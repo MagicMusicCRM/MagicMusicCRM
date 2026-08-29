@@ -45,6 +45,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
+import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 import 'client_card_aggregation.dart';
 import 'client_archive_button.dart';
 import 'comment_share_button.dart';
@@ -72,6 +73,7 @@ part 'client_card_counterpart_resolution.dart';
 part 'client_card_loaders.dart';
 part 'client_card_realtime.dart';
 part 'client_card_persistence.dart';
+part 'client_card_workspace_draft.dart';
 part 'client_card_header.dart';
 part 'client_card_overview_tab.dart';
 part 'client_card_tasks_tab.dart';
@@ -112,6 +114,7 @@ class ClientCard extends ConsumerStatefulWidget {
     this.capabilitySnapshot,
     this.initialViewState,
     this.onViewStateChanged,
+    this.workspaceTabId,
   });
 
   final bool routed;
@@ -121,6 +124,7 @@ class ClientCard extends ConsumerStatefulWidget {
   final CapabilitySnapshot? capabilitySnapshot;
   final ContextViewState? initialViewState;
   final ValueChanged<ContextViewState>? onViewStateChanged;
+  final String? workspaceTabId;
 
   @override
   ConsumerState<ClientCard> createState() => _ClientCardState();
@@ -136,6 +140,21 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // Resolved status list: either the one passed in or self-fetched.
   List<StatusRecord> _statuses = const [];
   bool _saving = false;
+  Timer? _autoSaveTimer;
+  Future<bool>? _autoSaveInFlight;
+  int _editRevision = 0;
+  bool _autoSavePending = false;
+  bool _autoSaveQueued = false;
+  bool _autoSaveFailed = false;
+  bool _autoSaveConflict = false;
+  final Map<String, int> _leadCoreEditRevisions = {};
+  final Map<String, int> _studentCoreEditRevisions = {};
+  final Map<String, int> _leadCustomEditRevisions = {};
+  final Map<String, int> _studentCustomEditRevisions = {};
+  int? _leadStatusEditRevision;
+  int? _studentStatusEditRevision;
+  int? _leadResponsibleEditRevision;
+  int? _studentResponsibleEditRevision;
   bool _converting = false;
   bool _replacingSubscription = false;
   bool _cancellingSubscription = false;
@@ -165,9 +184,33 @@ class _ClientCardState extends ConsumerState<ClientCard>
   String? _duplicateDecisionId;
 
   late final ClientCardWorkspaceController _workspaceController;
+  WorkspaceNavigationScope? _registeredWorkspaceScope;
+  String? _registeredWorkspaceTabId;
+  String? _registeredWorkspaceFormKey;
+  int _workspaceRegistrationGeneration = 0;
+  bool _workspaceDraftSyncScheduled = false;
+  WorkspaceFormState? _restoredWorkspaceForm;
+  bool _restoredWorkspaceDraftApplied = false;
+  int? _restoredLeadExpectedVersion;
+  int? _restoredStudentExpectedVersion;
+  ClientInternalNoteDraft? _workspaceInternalNoteDraft;
   bool get _dirty => _workspaceController.dirty;
   bool get _edited => _workspaceController.edited;
-  set _edited(bool value) => _workspaceController.edited = value;
+  set _edited(bool value) {
+    _workspaceController.edited = value;
+    if (value) {
+      _editRevision++;
+      if (_autoSaveConflict) {
+        _autoSaveFailed = true;
+      } else {
+        _autoSaveFailed = false;
+        _scheduleAutoSave();
+      }
+    }
+    _syncWorkspaceFormDirty();
+    if (value) _scheduleWorkspaceDraftSync();
+  }
+
   String get _selectedSection => _workspaceController.selectedSection;
   ScrollController get _taskScrollController =>
       _workspaceController.taskScrollController;
@@ -189,6 +232,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _operationalHistoryLoadingMore = false;
   String? _internalContextError;
   ClientInternalNote? _internalNote;
+  bool _internalNoteIsPending = false;
+  bool get _internalNotePending => _internalNoteIsPending;
+  set _internalNotePending(bool value) {
+    _internalNoteIsPending = value;
+    _syncWorkspaceFormDirty();
+  }
+
+  ClientInternalNoteFlush? _flushInternalNote;
   List<ClientOperationalHistoryItem> _operationalHistory = const [];
   String? _operationalHistoryCursor;
   final Map<String, GlobalKey> _desktopSectionKeys = {
@@ -262,6 +313,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _loadingStudent = true;
   String? _studentError;
   bool _realtimeRefreshQueued = false;
+  bool _realtimeRefreshDeferred = false;
   // Bumped ONLY when field values are replaced from the server (fetch/merge).
   // Text editors key on this instead of their live value, so local keystrokes
   // never recreate the field (which would drop cursor/focus/IME state), while
@@ -279,33 +331,17 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _blacklistBusy = false;
 
   Future<void> _handleClose() async {
-    if (!_workspaceController.requiresDiscardConfirmation) {
-      _closeCard(_workspaceController.terminalCloseResult);
-      return;
+    if (!await _flushPendingClientEdits() || !mounted) return;
+    _closeCard(_workspaceController.terminalCloseResult);
+  }
+
+  Future<bool> _flushPendingClientEdits() async {
+    final flushInternalNote = _flushInternalNote;
+    if (_internalNotePending) {
+      if (flushInternalNote == null) return false;
+      if (!await flushInternalNote()) return false;
     }
-    final leave = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Несохранённые изменения'),
-        content: const Text(
-          'Изменения не сохранены. Закрыть карточку без сохранения?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Остаться'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Закрыть без сохранения'),
-          ),
-        ],
-      ),
-    );
-    if (leave == true && mounted) {
-      _closeCard(_workspaceController.terminalCloseResult);
-    }
+    return _flushAutoSave();
   }
 
   void _closeCard([bool? result]) {
@@ -454,14 +490,108 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleWorkspaceFormRegistration();
+  }
+
+  @override
   void didUpdateWidget(covariant ClientCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _scheduleWorkspaceFormRegistration();
     if (oldWidget.initialSection != widget.initialSection) {
       _workspaceController.restoreSection(widget.initialSection);
       _workspaceController.schedulePostFrameIntent(
         () => unawaited(_ensureDesktopSectionVisible(_selectedSection)),
       );
     }
+  }
+
+  void _scheduleWorkspaceFormRegistration() {
+    final scope = WorkspaceNavigationScope.maybeOf(context);
+    final workspaceScope = scope?.isDesktop == true ? scope : null;
+    final tabId = widget.workspaceTabId;
+    final formKey = 'client-card:${widget.entityType}:$_entityId';
+    if (_registeredWorkspaceScope?.controller == workspaceScope?.controller &&
+        _registeredWorkspaceTabId == tabId &&
+        _registeredWorkspaceFormKey == formKey) {
+      final controller = workspaceScope?.controller;
+      final formStillMounted =
+          controller != null &&
+          tabId != null &&
+          controller.state.tabs.any(
+            (tab) => tab.tabId == tabId && tab.forms.containsKey(formKey),
+          );
+      if (formStillMounted) {
+        controller.registerForm(
+          tabId,
+          formKey,
+          onSave: _flushPendingClientEdits,
+        );
+        _restoreWorkspaceFormIfNeeded(
+          controller.state.tabs
+              .firstWhere((tab) => tab.tabId == tabId)
+              .forms[formKey],
+        );
+        return;
+      }
+    }
+    final generation = ++_workspaceRegistrationGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _workspaceRegistrationGeneration) return;
+      _unregisterWorkspaceForm(preserveDirtyDraft: true);
+      if (workspaceScope == null || tabId == null) return;
+      final controller = workspaceScope.controller;
+      if (!controller.state.tabs.any((tab) => tab.tabId == tabId)) return;
+      controller.registerForm(tabId, formKey, onSave: _flushPendingClientEdits);
+      final registeredForm = controller.state.tabs
+          .firstWhere((tab) => tab.tabId == tabId)
+          .forms[formKey];
+      _registeredWorkspaceScope = workspaceScope;
+      _registeredWorkspaceTabId = tabId;
+      _registeredWorkspaceFormKey = formKey;
+      final restoringDraft = _restoreWorkspaceFormIfNeeded(registeredForm);
+      if (!restoringDraft) {
+        // This is a newly mounted live form, not a persisted recovery draft.
+        // Later parent rebuilds must not replay its own current draft.
+        _restoredWorkspaceDraftApplied = true;
+        _syncWorkspaceFormDirty();
+      }
+    });
+  }
+
+  void _syncWorkspaceFormDirty() {
+    final workspaceScope = _registeredWorkspaceScope;
+    final tabId = _registeredWorkspaceTabId;
+    final formKey = _registeredWorkspaceFormKey;
+    if (workspaceScope == null || tabId == null || formKey == null) return;
+    final dirty = _edited || _internalNotePending;
+    final controller = workspaceScope.controller;
+    if (!controller.state.tabs.any((tab) => tab.tabId == tabId)) return;
+    controller.updateForm(
+      tabId,
+      formKey,
+      dirty: dirty,
+      expectedVersion: _workspaceExpectedVersion,
+      draft: dirty ? _buildWorkspaceDraft() : const {},
+    );
+  }
+
+  void _unregisterWorkspaceForm({bool preserveDirtyDraft = false}) {
+    final workspaceScope = _registeredWorkspaceScope;
+    final tabId = _registeredWorkspaceTabId;
+    final formKey = _registeredWorkspaceFormKey;
+    _registeredWorkspaceScope = null;
+    _registeredWorkspaceTabId = null;
+    _registeredWorkspaceFormKey = null;
+    if (workspaceScope == null || tabId == null || formKey == null) return;
+    final controller = workspaceScope.controller;
+    if (!controller.state.tabs.any((tab) => tab.tabId == tabId)) return;
+    controller.unregisterForm(
+      tabId,
+      formKey,
+      preserveDirtyDraft: preserveDirtyDraft,
+    );
   }
 
   // ── Counterpart resolution (Phase 4) ──────────────────────────────────────
@@ -485,7 +615,31 @@ class _ClientCardState extends ConsumerState<ClientCard>
     });
   }
 
+  void _recordCoreEdit(String key) {
+    if (_mode.hasLeadHalf) _leadCoreEditRevisions[key] = _editRevision;
+    if (_mode.hasStudentHalf) _studentCoreEditRevisions[key] = _editRevision;
+  }
+
+  bool get _hasPendingCardEdits =>
+      _leadCoreEditRevisions.isNotEmpty ||
+      _studentCoreEditRevisions.isNotEmpty ||
+      _leadCustomEditRevisions.isNotEmpty ||
+      _studentCustomEditRevisions.isNotEmpty ||
+      _leadStatusEditRevision != null ||
+      _studentStatusEditRevision != null ||
+      _leadResponsibleEditRevision != null ||
+      _studentResponsibleEditRevision != null;
+
   void _selectSection(String section) {
+    unawaited(_selectSectionAfterPendingNote(section));
+  }
+
+  Future<void> _selectSectionAfterPendingNote(String section) async {
+    if (section != _selectedSection && _internalNotePending) {
+      final flush = _flushInternalNote;
+      if (flush != null && !await flush()) return;
+    }
+    if (!mounted) return;
     _emitState(() => _workspaceController.selectSection(section));
     widget.onSectionChanged?.call(section);
     _workspaceController.schedulePostFrameIntent(
@@ -551,6 +705,10 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   @override
   void dispose() {
+    _workspaceRegistrationGeneration++;
+    _syncWorkspaceFormDirty();
+    _unregisterWorkspaceForm(preserveDirtyDraft: true);
+    _autoSaveTimer?.cancel();
     _commentCtrl.dispose();
     _workspaceController.dispose();
     super.dispose();
@@ -587,7 +745,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
     return ClientCardShell(
       routed: widget.routed,
-      edited: _edited,
+      edited: _edited || _internalNotePending,
       dirty: _dirty,
       header: _isStudent
           ? _buildStudentHeader(cs, curStatus)

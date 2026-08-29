@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { DatabaseService } from "../db/database.service";
 import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 import { CrmPolicy } from "./crm.policy";
@@ -31,15 +31,20 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       assertCanReadPayroll: jest.fn(),
       assertCanManagePayrollHistory: jest.fn(),
     };
-    const integrity = suppliedIntegrity ?? ({
-      executeVersionedMutation: jest.fn(async (command: any) => ({
-        resultRef: await command.mutate({ query }, command.expectedVersion + 1),
-        version: command.expectedVersion + 1,
-        replayed: false,
-        auditId: "audit-1",
-        eventId: "event-1",
-      })),
-    } as unknown as PlatformIntegrityService);
+    const integrity =
+      suppliedIntegrity ??
+      ({
+        executeVersionedMutation: jest.fn(async (command: any) => ({
+          resultRef: await command.mutate(
+            { query },
+            command.expectedVersion + 1,
+          ),
+          version: command.expectedVersion + 1,
+          replayed: false,
+          auditId: "audit-1",
+          eventId: "event-1",
+        })),
+      } as unknown as PlatformIntegrityService);
     const repository = new PayrollReadRepository(
       database as unknown as DatabaseService,
     );
@@ -104,6 +109,39 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       {} as TeacherStatsCsvService,
     );
     return { service, integrity, policy };
+  };
+
+  const createRateAuthorizationService = () => {
+    const repository = {
+      findRate: jest.fn().mockResolvedValue({
+        id: entryId,
+        teacher_id: teacherId,
+        rate: "900",
+        effective_from: "2026-08-01",
+      }),
+    } as unknown as PayrollReadRepository;
+    const integrity = {
+      executeVersionedMutation: jest.fn().mockResolvedValue({
+        resultRef: { entryId },
+        version: 1,
+        replayed: false,
+      }),
+    } as unknown as PlatformIntegrityService;
+    const commands = new TeacherPayrollCommandService(
+      repository,
+      new CrmPolicy(),
+      integrity,
+      new PayrollAccrualCalculator(),
+    );
+    return {
+      service: new PayrollService(
+        {} as TeacherPayrollQueryService,
+        commands,
+        {} as TeacherStatsReportService,
+        {} as TeacherStatsCsvService,
+      ),
+      integrity,
+    };
   };
 
   const lessonRow = (over: Record<string, unknown> = {}) => ({
@@ -758,6 +796,43 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       expect.objectContaining({ operation: "crm.teacher-rate.create" }),
     );
   });
+
+  it.each([
+    ["client", false],
+    ["teacher", false],
+    ["admin", false],
+    ["manager", false],
+    ["director", true],
+    ["system_admin", true],
+  ] as const)(
+    "creates a teacher rate only for the owner roles: %s",
+    async (role, allowed) => {
+      const { service, integrity } = createRateAuthorizationService();
+      const mutation = service.setTeacherRate(
+        { userId: `${role}-a`, role },
+        teacherId,
+        {
+          rate: 900,
+          effectiveFrom: "2026-08-01",
+          expectedVersion: 0,
+          reasonText: "Новая ставка",
+        },
+        metadata,
+      );
+
+      if (allowed) {
+        await expect(mutation).resolves.toMatchObject({
+          teacherId,
+          rate: 900,
+          version: 1,
+        });
+        expect(integrity.executeVersionedMutation).toHaveBeenCalledTimes(1);
+      } else {
+        await expect(mutation).rejects.toBeInstanceOf(ForbiddenException);
+        expect(integrity.executeVersionedMutation).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it("rejects a payroll mutation without safe request metadata", async () => {
     const { service, integrity } = createServiceWithQueryResults([]);

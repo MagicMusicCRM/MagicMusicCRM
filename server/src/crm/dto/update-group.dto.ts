@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsNumber,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -14,6 +15,12 @@ import {
 // (использовать ставку педагога), 0 — «входит в оклад». Отличие «поле не
 // передано» от «передан null» сервис определяет по dto.teacherRate !== undefined.
 export class UpdateGroupDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
+
   @IsOptional()
   @IsString()
   @MaxLength(120)

@@ -32,11 +32,7 @@ export class CrmPolicy {
   }
 
   assertCanListStudents(actor: ActorContext): void {
-    if (
-      actor.role === "teacher" ||
-      isManagerOrAdminRole(actor.role)
-    )
-      return;
+    if (actor.role === "teacher" || isManagerOrAdminRole(actor.role)) return;
     throw new ForbiddenException("Недостаточно прав для просмотра учеников.");
   }
 
@@ -134,9 +130,7 @@ export class CrmPolicy {
 
   assertCanArchiveClient(actor: ActorContext): void {
     if (actor.role === "director" || actor.role === "system_admin") return;
-    throw new ForbiddenException(
-      "Архивировать клиента может только директор.",
-    );
+    throw new ForbiddenException("Архивировать клиента может только директор.");
   }
 
   // Operational CRM work: administrators must be able to cover each other's
@@ -149,11 +143,7 @@ export class CrmPolicy {
   }
 
   assertCanReadOperationalData(actor: ActorContext): void {
-    if (
-      actor.role === "teacher" ||
-      isManagerOrAdminRole(actor.role)
-    )
-      return;
+    if (actor.role === "teacher" || isManagerOrAdminRole(actor.role)) return;
     throw new ForbiddenException(
       "Недостаточно прав для просмотра справочников CRM.",
     );
@@ -178,17 +168,45 @@ export class CrmPolicy {
 
   assertCanReadPayroll(actor: ActorContext): void {
     if (this.canReadTeacherRates(actor)) return;
-    throw new ForbiddenException(
-      "Недостаточно прав для зарплатного раздела.",
-    );
+    throw new ForbiddenException("Недостаточно прав для зарплатного раздела.");
   }
 
   /**
-   * Existing payroll history changes already-published staff calculations, so
-   * creation stays operational while correction/voiding is an owner action.
+   * Base-rate creation/change and correction/voiding of payroll history are
+   * owner actions. Payroll reads, salary changes and payout creation remain
+   * operational and use assertCanReadPayroll instead.
    */
+  canManageTeacherCompensation(actor: ActorContext): boolean {
+    return actor.role === "director" || actor.role === "system_admin";
+  }
+
+  assertCanSupplyTeacherCompensation(
+    actor: ActorContext,
+    input: unknown,
+  ): void {
+    const fields = new Set([
+      "teacherRate",
+      "teacherCompensationType",
+      "teacherCompensationValue",
+      "teacherCompensationRuleKey",
+      "teacherCompensationValueMinor",
+    ]);
+    const containsCompensation = (value: unknown): boolean => {
+      if (Array.isArray(value)) return value.some(containsCompensation);
+      if (value === null || typeof value !== "object") return false;
+      return Object.entries(value).some(([key, nested]) =>
+        fields.has(key) ? nested !== undefined : containsCompensation(nested),
+      );
+    };
+    const supplied = containsCompensation(input);
+    if (!supplied || this.canManageTeacherCompensation(actor)) return;
+    throw new ForbiddenException(
+      "Изменять оплату преподавателя может только директор.",
+    );
+  }
+
   assertCanManagePayrollHistory(actor: ActorContext): void {
-    if (actor.role === "director" || actor.role === "system_admin") return;
+    if (this.canManageTeacherCompensation(actor)) return;
     throw new ForbiddenException(
       "Исправлять и удалять историю ставок и выплат может только директор.",
     );

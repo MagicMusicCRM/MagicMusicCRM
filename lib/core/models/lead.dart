@@ -21,6 +21,11 @@ class Lead {
   Map<String, dynamic> get raw => _m;
 
   String get id => _m['id']?.toString() ?? '';
+  int get version {
+    final parsed = _intOf(_m['version']);
+    return parsed > 0 ? parsed : 1;
+  }
+
   String? get statusId => _m['status_id']?.toString();
   String get status => _m['status']?.toString() ?? 'new';
   String? get statusLabel => _m['status_label']?.toString();

@@ -9,6 +9,7 @@ import { DatabaseService } from "../db/database.service";
  */
 export interface StudentRow {
   id: string;
+  version?: string | number;
   lead_id: string | null;
   source_id: string | null;
   source_name: string | null;
@@ -34,7 +35,7 @@ export async function findStudent(
 ): Promise<StudentRow | undefined> {
   const result = await db.query<StudentRow>(
     `
-      select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+      select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
         s.lead_id, s.source_id, source.display_name as source_name,
         s.custom_data, s.blacklisted, s.blacklist_reason,
         p.first_name, p.last_name, u.email, p.phone, s.created_at,

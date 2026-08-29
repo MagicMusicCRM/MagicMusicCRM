@@ -54,7 +54,15 @@ export async function attachStudentToLead(
   const result = await database.query<{ id: string }>(
     `
       update app.students
-      set lead_id = $2, updated_at = now()
+      set lead_id = $2,
+          version = case
+            when lead_id is distinct from $2 then version + 1
+            else version
+          end,
+          updated_at = case
+            when lead_id is distinct from $2 then now()
+            else updated_at
+          end
       where id = $1
         and deleted_at is null
         and (lead_id is null or lead_id = $2)

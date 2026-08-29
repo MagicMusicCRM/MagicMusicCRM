@@ -311,6 +311,7 @@ extension MagicCrmCore on MagicCrmService {
 
   Future<Map<String, dynamic>> updateStudent(
     String id, {
+    required int expectedVersion,
     String? firstName,
     String? lastName,
     String? phone,
@@ -322,6 +323,7 @@ extension MagicCrmCore on MagicCrmService {
     List<Map<String, dynamic>>? customFields,
   }) async {
     final data = <String, dynamic>{};
+    data['expectedVersion'] = expectedVersion;
     if (firstName != null) data['firstName'] = firstName.trim();
     if (lastName != null) data['lastName'] = lastName.trim();
     if (phone != null) data['phone'] = phone.trim();

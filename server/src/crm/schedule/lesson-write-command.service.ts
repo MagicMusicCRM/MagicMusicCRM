@@ -47,7 +47,17 @@ export class LessonWriteCommandService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     assertLessonCommandMetadata(metadata);
-    const draft = this.validator.create(dto);
+    const canManageTeacherCompensation =
+      this.policy.canManageTeacherCompensation(actor);
+    const draft = this.validator.create(
+      canManageTeacherCompensation
+        ? dto
+        : {
+            ...dto,
+            teacherCompensationType: "none",
+            teacherCompensationValue: 0,
+          },
+    );
     if (!dto.financialDecision) {
       throw new UnprocessableEntityException({
         code: "LESSON_SETTLEMENT_PLAN_REQUIRED",
@@ -80,31 +90,41 @@ export class LessonWriteCommandService {
         payload: { lessonId, action: "created" },
       },
       mutate: async (client) => {
-        await this.acquireLocks(client, draft);
-        await this.assertConstraints(draft, client);
-        await this.assertLeadNotConverted(client, draft);
+        const effectiveDraft = canManageTeacherCompensation
+          ? draft
+          : await this.withEffectiveTeacherRate(client, draft);
+        const financialDecision = canManageTeacherCompensation
+          ? dto.financialDecision!
+          : await this.settlement.applyDefaultTeacherCompensation(
+              client,
+              effectiveDraft.branchId,
+              dto.financialDecision!,
+            );
+        await this.acquireLocks(client, effectiveDraft);
+        await this.assertConstraints(effectiveDraft, client);
+        await this.assertLeadNotConverted(client, effectiveDraft);
         await this.repository.insertLesson(
           client,
           lessonId,
-          draft,
+          effectiveDraft,
           actor.userId,
         );
         await this.lifecycle.createSnapshot(client, {
           lessonId,
-          clientType: draft.clientRef.type,
-          clientId: draft.clientRef.id,
-          completionType: draft.completionType,
-          clientChargeType: draft.clientChargeType,
-          clientChargeValue: draft.clientChargeValue,
-          teacherCompensationType: draft.teacherCompensationType,
-          teacherCompensationValue: draft.teacherCompensationValue,
-          subscriptionId: draft.subscriptionId ?? undefined,
-          trial: draft.isTrial,
+          clientType: effectiveDraft.clientRef.type,
+          clientId: effectiveDraft.clientRef.id,
+          completionType: effectiveDraft.completionType,
+          clientChargeType: effectiveDraft.clientChargeType,
+          clientChargeValue: effectiveDraft.clientChargeValue,
+          teacherCompensationType: effectiveDraft.teacherCompensationType,
+          teacherCompensationValue: effectiveDraft.teacherCompensationValue,
+          subscriptionId: effectiveDraft.subscriptionId ?? undefined,
+          trial: effectiveDraft.isTrial,
         });
         const plan = await this.settlement.assignPlan(client, {
           lessonId,
-          branchId: draft.branchId,
-          decision: dto.financialDecision!,
+          branchId: effectiveDraft.branchId,
+          decision: financialDecision,
           selectedBy: actor.userId,
           reasonText: dto.plannedSettlementReason,
         });
@@ -127,6 +147,22 @@ export class LessonWriteCommandService {
       mutation.version,
       mutation.replayed,
     );
+  }
+
+  private async withEffectiveTeacherRate(
+    client: PoolClient,
+    draft: CompleteLessonDraft,
+  ): Promise<CompleteLessonDraft> {
+    const rate = await this.repository.loadEffectiveTeacherRate(
+      client,
+      draft.teacherId,
+      draft.scheduledAt,
+    );
+    return {
+      ...draft,
+      teacherCompensationType: rate > 0 ? "hourly" : "none",
+      teacherCompensationValue: rate,
+    };
   }
 
   async update(

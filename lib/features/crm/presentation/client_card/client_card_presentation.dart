@@ -139,6 +139,7 @@ extension _ClientCardPresentation on _ClientCardState {
         }
       }
       _edited = true;
+      _recordCoreEdit(key);
     });
   }
 

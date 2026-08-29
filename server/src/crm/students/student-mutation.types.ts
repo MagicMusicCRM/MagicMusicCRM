@@ -17,6 +17,7 @@ export interface PreparedStudentCreate {
 
 export interface PreparedStudentUpdate {
   readonly studentId: string;
+  readonly expectedVersion?: number;
   readonly firstName: string | null;
   readonly lastName: string | null;
   readonly phone: string | null;
@@ -31,6 +32,7 @@ export interface PreparedStudentUpdate {
 }
 
 export interface StudentWriteSnapshot {
+  readonly version: string | number;
   readonly status: string | null;
   readonly branch_id: string | null;
   readonly first_name: string | null;

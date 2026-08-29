@@ -292,6 +292,12 @@ export class LeadIntakeService implements LeadIntakePort {
               [profile.user_id, phoneLeadId, matchedPhone, actor.userId],
             );
             if (linked.rows[0]) {
+              await client.query(
+                `update app.leads
+                    set version = version + 1, updated_at = now()
+                  where id = $1 and deleted_at is null`,
+                [phoneLeadId],
+              );
               return {
                 kind: "lead",
                 id: phoneLeadId,
@@ -761,6 +767,12 @@ export class LeadIntakeService implements LeadIntakePort {
           if (!linked.rows[0]) {
             return { kind: "review" };
           }
+          await client.query(
+            `update app.leads
+                set version = version + 1, updated_at = now()
+              where id = $1 and deleted_at is null`,
+            [leadId],
+          );
           return {
             kind: "lead",
             id: leadId,

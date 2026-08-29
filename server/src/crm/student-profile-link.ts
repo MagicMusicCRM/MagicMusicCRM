@@ -20,19 +20,24 @@ export async function mergeAndAssignStudentProfile(
   appProfileId: string,
 ): Promise<boolean> {
   const result = await executor.query<{ id: string }>(
-    `with existing_profile as (
+    `with target_student as (
+       select student.id, student.profile_id
+         from app.students student
+        where student.id = $1
+          and student.deleted_at is null
+        for update
+     ),
+     existing_profile as (
        select profile.first_name,
               profile.last_name,
               profile.phone,
               profile.dob,
               profile.avatar_file_id,
               profile.custom_data
-         from app.students student
+         from target_student student
          join app.profiles profile
            on profile.id = student.profile_id
           and profile.deleted_at is null
-        where student.id = $1
-          and student.deleted_at is null
      ),
      merged_profile as (
        update app.profiles target
@@ -54,6 +59,7 @@ export async function mergeAndAssignStudentProfile(
      )
      update app.students student
         set profile_id = merged.id,
+            version = student.version + 1,
             updated_at = now()
        from merged_profile merged
       where student.id = $1

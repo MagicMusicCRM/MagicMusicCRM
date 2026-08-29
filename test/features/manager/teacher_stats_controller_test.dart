@@ -84,6 +84,7 @@ TeacherStatsController _controller(
   DateTimeRange? filterRange,
   String? branchId,
   ReportFileOpener? opener,
+  bool canManageTeacherRates = true,
 }) {
   return TeacherStatsController(
     crm: MagicCrmService(api),
@@ -94,7 +95,7 @@ TeacherStatsController _controller(
             ReportFileOpenResult(path: 'C:/reports/$filename', opened: false),
     filterRange: filterRange,
     branchId: branchId,
-    canCorrectSettledPayroll: false,
+    canCorrectSettledPayroll: canManageTeacherRates,
     clock: () => DateTime.utc(2026, 8, 27, 12),
   );
 }
@@ -187,7 +188,26 @@ void main() {
 
     expect(api.patches, hasLength(1));
     expect(api.patches.single.path, '/crm/groups/group-a');
-    expect(api.patches.single.body, <String, dynamic>{'teacherRate': 0});
+    expect(api.patches.single.body, <String, dynamic>{
+      'teacherRate': 0,
+      'expectedVersion': 1,
+    });
+  });
+
+  test('read-only payroll access cannot start rate requests', () async {
+    final api = _FakeApiClient();
+    final controller = _controller(api, canManageTeacherRates: false);
+
+    await controller.updateGroupRate('group-a', 0);
+    await controller.applyRate(
+      const TeacherStatsRateChange(
+        lessonIds: ['lesson-a'],
+        teacherRate: 900,
+        reasonText: 'Изменение ставки',
+      ),
+    );
+
+    expect(api.patches, isEmpty);
   });
 
   test('report reload clears selected units', () async {

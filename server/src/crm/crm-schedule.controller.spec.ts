@@ -39,9 +39,6 @@ describe("CrmScheduleController rollout boundary", () => {
         .fn()
         .mockResolvedValue({ valid: true, violations: [] }),
     };
-    const lessonSeriesCommands = {
-      create: jest.fn().mockResolvedValue({ path: "v4" }),
-    };
     const lessonTransitions = {
       previewCancel: jest.fn(),
     };
@@ -65,7 +62,6 @@ describe("CrmScheduleController rollout boundary", () => {
         scheduleConflicts as never,
         scheduleSeries as never,
         lessonCommands as never,
-        lessonSeriesCommands as never,
         lessonTransitions as never,
         flags,
         schedulePlans as never,
@@ -96,8 +92,11 @@ describe("CrmScheduleController rollout boundary", () => {
   });
 
   it("routes lesson writes to the v4 command only after enable", async () => {
-    const { controller: subject, lessonMutations, lessonCommands } =
-      controller("v4");
+    const {
+      controller: subject,
+      lessonMutations,
+      lessonCommands,
+    } = controller("v4");
 
     await expect(
       subject.createLesson(actor, "key", "request", {} as never),
@@ -159,15 +158,26 @@ describe("CrmScheduleController rollout boundary", () => {
     expect(scheduleRead.getScheduleMatrix).toHaveBeenCalledWith(actor, {
       groupBy: "room",
     });
-    expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(actor, {});
+    expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(
+      actor,
+      {},
+    );
   });
 
   it("routes legacy-only delete and rate commands through the mutation owner", async () => {
-    const { controller: subject, lessonMutations, lessonTeacherRates } =
-      controller("v4");
+    const {
+      controller: subject,
+      lessonMutations,
+      lessonTeacherRates,
+    } = controller("v4");
 
     await subject.deleteLesson(actor, "lesson-a");
-    await subject.setLessonsTeacherRate(actor, {} as never);
+    await subject.setLessonsTeacherRate(
+      actor,
+      "rate-key",
+      "rate-request",
+      {} as never,
+    );
 
     expect(lessonMutations.deleteLesson).toHaveBeenCalledWith(
       actor,
@@ -176,24 +186,40 @@ describe("CrmScheduleController rollout boundary", () => {
     expect(lessonTeacherRates.setLessonsTeacherRate).toHaveBeenCalledWith(
       actor,
       {},
+      { idempotencyKey: "rate-key", requestId: "rate-request" },
     );
   });
 
-  it("routes recurring-series reads and mutations through their owner", async () => {
+  it("routes recurring-series reads and remaining mutations through their owner", async () => {
     const { controller: subject, scheduleSeries } = controller("legacy");
 
     await subject.listScheduleSeries(actor, {} as never);
-    await subject.createScheduleSeries(actor, "", "", {
-      notes: "Проверка маршрутизации",
-    } as never);
     await subject.updateScheduleSeries(actor, "series-a", {} as never);
     await subject.deleteScheduleSeries(actor, "series-a", {} as never);
 
     expect(scheduleSeries.listScheduleSeries).toHaveBeenCalled();
-    expect(scheduleSeries.createScheduleSeries).toHaveBeenCalled();
     expect(scheduleSeries.updateScheduleSeries).toHaveBeenCalled();
     expect(scheduleSeries.deleteScheduleSeries).toHaveBeenCalled();
   });
+
+  it.each(["legacy", "v4"] as const)(
+    "keeps legacy series creation closed on the %s rollout path",
+    async (effectivePath) => {
+      const { controller: subject, scheduleSeries } = controller(effectivePath);
+      scheduleSeries.createScheduleSeries.mockRejectedValueOnce({
+        response: { code: "SCHEDULE_PLAN_MUTATION_REQUIRED" },
+      });
+
+      await expect(
+        subject.createScheduleSeries(actor, "", "", {
+          studentId: "student-a",
+        } as never),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_MUTATION_REQUIRED" },
+      });
+      expect(scheduleSeries.createScheduleSeries).toHaveBeenCalled();
+    },
+  );
 
   it("routes conflict preflight through the dedicated conflict service", async () => {
     const { controller: subject, scheduleConflicts } = controller("v4");

@@ -59,9 +59,18 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
           nextCursor: response['next_cursor']?.toString(),
         );
       },
-      updateStudentStatus: ({required studentId, required status}) async {
-        await crm.updateStudent(studentId, status: status);
-      },
+      updateStudentStatus:
+          ({
+            required studentId,
+            required status,
+            required expectedVersion,
+          }) async {
+            await crm.updateStudent(
+              studentId,
+              expectedVersion: expectedVersion,
+              status: status,
+            );
+          },
     );
     final transfer = ref.read(leadTransferControllerProvider);
     final transferBranchId = transfer.isActive

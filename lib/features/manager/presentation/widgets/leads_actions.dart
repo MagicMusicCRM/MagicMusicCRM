@@ -295,7 +295,11 @@ extension _LeadsActions on _LeadsWidgetState {
     if (result != null && mounted) _refreshBoard();
   }
 
-  Future<void> _moveStatus(String id, String newStatus) async {
+  Future<void> _moveStatus(
+    String id,
+    String newStatus,
+    int expectedVersion,
+  ) async {
     if (id.isEmpty || _pendingLeadIds.contains(id)) return;
     // P3-7: a move into a terminal/requires-reason column must capture why.
     String? reasonId;
@@ -321,6 +325,7 @@ extension _LeadsActions on _LeadsWidgetState {
           .read(magicCrmServiceProvider)
           .updateLead(
             id,
+            expectedVersion: expectedVersion,
             statusId: isUuid ? newStatus : null,
             clearStatus: !isUuid,
             reasonId: reasonId,

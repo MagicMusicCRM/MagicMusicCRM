@@ -70,7 +70,8 @@ export class LessonBulkTransitionService {
         (item) => item.preview.canConfirm && item.preview.transitionFingerprint,
       );
       const previews = calculated.map(({ preview, ...item }) => {
-        const { transitionFingerprint: _fingerprint, ...publicPreview } = preview;
+        const { transitionFingerprint: _fingerprint, ...publicPreview } =
+          preview;
         return { ...item, ...publicPreview };
       });
       if (!canConfirm) {
@@ -108,58 +109,67 @@ export class LessonBulkTransitionService {
     const bulkId = stableTransitionId(
       `schedule.lesson.bulk\0${actor.userId}\0${metadata.idempotencyKey}`,
     );
-    const mutation = await this.platform.executeVersionedMutation<
-      BulkTransitionResultRef
-    >({
-      actorKey: `user:${actor.userId}`,
-      actorUserId: actor.userId,
-      authorization: { actor, capabilityKey: "schedule.lesson.write" },
-      operation: "schedule.lesson.bulk-transition",
-      idempotencyKey: metadata.idempotencyKey,
-      payload: { dto },
-      aggregateType: "schedule:lesson-bulk",
-      aggregateId: bulkId,
-      expectedVersion: 0,
-      requestId: metadata.requestId,
-      audit: {
-        action: "crm.lessons_bulk_transitioned",
-        entityType: "lesson_batch",
-        entityId: bulkId,
-        reason: dto.reasonCode?.trim() || "manual",
-        reasonText: dto.reasonText.trim(),
-        beforeRef: {
-          items: items.map((item) => ({
-            lessonId: item.lessonId,
-            version: item.expectedVersion,
-          })),
+    const mutation =
+      await this.platform.executeVersionedMutation<BulkTransitionResultRef>({
+        actorKey: `user:${actor.userId}`,
+        actorUserId: actor.userId,
+        authorization: { actor, capabilityKey: "schedule.lesson.write" },
+        operation: "schedule.lesson.bulk-transition",
+        idempotencyKey: metadata.idempotencyKey,
+        payload: { dto },
+        aggregateType: "schedule:lesson-bulk",
+        aggregateId: bulkId,
+        expectedVersion: 0,
+        requestId: metadata.requestId,
+        audit: {
+          action: "crm.lessons_bulk_transitioned",
+          entityType: "lesson_batch",
+          entityId: bulkId,
+          reason: dto.reasonCode?.trim() || "manual",
+          reasonText: dto.reasonText.trim(),
+          beforeRef: {
+            items: items.map((item) => ({
+              lessonId: item.lessonId,
+              version: item.expectedVersion,
+            })),
+          },
         },
-      },
-      outbox: {
-        type: "schedule.lessons.changed",
-        payload: { entityIds: items.map((item) => item.lessonId) },
-      },
-      mutate: async (client) => {
-        const signed = this.previewTokens.verifyLessonTransition(dto.previewToken);
-        this.assertBulkPreview(signed, actor, previewId);
-        const committed: CommittedTransition[] = [];
-        for (const item of items) {
-          committed.push(await this.commits.commit(client, {
-            actor,
-            lessonId: item.lessonId,
-            dto: bulkTransitionItemDto(dto, item),
-            operation: item.operation,
-            successorId: item.operation === "reschedule"
-              ? stableTransitionId(
-                  `schedule.lesson.bulk-successor\0${bulkId}\0${item.lessonId}`,
-                )
-              : null,
-            nextVersion: item.expectedVersion + 1,
-          }));
-        }
-        this.assertBulkFingerprint(signed.transitionFingerprint, dto, items, committed);
-        return { bulkId, items: committed };
-      },
-    });
+        outbox: {
+          type: "schedule.lessons.changed",
+          payload: { entityIds: items.map((item) => item.lessonId) },
+        },
+        mutate: async (client) => {
+          const signed = this.previewTokens.verifyLessonTransition(
+            dto.previewToken,
+          );
+          this.assertBulkPreview(signed, actor, previewId);
+          const committed: CommittedTransition[] = [];
+          for (const item of items) {
+            committed.push(
+              await this.commits.commit(client, {
+                actor,
+                lessonId: item.lessonId,
+                dto: bulkTransitionItemDto(dto, item),
+                operation: item.operation,
+                successorId:
+                  item.operation === "reschedule"
+                    ? stableTransitionId(
+                        `schedule.lesson.bulk-successor\0${bulkId}\0${item.lessonId}`,
+                      )
+                    : null,
+                nextVersion: item.expectedVersion + 1,
+              }),
+            );
+          }
+          this.assertBulkFingerprint(
+            signed.transitionFingerprint,
+            dto,
+            items,
+            committed,
+          );
+          return { bulkId, items: committed };
+        },
+      });
     for (const item of items) {
       await this.reservations.publishLessonSettlementPostCommit(item.lessonId);
       if (item.operation !== "reschedule") continue;
@@ -180,14 +190,19 @@ export class LessonBulkTransitionService {
   }
 
   private assertBulkPreview(
-    signed: ReturnType<SubscriptionPreviewTokenService["verifyLessonTransition"]>,
+    signed: ReturnType<
+      SubscriptionPreviewTokenService["verifyLessonTransition"]
+    >,
     actor: ActorContext,
     previewId: string,
   ): void {
     if (
-      signed.actorUserId === actor.userId && signed.operation === "bulk" &&
-      signed.lessonId === previewId && signed.expectedVersion === 1
-    ) return;
+      signed.actorUserId === actor.userId &&
+      signed.operation === "bulk" &&
+      signed.lessonId === previewId &&
+      signed.expectedVersion === 1
+    )
+      return;
     throw new UnprocessableEntityException({
       code: "LESSON_TRANSITION_PREVIEW_STALE",
       message: "Signed preview does not match this bulk command.",
@@ -200,12 +215,17 @@ export class LessonBulkTransitionService {
     items: ReturnType<typeof normalizeBulkTransitionItems>,
     committed: CommittedTransition[],
   ): void {
-    const operations = new Map(items.map((item) => [item.lessonId, item.operation]));
-    const actual = bulkTransitionFingerprint(dto, committed.map((item) => ({
-      lessonId: item.lessonId,
-      operation: operations.get(item.lessonId)!,
-      preview: { transitionFingerprint: item.transitionFingerprint },
-    })));
+    const operations = new Map(
+      items.map((item) => [item.lessonId, item.operation]),
+    );
+    const actual = bulkTransitionFingerprint(
+      dto,
+      committed.map((item) => ({
+        lessonId: item.lessonId,
+        operation: operations.get(item.lessonId)!,
+        preview: { transitionFingerprint: item.transitionFingerprint },
+      })),
+    );
     if (expected === actual) return;
     throw new UnprocessableEntityException({
       code: "LESSON_TRANSITION_PREVIEW_STALE",

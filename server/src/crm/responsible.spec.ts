@@ -22,6 +22,7 @@ describe("responsible ownership", () => {
     expect(sql).toContain("join app.staff_members");
     expect(sql).toContain("l.assigned_to is null");
     expect(sql).toContain("set assigned_to = eligible_actor.user_id");
+    expect(sql).toContain("version = l.version + 1");
     expect(sql.match(/l\.assigned_to is null/g)).toHaveLength(2);
     expect(sql.match(/l\.custom_data->>'responsible'/g)).toHaveLength(2);
     expect(sql).toContain("'responsibleUserId'");
@@ -46,6 +47,7 @@ describe("responsible ownership", () => {
 
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("update app.students");
+    expect(sql).toContain("version = s.version + 1");
     expect(sql).toContain("coalesce(s.custom_data->>'responsible', '') = ''");
     expect(sql).not.toContain("assigned_to");
     expect(query.mock.calls[0][1]).toEqual([

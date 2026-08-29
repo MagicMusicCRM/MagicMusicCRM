@@ -168,6 +168,7 @@ class TeacherStatsController extends ChangeNotifier {
     if (_state.canCorrectSettledPayroll == canCorrectSettledPayroll) return;
     _state = _state.copyWith(
       canCorrectSettledPayroll: canCorrectSettledPayroll,
+      selectedUnits: canCorrectSettledPayroll ? _state.selectedUnits : const {},
     );
   }
 
@@ -220,6 +221,7 @@ class TeacherStatsController extends ChangeNotifier {
 
   Future<void> applyRate(TeacherStatsRateChange change) async {
     if (_lifecycle.isDisposed ||
+        !_state.canCorrectSettledPayroll ||
         change.lessonIds.isEmpty ||
         _state.applyingRate) {
       return;
@@ -232,6 +234,8 @@ class TeacherStatsController extends ChangeNotifier {
         lessonIds: change.lessonIds,
         teacherRate: change.teacherRate,
         reasonText: change.reasonText,
+        expectedVersion:
+            (_state.report['rateMutationVersion'] as num?)?.toInt() ?? 0,
       );
       if (!_lifecycle.isCurrent(_TeacherStatsRequest.rate, requestGeneration)) {
         return;
@@ -247,9 +251,15 @@ class TeacherStatsController extends ChangeNotifier {
   }
 
   Future<void> updateGroupRate(String groupId, num? rate) async {
-    if (_lifecycle.isDisposed) return;
+    if (_lifecycle.isDisposed || !_state.canCorrectSettledPayroll) return;
     final requestGeneration = _lifecycle.begin(_TeacherStatsRequest.groupRate);
-    await _crm.updateGroup(groupId, teacherRate: rate, setTeacherRate: true);
+    final group = await _crm.getGroup(groupId);
+    await _crm.updateGroup(
+      groupId,
+      teacherRate: rate,
+      setTeacherRate: true,
+      expectedVersion: (group['version'] as num?)?.toInt(),
+    );
     if (!_lifecycle.isCurrent(
       _TeacherStatsRequest.groupRate,
       requestGeneration,
@@ -291,7 +301,7 @@ class TeacherStatsController extends ChangeNotifier {
   }
 
   void toggleUnit(String unitKey, List<String> lessonIds) {
-    if (_lifecycle.isDisposed) return;
+    if (_lifecycle.isDisposed || !_state.canCorrectSettledPayroll) return;
     final selected = {
       for (final entry in _state.selectedUnits.entries)
         entry.key: List<String>.unmodifiable(entry.value),
@@ -323,6 +333,7 @@ class TeacherStatsController extends ChangeNotifier {
   }
 
   List<String> selectableLessonIdsFor(Map<String, dynamic> unit) {
+    if (!_state.canCorrectSettledPayroll) return const [];
     final lessonIds = editableLessonIdsFor(unit);
     final isGroup =
         unit['unitType'] == 'group' || unit['unitType'] == 'group_trial';

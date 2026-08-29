@@ -114,7 +114,8 @@ void main() {
     await tester.ensureVisible(subscriptions);
     await tester.tap(subscriptions);
     await tester.pumpAndSettle();
-    expect(find.text('Выдать абонемент'), findsOneWidget);
+    expect(find.text('Продать абонемент'), findsOneWidget);
+    expect(find.text('Выдать абонемент'), findsNothing);
 
     final progress = find.text('Прогресс');
     await tester.ensureVisible(progress);

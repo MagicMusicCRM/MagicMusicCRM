@@ -192,6 +192,8 @@ void main() {
       await tester.tap(find.text('Оплаты'));
       await tester.pumpAndSettle();
       expect(find.text('Оплаты и личный счёт'), findsOneWidget);
+      expect(find.text('Внести оплату'), findsOneWidget);
+      expect(find.text('Добавить оплату'), findsNothing);
       expect(find.text('Оплата за август'), findsNothing);
       final paymentScroll = tester.state<ScrollableState>(
         find.descendant(

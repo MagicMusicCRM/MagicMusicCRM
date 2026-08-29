@@ -570,35 +570,9 @@ extension _ClientCardStudent on _ClientCardState {
             TextButton(
               onPressed: _saving || _converting ? null : _handleClose,
               style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant),
-              child: Text(widget.routed ? 'Назад' : 'Отмена'),
+              child: Text(widget.routed ? 'Назад' : 'Закрыть'),
             ),
-            FilledButton(
-              onPressed: busy || _saving || _converting ? null : _save,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColor.gold,
-                foregroundColor: AppColor.onGold,
-                disabledBackgroundColor: AppColor.gold.withValues(alpha: 0.42),
-                disabledForegroundColor: AppColor.onGold.withValues(alpha: 0.7),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                ),
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-              child: _saving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColor.onGold,
-                      ),
-                    )
-                  : const Text('Сохранить'),
-            ),
+            _buildAutoSaveControl(cs, enabled: !busy && !_converting),
           ],
         ),
       ),
@@ -706,7 +680,7 @@ extension _ClientCardStudent on _ClientCardState {
       // The package endpoint atomically copies the persisted lead record.
       // Save the in-memory draft first; otherwise choosing a package closes
       // the card and silently drops fields typed since the last Save action.
-      if (_edited && !await _persistEdits()) return;
+      if (!await _flushPendingClientEdits()) return;
       await crm.issueLeadSubscription(_leadId, packageId);
       if (!mounted) return;
       _markDirty();
@@ -1048,6 +1022,7 @@ extension _ClientCardStudent on _ClientCardState {
             _emitState(() {
               _leadData['status'] = v;
               _edited = true;
+              _leadStatusEditRevision = _editRevision;
             });
           }
         },
@@ -1117,6 +1092,7 @@ extension _ClientCardStudent on _ClientCardState {
           _emitState(() {
             _student?['status'] = value;
             _edited = true;
+            _studentStatusEditRevision = _editRevision;
           });
         },
       ),

@@ -25,6 +25,9 @@ export class PayrollReadRepository {
     const result = await this.database.query<PayrollLessonRow>(
       `
         select l.id, l.teacher_id, l.student_id, l.lead_id, l.group_id,
+          coalesce((select version from app.aggregate_versions
+            where aggregate_type = 'schedule:teacher-rate-bulk'
+              and aggregate_id = 'global'), 0) as rate_mutation_version,
           l.scheduled_at, l.duration_minutes, l.is_trial,
           l.teacher_rate, g.teacher_rate as group_rate, g.name as group_name,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
@@ -246,8 +249,9 @@ export class PayrollReadRepository {
       effectiveFrom: this.calculator.toDateOnly(row.effective_from),
       createdAt: row.created_at ?? null,
       authorName:
-        [row.author_first_name, row.author_last_name].filter(Boolean).join(" ") ||
-        null,
+        [row.author_first_name, row.author_last_name]
+          .filter(Boolean)
+          .join(" ") || null,
     });
     map.set(row.teacher_id, list);
   }

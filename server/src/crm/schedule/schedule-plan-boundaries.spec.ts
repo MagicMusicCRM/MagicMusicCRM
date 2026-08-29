@@ -262,6 +262,7 @@ describe("Schedule plan owner boundaries", () => {
           SchedulePlanDefinitionService,
           LessonSeriesCommandService,
           LessonSettlementService,
+          SubscriptionPreviewTokenService,
         ],
       ],
       [
@@ -274,6 +275,7 @@ describe("Schedule plan owner boundaries", () => {
           ScheduleSeriesMaterializerService,
           LessonSettlementService,
           SchedulePlanDefinitionService,
+          SchedulePlanConstraintPreviewService,
         ],
       ],
       [
@@ -437,11 +439,7 @@ describe("Schedule plan owner boundaries", () => {
   });
 
   it("registers extracted owners privately behind the narrow CRM export surface", () => {
-    const providers = moduleIdentifiers(
-      moduleSource,
-      "CrmModule",
-      "providers",
-    );
+    const providers = moduleIdentifiers(moduleSource, "CrmModule", "providers");
     const exports = moduleIdentifiers(moduleSource, "CrmModule", "exports");
     for (const owner of [
       "SchedulePlanDefinitionService",

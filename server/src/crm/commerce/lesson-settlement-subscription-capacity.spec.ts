@@ -16,6 +16,7 @@ function fact(
   subscriptionId: string,
   clientId: string,
   units: string,
+  payerStudentId: string | null = null,
 ): CalculatedLessonClientFact {
   return {
     charge: {
@@ -27,6 +28,7 @@ function fact(
     },
     chargeType: "subscription",
     subscriptionId,
+    payerStudentId,
     settlement: {
       stableKey: "completed",
       label: "Проведено",
@@ -110,5 +112,29 @@ describe("lesson settlement subscription capacity", () => {
     );
     expect(reservations).toHaveLength(1);
     expect(reservations[0]!.values?.[1]).toBe("subscription-b");
+  });
+
+  it("allows the explicitly selected payer to own the subscription", async () => {
+    const client = {
+      query: async (text: string) => {
+        if (text.includes("from app.subscriptions")) {
+          return queryResult([
+            {
+              student_id: "payer-a",
+              is_usable: true,
+              has_capacity: true,
+              available_units: "3.00",
+            },
+          ]);
+        }
+        return queryResult([{ id: "reservation-a" }]);
+      },
+    } as unknown as PoolClient;
+
+    await expect(
+      reserveLessonSettlementSubscriptions(client, "lesson-a", [
+        fact("subscription-a", "recipient-b", "1.00", "payer-a"),
+      ]),
+    ).resolves.toBeUndefined();
   });
 });

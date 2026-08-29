@@ -98,7 +98,7 @@ export class LeadBoardService {
     return this.database.query<LeadBoardRow>(
       `
         with filtered as (
-          select l.id, l.status_id, ls.stage_key as status_key,
+          select l.id, l.version, l.status_id, ls.stage_key as status_key,
             ls.name as status_name, ls.color as status_color,
             ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
             l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,

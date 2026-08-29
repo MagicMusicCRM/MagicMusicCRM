@@ -7,6 +7,32 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/students_b
 
 void main() {
   group('StudentsBoardController', () {
+    test('passes the Student projection version to the status PATCH', () async {
+      int? receivedVersion;
+      final controller = StudentsBoardController(
+        loadBranches: () async => const [],
+        loadStudentsPage: _unusedPageLoader,
+        updateStudentStatus:
+            ({
+              required studentId,
+              required status,
+              required expectedVersion,
+            }) async {
+              receivedVersion = expectedVersion;
+            },
+      );
+      addTearDown(controller.dispose);
+      controller.selectBranch('branch-a');
+
+      await controller.moveStatus(
+        const {'id': 'student-1', 'status': 'active', 'version': 6},
+        'paused',
+        refreshAndReadback: (_) async {},
+      );
+
+      expect(receivedVersion, 6);
+    });
+
     test('loads branches and selects the first branch', () async {
       final controller = StudentsBoardController(
         loadBranches: () async => [
@@ -157,8 +183,9 @@ void main() {
       final controller = StudentsBoardController(
         loadBranches: () async => const [],
         loadStudentsPage: _unusedPageLoader,
-        updateStudentStatus: ({required studentId, required status}) =>
-            update.future,
+        updateStudentStatus:
+            ({required studentId, required status, required expectedVersion}) =>
+                update.future,
       );
       addTearDown(controller.dispose);
       controller.selectBranch('branch-a');
@@ -187,8 +214,12 @@ void main() {
         final controller = StudentsBoardController(
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) =>
-              update.future,
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) => update.future,
         );
         addTearDown(controller.dispose);
         controller.selectBranch('branch-a');
@@ -223,9 +254,14 @@ void main() {
           realtimeDebounce: const Duration(milliseconds: 50),
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) async {
-            patchCalls++;
-          },
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) async {
+                patchCalls++;
+              },
         );
         addTearDown(controller.dispose);
         controller.selectBranch('branch-a');
@@ -266,7 +302,12 @@ void main() {
           realtimeDebounce: const Duration(milliseconds: 20),
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) async {},
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) async {},
         );
         addTearDown(controller.dispose);
         controller.selectBranch('branch-a');
@@ -300,7 +341,12 @@ void main() {
           realtimeDebounce: const Duration(milliseconds: 20),
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) async {},
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) async {},
         );
         addTearDown(controller.dispose);
         controller.selectBranch('branch-a');
@@ -342,7 +388,12 @@ void main() {
           realtimeDebounce: const Duration(milliseconds: 10),
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) async {},
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) async {},
         );
         addTearDown(controller.dispose);
         controller.selectBranch('branch-a');
@@ -380,7 +431,12 @@ void main() {
           realtimeDebounce: const Duration(milliseconds: 30),
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) async {},
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) async {},
         );
         controller.selectBranch('branch-a');
 
@@ -410,8 +466,12 @@ void main() {
           realtimeDebounce: Duration.zero,
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) =>
-              update.future,
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) => update.future,
         );
         controller.selectBranch('branch-a');
         final move = controller.moveStatus(
@@ -502,7 +562,12 @@ void main() {
         final controller = StudentsBoardController(
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) async {},
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) async {},
         );
         addTearDown(controller.dispose);
         controller.selectBranch('branch-a');
@@ -542,7 +607,12 @@ void main() {
         realtimeDebounce: const Duration(milliseconds: 20),
         loadBranches: () async => const [],
         loadStudentsPage: _unusedPageLoader,
-        updateStudentStatus: ({required studentId, required status}) async {},
+        updateStudentStatus:
+            ({
+              required studentId,
+              required status,
+              required expectedVersion,
+            }) async {},
       );
       addTearDown(controller.dispose);
       controller.selectBranch('branch-a');
@@ -598,7 +668,12 @@ void main() {
           realtimeDebounce: const Duration(milliseconds: 20),
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) async {},
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) async {},
         );
         addTearDown(controller.dispose);
         controller.selectBranch('branch-a');
@@ -653,7 +728,12 @@ void main() {
           realtimeDebounce: const Duration(milliseconds: 20),
           loadBranches: () async => const [],
           loadStudentsPage: _unusedPageLoader,
-          updateStudentStatus: ({required studentId, required status}) async {},
+          updateStudentStatus:
+              ({
+                required studentId,
+                required status,
+                required expectedVersion,
+              }) async {},
         );
         addTearDown(controller.dispose);
         controller.selectBranch('branch-a');
@@ -709,7 +789,12 @@ void main() {
         realtimeDebounce: const Duration(milliseconds: 20),
         loadBranches: () async => const [],
         loadStudentsPage: _unusedPageLoader,
-        updateStudentStatus: ({required studentId, required status}) async {},
+        updateStudentStatus:
+            ({
+              required studentId,
+              required status,
+              required expectedVersion,
+            }) async {},
       );
       addTearDown(controller.dispose);
       controller.selectBranch('branch-a');
@@ -783,4 +868,5 @@ Future<StudentsBoardPageResult> _unusedPageLoader({
 Future<void> _unusedStatusUpdater({
   required String studentId,
   required String status,
+  required int expectedVersion,
 }) => throw UnimplementedError();

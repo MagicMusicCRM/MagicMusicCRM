@@ -43,6 +43,7 @@ class LessonEditorViewModel {
     required this.isSaving,
     required this.isAnalyzing,
     required this.validationMessage,
+    required this.canManageTeacherCompensation,
     this.loadErrorMessage,
     this.scheduleAnalysisError,
   });
@@ -51,6 +52,7 @@ class LessonEditorViewModel {
     LessonEditorCoreViewState editor,
     LessonEditorProgressViewState progress,
     LessonEditorFeedbackViewState feedback,
+    bool canManageTeacherCompensation,
   ) => LessonEditorViewModel(
     session: editor.$1,
     draft: editor.$2,
@@ -60,6 +62,7 @@ class LessonEditorViewModel {
     isSaving: progress.$3,
     isAnalyzing: progress.$4,
     validationMessage: feedback.$1,
+    canManageTeacherCompensation: canManageTeacherCompensation,
     loadErrorMessage: feedback.$2,
     scheduleAnalysisError: feedback.$3,
   );
@@ -74,6 +77,7 @@ class LessonEditorViewModel {
   final String? validationMessage;
   final String? loadErrorMessage;
   final String? scheduleAnalysisError;
+  final bool canManageTeacherCompensation;
 }
 
 class LessonEditorView extends StatelessWidget {
@@ -93,6 +97,7 @@ class LessonEditorView extends StatelessWidget {
     LessonEditorProgressViewState progress,
     LessonEditorFeedbackViewState feedback, {
     required LessonEditorActions actions,
+    required bool canManageTeacherCompensation,
     bool pageMode = false,
     String? title,
     ScrollController? scrollController,
@@ -100,7 +105,12 @@ class LessonEditorView extends StatelessWidget {
     VoidCallback? onRetry,
     Key? key,
   }) => LessonEditorView(
-    model: LessonEditorViewModel.fromState(editor, progress, feedback),
+    model: LessonEditorViewModel.fromState(
+      editor,
+      progress,
+      feedback,
+      canManageTeacherCompensation,
+    ),
     actions: actions,
     pageMode: pageMode,
     title: title,
@@ -227,6 +237,8 @@ class LessonEditorView extends StatelessWidget {
                     draft: model.draft,
                     rule: selectedRule,
                   ),
+                  canManageTeacherCompensation:
+                      model.canManageTeacherCompensation,
                   allowsNoFunding: policy.isNoCharge(selectedSettlement),
                 ),
                 actions: actions,
@@ -246,6 +258,8 @@ class LessonEditorView extends StatelessWidget {
                     draft: model.draft,
                     references: model.references,
                   ),
+                  canManageTeacherCompensation:
+                      model.canManageTeacherCompensation,
                 ),
               ),
             ],

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
 import 'lesson_decision_models.dart';
 
@@ -55,8 +56,14 @@ class LessonDecisionFormContent extends StatelessWidget {
     required this.participants,
     required this.participantNames,
     required this.clientSettlementKeys,
+    required this.payerIds,
+    required this.payerNames,
+    required this.subscriptionIds,
+    required this.subscriptions,
+    required this.loadingSubscriptions,
     required this.groupLesson,
     required this.completedReschedule,
+    required this.canManageTeacherCompensation,
     required this.busy,
     required this.preview,
     required this.error,
@@ -66,6 +73,9 @@ class LessonDecisionFormContent extends StatelessWidget {
     required this.onCompensationChanged,
     required this.onCompensationValueChanged,
     required this.onClientSettlementChanged,
+    required this.searchPayers,
+    required this.onPayerChanged,
+    required this.onSubscriptionChanged,
     required this.compensationValidator,
     required this.onClose,
     required this.onSubmit,
@@ -87,8 +97,14 @@ class LessonDecisionFormContent extends StatelessWidget {
   final List<LessonDecisionParticipant> participants;
   final Map<String, String> participantNames;
   final Map<String, String?> clientSettlementKeys;
+  final Map<String, String?> payerIds;
+  final Map<String, String?> payerNames;
+  final Map<String, String?> subscriptionIds;
+  final Map<String, List<LessonDecisionSubscription>> subscriptions;
+  final Set<String> loadingSubscriptions;
   final bool groupLesson;
   final bool completedReschedule;
+  final bool canManageTeacherCompensation;
   final bool busy;
   final LessonDecisionPreview? preview;
   final Object? error;
@@ -99,6 +115,12 @@ class LessonDecisionFormContent extends StatelessWidget {
   final ValueChanged<String> onCompensationValueChanged;
   final void Function(String clientId, String? settlementKey)
   onClientSettlementChanged;
+  final Future<List<LessonDecisionParticipant>> Function(String query)
+  searchPayers;
+  final void Function(String clientId, LessonDecisionParticipant? payer)
+  onPayerChanged;
+  final void Function(String clientId, String? subscriptionId)
+  onSubscriptionChanged;
   final FormFieldValidator<String> compensationValidator;
   final VoidCallback onClose;
   final VoidCallback onSubmit;
@@ -134,20 +156,30 @@ class LessonDecisionFormContent extends StatelessWidget {
             compensationKey: compensationKey,
             participants: participants,
             clientSettlementKeys: clientSettlementKeys,
+            payerIds: payerIds,
+            payerNames: payerNames,
+            subscriptionIds: subscriptionIds,
+            subscriptions: subscriptions,
+            loadingSubscriptions: loadingSubscriptions,
             groupLesson: groupLesson,
+            canManageTeacherCompensation: canManageTeacherCompensation,
             enabled: !busy,
             onSettlementChanged: onSettlementChanged,
             onCompensationChanged: onCompensationChanged,
             onClientSettlementChanged: onClientSettlementChanged,
+            searchPayers: searchPayers,
+            onPayerChanged: onPayerChanged,
+            onSubscriptionChanged: onSubscriptionChanged,
           ),
-        LessonDecisionCompensationSection(
-          completedReschedule: completedReschedule,
-          rule: compensationRule,
-          controller: compensationValueController,
-          enabled: !busy,
-          validator: compensationValidator,
-          onChanged: onCompensationValueChanged,
-        ),
+        if (canManageTeacherCompensation)
+          LessonDecisionCompensationSection(
+            completedReschedule: completedReschedule,
+            rule: compensationRule,
+            controller: compensationValueController,
+            enabled: !busy,
+            validator: compensationValidator,
+            onChanged: onCompensationValueChanged,
+          ),
         if (preview case final value?) ...[
           const SizedBox(height: AppSpace.lg),
           LessonDecisionPreviewCard(
@@ -221,11 +253,20 @@ class LessonDecisionOptionsSection extends StatelessWidget {
     required this.compensationKey,
     required this.participants,
     required this.clientSettlementKeys,
+    required this.payerIds,
+    required this.payerNames,
+    required this.subscriptionIds,
+    required this.subscriptions,
+    required this.loadingSubscriptions,
     required this.groupLesson,
+    required this.canManageTeacherCompensation,
     required this.enabled,
     required this.onSettlementChanged,
     required this.onCompensationChanged,
     required this.onClientSettlementChanged,
+    required this.searchPayers,
+    required this.onPayerChanged,
+    required this.onSubscriptionChanged,
     super.key,
   });
 
@@ -234,12 +275,24 @@ class LessonDecisionOptionsSection extends StatelessWidget {
   final String? compensationKey;
   final List<LessonDecisionParticipant> participants;
   final Map<String, String?> clientSettlementKeys;
+  final Map<String, String?> payerIds;
+  final Map<String, String?> payerNames;
+  final Map<String, String?> subscriptionIds;
+  final Map<String, List<LessonDecisionSubscription>> subscriptions;
+  final Set<String> loadingSubscriptions;
   final bool groupLesson;
+  final bool canManageTeacherCompensation;
   final bool enabled;
   final ValueChanged<String?> onSettlementChanged;
   final ValueChanged<String?> onCompensationChanged;
   final void Function(String clientId, String? settlementKey)
   onClientSettlementChanged;
+  final Future<List<LessonDecisionParticipant>> Function(String query)
+  searchPayers;
+  final void Function(String clientId, LessonDecisionParticipant? payer)
+  onPayerChanged;
+  final void Function(String clientId, String? subscriptionId)
+  onSubscriptionChanged;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -262,32 +315,42 @@ class LessonDecisionOptionsSection extends StatelessWidget {
         onChanged: enabled ? onSettlementChanged : null,
       ),
       const SizedBox(height: AppSpace.md),
-      if (groupLesson && participants.isNotEmpty) ...[
+      if (participants.isNotEmpty) ...[
         LessonDecisionClientOverrides(
           participants: participants,
           settlementTypes: catalog.settlementTypes,
           selectedKeys: clientSettlementKeys,
+          payerIds: payerIds,
+          payerNames: payerNames,
+          subscriptionIds: subscriptionIds,
+          subscriptions: subscriptions,
+          loadingSubscriptions: loadingSubscriptions,
+          showSettlementOverrides: groupLesson,
           enabled: enabled,
           onChanged: onClientSettlementChanged,
+          searchPayers: searchPayers,
+          onPayerChanged: onPayerChanged,
+          onSubscriptionChanged: onSubscriptionChanged,
         ),
         const SizedBox(height: AppSpace.md),
       ],
-      DropdownButtonFormField<String>(
-        menuMaxHeight: 256,
-        key: const Key('lesson-decision-compensation'),
-        initialValue: compensationKey,
-        isExpanded: true,
-        decoration: const InputDecoration(
-          labelText: 'Оплата преподавателю *',
-          helperText: 'Выбирается сотрудником независимо от списания',
+      if (canManageTeacherCompensation)
+        DropdownButtonFormField<String>(
+          menuMaxHeight: 256,
+          key: const Key('lesson-decision-compensation'),
+          initialValue: compensationKey,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Оплата преподавателю *',
+            helperText: 'Выбирается сотрудником независимо от списания',
+          ),
+          items: [
+            for (final item in catalog.compensationRules)
+              DropdownMenuItem(value: item.key, child: Text(item.label)),
+          ],
+          validator: (value) => value == null ? 'Выберите оплату' : null,
+          onChanged: enabled ? onCompensationChanged : null,
         ),
-        items: [
-          for (final item in catalog.compensationRules)
-            DropdownMenuItem(value: item.key, child: Text(item.label)),
-        ],
-        validator: (value) => value == null ? 'Выберите оплату' : null,
-        onChanged: enabled ? onCompensationChanged : null,
-      ),
     ],
   );
 }
@@ -334,16 +397,37 @@ class LessonDecisionClientOverrides extends StatelessWidget {
     required this.participants,
     required this.settlementTypes,
     required this.selectedKeys,
+    required this.payerIds,
+    required this.payerNames,
+    required this.subscriptionIds,
+    required this.subscriptions,
+    required this.loadingSubscriptions,
+    required this.showSettlementOverrides,
     required this.enabled,
     required this.onChanged,
+    required this.searchPayers,
+    required this.onPayerChanged,
+    required this.onSubscriptionChanged,
     super.key,
   });
 
   final List<LessonDecisionParticipant> participants;
   final List<LessonDecisionCatalogItem> settlementTypes;
   final Map<String, String?> selectedKeys;
+  final Map<String, String?> payerIds;
+  final Map<String, String?> payerNames;
+  final Map<String, String?> subscriptionIds;
+  final Map<String, List<LessonDecisionSubscription>> subscriptions;
+  final Set<String> loadingSubscriptions;
+  final bool showSettlementOverrides;
   final bool enabled;
   final void Function(String clientId, String? settlementKey) onChanged;
+  final Future<List<LessonDecisionParticipant>> Function(String query)
+  searchPayers;
+  final void Function(String clientId, LessonDecisionParticipant? payer)
+  onPayerChanged;
+  final void Function(String clientId, String? subscriptionId)
+  onSubscriptionChanged;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -357,13 +441,17 @@ class LessonDecisionClientOverrides extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Индивидуальные условия участников',
+        Text(
+          showSettlementOverrides
+              ? 'Индивидуальные условия участников'
+              : 'Оплата занятия',
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: AppSpace.xs),
         Text(
-          'Общее списание применяется ко всей группе. Здесь можно изменить его только для конкретного ученика; источник средств берётся из закреплённого плана ученика.',
+          showSettlementOverrides
+              ? 'Для каждого ученика можно изменить списание или плательщика.'
+              : 'Если платит другой ученик, выберите его абонемент.',
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontSize: 12,
@@ -371,34 +459,106 @@ class LessonDecisionClientOverrides extends StatelessWidget {
         ),
         const SizedBox(height: AppSpace.md),
         for (var index = 0; index < participants.length; index++) ...[
-          DropdownButtonFormField<String>(
-            menuMaxHeight: 256,
-            key: Key('lesson-decision-client-${participants[index].id}'),
-            initialValue:
-                selectedKeys[participants[index].id] ??
-                _commonSettlementOverride,
-            isExpanded: true,
-            decoration: InputDecoration(labelText: participants[index].name),
-            items: [
-              const DropdownMenuItem(
-                value: _commonSettlementOverride,
-                child: Text('Как у всей группы'),
-              ),
-              for (final item in settlementTypes)
-                DropdownMenuItem(
-                  value: item.key,
-                  child: LessonDecisionCatalogLabel(item: item),
+          if (showSettlementOverrides) ...[
+            DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: Key('lesson-decision-client-${participants[index].id}'),
+              initialValue:
+                  selectedKeys[participants[index].id] ??
+                  _commonSettlementOverride,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: participants[index].name),
+              items: [
+                const DropdownMenuItem(
+                  value: _commonSettlementOverride,
+                  child: Text('Как у всей группы'),
                 ),
-            ],
-            onChanged: !enabled
-                ? null
-                : (value) => onChanged(
-                    participants[index].id,
-                    value == _commonSettlementOverride ? null : value,
+                for (final item in settlementTypes)
+                  DropdownMenuItem(
+                    value: item.key,
+                    child: LessonDecisionCatalogLabel(item: item),
                   ),
-          ),
-          if (index != participants.length - 1)
+              ],
+              onChanged: !enabled
+                  ? null
+                  : (value) => onChanged(
+                      participants[index].id,
+                      value == _commonSettlementOverride ? null : value,
+                    ),
+            ),
             const SizedBox(height: AppSpace.sm),
+          ],
+          SearchablePickerField(
+            key: Key('lesson-decision-payer-${participants[index].id}'),
+            label: showSettlementOverrides
+                ? 'Плательщик для ${participants[index].name}'
+                : 'Плательщик',
+            placeholder: 'По плану ученика',
+            hintText: 'Найдите ученика по имени',
+            selectedId: payerIds[participants[index].id],
+            selectedLabel: payerNames[participants[index].id],
+            items: const [],
+            enabled: enabled,
+            onSearch: (query) async => [
+              for (final payer in await searchPayers(query))
+                if (payer.id != participants[index].id)
+                  SearchableSelectItem(id: payer.id, label: payer.name),
+            ],
+            onSelected: (item) => onPayerChanged(
+              participants[index].id,
+              item == null
+                  ? null
+                  : LessonDecisionParticipant(id: item.id, name: item.label),
+            ),
+          ),
+          if (payerIds[participants[index].id] != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: Key(
+                'lesson-decision-subscription-${participants[index].id}',
+              ),
+              initialValue: subscriptionIds[participants[index].id],
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Абонемент',
+                suffixIcon:
+                    loadingSubscriptions.contains(participants[index].id)
+                    ? const Padding(
+                        padding: EdgeInsets.all(AppSpace.sm),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : null,
+              ),
+              items: [
+                for (final subscription
+                    in subscriptions[participants[index].id] ?? const [])
+                  DropdownMenuItem(
+                    value: subscription.id,
+                    child: Text(subscription.label),
+                  ),
+              ],
+              validator: (value) {
+                if (value != null) return null;
+                return loadingSubscriptions.contains(participants[index].id)
+                    ? 'Дождитесь загрузки'
+                    : (subscriptions[participants[index].id]?.isEmpty ?? true)
+                    ? 'Нет доступного абонемента'
+                    : 'Выберите абонемент';
+              },
+              onChanged:
+                  !enabled ||
+                      loadingSubscriptions.contains(participants[index].id)
+                  ? null
+                  : (value) =>
+                        onSubscriptionChanged(participants[index].id, value),
+            ),
+          ],
+          if (index != participants.length - 1)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpace.md),
+              child: Divider(height: 1),
+            ),
         ],
       ],
     ),

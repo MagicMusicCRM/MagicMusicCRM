@@ -4,7 +4,9 @@ extension _TeacherStatsViewSections on TeacherStatsView {
   Widget _unitRow(BuildContext context, Map<String, dynamic> unit) {
     final meta = _unitMeta(unit);
     return InkWell(
-      onTap: () => _editUnit(context, unit, meta.isGroup),
+      onTap: _state.canCorrectSettledPayroll
+          ? () => _editUnit(context, unit, meta.isGroup)
+          : null,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
@@ -95,6 +97,9 @@ extension _TeacherStatsViewSections on TeacherStatsView {
   }
 
   Widget _unitSelection(_TeacherStatsUnitMeta meta) {
+    if (!_state.canCorrectSettledPayroll) {
+      return const SizedBox(width: 28, height: 28);
+    }
     final unitKey = meta.unitKey;
     if (unitKey == null) return const SizedBox(width: 28, height: 28);
     return SizedBox(
@@ -121,7 +126,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
         ],
       );
     }
-    if (meta.isGroup) {
+    if (meta.isGroup && _state.canCorrectSettledPayroll) {
       return const Row(
         children: [SizedBox(width: 4), Icon(Icons.edit_rounded, size: 14)],
       );
@@ -147,6 +152,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
     Map<String, dynamic> unit,
     bool isGroup,
   ) async {
+    if (!_state.canCorrectSettledPayroll) return;
     if (isGroup) return _editGroup(context, unit);
     await _editLessons(context, unit);
   }

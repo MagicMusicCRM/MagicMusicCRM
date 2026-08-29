@@ -75,70 +75,77 @@ export class LessonTransitionCommandService {
     assertTransitionMetadata(metadata);
     assertTransitionReason(dto, operation);
     const toState = targetTransitionState(operation);
-    const successorId = operation === "reschedule"
-      ? stableTransitionId(
-          `schedule.lesson.reschedule\0${lessonId}\0${actor.userId}\0${metadata.idempotencyKey}`,
-        )
-      : null;
-    const mutation = await this.platform.executeVersionedMutation<CommittedTransition>({
-      actorKey: `user:${actor.userId}`,
-      actorUserId: actor.userId,
-      authorization: { actor, capabilityKey: "schedule.lesson.write" },
-      operation: `schedule.lesson.${operation}`,
-      idempotencyKey: metadata.idempotencyKey,
-      payload: { lessonId, dto },
-      aggregateType: "schedule:lesson",
-      aggregateId: lessonId,
-      expectedVersion: dto.expectedVersion,
-      requestId: metadata.requestId,
-      audit: {
-        action: operation === "reschedule"
-          ? "crm.lesson_rescheduled"
-          : operation === "cancel"
-            ? "crm.lesson_cancelled"
-            : "crm.lesson_settled",
-        entityType: "lesson",
-        entityId: lessonId,
-        reason: transitionReasonCode(dto),
-        reasonText: dto.reasonText?.trim(),
-        beforeRef: { lessonId, version: dto.expectedVersion },
-      },
-      outbox: {
-        type: "schedule.lesson.changed",
-        payload: {
+    const successorId =
+      operation === "reschedule"
+        ? stableTransitionId(
+            `schedule.lesson.reschedule\0${lessonId}\0${actor.userId}\0${metadata.idempotencyKey}`,
+          )
+        : null;
+    const mutation =
+      await this.platform.executeVersionedMutation<CommittedTransition>({
+        actorKey: `user:${actor.userId}`,
+        actorUserId: actor.userId,
+        authorization: { actor, capabilityKey: "schedule.lesson.write" },
+        operation: `schedule.lesson.${operation}`,
+        idempotencyKey: metadata.idempotencyKey,
+        payload: { lessonId, dto },
+        aggregateType: "schedule:lesson",
+        aggregateId: lessonId,
+        expectedVersion: dto.expectedVersion,
+        requestId: metadata.requestId,
+        audit: {
+          action:
+            operation === "reschedule"
+              ? "crm.lesson_rescheduled"
+              : operation === "cancel"
+                ? "crm.lesson_cancelled"
+                : "crm.lesson_settled",
+          entityType: "lesson",
           entityId: lessonId,
-          action: operation === "reschedule"
-            ? "rescheduled"
-            : operation === "cancel"
-              ? "cancelled"
-              : "settled",
-          state: toState,
-          successorId,
+          reason: transitionReasonCode(dto),
+          reasonText: dto.reasonText?.trim(),
+          beforeRef: { lessonId, version: dto.expectedVersion },
         },
-      },
-      mutate: async (client, nextVersion) => {
-        const signed = this.previewTokens.verifyLessonTransition(dto.previewToken);
-        this.assertSignedPreview(signed, actor, lessonId, dto, operation);
-        return this.commits.commit(client, {
-          actor,
-          lessonId,
-          dto,
-          operation,
-          successorId,
-          nextVersion,
-          expectedFingerprint: signed.transitionFingerprint,
-        });
-      },
-    });
+        outbox: {
+          type: "schedule.lesson.changed",
+          payload: {
+            entityId: lessonId,
+            action:
+              operation === "reschedule"
+                ? "rescheduled"
+                : operation === "cancel"
+                  ? "cancelled"
+                  : "settled",
+            state: toState,
+            successorId,
+          },
+        },
+        mutate: async (client, nextVersion) => {
+          const signed = this.previewTokens.verifyLessonTransition(
+            dto.previewToken,
+          );
+          this.assertSignedPreview(signed, actor, lessonId, dto, operation);
+          return this.commits.commit(client, {
+            actor,
+            lessonId,
+            dto,
+            operation,
+            successorId,
+            nextVersion,
+            expectedFingerprint: signed.transitionFingerprint,
+          });
+        },
+      });
     await this.reservations.publishLessonSettlementPostCommit(lessonId);
     if (successorId) {
       await this.reservations.publishLessonSettlementPostCommit(successorId);
     }
     return {
       source: { id: lessonId, state: toState, version: mutation.version },
-      successor: successorId === null
-        ? null
-        : { id: successorId, state: "scheduled", version: 1 },
+      successor:
+        successorId === null
+          ? null
+          : { id: successorId, state: "scheduled", version: 1 },
       transitionId: mutation.resultRef.transitionId,
       clientFinancialFactIds: mutation.resultRef.clientFinancialFactIds,
       teacherFinancialFactId: mutation.resultRef.teacherFinancialFactId,
@@ -148,14 +155,17 @@ export class LessonTransitionCommandService {
   }
 
   private assertSignedPreview(
-    signed: ReturnType<SubscriptionPreviewTokenService["verifyLessonTransition"]>,
+    signed: ReturnType<
+      SubscriptionPreviewTokenService["verifyLessonTransition"]
+    >,
     actor: ActorContext,
     lessonId: string,
     dto: TransitionCommandDto,
     operation: TransitionOperation,
   ): void {
     if (
-      signed.actorUserId !== actor.userId || signed.lessonId !== lessonId ||
+      signed.actorUserId !== actor.userId ||
+      signed.lessonId !== lessonId ||
       signed.expectedVersion !== dto.expectedVersion ||
       signed.operation !== operation
     ) {

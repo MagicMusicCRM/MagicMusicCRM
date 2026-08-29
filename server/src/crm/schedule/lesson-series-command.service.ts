@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { Injectable, UnprocessableEntityException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
@@ -28,6 +25,7 @@ interface SeriesOccurrenceRow {
   starts_at: Date | string;
   ends_at: Date | string;
   timezone_name: string;
+  historical: boolean;
 }
 
 export interface SeriesOccurrence {
@@ -36,6 +34,7 @@ export interface SeriesOccurrence {
   startAt: string;
   endAt: string;
   timezone: string;
+  historical: boolean;
 }
 
 export interface SchedulePlanRowConstraintPreview {
@@ -52,6 +51,7 @@ export interface SchedulePlanRowConstraintPreview {
 export class LessonSeriesCommandService {
   private static readonly MAX_RANGE_DAYS = 365;
   private static readonly MATERIALIZATION_HORIZON_DAYS = 60;
+  private static readonly MAX_PLAN_OCCURRENCES = 500;
 
   constructor(
     private readonly platform: PlatformIntegrityService,
@@ -69,6 +69,8 @@ export class LessonSeriesCommandService {
     metadata: LessonCommandMetadata,
   ) {
     this.policy.assertCanWriteCrm(actor);
+    const canManageTeacherCompensation =
+      this.policy.canManageTeacherCompensation(actor);
     this.assertMetadata(metadata);
     this.assertFiniteRecurrence(dto);
     const clientRef = this.clientRef(dto);
@@ -106,15 +108,42 @@ export class LessonSeriesCommandService {
       },
       mutate: async (client, nextVersion) => {
         const templateOccurrence = await this.templateOccurrence(client, dto);
+        const templateCompensation = canManageTeacherCompensation
+          ? undefined
+          : await this.effectiveTeacherCompensation(
+              client,
+              dto.teacherId,
+              templateOccurrence.startAt,
+            );
         const templateDraft = this.validator.create(
-          this.lessonDraft(dto, clientRef, templateOccurrence.startAt),
-        );
-        const occurrences = await this.expand(client, dto);
-        const drafts = occurrences.map((occurrence) =>
-          this.validator.create(
-            this.lessonDraft(dto, clientRef, occurrence.startAt),
+          this.lessonDraft(
+            dto,
+            clientRef,
+            templateOccurrence.startAt,
+            templateCompensation,
           ),
         );
+        const occurrences = await this.expand(client, dto);
+        const drafts: CompleteLessonDraft[] = [];
+        for (const occurrence of occurrences) {
+          const compensation = canManageTeacherCompensation
+            ? undefined
+            : await this.effectiveTeacherCompensation(
+                client,
+                dto.teacherId,
+                occurrence.startAt,
+              );
+          drafts.push(
+            this.validator.create(
+              this.lessonDraft(
+                dto,
+                clientRef,
+                occurrence.startAt,
+                compensation,
+              ),
+            ),
+          );
+        }
         await this.acquireLocks(client, seriesId, templateDraft);
         await this.assertLeadNotConverted(client, clientRef);
         await this.validateEveryOccurrence(client, drafts, occurrences);
@@ -163,6 +192,7 @@ export class LessonSeriesCommandService {
     validFrom: string,
     validUntil: string | null,
     studentIds: string[],
+    includePast = false,
   ): Promise<void> {
     const preview = await this.previewPlanRow(
       client,
@@ -170,6 +200,7 @@ export class LessonSeriesCommandService {
       validFrom,
       validUntil,
       studentIds,
+      { includePast },
     );
     const failure = preview.failures[0];
     if (failure) {
@@ -178,6 +209,63 @@ export class LessonSeriesCommandService {
         message: "Schedule plan row violates schedule constraints.",
         ...failure,
       });
+    }
+  }
+
+  async assertPlanExpansionBounds(
+    client: PoolClient,
+    rows: SchedulePlanRowDto[],
+    validFrom: string,
+    validUntil: string | null,
+  ): Promise<void> {
+    const branchIds = [...new Set(rows.map((row) => row.branchId))];
+    const localDates = await client.query<{
+      id: string;
+      local_today: string;
+    }>(
+      `select id, timezone(timezone_name, now())::date::text as local_today
+         from app.branches
+        where id = any($1::uuid[]) and deleted_at is null`,
+      [branchIds],
+    );
+    const todayByBranch = new Map(
+      localDates.rows.map((row) => [row.id, this.epochDay(row.local_today)]),
+    );
+    const startDay = this.epochDay(validFrom);
+    const requestedEndDay = validUntil
+      ? this.epochDay(validUntil)
+      : Number.POSITIVE_INFINITY;
+    let occurrenceCount = 0;
+    for (const row of rows) {
+      const today = todayByBranch.get(row.branchId);
+      if (today === undefined) continue;
+      const expansionEnd = Math.min(
+        requestedEndDay,
+        today + LessonSeriesCommandService.MATERIALIZATION_HORIZON_DAYS,
+      );
+      const historicalEnd = Math.min(expansionEnd, today - 1);
+      if (
+        historicalEnd >= startDay &&
+        historicalEnd - startDay > LessonSeriesCommandService.MAX_RANGE_DAYS
+      ) {
+        throw new UnprocessableEntityException({
+          code: "SCHEDULE_PLAN_HISTORICAL_RANGE_TOO_LARGE",
+          message: "Исторический период расписания слишком большой.",
+          fields: ["activeFrom", "activeUntil"],
+        });
+      }
+      occurrenceCount += this.weekdayOccurrences(
+        startDay,
+        expansionEnd,
+        row.weekday,
+      );
+      if (occurrenceCount > LessonSeriesCommandService.MAX_PLAN_OCCURRENCES) {
+        throw new UnprocessableEntityException({
+          code: "SCHEDULE_PLAN_OCCURRENCE_LIMIT_EXCEEDED",
+          message: "Слишком много занятий для одной проверки расписания.",
+          fields: ["rows", "activeFrom", "activeUntil"],
+        });
+      }
     }
   }
 
@@ -190,6 +278,7 @@ export class LessonSeriesCommandService {
     options: {
       excludeScheduleSeriesIds?: string[];
       includeSuggestions?: boolean;
+      includePast?: boolean;
     } = {},
   ): Promise<SchedulePlanRowConstraintPreview> {
     const dto = Object.assign(new CreateScheduleSeriesDto(), {
@@ -202,10 +291,14 @@ export class LessonSeriesCommandService {
       validFrom,
       validUntil,
     });
-    const occurrences = await this.expand(client, dto, true);
-    const validationOccurrences = occurrences.length > 0
-      ? occurrences
-      : [await this.firstPlanOccurrence(client, dto)];
+    const occurrences = await this.expand(client, dto, {
+      allowPlanRange: true,
+      includePast: options.includePast,
+    });
+    const validationOccurrences =
+      occurrences.length > 0
+        ? occurrences
+        : [await this.firstPlanOccurrence(client, dto)];
     const failures: SchedulePlanRowConstraintPreview["failures"] = [];
     for (const occurrence of validationOccurrences) {
       for (const studentId of studentIds) {
@@ -230,22 +323,23 @@ export class LessonSeriesCommandService {
         }
       }
     }
-    const suggestions = options.includeSuggestions && failures[0]
-      ? await this.constraints
-          .analyze(
-            {
-              clientRef: { type: "student", id: failures[0].studentId },
-              teacherId: row.teacherId,
-              branchId: row.branchId,
-              roomId: row.roomId,
-              startAt: failures[0].occurrence.startAt,
-              endAt: failures[0].occurrence.endAt,
-              excludeScheduleSeriesIds: options.excludeScheduleSeriesIds,
-            },
-            client,
-          )
-          .then((analysis) => analysis.suggestions)
-      : [];
+    const suggestions =
+      options.includeSuggestions && failures[0]
+        ? await this.constraints
+            .analyze(
+              {
+                clientRef: { type: "student", id: failures[0].studentId },
+                teacherId: row.teacherId,
+                branchId: row.branchId,
+                roomId: row.roomId,
+                startAt: failures[0].occurrence.startAt,
+                endAt: failures[0].occurrence.endAt,
+                excludeScheduleSeriesIds: options.excludeScheduleSeriesIds,
+              },
+              client,
+            )
+            .then((analysis) => analysis.suggestions)
+        : [];
     return { occurrences: validationOccurrences, failures, suggestions };
   }
 
@@ -258,7 +352,8 @@ export class LessonSeriesCommandService {
           (day::date + $5::time) at time zone branch.timezone_name as starts_at,
           ((day::date + $5::time) at time zone branch.timezone_name
             + $6::int * interval '1 minute') as ends_at,
-          branch.timezone_name
+          branch.timezone_name,
+          day::date < timezone(branch.timezone_name, now())::date as historical
        from app.branches branch
        cross join lateral generate_series(
          $2::date,
@@ -290,6 +385,7 @@ export class LessonSeriesCommandService {
       startAt: new Date(row.starts_at).toISOString(),
       endAt: new Date(row.ends_at).toISOString(),
       timezone: row.timezone_name,
+      historical: row.historical,
     };
   }
 
@@ -329,7 +425,7 @@ export class LessonSeriesCommandService {
   private async expand(
     client: PoolClient,
     dto: CreateScheduleSeriesDto,
-    allowPlanRange = false,
+    options: { allowPlanRange?: boolean; includePast?: boolean } = {},
   ): Promise<SeriesOccurrence[]> {
     const result = await client.query<SeriesOccurrenceRow>(
       `
@@ -340,13 +436,13 @@ export class LessonSeriesCommandService {
             (day::date + $5::time) at time zone branch.timezone_name
             + $6::int * interval '1 minute'
           ) as ends_at,
-          branch.timezone_name
+          branch.timezone_name,
+          day::date < timezone(branch.timezone_name, now())::date as historical
         from app.branches branch
         cross join lateral generate_series(
-          greatest(
-            $2::date,
-            timezone(branch.timezone_name, now())::date
-          ),
+          case when $10::boolean then $2::date else greatest(
+            $2::date, timezone(branch.timezone_name, now())::date
+          ) end,
           least(
             coalesce(
               $3::date,
@@ -374,7 +470,8 @@ export class LessonSeriesCommandService {
         dto.durationMinutes ?? 60,
         LessonSeriesCommandService.MAX_RANGE_DAYS,
         LessonSeriesCommandService.MATERIALIZATION_HORIZON_DAYS,
-        allowPlanRange,
+        options.allowPlanRange ?? false,
+        options.includePast ?? false,
       ],
     );
     return result.rows.map((row, index) => ({
@@ -383,7 +480,27 @@ export class LessonSeriesCommandService {
       startAt: new Date(row.starts_at).toISOString(),
       endAt: new Date(row.ends_at).toISOString(),
       timezone: row.timezone_name,
+      historical: row.historical,
     }));
+  }
+
+  private epochDay(value: string): number {
+    return Math.floor(
+      Date.parse(`${value.slice(0, 10)}T00:00:00.000Z`) / 86_400_000,
+    );
+  }
+
+  private weekdayOccurrences(
+    startDay: number,
+    endDay: number,
+    weekday: number,
+  ): number {
+    if (endDay < startDay) return 0;
+    const startWeekday = ((((startDay + 3) % 7) + 7) % 7) + 1;
+    const firstOccurrence = startDay + ((weekday - startWeekday + 7) % 7);
+    return firstOccurrence > endDay
+      ? 0
+      : Math.floor((endDay - firstOccurrence) / 7) + 1;
   }
 
   private async templateOccurrence(
@@ -422,6 +539,7 @@ export class LessonSeriesCommandService {
       startAt: new Date(row.starts_at).toISOString(),
       endAt: new Date(row.ends_at).toISOString(),
       timezone: row.timezone_name,
+      historical: false,
     };
   }
 
@@ -429,6 +547,10 @@ export class LessonSeriesCommandService {
     dto: CreateScheduleSeriesDto,
     clientRef: ClientRefDto,
     scheduledAt: string,
+    compensation?: {
+      type: "hourly" | "none";
+      value: number;
+    },
   ): UpsertLessonDto {
     return {
       clientRef,
@@ -441,11 +563,35 @@ export class LessonSeriesCommandService {
       completionType: dto.completionType,
       clientChargeType: dto.clientChargeType,
       clientChargeValue: dto.clientChargeValue,
-      teacherCompensationType: dto.teacherCompensationType,
-      teacherCompensationValue: dto.teacherCompensationValue,
+      teacherCompensationType:
+        compensation?.type ?? dto.teacherCompensationType,
+      teacherCompensationValue:
+        compensation?.value ?? dto.teacherCompensationValue,
       subscriptionId: dto.subscriptionId,
       notes: dto.notes,
     };
+  }
+
+  private async effectiveTeacherCompensation(
+    client: PoolClient,
+    teacherId: string | undefined,
+    scheduledAt: string,
+  ): Promise<{ type: "hourly" | "none"; value: number }> {
+    if (!teacherId) return { type: "none", value: 0 };
+    const result = await client.query<{ rate: number | string }>(
+      `select coalesce((
+         select teacher_rate.rate
+         from app.teacher_rates teacher_rate
+         where teacher_rate.teacher_id = $1
+           and teacher_rate.deleted_at is null
+           and teacher_rate.effective_from <= $2::timestamptz::date
+         order by teacher_rate.effective_from desc, teacher_rate.created_at desc
+         limit 1
+       ), 0)::numeric as rate`,
+      [teacherId, scheduledAt],
+    );
+    const value = Number(result.rows[0]?.rate ?? 0);
+    return { type: value > 0 ? "hourly" : "none", value };
   }
 
   private async validateEveryOccurrence(

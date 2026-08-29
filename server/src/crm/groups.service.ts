@@ -6,10 +6,17 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { createHash } from "node:crypto";
+import type { QueryResult, QueryResultRow } from "pg";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
+import {
+  assertVersionedMutationMetadata,
+  type VersionedMutationMetadata,
+} from "../platform/versioned-mutation-metadata";
 import { GroupListQuery } from "./dto/group-lifecycle.dto";
 import { UpdateGroupDto } from "./dto/update-group.dto";
 import { UpsertGroupDto } from "./dto/upsert-group.dto";
@@ -50,6 +57,22 @@ interface GroupAssignmentImpactRow {
   active_plans: string | number;
 }
 
+type GroupQueryRunner = <T extends QueryResultRow>(
+  query: string,
+  params?: unknown[],
+) => Promise<QueryResult<T>>;
+
+const stableGroupId = (actorUserId: string, idempotencyKey: string) => {
+  const bytes = createHash("sha256")
+    .update(`crm.group.create\0${actorUserId}\0${idempotencyKey}`)
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
 /**
  * Groups domain, extracted from CrmService (SRP): group CRUD and membership
  * mutations (add/remove student). Touches `app.groups` / `app.group_students`
@@ -65,6 +88,7 @@ export class GroupsService {
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
     private readonly realtime: RealtimeBus,
+    private readonly integrity: PlatformIntegrityService,
   ) {}
 
   // ponytail: toGroupDto/GroupRow are duplicated from CrmService, which still
@@ -184,12 +208,24 @@ export class GroupsService {
     return this.toGroupDto(row);
   }
 
-  async createGroup(actor: ActorContext, dto: UpsertGroupDto) {
+  async createGroup(
+    actor: ActorContext,
+    dto: UpsertGroupDto,
+    metadata?: VersionedMutationMetadata,
+  ) {
     this.policy.assertCanManageSystemSettings(actor);
+    if (dto.teacherRate !== undefined && dto.teacherRate !== null) {
+      this.policy.assertCanManagePayrollHistory(actor);
+    }
     await assertSettingsBranchScope(this.database, actor, dto.branchId);
     const name = requiredTrim(dto.name, "Название группы обязательно.");
-    const result = await this.database.query<GroupRow>(
-      `
+    const insert = async (
+      runner: GroupQueryRunner,
+      groupId: string | null,
+      version: number | null,
+    ) => {
+      const result = await runner<GroupRow>(
+        `
         with valid_references as (
           select b.id as branch_id, t.id as teacher_id, r.id as room_id
           from app.branches b
@@ -209,14 +245,17 @@ export class GroupsService {
         ),
         inserted_group as (
           insert into app.groups (
+            id,
             teacher_id,
             branch_id,
             room_id,
             name,
             price_per_lesson,
-            teacher_rate
+            teacher_rate,
+            version
           )
-          select teacher_id, branch_id, room_id, $4, $5, $6
+          select coalesce($7::uuid, gen_random_uuid()), teacher_id, branch_id,
+            room_id, $4, $5, $6, coalesce($8::bigint, 1)
           from valid_references
           returning id, teacher_id, branch_id, room_id, name, price_per_lesson,
             teacher_rate, lifecycle_state, version, archived_at, archive_reason,
@@ -236,21 +275,80 @@ export class GroupsService {
         left join app.rooms r on r.id = g.room_id
         limit 1
       `,
-      [
-        dto.teacherId,
-        dto.branchId,
-        dto.roomId,
-        name,
-        dto.pricePerLesson ?? null,
-        dto.teacherRate ?? null,
-      ],
-    );
-    const group = result.rows[0];
-    if (!group) {
-      throw new BadRequestException(
-        "Выберите действующий филиал, назначенного в него преподавателя и аудиторию этого филиала.",
+        [
+          dto.teacherId,
+          dto.branchId,
+          dto.roomId,
+          name,
+          dto.pricePerLesson ?? null,
+          dto.teacherRate ?? null,
+          groupId,
+          version,
+        ],
       );
+      const group = result.rows[0];
+      if (!group) {
+        throw new BadRequestException(
+          "Выберите действующий филиал, назначенного в него преподавателя и аудиторию этого филиала.",
+        );
+      }
+      return group;
+    };
+    const hasInitialRate =
+      dto.teacherRate !== undefined && dto.teacherRate !== null;
+    if (hasInitialRate) {
+      assertVersionedMutationMetadata(
+        metadata ?? { idempotencyKey: "", requestId: "" },
+      );
+      const groupId = stableGroupId(actor.userId, metadata!.idempotencyKey);
+      const mutation = await this.integrity.executeVersionedMutation({
+        actorKey: actor.userId,
+        actorUserId: actor.userId,
+        authorization: { actor, capabilityKey: "system.settings.manage" },
+        operation: "crm.group.create-with-teacher-rate",
+        idempotencyKey: metadata!.idempotencyKey,
+        payload: { ...dto, name },
+        aggregateType: "organization:group",
+        aggregateId: groupId,
+        expectedVersion: 0,
+        requestId: metadata!.requestId,
+        audit: {
+          action: "crm.group_created",
+          entityType: "group",
+          entityId: groupId,
+          metadata: { teacherRate: dto.teacherRate },
+        },
+        outbox: {
+          type: "organization.group.changed",
+          payload: { entityId: groupId, action: "created" },
+        },
+        mutate: async (client, version) => ({
+          groupId: (await insert(client.query.bind(client), groupId, version))
+            .id,
+        }),
+      });
+      const createdGroup = await this.getGroup(
+        actor,
+        String(mutation.resultRef.groupId),
+      );
+      const affectedUserIds = await audienceForGroup(
+        this.database,
+        createdGroup.id,
+      );
+      this.realtime.emitCrmChanged({
+        entity: "group",
+        action: "created",
+        id: createdGroup.id,
+        branchId: createdGroup.branchId,
+        affectedUserIds,
+      });
+      return createdGroup;
     }
+    const group = await insert(
+      (query, params) => this.database.query(query, params),
+      null,
+      null,
+    );
     await this.audit.record({
       actor,
       action: "crm.group_created",
@@ -274,8 +372,16 @@ export class GroupsService {
    * null сбрасывает переопределение (брать ставку педагога), 0 — «входит в
    * оклад»; поле применяется только если передано (dto.teacherRate !== undefined).
    */
-  async updateGroup(actor: ActorContext, groupId: string, dto: UpdateGroupDto) {
+  async updateGroup(
+    actor: ActorContext,
+    groupId: string,
+    dto: UpdateGroupDto,
+    metadata?: VersionedMutationMetadata,
+  ) {
     this.policy.assertCanManageSystemSettings(actor);
+    if (dto.teacherRate !== undefined) {
+      this.policy.assertCanManagePayrollHistory(actor);
+    }
     const name =
       dto.name === undefined
         ? null
@@ -286,8 +392,13 @@ export class GroupsService {
       dto.branchId !== undefined ||
       dto.roomId !== undefined;
     await this.assertAssignmentChangeAllowed(actor, groupId, dto);
-    const result = await this.database.query<GroupRow>(
-      `
+    const update = async (
+      runner: GroupQueryRunner,
+      nextVersion: number | null,
+      expectedVersion: number | null,
+    ) => {
+      const result = await runner<GroupRow>(
+        `
         with target as (
           select g.*,
             coalesce($3::uuid, g.teacher_id) as next_teacher_id,
@@ -323,9 +434,11 @@ export class GroupsService {
             room_id = coalesce($5::uuid, g.room_id),
             price_per_lesson = coalesce($6::numeric, g.price_per_lesson),
             teacher_rate = case when $7::boolean then $8::numeric else g.teacher_rate end,
+            version = coalesce($10::bigint, g.version),
             updated_at = now()
           from valid_references
           where g.id = valid_references.id
+            and ($11::bigint is null or g.version = $11::bigint)
           returning g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
             g.price_per_lesson, g.teacher_rate, g.lifecycle_state, g.version,
             g.archived_at, g.archive_reason, g.archive_effective_date, g.created_at
@@ -344,32 +457,106 @@ export class GroupsService {
         left join app.rooms r on r.id = g.room_id
         limit 1
       `,
-      [
-        groupId,
-        name,
-        dto.teacherId ?? null,
-        dto.branchId ?? null,
-        dto.roomId ?? null,
-        dto.pricePerLesson ?? null,
-        teacherRateProvided,
-        teacherRateProvided ? dto.teacherRate : null,
-        referencesProvided,
-      ],
-    );
-    const group = result.rows[0];
-    if (!group) {
-      throw new BadRequestException(
-        "Группа не найдена или преподаватель/аудитория не относятся к выбранному филиалу.",
+        [
+          groupId,
+          name,
+          dto.teacherId ?? null,
+          dto.branchId ?? null,
+          dto.roomId ?? null,
+          dto.pricePerLesson ?? null,
+          teacherRateProvided,
+          teacherRateProvided ? dto.teacherRate : null,
+          referencesProvided,
+          nextVersion,
+          expectedVersion,
+        ],
       );
+      const group = result.rows[0];
+      if (!group) {
+        throw new ConflictException({
+          code: teacherRateProvided
+            ? "GROUP_VERSION_STALE"
+            : "GROUP_UPDATE_INVALID",
+          message:
+            "Группа не найдена, версия устарела или назначения недоступны.",
+        });
+      }
+      return group;
+    };
+    if (teacherRateProvided) {
+      if (
+        !Number.isSafeInteger(dto.expectedVersion) ||
+        dto.expectedVersion! < 1
+      ) {
+        throw new BadRequestException({ code: "GROUP_VERSION_REQUIRED" });
+      }
+      assertVersionedMutationMetadata(
+        metadata ?? { idempotencyKey: "", requestId: "" },
+      );
+      await this.database.query(
+        `insert into app.aggregate_versions (aggregate_type, aggregate_id, version)
+         values ('organization:group', $1, $2)
+         on conflict (aggregate_type, aggregate_id) do nothing`,
+        [groupId, dto.expectedVersion],
+      );
+      const mutation = await this.integrity.executeVersionedMutation({
+        actorKey: actor.userId,
+        actorUserId: actor.userId,
+        authorization: { actor, capabilityKey: "system.settings.manage" },
+        operation: "crm.group.teacher-rate.update",
+        idempotencyKey: metadata!.idempotencyKey,
+        payload: { groupId, teacherRate: dto.teacherRate ?? null },
+        aggregateType: "organization:group",
+        aggregateId: groupId,
+        expectedVersion: dto.expectedVersion!,
+        requestId: metadata!.requestId,
+        audit: {
+          action: "crm.group_updated",
+          entityType: "group",
+          entityId: groupId,
+          metadata: { teacherRate: dto.teacherRate ?? null },
+        },
+        outbox: {
+          type: "organization.group.changed",
+          payload: { entityId: groupId, action: "teacher_rate_updated" },
+        },
+        mutate: async (client, version) => ({
+          groupId: (
+            await update(
+              client.query.bind(client),
+              version,
+              dto.expectedVersion!,
+            )
+          ).id,
+        }),
+      });
+      const updatedGroup = await this.getGroup(
+        actor,
+        String(mutation.resultRef.groupId),
+      );
+      const affectedUserIds = await audienceForGroup(
+        this.database,
+        updatedGroup.id,
+      );
+      this.realtime.emitCrmChanged({
+        entity: "group",
+        action: "updated",
+        id: updatedGroup.id,
+        branchId: updatedGroup.branchId,
+        affectedUserIds,
+      });
+      return updatedGroup;
     }
+    const group = await update(
+      (query, params) => this.database.query(query, params),
+      null,
+      null,
+    );
     await this.audit.record({
       actor,
       action: "crm.group_updated",
       entityType: "group",
       entityId: group.id,
-      metadata: teacherRateProvided
-        ? { teacherRate: dto.teacherRate ?? null }
-        : undefined,
     });
     const affectedUserIds = await audienceForGroup(this.database, group.id);
     this.realtime.emitCrmChanged({

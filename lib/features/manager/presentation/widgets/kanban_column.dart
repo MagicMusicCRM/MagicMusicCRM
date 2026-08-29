@@ -6,7 +6,7 @@ class _KanbanColumn extends StatefulWidget {
   final StatusRecord status;
   final List<Map<String, dynamic>> leads;
   final int totalCount;
-  final Function(String, String) onMove;
+  final Function(String, String, int) onMove;
   final Function(Map<String, dynamic>) onTap;
   final List<StatusRecord> allStatuses;
   final VoidCallback onRefresh;
@@ -49,11 +49,11 @@ class _KanbanColumnState extends State<_KanbanColumn> {
     final hasMore =
         (widget.nextCursor?.trim().isNotEmpty ?? false) &&
         widget.totalCount > widget.leads.length;
-    return DragTarget<String>(
+    return DragTarget<({String id, int version})>(
       onWillAcceptWithDetails: (details) => true,
       onAcceptWithDetails: (details) {
         widget.onDragEnd();
-        widget.onMove(details.data, widget.status.$1);
+        widget.onMove(details.data.id, widget.status.$1, details.data.version);
       },
       builder: (context, candidateData, rejectedData) {
         final hovering = candidateData.isNotEmpty;

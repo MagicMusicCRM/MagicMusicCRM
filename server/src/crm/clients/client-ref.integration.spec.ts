@@ -4,16 +4,10 @@ import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import { randomUUID } from "crypto";
 import { Pool } from "pg";
-import {
-  ActorContext,
-  UserRole,
-} from "../../common/security/actor-context";
+import { ActorContext, UserRole } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
-import {
-  ClientRefDto,
-  ClientRefSearchQuery,
-} from "../dto/client-ref.dto";
+import { ClientRefDto, ClientRefSearchQuery } from "../dto/client-ref.dto";
 import { ClientReferenceService } from "./client-reference.service";
 
 const defaultTestDatabaseUrl =
@@ -21,7 +15,9 @@ const defaultTestDatabaseUrl =
 const testDatabaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ?? defaultTestDatabaseUrl;
 const parsedDatabaseUrl = new URL(testDatabaseUrl);
-if (!new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)) {
+if (
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)
+) {
   throw new Error("ClientRef tests require local PostgreSQL.");
 }
 
@@ -51,6 +47,7 @@ describe("ClientReferenceService (PostgreSQL)", () => {
   let taskLeadId: string;
   let foreignLeadId: string;
   let defaultBranchId: string;
+  let foreignBranchId: string;
 
   async function createActor(
     role: UserRole,
@@ -88,6 +85,7 @@ describe("ClientReferenceService (PostgreSQL)", () => {
   async function createStudent(
     profileId: string,
     archived = false,
+    branchId = defaultBranchId,
   ): Promise<string> {
     const created = await database.query<{ id: string }>(
       `
@@ -100,7 +98,7 @@ describe("ClientReferenceService (PostgreSQL)", () => {
         values ($1, $3, 'active', case when $2 then now() else null end)
         returning id
       `,
-      [profileId, archived, defaultBranchId],
+      [profileId, archived, branchId],
     );
     const id = created.rows[0]!.id;
     students.push(id);
@@ -189,20 +187,18 @@ describe("ClientReferenceService (PostgreSQL)", () => {
     );
     defaultBranchId = branch.rows[0]!.id;
     branches.push(defaultBranchId);
+    const foreignBranch = await database.query<{ id: string }>(
+      `insert into app.branches (name) values ($1) returning id`,
+      [`Client ref foreign ${randomUUID()}`],
+    );
+    foreignBranchId = foreignBranch.rows[0]!.id;
+    branches.push(foreignBranchId);
 
     admin = await createActor("admin", "Admin", "Resolver");
     client = await createActor("client", "Клиент", "Свой");
     teacher = await createActor("teacher", "Педагог", "Назначенный");
-    unrelatedTeacher = await createActor(
-      "teacher",
-      "Педагог",
-      "Посторонний",
-    );
-    const assignedClient = await createActor(
-      "client",
-      "Анна",
-      "Назначенная",
-    );
+    unrelatedTeacher = await createActor("teacher", "Педагог", "Посторонний");
+    const assignedClient = await createActor("client", "Анна", "Назначенная");
     const foreignClient = await createActor("client", "Борис", "Чужой");
     const archivedClient = await createActor("client", "Вера", "Архивная");
 
@@ -210,7 +206,11 @@ describe("ClientReferenceService (PostgreSQL)", () => {
       (client as ActorContext & { profileId: string }).profileId,
     );
     assignedStudentId = await createStudent(assignedClient.profileId);
-    foreignStudentId = await createStudent(foreignClient.profileId);
+    foreignStudentId = await createStudent(
+      foreignClient.profileId,
+      false,
+      foreignBranchId,
+    );
     archivedStudentId = await createStudent(archivedClient.profileId, true);
 
     linkedLeadId = await createLead("Галина", "Связанная");
@@ -302,10 +302,9 @@ describe("ClientReferenceService (PostgreSQL)", () => {
       "delete from app.students where id = any($1::uuid[])",
       [students],
     );
-    await database.query(
-      "delete from app.leads where id = any($1::uuid[])",
-      [leads],
-    );
+    await database.query("delete from app.leads where id = any($1::uuid[])", [
+      leads,
+    ]);
     await database.query(
       "delete from app.teachers where id = any($1::uuid[])",
       [teachers],
@@ -322,10 +321,9 @@ describe("ClientReferenceService (PostgreSQL)", () => {
       `,
       [users],
     );
-    await database.query(
-      "delete from app.users where id = any($1::uuid[])",
-      [users],
-    );
+    await database.query("delete from app.users where id = any($1::uuid[])", [
+      users,
+    ]);
     await database.onModuleDestroy();
   });
 
@@ -473,6 +471,19 @@ describe("ClientReferenceService (PostgreSQL)", () => {
         label: "Галина Связанная",
       }),
     ]);
+
+    const branchStudents = await service.search(admin, {
+      type: "student",
+      branchId: defaultBranchId,
+      limit: 50,
+    });
+    expect(branchStudents.items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ref: { type: "student", id: foreignStudentId },
+        }),
+      ]),
+    );
 
     const defaultResults = await service.search(admin, {
       q: "Архивная",

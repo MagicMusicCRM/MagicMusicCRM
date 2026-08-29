@@ -10,13 +10,14 @@ Future<bool> requestWorkspaceDirtyExit(
   final workspace = WorkspaceNavigationScope.maybeOf(context);
   if (workspace == null || workspace.controller.state.loggedOut) return true;
   final controller = workspace.controller;
-  return controller.resolveDirtyTab(
-    controller.state.activeTabId,
-    resolveDirty: (_) async => switch (await showDirtyFormExitDialog(context)) {
-      DirtyFormExitDecision.save => DirtyCloseDecision.save,
-      DirtyFormExitDecision.discard => DirtyCloseDecision.discard,
-      DirtyFormExitDecision.cancel || null => DirtyCloseDecision.cancel,
-    },
+  if (!controller.state.tabs.any((tab) => tab.hasDirtyForms)) return true;
+  final decision = switch (await showDirtyFormExitDialog(context)) {
+    DirtyFormExitDecision.save => DirtyCloseDecision.save,
+    DirtyFormExitDecision.discard => DirtyCloseDecision.discard,
+    DirtyFormExitDecision.cancel || null => DirtyCloseDecision.cancel,
+  };
+  return controller.resolveAllDirtyTabs(
+    decision: decision,
     saveDirty: controller.saveDirtyForms,
     discardDirty: controller.discardDirtyForms,
   );

@@ -2,7 +2,11 @@ import 'students_board_models.dart';
 import 'students_board_reconciliation_runtime.dart';
 
 typedef StudentsBoardStatusUpdater =
-    Future<void> Function({required String studentId, required String status});
+    Future<void> Function({
+      required String studentId,
+      required String status,
+      required int expectedVersion,
+    });
 
 /// Owns optimistic status persistence and delegates eventual readback timing.
 class StudentsBoardStatusCoordinator {
@@ -38,11 +42,13 @@ class StudentsBoardStatusCoordinator {
   }) async {
     final state = _readState();
     final studentId = student['id']?.toString() ?? '';
+    final expectedVersion = _versionOf(student['version']);
     final currentStatus =
         state.optimisticStatuses[studentId] ??
         student['status']?.toString() ??
         '';
-    if (!_canMove(state, studentId, currentStatus, newStatus)) {
+    if (!_canMove(state, studentId, currentStatus, newStatus) ||
+        expectedVersion < 1) {
       return const StudentsBoardMoveResult.success();
     }
 
@@ -54,7 +60,11 @@ class StudentsBoardStatusCoordinator {
     );
     _applyOptimisticMove(studentId, newStatus);
     try {
-      await _updateStudentStatus(studentId: studentId, status: newStatus);
+      await _updateStudentStatus(
+        studentId: studentId,
+        status: newStatus,
+        expectedVersion: expectedVersion,
+      );
     } catch (error) {
       return _handlePersistenceFailure(lease, error);
     }
@@ -150,6 +160,13 @@ class StudentsBoardStatusCoordinator {
       _reconciliation.ownsContext(lease.contextGeneration);
 
   void dispose() => _reconciliation.dispose();
+
+  static int _versionOf(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    final parsed = int.tryParse(value?.toString() ?? '') ?? 1;
+    return parsed > 0 ? parsed : 1;
+  }
 }
 
 class _StatusMoveLease {

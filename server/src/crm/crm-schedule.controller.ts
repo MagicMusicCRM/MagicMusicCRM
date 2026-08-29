@@ -45,10 +45,8 @@ import {
   LessonSettlePreviewDto,
 } from "./dto/lesson-transition.dto";
 import { LessonCommandService } from "./schedule/lesson-command.service";
-import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
 import { V4DomainFlagsService } from "../platform/rollout/v4/domain-flags";
-import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
 import {
   CreateSchedulePlanDto,
   SchedulePlanConstraintPreviewDto,
@@ -79,7 +77,6 @@ export class CrmScheduleController {
     private readonly scheduleConflicts: ScheduleConflictService,
     private readonly scheduleSeries: ScheduleSeriesService,
     private readonly lessonCommands: LessonCommandService,
-    private readonly lessonSeriesCommands: LessonSeriesCommandService,
     private readonly lessonTransitions: LessonTransitionService,
     private readonly v4DomainFlags: V4DomainFlagsService,
     private readonly schedulePlans: SchedulePlanService,
@@ -187,18 +184,11 @@ export class CrmScheduleController {
   @Post("schedule-series")
   createScheduleSeries(
     @CurrentActor() actor: ActorContext,
-    @Headers("idempotency-key") idempotencyKey: string | undefined,
-    @Headers("x-request-id") requestId: string | undefined,
+    @Headers("idempotency-key") _idempotencyKey: string | undefined,
+    @Headers("x-request-id") _requestId: string | undefined,
     @Body() dto: CreateScheduleSeriesDto,
   ) {
-    assertLessonPatchUsesTransition(dto);
-    const metadata = {
-      idempotencyKey: idempotencyKey ?? "",
-      requestId: requestId ?? "",
-    };
-    return this.v4DomainFlags.get("schedule").effectivePath === "v4"
-      ? this.lessonSeriesCommands.create(actor, dto, metadata)
-      : this.scheduleSeries.createScheduleSeries(actor, dto);
+    return this.scheduleSeries.createScheduleSeries(actor, dto);
   }
 
   @Patch("schedule-series/:id")
@@ -281,9 +271,14 @@ export class CrmScheduleController {
   @Patch("lessons/teacher-rate")
   setLessonsTeacherRate(
     @CurrentActor() actor: ActorContext,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: BulkLessonRateDto,
   ) {
-    return this.lessonTeacherRates.setLessonsTeacherRate(actor, dto);
+    return this.lessonTeacherRates.setLessonsTeacherRate(actor, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Post("lessons/:id/planned-settlement/preview")

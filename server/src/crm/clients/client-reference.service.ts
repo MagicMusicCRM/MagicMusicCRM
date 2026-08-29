@@ -80,7 +80,8 @@ export class ClientReferenceService {
   async search(actor: ActorContext, query: ClientRefSearchQuery) {
     const limit = Math.min(query.limit ?? 25, 50);
     const term = query.q?.trim().toLowerCase() || null;
-    const escapedTerm = term?.replace(/[\\%_]/g, (value) => `\\${value}`) ?? null;
+    const escapedTerm =
+      term?.replace(/[\\%_]/g, (value) => `\\${value}`) ?? null;
     const result = await this.database.query<ClientReferenceRow>(
       `
         ${this.candidatesCte()}
@@ -92,22 +93,24 @@ export class ClientReferenceService {
         where ${this.actorScopeSql("candidate")}
           and ($3::text is null or candidate.type = $3)
           and ($4::boolean or candidate.deleted_at is null)
+          and ($5::uuid is null or candidate.branch_id = $5)
           and (
-            $5::text is null
-            or lower(candidate.label) like '%' || $5 || '%' escape '\\'
+            $6::text is null
+            or lower(candidate.label) like '%' || $6 || '%' escape '\\'
           )
         order by
           (candidate.deleted_at is not null) asc,
           lower(candidate.label) asc,
           candidate.type asc,
           candidate.id asc
-        limit $6
+        limit $7
       `,
       [
         actor.role,
         actor.userId,
         query.type ?? null,
         query.includeArchived ?? false,
+        query.branchId ?? null,
         escapedTerm,
         limit,
       ],

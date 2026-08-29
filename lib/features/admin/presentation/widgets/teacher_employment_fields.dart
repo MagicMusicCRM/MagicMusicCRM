@@ -78,6 +78,7 @@ class TeacherEmploymentFields extends StatefulWidget {
   final TeacherEmploymentReferenceGateway gateway;
   final TeacherEmploymentInitial initial;
   final bool requireRate;
+  final bool canManageRate;
   final bool enabled;
 
   const TeacherEmploymentFields({
@@ -85,6 +86,7 @@ class TeacherEmploymentFields extends StatefulWidget {
     required this.gateway,
     this.initial = const TeacherEmploymentInitial(),
     this.requireRate = false,
+    this.canManageRate = true,
     this.enabled = true,
   });
 
@@ -244,7 +246,7 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
       error = 'Не удалось загрузить филиалы.';
     } else if (_branchIds.isEmpty) {
       error = 'Выберите хотя бы один филиал.';
-    } else if (widget.requireRate && _rate == null) {
+    } else if (widget.canManageRate && widget.requireRate && _rate == null) {
       error = 'Выберите ставку преподавателя.';
     }
     setState(() => _selectionError = error);
@@ -305,33 +307,35 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 6),
-          Text(
-            'Ставка: оплата преподавателю за астрономический час. '
-            'Она не списывается со счёта или абонемента ученика.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          TeacherRateSelector(
-            initialRate: widget.initial.rate,
-            allowUnset: true,
-            required: widget.requireRate,
-            enabled: widget.enabled,
-            label: 'Базовая ставка, ₽/астр.ч. *',
-            onChanged: (value) {
-              _rate = value;
-              _rateTouched = true;
-            },
-          ),
-          const SizedBox(height: 12),
-          _TeacherDateField(
-            label: 'Ставка действует с',
-            value: _rateEffectiveFrom,
-            firstDate: DateTime(2020),
-            lastDate: DateTime(2100),
-            enabled: widget.enabled,
-            onChanged: (value) => setState(() => _rateEffectiveFrom = value),
-          ),
-          const SizedBox(height: 12),
+          if (widget.canManageRate) ...[
+            Text(
+              'Ставка: оплата преподавателю за астрономический час. '
+              'Она не списывается со счёта или абонемента ученика.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TeacherRateSelector(
+              initialRate: widget.initial.rate,
+              allowUnset: true,
+              required: widget.requireRate,
+              enabled: widget.enabled,
+              label: 'Базовая ставка, ₽/астр.ч. *',
+              onChanged: (value) {
+                _rate = value;
+                _rateTouched = true;
+              },
+            ),
+            const SizedBox(height: 12),
+            _TeacherDateField(
+              label: 'Ставка действует с',
+              value: _rateEffectiveFrom,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2100),
+              enabled: widget.enabled,
+              onChanged: (value) => setState(() => _rateEffectiveFrom = value),
+            ),
+            const SizedBox(height: 12),
+          ],
           TextFormField(
             controller: _salaryController,
             enabled: widget.enabled,

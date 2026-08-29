@@ -124,7 +124,7 @@ export class TeacherPayrollCommandService {
     dto: SetTeacherRateDto,
     metadata: PayrollMutationMetadata,
   ) {
-    this.policy.assertCanReadPayroll(actor);
+    this.policy.assertCanManagePayrollHistory(actor);
     assertVersionedMutationMetadata(metadata);
     const reasonText = dto.reasonText.trim();
     if (!reasonText) {

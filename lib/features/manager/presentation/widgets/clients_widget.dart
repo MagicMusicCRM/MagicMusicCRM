@@ -71,7 +71,7 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
   }
 
   /// Legacy drag-to-student callbacks must not create a student directly.
-  /// New conversions are atomic and start from «Выдать абонемент» in the lead
+  /// New conversions are atomic and start from «Продать абонемент» in the lead
   /// card, so a stale drag gesture is cancelled with a clear operator hint.
   Future<void> _commitTransfer(TransferDropResult result) async {
     if (!mounted) return;
@@ -84,7 +84,7 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
     setState(() => _segment = 0);
     _toast(
       'Лид станет учеником только после выдачи абонемента. '
-      'Откройте карточку лида → «Выдать абонемент».',
+      'Откройте карточку лида → «Продать абонемент».',
     );
   }
 

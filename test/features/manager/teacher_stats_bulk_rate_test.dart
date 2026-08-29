@@ -128,27 +128,30 @@ void main() {
     view.resetDevicePixelRatio();
   });
 
-  testWidgets('offers a tick box for trials but not for groups', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_host(_FakeApiClient()));
+  testWidgets('manager keeps the payroll report read-only', (tester) async {
+    final api = _FakeApiClient();
+    await tester.pumpWidget(_host(api));
     await tester.pumpAndSettle();
 
     expect(find.text('Пробное — Анна'), findsOneWidget);
     expect(find.text('Гитара-1'), findsOneWidget);
-    // Only the trial is selectable: a group's rate knob is the GROUP rate, and
-    // a per-lesson override would silently shadow it.
-    expect(find.byType(Checkbox), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+    expect(find.byIcon(Icons.edit_rounded), findsNothing);
+
+    await tester.tap(find.text('Гитара-1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ставка по данной группе'), findsNothing);
+    expect(api.bulkRateCalls, 0);
   });
 
   testWidgets('applies "входит в оклад" to the ticked units in one call', (
     tester,
   ) async {
     final api = _FakeApiClient();
-    await tester.pumpWidget(_host(api));
+    await tester.pumpWidget(_host(api, role: 'director'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Выбрано: 1'), findsOneWidget);
@@ -210,5 +213,15 @@ void main() {
     // Director: this action is an explicit per-lesson correction.
     expect(find.byType(Checkbox), findsNWidgets(2));
     expect(find.byIcon(Icons.lock_outline_rounded), findsNothing);
+  });
+
+  testWidgets('director can open the group-rate control', (tester) async {
+    await tester.pumpWidget(_host(_FakeApiClient(), role: 'director'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Гитара-1'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ставка по данной группе'), findsOneWidget);
   });
 }

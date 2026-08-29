@@ -58,7 +58,10 @@ class AccountWorkspaceStore {
   final WorkspaceKeyValueStore _storage;
 
   Future<void> save(WorkspaceState state) {
-    if (state.loggedOut) return clear(state.accountId);
+    // Session teardown is not itself a consent to delete recovery data.
+    // Explicit logout owns deletion; forced revocation keeps the encrypted
+    // client-card draft so the same account can restore it after signing in.
+    if (state.loggedOut) return Future<void>.value();
     return _storage.write(_key(state.accountId), jsonEncode(_serialize(state)));
   }
 
@@ -105,12 +108,14 @@ class AccountWorkspaceStore {
         if (forward == null) return fallback;
         final tabId = tab['tabId']?.toString() ?? '';
         if (tabId.isEmpty || !tabIds.add(tabId)) return fallback;
+        final forms = _restoreForms(tab['forms']);
         tabs.add(
           WorkspaceTabState(
             tabId: tabId,
             titleHint: tab['titleHint']?.toString() ?? '',
             routeStack: routes,
             forwardStack: forward,
+            forms: forms,
           ),
         );
       }
@@ -152,9 +157,85 @@ class AccountWorkspaceStore {
             'forwardStack': [
               for (final route in tab.forwardStack) route.toJson(),
             ],
+            'forms': [
+              for (final form in tab.forms.values)
+                if (_shouldPersistForm(form))
+                  {
+                    'formKey': form.formKey,
+                    'dirty': true,
+                    if (form.expectedVersion != null)
+                      'expectedVersion': form.expectedVersion,
+                    'draft': _jsonSafeMap(form.draft),
+                  },
+            ],
           },
       ],
     };
+  }
+
+  /// Only the client-card recovery draft is durable. Other workspace forms may
+  /// contain short-lived credentials or secrets and remain memory-only.
+  static bool _shouldPersistForm(WorkspaceFormState form) {
+    return form.dirty &&
+        form.formKey.startsWith('client-card:') &&
+        form.draft.isNotEmpty;
+  }
+
+  static Map<String, WorkspaceFormState> _restoreForms(Object? rawForms) {
+    if (rawForms == null) return const {};
+    if (rawForms is! List || rawForms.length > 10) return const {};
+    final forms = <String, WorkspaceFormState>{};
+    for (final rawForm in rawForms) {
+      if (rawForm is! Map) continue;
+      final form = rawForm.map((key, value) => MapEntry(key.toString(), value));
+      final formKey = form['formKey']?.toString() ?? '';
+      final rawDraft = form['draft'];
+      if (!formKey.startsWith('client-card:') ||
+          form['dirty'] != true ||
+          rawDraft is! Map) {
+        continue;
+      }
+      final draft = _jsonSafeMap(
+        rawDraft.map((key, value) => MapEntry(key.toString(), value)),
+      );
+      // Bound secure-storage snapshots. A normal client card, including its
+      // 20k internal note, stays far below this limit.
+      if (draft.isEmpty || jsonEncode(draft).length > 256 * 1024) continue;
+      final rawExpectedVersion = form['expectedVersion'];
+      final expectedVersion = rawExpectedVersion is num
+          ? rawExpectedVersion.toInt()
+          : int.tryParse(rawExpectedVersion?.toString() ?? '');
+      forms[formKey] = WorkspaceFormState(
+        formKey: formKey,
+        dirty: true,
+        expectedVersion: expectedVersion,
+        draft: draft,
+      );
+    }
+    return forms;
+  }
+
+  static Map<String, Object?> _jsonSafeMap(Map<String, Object?> source) {
+    return {
+      for (final entry in source.entries)
+        entry.key: _jsonSafeValue(entry.value),
+    };
+  }
+
+  static Object? _jsonSafeValue(Object? value) {
+    if (value == null || value is String || value is bool || value is num) {
+      return value;
+    }
+    if (value is Iterable) {
+      return [for (final item in value) _jsonSafeValue(item)];
+    }
+    if (value is Map) {
+      return {
+        for (final entry in value.entries)
+          entry.key.toString(): _jsonSafeValue(entry.value),
+      };
+    }
+    return value.toString();
   }
 
   static List<ContextRouteState>? _restoreRoutes(
@@ -247,15 +328,67 @@ class WorkspaceLogoutCoordinator {
     final controllers = List<WorkspaceController>.of(
       _controllers[accountId] ?? const {},
     );
+    await _saveDirtyControllers(controllers);
     for (final controller in controllers) {
-      controller.handleGlobalLogout();
+      if (_isAttached(controller)) controller.handleGlobalLogout();
     }
     await _store.clear(accountId);
   }
 
   Future<void> logoutAll() async {
+    final controllers = [
+      for (final accountControllers in _controllers.values)
+        ...accountControllers,
+    ];
+    await _saveDirtyControllers(controllers);
+    for (final controller in controllers) {
+      if (_isAttached(controller)) controller.handleGlobalLogout();
+    }
     for (final accountId in _controllers.keys.toList(growable: false)) {
-      await logout(accountId);
+      await _store.clear(accountId);
+    }
+  }
+
+  /// A revoked session cannot save through the API. Preserve encrypted local
+  /// recovery drafts best-effort, then always tear down every live workspace.
+  /// Unlike an explicit logout this intentionally does not clear the snapshot:
+  /// the same account can recover it after signing in again.
+  Future<void> forceLogoutAllPreservingDrafts() async {
+    final controllers = [
+      for (final accountControllers in _controllers.values)
+        ...accountControllers,
+    ];
+    for (final controller in controllers) {
+      if (controller.state.loggedOut) continue;
+      try {
+        await _store.save(controller.state);
+      } on Object {
+        // Credential/session removal must not be blocked by local I/O.
+      }
+    }
+    for (final controller in controllers) {
+      if (_isAttached(controller)) controller.handleGlobalLogout();
+    }
+  }
+
+  bool _isAttached(WorkspaceController controller) {
+    return _controllers[controller.state.accountId]?.contains(controller) ==
+        true;
+  }
+
+  Future<void> _saveDirtyControllers(
+    Iterable<WorkspaceController> controllers,
+  ) async {
+    for (final controller in controllers) {
+      final saved = await controller.resolveAllDirtyTabs(
+        decision: DirtyCloseDecision.save,
+        saveDirty: controller.saveDirtyForms,
+      );
+      if (!saved) {
+        throw StateError(
+          'Workspace forms for "${controller.state.accountId}" were not saved.',
+        );
+      }
     }
   }
 }

@@ -424,10 +424,29 @@ function resolveTeacherPayrollHistoryPolicy({
   );
 }
 
+function resolveLessonTeacherRateWritePolicy({
+  path,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
+  if (path !== "/crm/lessons/teacher-rate") return null;
+  return policy(
+    "commerce.teacher_payroll.write",
+    "resource",
+    rootBusinessRoles,
+    "CrmPolicy.assertCanManagePayrollHistory for bulk lesson-rate changes",
+  );
+}
+
 function resolveTeacherPayrollWritePolicy({
   path,
 }: RoutePolicyContext): CapabilityRoutePolicy | null {
   if (!isTeacherPayrollWritePath(path)) return null;
+  if (path.endsWith("/rates"))
+    return policy(
+      "commerce.teacher_payroll.write",
+      "resource",
+      rootBusinessRoles,
+      "CrmPolicy.assertCanManagePayrollHistory for base-rate creation",
+    );
   if (path.endsWith("/export"))
     return policy(
       "commerce.teacher_payroll.read",
@@ -467,6 +486,7 @@ function resolvePayrollPolicyStage(
   return (
     resolveTeacherPayrollReadPolicy(context) ??
     resolveTeacherPayrollHistoryPolicy(context) ??
+    resolveLessonTeacherRateWritePolicy(context) ??
     resolveTeacherPayrollWritePolicy(context)
   );
 }

@@ -7,7 +7,9 @@ import { MigrationRunner } from "../../db/migration-runner";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import type { ConfigSnapshot } from "../crm-configuration.contracts";
 import { LessonLifecycleRepository } from "../schedule/lesson-lifecycle.repository";
+import type { CalculatedLessonClientFact } from "./lesson-settlement-facts.persistence";
 import { LessonSettlementService } from "./lesson-settlement.service";
+import { assertCorrectionSubscriptionCapacity } from "./lesson-settlement-subscription-capacity";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 const databaseUrl =
@@ -207,6 +209,387 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
         [fixture.groupLessonId],
       );
       expect(counts.rows[0]).toEqual({ client_count: 2, teacher_count: 1 });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("uses another student's subscription without moving the lesson or teacher fact", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      const input = {
+        context: "settle" as const,
+        decision: {
+          settlementTypeKey: "free_lesson",
+          clientDecisions: [
+            {
+              clientId: fixture.secondStudentId,
+              settlementTypeKey: "lesson",
+              payerStudentId: fixture.studentId,
+              subscriptionId: fixture.groupSubscriptionId,
+            },
+          ],
+          teacherCompensationRuleKey: "standard",
+        },
+      } as unknown as NonNullable<
+        Parameters<LessonSettlementService["settleStandalone"]>[1]
+      >;
+
+      const plannedAllocations = await database.transaction(async (client) => {
+        const plan = await service.preparePlan(
+          client,
+          fixture.branchId,
+          input.decision,
+        );
+        const allocations = await service.plannedSubscriptionAllocations(
+          client,
+          fixture.groupLessonId,
+          plan,
+        );
+        for (const allocation of allocations) {
+          await reservations.allocate(client, {
+            lessonId: fixture.groupLessonId,
+            chargeType: "subscription",
+            ...allocation,
+          });
+        }
+        return allocations;
+      });
+      expect(plannedAllocations).toEqual([
+        {
+          clientType: "student",
+          clientId: fixture.secondStudentId,
+          payerStudentId: fixture.studentId,
+          subscriptionId: fixture.groupSubscriptionId,
+          units: 1,
+        },
+      ]);
+
+      const settled = await database.transaction(async (client) => {
+        const result = await service.settle(
+          client,
+          fixture.groupLessonId,
+          input,
+        );
+        await reservations.terminalize(client, result);
+        return result;
+      });
+      await expect(
+        service.settleStandalone(fixture.groupLessonId, input),
+      ).resolves.toEqual(settled);
+      await expect(
+        service.settleStandalone(fixture.groupLessonId, {
+          ...input,
+          decision: {
+            ...input.decision,
+            clientDecisions: input.decision.clientDecisions!.map(
+              (decision) => ({
+                ...decision,
+                payerStudentId: fixture.secondStudentId,
+              }),
+            ),
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SUBSCRIPTION_CAPACITY" },
+      });
+
+      expect(
+        settled.clientFacts.find(
+          (fact) => fact.clientId === fixture.secondStudentId,
+        ),
+      ).toMatchObject({
+        chargeType: "subscription",
+        subscriptionId: fixture.groupSubscriptionId,
+        amountMinor: "0",
+        units: "1.00",
+      });
+      expect(
+        settled.clientFacts.find((fact) => fact.clientId === fixture.studentId),
+      ).toMatchObject({
+        chargeType: "personal_account",
+        amountMinor: "0",
+        units: "0.00",
+      });
+      expect(settled.teacherFact).toMatchObject({
+        teacherId: fixture.teacherId,
+        compensationRuleKey: "standard",
+        amountMinor: "90000",
+      });
+
+      const persisted = await pool.query<{
+        client_count: number;
+        teacher_count: number;
+        unexpected_teacher_count: number;
+        consumed_count: number;
+      }>(
+        `select
+           (select count(*)::int from app.lesson_client_charge_facts_effective
+             where lesson_id = $1) as client_count,
+           (select count(*)::int from app.lesson_teacher_compensation_facts_effective
+             where lesson_id = $1) as teacher_count,
+           (select count(*)::int from app.lesson_teacher_compensation_facts_effective
+             where lesson_id = $1 and teacher_id <> $2) as unexpected_teacher_count,
+           (select count(*)::int from app.lesson_reservations
+             where lesson_id = $1 and subscription_id = $3
+               and state = 'consumed') as consumed_count`,
+        [
+          fixture.groupLessonId,
+          fixture.teacherId,
+          fixture.groupSubscriptionId,
+        ],
+      );
+      expect(persisted.rows[0]).toEqual({
+        client_count: 2,
+        teacher_count: 1,
+        unexpected_teacher_count: 0,
+        consumed_count: 1,
+      });
+
+      const realtime = {
+        emitCrmChanged: jest.fn(),
+        emitFinanceChanged: jest.fn(),
+      };
+      await new SubscriptionReservationService(
+        database,
+        realtime as unknown as RealtimeBus,
+      ).publishLessonSettlementPostCommit(fixture.groupLessonId);
+      expect(realtime.emitFinanceChanged).toHaveBeenCalledWith(
+        expect.arrayContaining(fixture.clientUserIds),
+      );
+      expect(realtime.emitFinanceChanged.mock.calls[0]?.[0]).toHaveLength(2);
+      expect(realtime.emitCrmChanged).toHaveBeenCalledWith({
+        entity: "subscription",
+        action: "updated",
+        id: fixture.groupSubscriptionId,
+        affectedUserIds: expect.arrayContaining(fixture.clientUserIds),
+      });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("requires the original cross-payer decision on idempotent retry", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      const input = {
+        context: "settle" as const,
+        decision: {
+          settlementTypeKey: "lesson",
+          clientDecisions: [
+            {
+              clientId: fixture.secondStudentId,
+              settlementTypeKey: "lesson",
+              payerStudentId: fixture.studentId,
+              subscriptionId: fixture.groupSubscriptionId,
+            },
+          ],
+          teacherCompensationRuleKey: "standard",
+        },
+      } as unknown as NonNullable<
+        Parameters<LessonSettlementService["settleStandalone"]>[1]
+      >;
+      const settled = await service.settleStandalone(
+        fixture.groupLessonId,
+        input,
+      );
+      await expect(
+        service.settleStandalone(fixture.groupLessonId, input),
+      ).resolves.toEqual(settled);
+
+      const retries = await Promise.allSettled([
+        service.settleStandalone(fixture.groupLessonId, {
+          ...input,
+          decision: { ...input.decision, clientDecisions: [] },
+        }),
+        service.settleStandalone(fixture.groupLessonId, {
+          ...input,
+          decision: {
+            settlementTypeKey: input.decision.settlementTypeKey,
+            teacherCompensationRuleKey:
+              input.decision.teacherCompensationRuleKey,
+          },
+        }),
+      ]);
+      for (const retry of retries) {
+        expect(retry).toMatchObject({
+          status: "rejected",
+          reason: {
+            response: {
+              code: "LESSON_ALREADY_SETTLED_WITH_DIFFERENT_DECISION",
+            },
+          },
+        });
+      }
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("uses lesson-local date for an expired-now subscription that covered a historical lesson", async () => {
+    const fixture = await createFixture(pool, database, false, {
+      startsAt: "2026-07-01",
+      expiresAt: "2026-07-31",
+    });
+    try {
+      await expect(
+        database.transaction((client) =>
+          assertCorrectionSubscriptionCapacity(
+            client,
+            fixture.groupLessonId,
+            [crossPayerCapacityFact(fixture)],
+          ),
+        ),
+      ).resolves.toBeUndefined();
+
+      const settled = await service.settleStandalone(fixture.groupLessonId, {
+        context: "settle",
+        decision: crossPayerDecision(fixture),
+      });
+      expect(
+        settled.clientFacts.find(
+          (fact) => fact.clientId === fixture.secondStudentId,
+        ),
+      ).toMatchObject({
+        subscriptionId: fixture.groupSubscriptionId,
+        units: "1.00",
+      });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("rejects a subscription that became valid only after the historical lesson", async () => {
+    const fixture = await createFixture(pool, database, false, {
+      startsAt: "2026-08-01",
+      expiresAt: "2099-12-31",
+    });
+    try {
+      await expect(
+        database.transaction((client) =>
+          assertCorrectionSubscriptionCapacity(
+            client,
+            fixture.groupLessonId,
+            [crossPayerCapacityFact(fixture)],
+          ),
+        ),
+      ).rejects.toMatchObject({
+        response: { code: "SUBSCRIPTION_CAPACITY" },
+      });
+      await expect(
+        service.settleStandalone(fixture.groupLessonId, {
+          context: "settle",
+          decision: crossPayerDecision(fixture),
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SUBSCRIPTION_CAPACITY" },
+      });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("rejects a selected payer subscription when the actual recipient is outside the lesson branch", async () => {
+    const fixture = await createFixture(pool, database);
+    const foreignBranch = await pool.query<{ id: string }>(
+      `insert into app.branches (name, timezone_name)
+       values ($1, 'Europe/Moscow') returning id`,
+      [`Settlement foreign ${randomUUID()}`],
+    );
+    const foreignBranchId = foreignBranch.rows[0]!.id;
+    try {
+      await pool.query("update app.students set branch_id = $2 where id = $1", [
+        fixture.secondStudentId,
+        foreignBranchId,
+      ]);
+      const decision = {
+        settlementTypeKey: "free_lesson",
+        clientDecisions: [
+          {
+            clientId: fixture.secondStudentId,
+            settlementTypeKey: "lesson",
+            payerStudentId: fixture.studentId,
+            subscriptionId: fixture.groupSubscriptionId,
+          },
+        ],
+        teacherCompensationRuleKey: "standard",
+      };
+      await expect(
+        database.transaction(async (client) => {
+          const plan = await service.preparePlan(
+            client,
+            fixture.branchId,
+            decision,
+          );
+          const allocations = await service.plannedSubscriptionAllocations(
+            client,
+            fixture.groupLessonId,
+            plan,
+          );
+          for (const allocation of allocations) {
+            await reservations.allocate(client, {
+              lessonId: fixture.groupLessonId,
+              chargeType: "subscription",
+              ...allocation,
+            });
+          }
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: "LESSON_CONSTRAINT_VIOLATIONS",
+          violations: [
+            expect.objectContaining({ code: "SUBSCRIPTION_CAPACITY" }),
+          ],
+        },
+      });
+      await expect(
+        service.settleStandalone(fixture.groupLessonId, {
+          context: "settle",
+          decision,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SUBSCRIPTION_CAPACITY" },
+      });
+      const persisted = await pool.query<{ count: number }>(
+        `select count(*)::int as count
+         from app.lesson_client_charge_facts where lesson_id = $1`,
+        [fixture.groupLessonId],
+      );
+      expect(persisted.rows[0]?.count).toBe(0);
+    } finally {
+      await pool.query("update app.students set branch_id = $2 where id = $1", [
+        fixture.secondStudentId,
+        fixture.branchId,
+      ]);
+      await pool.query("delete from app.branches where id = $1", [
+        foreignBranchId,
+      ]);
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("rejects a subscription that is not owned by the explicit payer", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      await expect(
+        service.settleStandalone(fixture.groupLessonId, {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "free_lesson",
+            clientDecisions: [
+              {
+                clientId: fixture.secondStudentId,
+                settlementTypeKey: "lesson",
+                payerStudentId: fixture.secondStudentId,
+                subscriptionId: fixture.groupSubscriptionId,
+              },
+            ],
+            teacherCompensationRuleKey: "standard",
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SUBSCRIPTION_CAPACITY" },
+      });
     } finally {
       await cleanupFixture(pool, fixture);
     }
@@ -807,6 +1190,10 @@ async function createFixture(
   pool: Pool,
   database: DatabaseService,
   scheduled = false,
+  groupSubscriptionDates: {
+    startsAt?: string;
+    expiresAt?: string;
+  } = {},
 ) {
   const branch = await pool.query<{ id: string }>(
     `
@@ -903,7 +1290,7 @@ async function createFixture(
        package_id, commercial_snapshot, snapshot_version, package_version,
        base_price_minor, currency_code, final_price_minor, version
      ) values (
-       $1, 20, 0, current_date, current_date + 90, 'active', $2,
+       $1, 20, 0, date '2026-01-01', current_date + 90, 'active', $2,
        $3::jsonb, 1, 1, 800000, 'RUB', 800000, 1
      ) returning id`,
     [
@@ -919,7 +1306,8 @@ async function createFixture(
        package_id, commercial_snapshot, snapshot_version, package_version,
        base_price_minor, currency_code, final_price_minor, version
      ) values (
-       $1, 20, 0, current_date, current_date + 90, 'active', $2,
+       $1, 20, 0, coalesce($4::date, date '2026-01-01'),
+       coalesce($5::date, current_date + 90), 'active', $2,
        $3::jsonb, 1, 1, 800000, 'RUB', 800000, 1
      ) returning id`,
     [
@@ -929,6 +1317,8 @@ async function createFixture(
         snapshotVersion: 1,
         displayName: "Group settlement package",
       }),
+      groupSubscriptionDates.startsAt ?? null,
+      groupSubscriptionDates.expiresAt ?? null,
     ],
   );
   const groupSubscriptionId = groupSubscription.rows[0]!.id;
@@ -1082,6 +1472,7 @@ async function createFixture(
     secondStudentId,
     groupId,
     managerId,
+    clientUserIds,
     userIds: [managerId, teacherUserId, ...clientUserIds],
     profileIds: profiles.rows.map((row) => row.id),
     lessonIds: [
@@ -1098,6 +1489,50 @@ async function createFixture(
     subscriptionId,
     groupSubscriptionId,
     packageId: packageRow.rows[0]!.id,
+  };
+}
+
+function crossPayerDecision(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+  return {
+    settlementTypeKey: "free_lesson",
+    clientDecisions: [
+      {
+        clientId: fixture.secondStudentId,
+        settlementTypeKey: "lesson",
+        payerStudentId: fixture.studentId,
+        subscriptionId: fixture.groupSubscriptionId,
+      },
+    ],
+    teacherCompensationRuleKey: "standard",
+  };
+}
+
+function crossPayerCapacityFact(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+): CalculatedLessonClientFact {
+  return {
+    charge: {
+      client_type: "student",
+      client_id: fixture.secondStudentId,
+      charge_type: "subscription",
+      charge_value: "1",
+      subscription_id: fixture.groupSubscriptionId,
+    },
+    chargeType: "subscription",
+    subscriptionId: fixture.groupSubscriptionId,
+    payerStudentId: fixture.studentId,
+    settlement: {
+      stableKey: "lesson",
+      label: "Занятие",
+      colorToken: "success",
+      hourShareBasisPoints: 10_000,
+      allowedContexts: ["settle"],
+      active: true,
+      order: 0,
+    },
+    calculation: { units: "1.00", amountMinor: "0" },
   };
 }
 

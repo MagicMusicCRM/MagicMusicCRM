@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,10 +49,18 @@ class FakeCardApiClient extends MagicApiClient {
     this.branches = const [],
     this.teachers = const [],
     this.rooms = const [],
+    this.clientPipelineStages = const [
+      {
+        'key': 'active',
+        'label': 'Занимается',
+        'style': 'green',
+        'active': true,
+        'allowedTransitions': <String>[],
+      },
+    ],
     List<Map<String, dynamic>> scheduleSeries = const [],
     List<Map<String, dynamic>> schedulePlans = const [],
     this.schedulePlanTrays = const {},
-    this.mutateScheduleSeriesOnCreate = false,
     this.mutateSchedulePlanOnCreate = false,
     this.mutateSchedulePlanOnEnd = false,
     List<Map<String, dynamic>> schedulePlanConstraintPreviews = const [],
@@ -118,10 +128,10 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> branches;
   final List<Map<String, dynamic>> teachers;
   final List<Map<String, dynamic>> rooms;
+  final List<Map<String, dynamic>> clientPipelineStages;
   final List<Map<String, dynamic>> scheduleSeries;
   final List<Map<String, dynamic>> schedulePlans;
   final Map<String, Map<String, dynamic>> schedulePlanTrays;
-  final bool mutateScheduleSeriesOnCreate;
   final bool mutateSchedulePlanOnCreate;
   final bool mutateSchedulePlanOnEnd;
   final List<Map<String, dynamic>> schedulePlanConstraintPreviews;
@@ -137,8 +147,18 @@ class FakeCardApiClient extends MagicApiClient {
   final Map<String, dynamic>? adjustmentReversalPreview;
 
   Map<String, dynamic>? updateLeadBody;
+  final List<Map<String, dynamic>> updateLeadBodies = [];
   Map<String, dynamic>? updateStudentBody;
+  final List<Map<String, dynamic>> updateStudentBodies = [];
+  Completer<void>? leadPatchGate;
+  Completer<void>? studentPatchGate;
+  Completer<void>? nextStudentCardGate;
+  int studentPatchFailures = 0;
+  int studentPatchConflicts = 0;
+  int leadPatchConflicts = 0;
+  int internalNotePutConflicts = 0;
   Map<String, dynamic>? updateInternalNoteBody;
+  final List<Map<String, dynamic>> updateInternalNoteBodies = [];
   final List<String> requests = [];
   final List<String> getRequests = [];
   final List<CardGetCall> getCalls = [];
@@ -357,15 +377,7 @@ class FakeCardApiClient extends MagicApiClient {
             'source': 'school',
             'schoolVersion': 1,
             'branchVersion': 0,
-            'stages': [
-              {
-                'key': 'active',
-                'label': 'Занимается',
-                'style': 'green',
-                'active': true,
-                'allowedTransitions': const <String>[],
-              },
-            ],
+            'stages': clientPipelineStages,
             'remediationStatuses': const <Map<String, dynamic>>[],
           }
           as T;
@@ -417,6 +429,9 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (student != null && path == '/crm/students/${student!['id']}/card') {
       studentCardLoadCount++;
+      final gate = nextStudentCardGate;
+      nextStudentCardGate = null;
+      if (gate != null) await gate.future;
       return <String, dynamic>{
             'student': student,
             'groups': <dynamic>[],
@@ -550,6 +565,14 @@ class FakeCardApiClient extends MagicApiClient {
     requests.add('PUT $path');
     final body = Map<String, dynamic>.from(data as Map);
     updateInternalNoteBody = body;
+    updateInternalNoteBodies.add(body);
+    if (internalNotePutConflicts > 0) {
+      internalNotePutConflicts--;
+      throw const MagicApiException(
+        statusCode: 409,
+        message: 'Заметку уже изменили.',
+      );
+    }
     internalNote = {
       'id': internalNote?['id'] ?? 'note-1',
       'body': body['body'],
@@ -574,12 +597,48 @@ class FakeCardApiClient extends MagicApiClient {
     ));
     if (lead != null && path == '/crm/leads/${lead!['id']}') {
       requests.add('PATCH $path');
-      updateLeadBody = Map<String, dynamic>.from(data as Map);
-      return <String, dynamic>{'id': lead!['id']} as T;
+      final body = Map<String, dynamic>.from(data as Map);
+      updateLeadBody = body;
+      updateLeadBodies.add(body);
+      final gate = leadPatchGate;
+      if (gate != null) await gate.future;
+      if (leadPatchConflicts > 0) {
+        leadPatchConflicts--;
+        throw const MagicApiException(
+          statusCode: 409,
+          message: 'Карточку уже изменили.',
+          details: {'code': 'CLIENT_VERSION_CONFLICT', 'entityType': 'lead'},
+        );
+      }
+      return <String, dynamic>{
+            'id': lead!['id'],
+            'version': (body['expectedVersion'] as int? ?? 0) + 1,
+          }
+          as T;
     }
     if (student != null && path == '/crm/students/${student!['id']}') {
-      updateStudentBody = Map<String, dynamic>.from(data as Map);
-      return <String, dynamic>{'id': student!['id']} as T;
+      final body = Map<String, dynamic>.from(data as Map);
+      updateStudentBody = body;
+      updateStudentBodies.add(body);
+      final gate = studentPatchGate;
+      if (gate != null) await gate.future;
+      if (studentPatchFailures > 0) {
+        studentPatchFailures--;
+        throw const MagicApiException(message: 'Тестовая ошибка сохранения.');
+      }
+      if (studentPatchConflicts > 0) {
+        studentPatchConflicts--;
+        throw const MagicApiException(
+          statusCode: 409,
+          message: 'Карточку уже изменили.',
+          details: {'code': 'CLIENT_VERSION_CONFLICT', 'entityType': 'student'},
+        );
+      }
+      return <String, dynamic>{
+            'id': student!['id'],
+            'version': (body['expectedVersion'] as int? ?? 0) + 1,
+          }
+          as T;
     }
     if (RegExp(r'^/crm/schedule-plans/[^/]+$').hasMatch(path)) {
       return <String, dynamic>{'version': 2} as T;
@@ -613,47 +672,6 @@ class FakeCardApiClient extends MagicApiClient {
       path: path,
       data: data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
     ));
-    if (path == '/crm/schedule-series') {
-      final body = data is Map
-          ? Map<String, dynamic>.from(data)
-          : <String, dynamic>{};
-      Map<String, dynamic>? byId(List<Map<String, dynamic>> rows, Object? id) {
-        for (final row in rows) {
-          if (row['id']?.toString() == id?.toString()) return row;
-        }
-        return null;
-      }
-
-      final clientRef = body['clientRef'];
-      final teacher = byId(teachers, body['teacherId']);
-      final room = byId(rooms, body['roomId']);
-      final branch = byId(branches, body['branchId']);
-      final teacherName = [
-        teacher?['firstName'],
-        teacher?['lastName'],
-      ].where((part) => part != null && '$part'.trim().isNotEmpty).join(' ');
-      final created = <String, dynamic>{
-        'id': 'series-${scheduleSeries.length + 1}',
-        'clientType': clientRef is Map ? clientRef['type'] : null,
-        'clientId': clientRef is Map ? clientRef['id'] : null,
-        'studentId': body['studentId'],
-        'groupId': body['groupId'],
-        'teacherId': body['teacherId'],
-        'teacherName': teacherName,
-        'roomId': body['roomId'],
-        'roomName': room?['name'],
-        'branchId': body['branchId'],
-        'branchName': branch?['name'],
-        'weekday': body['weekday'],
-        'beginTime': body['beginTime'],
-        'durationMinutes': body['durationMinutes'] ?? 60,
-        'validFrom': body['validFrom'],
-        'validUntil': body['validUntil'],
-        'notes': body['notes'],
-      };
-      if (mutateScheduleSeriesOnCreate) scheduleSeries.add(created);
-      return created as T;
-    }
     if (replacementPreview != null && path.endsWith('/replace/preview')) {
       return Map<String, dynamic>.from(replacementPreview!) as T;
     }

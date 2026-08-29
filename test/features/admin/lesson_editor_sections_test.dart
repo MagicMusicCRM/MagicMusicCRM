@@ -220,6 +220,7 @@ LessonEditorViewModel _viewModel({
     isSaving: isSaving,
     isAnalyzing: isAnalyzing,
     validationMessage: null,
+    canManageTeacherCompensation: true,
     loadErrorMessage: loadErrorMessage,
   );
 }
@@ -803,6 +804,7 @@ void main() {
               isSaving: false,
               requiresCompensationValue: true,
               compensationNeedsReason: true,
+              canManageTeacherCompensation: true,
             ),
             actions: actions,
           ),
@@ -891,6 +893,7 @@ void main() {
                     isSaving: false,
                     requiresCompensationValue: true,
                     compensationNeedsReason: true,
+                    canManageTeacherCompensation: true,
                   ),
                   actions: actions,
                 ),
@@ -955,6 +958,7 @@ void main() {
                 clientSnapshotValue: '1 500 ₽',
                 compensationLabel: 'Стандартная ставка',
                 teacherSnapshotValue: '1 000 ₽/ч',
+                canManageTeacherCompensation: true,
               ),
             ),
             LessonEditorActionsRow(

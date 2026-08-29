@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';

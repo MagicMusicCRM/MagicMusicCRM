@@ -57,7 +57,7 @@ describe("MergeService", () => {
     // HolliHop». Before this, merge only re-pointed references and threw the
     // loser's custom_data away — the appeal date and source vanished silently.
     const update = query.mock.calls.find((call) =>
-      String(call[0]).includes("update app.leads set custom_data"),
+      String(call[0]).includes("set custom_data = $2::jsonb"),
     );
     expect(update).toBeDefined();
     expect(JSON.parse(String((update![1] as unknown[])[1]))).toEqual({
@@ -132,10 +132,12 @@ describe("MergeService", () => {
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(sql).toContain("update app.students set lead_id");
+    expect(sql).toContain("for update");
+    expect(sql).toContain("version = version + 1");
+    expect(sql).toMatch(/update app\.students\s+set lead_id/);
     expect(sql).toContain("app.allow_lead_status_history_repoint");
     expect(sql).toContain("update app.chats set lead_id");
-    expect(sql).toContain("update app.leads set deleted_at = now()");
+    expect(sql).toMatch(/update app\.leads\s+set deleted_at = now\(\)/);
     expect(sql).toContain("insert into app.merge_log");
     // merge_log insert carries the captured repointed ids
     const mlInsert = query.mock.calls.find((c) => String(c[0]).includes("insert into app.merge_log"));
@@ -161,6 +163,7 @@ describe("MergeService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
     expect(sql).toContain("update app.students set lead_id = $1");
+    expect(sql).toContain("version = version + 1");
     expect(sql).toContain("set deleted_at = null");
     expect(sql).toContain("update app.merge_log set undone_at = now()");
     // duplicate_candidates reverse binds [null, ids]; students reverse binds [loser_id, ids]

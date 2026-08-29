@@ -1,0 +1,341 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+set +x
+export LC_ALL=C
+
+script_path="${1:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/deploy-api-release.sh}"
+[[ -f "${script_path}" ]] || {
+  printf 'deploy-api-release behavior: missing script\n' >&2
+  exit 1
+}
+
+extract_contract_section() {
+  local section="$1"
+  sed -n \
+    "/^# CONTRACT_HARNESS_BEGIN ${section}$/,/^# CONTRACT_HARNESS_END ${section}$/p" \
+    "${script_path}"
+}
+
+eval "$(extract_contract_section image-migration-head)"
+eval "$(extract_contract_section db-object-contract)"
+eval "$(extract_contract_section rollback-recovery)"
+
+expect_pass() {
+  local label="$1"
+  shift
+  "$@" || {
+    printf 'deploy-api-release behavior: expected PASS: %s\n' "${label}" >&2
+    exit 1
+  }
+}
+
+expect_fail() {
+  local label="$1"
+  shift
+  if "$@"; then
+    printf 'deploy-api-release behavior: expected FAIL: %s\n' "${label}" >&2
+    exit 1
+  fi
+}
+
+fake_image_head=0141_previous
+docker() {
+  case "$1" in
+    run)
+      printf '%s' "${fake_image_head}"
+      ;;
+    inspect)
+      log_event "docker-inspect:${2}"
+      if [[ "$2" == fake-caddy-container ]]; then
+        cat -- "${caddy_running_file}"
+      else
+        cat -- "${api_running_file}"
+      fi
+      ;;
+    stop)
+      log_event "docker-stop:${*:2}"
+      if [[ "${*:2}" == *fake-caddy-container* ]]; then
+        printf 'false\n' >"${caddy_running_file}"
+      else
+        printf 'false\n' >"${api_running_file}"
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+die() {
+  exit 1
+}
+image_head_call() {
+  (image_migration_head sha256:fake contract)
+}
+
+image_head_result="$(image_head_call)"
+[[ "${image_head_result}" == 0141_previous ]] || {
+  printf 'deploy-api-release behavior: valid image head was rejected\n' >&2
+  exit 1
+}
+fake_image_head='../../not-a-migration'
+expect_fail 'malformed image migration head' image_head_call
+fake_image_head=0141_previous
+
+# These globals are consumed by the extracted production function through eval.
+# shellcheck disable=SC2034
+declare expected_db_schema=app \
+  expected_db_relation=schedule_series \
+  expected_db_constraint=schedule_series_template_shape_check \
+  expected_db_trigger=schedule_series_validate_plan_subscription \
+  expected_db_trigger_function=app.validate_schedule_plan_series_subscription \
+  expected_db_trigger_function_schema=app \
+  expected_db_trigger_function_name=validate_schedule_plan_series_subscription \
+  expected_db_trigger_update_columns=plan_id,subscription_id
+
+valid_constraint_definition='check(subscription_idisnullorplan_idisnotnull)'
+expected_db_check_sha256="$(
+  printf '%s' "${valid_constraint_definition}" | sha256sum
+)"
+expected_db_check_sha256="${expected_db_check_sha256%% *}"
+fake_constraint_result="c|t|f|${valid_constraint_definition}"
+fake_trigger_result='O|23|app.validate_schedule_plan_series_subscription|plan_id,subscription_id|0|0|trigger'
+fake_function_definition='CREATE FUNCTION app.validate_schedule_plan_series_subscription() RETURNS trigger BODY exact-behavior'
+expected_db_trigger_function_sha256="$(
+  printf '%s' "${fake_function_definition}" | sha256sum
+)"
+expected_db_trigger_function_sha256="${expected_db_trigger_function_sha256%% *}"
+
+database_query() {
+  local sql="$1"
+  case "${sql}" in
+    *'select pg_get_functiondef(trigger_row.tgfoid)'*)
+      printf '%s\n' "${fake_function_definition}"
+      ;;
+    *'from pg_constraint constraint_row'*)
+      printf '%s\n' "${fake_constraint_result}"
+      ;;
+    *'from pg_trigger trigger_row'*)
+      printf '%s\n' "${fake_trigger_result}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+expect_pass 'exact CHECK and trigger catalog contract' assert_db_objects
+
+fake_constraint_result="f|t|f|${valid_constraint_definition}"
+expect_fail 'constraint must be CHECK type' assert_db_objects
+fake_constraint_result='c|t|f|check(subscription_idisnull)'
+expect_fail 'normalized CHECK definition hash must match' assert_db_objects
+fake_constraint_result="c|t|f|${valid_constraint_definition}"
+
+fake_trigger_result='R|23|app.validate_schedule_plan_series_subscription|plan_id,subscription_id|0|0|trigger'
+expect_fail 'replica-only trigger is not enabled for normal writes' assert_db_objects
+fake_trigger_result='O|19|app.validate_schedule_plan_series_subscription|plan_id,subscription_id|0|0|trigger'
+expect_fail 'trigger timing and events must be exact' assert_db_objects
+fake_trigger_result='O|23|app.wrong_function|plan_id,subscription_id|0|0|trigger'
+expect_fail 'trigger function identity must match' assert_db_objects
+fake_trigger_result='O|23|app.validate_schedule_plan_series_subscription|lesson_id,plan_id,subscription_id|0|0|trigger'
+expect_fail 'UPDATE OF columns must match migration exactly' assert_db_objects
+fake_trigger_result='A|23|app.validate_schedule_plan_series_subscription|plan_id,subscription_id|0|0|trigger'
+expect_pass 'always-enabled trigger is accepted' assert_db_objects
+fake_function_definition='CREATE FUNCTION app.validate_schedule_plan_series_subscription() RETURNS trigger BODY return-new-no-op'
+expect_fail 'trigger function body hash must match' assert_db_objects
+fake_function_definition='CREATE FUNCTION app.validate_schedule_plan_series_subscription() RETURNS trigger BODY exact-behavior'
+
+test_tmp="$(mktemp -d)"
+[[ "${test_tmp}" == /tmp/* ]] || {
+  printf 'deploy-api-release behavior: unsafe temp path\n' >&2
+  exit 1
+}
+trap 'rm -rf -- "${test_tmp}"' EXIT
+event_file="${test_tmp}/events.log"
+stage_file="${test_tmp}/stage.txt"
+recreate_count_file="${test_tmp}/recreate-count.txt"
+api_running_file="${test_tmp}/api-running.txt"
+caddy_running_file="${test_tmp}/caddy-running.txt"
+caddy_stop_count_file="${test_tmp}/caddy-stop-count.txt"
+# These globals are consumed by the extracted rollback functions through eval.
+# shellcheck disable=SC2034
+declare DEPLOYED_REVISION_FILE="${test_tmp}/deployed-revision.txt" \
+  rollback_override=rollback-release \
+  workers_disabled_override=workers-disabled \
+  workers_enabled_override=workers-enabled \
+  rollback_image=rollback-image \
+  rollback_image_id=sha256:rollback \
+  rollback_revision=1111111111111111111111111111111111111111 \
+  rollback_version=rollback-version \
+  rollback_image_migration_head=0141_previous \
+  pre_deployed_revision=11111111
+state_dir="${test_tmp}/state"
+mkdir -- "${state_dir}"
+
+# shellcheck disable=SC2034
+declare -a compose_base=(fake_compose)
+candidate_image_migration_head=0142_candidate
+
+log_event() {
+  printf '%s\n' "$1" >>"${event_file}"
+}
+
+current_stage() {
+  cat -- "${stage_file}"
+}
+
+fake_compose() {
+  if [[ "$*" == 'stop caddy' ]]; then
+    local caddy_stop_count
+    caddy_stop_count="$(cat -- "${caddy_stop_count_file}")"
+    caddy_stop_count=$((caddy_stop_count + 1))
+    printf '%s\n' "${caddy_stop_count}" >"${caddy_stop_count_file}"
+    printf 'false\n' >"${caddy_running_file}"
+    log_event "compose:stop caddy:${caddy_stop_count}"
+    return 0
+  fi
+  log_event "compose:$*"
+  if [[ "$*" == 'ps --all -q caddy' ]]; then
+    printf 'fake-caddy-container\n'
+  fi
+  if [[ "${scenario:-}" == recovery_unproven &&
+    "$*" == 'ps --all -q api' ]]; then
+    printf 'fake-api-container\n'
+  fi
+  return 0
+}
+
+recreate_api() {
+  local count
+  count="$(cat -- "${recreate_count_file}")"
+  count=$((count + 1))
+  printf '%s\n' "${count}" >"${recreate_count_file}"
+  printf '%s|%s\n' "${count}" "$2" >"${stage_file}"
+  log_event "recreate:${count}:$2"
+}
+
+wait_for_health() {
+  local stage
+  stage="$(current_stage)"
+  log_event "health:${stage}"
+  if [[ "${scenario}" == recovery_unproven &&
+    "${stage}" == 3'|'workers-disabled ]]; then
+    return 1
+  fi
+}
+
+assert_running_metadata() {
+  local stage
+  stage="$(current_stage)"
+  log_event "metadata:${stage}:worker-$5"
+}
+
+get_migration() {
+  log_event "migration:$(current_stage)"
+  printf '%s' "${candidate_image_migration_head}"
+}
+
+assert_migration() {
+  log_event "assert-migration:$(current_stage):$1"
+  [[ "$1" == "${candidate_image_migration_head}" ]]
+}
+
+assert_db_objects() {
+  log_event "db-objects:$(current_stage)"
+}
+
+assert_reconciliation() {
+  local stage
+  stage="$(current_stage)"
+  log_event "reconcile:${stage}:$2"
+  if [[ "${scenario}" == recovery_proven ||
+    "${scenario}" == recovery_unproven ]]; then
+    [[ "${stage}" != 2'|'workers-enabled ]]
+  fi
+}
+
+start_caddy() {
+  log_event start-caddy
+  printf 'true\n' >"${caddy_running_file}"
+}
+
+wait_public_ready() {
+  log_event "public-ready:$1"
+  [[ "${scenario}" != post_public_failure ]]
+}
+
+reset_rollback_scenario() {
+  scenario="$1"
+  : >"${event_file}"
+  : >"${stage_file}"
+  printf '0\n' >"${recreate_count_file}"
+  printf 'true\n' >"${api_running_file}"
+  printf 'false\n' >"${caddy_running_file}"
+  printf '0\n' >"${caddy_stop_count_file}"
+  rm -f -- "${state_dir}/rollback-migration.txt"
+}
+
+assert_log_contains() {
+  local expected="$1"
+  grep -Fqx -- "${expected}" "${event_file}" || {
+    printf 'deploy-api-release behavior: missing event: %s\n' "${expected}" >&2
+    exit 1
+  }
+}
+
+assert_log_excludes() {
+  local unexpected="$1"
+  if grep -Fqx -- "${unexpected}" "${event_file}"; then
+    printf 'deploy-api-release behavior: unexpected event: %s\n' \
+      "${unexpected}" >&2
+    exit 1
+  fi
+}
+
+assert_event_before() {
+  local first="$1"
+  local second="$2"
+  local first_line second_line
+  first_line="$(grep -nF -- "${first}" "${event_file}" | head -n 1 | cut -d: -f1)"
+  second_line="$(grep -nF -- "${second}" "${event_file}" | head -n 1 | cut -d: -f1)"
+  [[ -n "${first_line}" && -n "${second_line}" &&
+    "${first_line}" -lt "${second_line}" ]] || {
+    printf 'deploy-api-release behavior: wrong event order: %s -> %s\n' \
+      "${first}" "${second}" >&2
+    exit 1
+  }
+}
+
+reset_rollback_scenario recovery_proven
+automatic_rollback 77 2>/dev/null
+assert_event_before 'recreate:2:workers-enabled' 'recreate:3:workers-disabled'
+assert_log_contains 'health:3|workers-disabled'
+assert_log_contains 'metadata:3|workers-disabled:worker-false'
+assert_log_contains 'assert-migration:3|workers-disabled:0142_candidate'
+assert_log_contains 'db-objects:3|workers-disabled'
+assert_log_contains 'reconcile:3|workers-disabled:workers-disabled'
+assert_log_excludes 'compose:stop api'
+assert_log_excludes start-caddy
+
+reset_rollback_scenario recovery_unproven
+automatic_rollback 78 2>/dev/null
+assert_event_before 'recreate:2:workers-enabled' 'recreate:3:workers-disabled'
+assert_event_before 'health:3|workers-disabled' 'compose:stop api'
+assert_log_contains 'compose:stop api'
+assert_log_contains 'docker-stop:--time 15 fake-api-container'
+assert_log_contains 'docker-inspect:fake-api-container'
+assert_log_excludes start-caddy
+
+reset_rollback_scenario post_public_failure
+automatic_rollback 79 2>/dev/null
+assert_event_before start-caddy 'compose:stop caddy:2'
+assert_event_before 'compose:stop caddy:2' 'recreate:3:workers-disabled'
+assert_log_contains 'health:3|workers-disabled'
+assert_log_contains 'metadata:3|workers-disabled:worker-false'
+assert_log_excludes 'compose:stop api'
+[[ "$(cat -- "${caddy_running_file}")" == false ]] || {
+  printf 'deploy-api-release behavior: Caddy remained open after failed public check\n' >&2
+  exit 1
+}
+
+printf 'deploy-api-release behavior: PASS\n'

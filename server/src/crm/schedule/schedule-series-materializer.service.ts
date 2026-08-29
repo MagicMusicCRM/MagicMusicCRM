@@ -31,6 +31,11 @@ interface SeriesConstraintCandidate {
   client_refs: SeriesConstraintClientRef[] | null;
 }
 
+interface ScheduleMaterializationOptions {
+  includePast?: boolean;
+  replaceableLineageDates?: string[];
+}
+
 @Injectable()
 export class ScheduleSeriesMaterializerService {
   private readonly logger = new Logger(ScheduleSeriesMaterializerService.name);
@@ -56,10 +61,11 @@ export class ScheduleSeriesMaterializerService {
   private async seriesConstraintCandidates(
     seriesId: string,
     executor: ScheduleQueryExecutor = this.database,
+    options: ScheduleMaterializationOptions = {},
   ): Promise<SeriesConstraintCandidate[]> {
     const result = await executor.query<SeriesConstraintCandidate>(
       `
-        with target as (
+        with recursive target as (
           select s.*,
             coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow')
               as effective_timezone,
@@ -71,6 +77,15 @@ export class ScheduleSeriesMaterializerService {
           left join app.branches branch
             on branch.id = s.branch_id and branch.deleted_at is null
           where s.id = $1 and s.deleted_at is null
+        ), lineage(series_id, plan_id) as (
+          select id, plan_id from target
+          union
+          select previous.id, previous.plan_id
+            from app.schedule_series previous
+            join lineage continuation
+              on continuation.plan_id is not null
+             and previous.plan_id = continuation.plan_id
+             and previous.superseded_by = continuation.series_id
         ), candidates as (
           select s.id as series_id, s.plan_id, s.client_type, s.client_id,
             s.student_id, s.group_id, s.teacher_id, s.branch_id, s.room_id,
@@ -81,7 +96,7 @@ export class ScheduleSeriesMaterializerService {
               + s.duration_minutes * interval '1 minute' as ends_at
           from target s
           cross join lateral generate_series(
-            greatest(s.valid_from, s.local_today)::timestamp,
+            case when $4::boolean then s.valid_from else greatest(s.valid_from, s.local_today) end::timestamp,
             least(
               coalesce(s.valid_until, s.local_today
                 + case when s.plan_id is not null or s.group_id is null
@@ -94,8 +109,17 @@ export class ScheduleSeriesMaterializerService {
           ) as d
           where extract(isodow from d) = s.weekday
             and not exists (
-              select 1 from app.lessons lesson
-              where lesson.series_id = s.id and lesson.series_date = d::date
+              select 1
+                from app.lessons lesson
+                join app.schedule_series owner on owner.id = lesson.series_id
+              where owner.id in (select series_id from lineage)
+                and lesson.series_date = d::date
+                and not (
+                  lesson.series_date = any($5::date[])
+                  and lesson.deleted_at is not null
+                  and lesson.lifecycle_state = 'scheduled'
+                  and lesson.original_scheduled_at is null
+                )
             )
         )
         select candidate.series_date::text, candidate.plan_id,
@@ -144,6 +168,8 @@ export class ScheduleSeriesMaterializerService {
         seriesId,
         ScheduleSeriesMaterializerService.INDIVIDUAL_SERIES_HORIZON_DAYS,
         ScheduleSeriesMaterializerService.GROUP_SERIES_HORIZON_DAYS,
+        options.includePast ?? false,
+        options.replaceableLineageDates ?? [],
       ],
     );
     return result.rows;
@@ -164,10 +190,12 @@ export class ScheduleSeriesMaterializerService {
   private async assertNoScheduleSeriesConflicts(
     seriesId: string,
     executor: ScheduleQueryExecutor = this.database,
+    options: ScheduleMaterializationOptions = {},
   ): Promise<void> {
     const beforeLock = await this.seriesConstraintCandidates(
       seriesId,
       executor,
+      options,
     );
     const lockedKeys = this.seriesConstraintLockKeys(beforeLock);
     await acquireScheduleLockKeys(executor, lockedKeys);
@@ -178,6 +206,7 @@ export class ScheduleSeriesMaterializerService {
     const candidates = await this.seriesConstraintCandidates(
       seriesId,
       executor,
+      options,
     );
     const normalizedLockedKeys = new Set(
       lockedKeys
@@ -244,13 +273,28 @@ export class ScheduleSeriesMaterializerService {
   async materializeSeries(
     seriesId: string,
     executor: ScheduleQueryExecutor = this.database,
+    options: ScheduleMaterializationOptions = {},
   ): Promise<number> {
     // The worker, edit and stop flows all serialize on the same key. Without
     // this lock a worker can commit old future lessons after an edit deleted
     // them, or two edits can create competing continuations.
-    await this.assertNoScheduleSeriesConflicts(seriesId, executor);
+    await this.assertNoScheduleSeriesConflicts(seriesId, executor, options);
     const result = await executor.query<{ id: string }>(
       `
+        with recursive target as (
+          select series.*
+            from app.schedule_series series
+           where series.id = $1 and series.deleted_at is null
+        ), lineage(series_id, plan_id) as (
+          select id, plan_id from target
+          union
+          select previous.id, previous.plan_id
+            from app.schedule_series previous
+            join lineage continuation
+              on continuation.plan_id is not null
+             and previous.plan_id = continuation.plan_id
+             and previous.superseded_by = continuation.series_id
+        )
         insert into app.lessons (
           student_id, group_id, teacher_id, branch_id, room_id,
           scheduled_at, duration_minutes, status, is_trial,
@@ -261,17 +305,17 @@ export class ScheduleSeriesMaterializerService {
             coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
           s.duration_minutes, 'scheduled', false,
           s.id, d::date, s.created_by
-        from app.schedule_series s
+        from target s
         left join app.branches branch
           on branch.id = s.branch_id and branch.deleted_at is null
         cross join lateral generate_series(
-          greatest(
+          case when $4::boolean then s.valid_from else greatest(
             s.valid_from,
             timezone(
               coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
               now()
             )::date
-          )::timestamp,
+          ) end::timestamp,
           least(
               coalesce(s.valid_until, timezone(
                 coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
@@ -288,11 +332,19 @@ export class ScheduleSeriesMaterializerService {
           )::timestamp,
           interval '1 day'
         ) as d
-        where s.id = $1 and s.deleted_at is null
-          and extract(isodow from d) = s.weekday
+        where extract(isodow from d) = s.weekday
           and not exists (
-            select 1 from app.lessons l
-            where l.series_id = s.id and l.series_date = d::date
+            select 1
+              from app.lessons lesson
+              join app.schedule_series owner on owner.id = lesson.series_id
+            where owner.id in (select series_id from lineage)
+              and lesson.series_date = d::date
+              and not (
+                lesson.series_date = any($5::date[])
+                and lesson.deleted_at is not null
+                and lesson.lifecycle_state = 'scheduled'
+                and lesson.original_scheduled_at is null
+              )
           )
         on conflict (series_id, series_date) where deleted_at is null
         do nothing
@@ -302,6 +354,8 @@ export class ScheduleSeriesMaterializerService {
         seriesId,
         ScheduleSeriesMaterializerService.INDIVIDUAL_SERIES_HORIZON_DAYS,
         ScheduleSeriesMaterializerService.GROUP_SERIES_HORIZON_DAYS,
+        options.includePast ?? false,
+        options.replaceableLineageDates ?? [],
       ],
     );
     const lessonIds = result.rows.map((row) => row.id);
@@ -406,7 +460,8 @@ export class ScheduleSeriesMaterializerService {
               * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
           ) / 100,
           case when rate.value > 0 then 'fixed' else 'none' end,
-          rate.value, plan.subscription_id, false, lesson.duration_minutes
+          rate.value, coalesce(series.subscription_id, plan.subscription_id),
+          false, lesson.duration_minutes
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
         join app.schedule_plans plan on plan.id = series.plan_id
@@ -607,8 +662,12 @@ export class ScheduleSeriesMaterializerService {
     return lessonIds.length;
   }
 
-  materializePlanSeries(client: PoolClient, seriesId: string): Promise<number> {
-    return this.materializeSeries(seriesId, client);
+  materializePlanSeries(
+    client: PoolClient,
+    seriesId: string,
+    options: ScheduleMaterializationOptions = {},
+  ): Promise<number> {
+    return this.materializeSeries(seriesId, client, options);
   }
 
   /** Продлить все живые серии (вкл. «до бесконечности») — вызывается воркером. */

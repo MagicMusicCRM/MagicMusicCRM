@@ -11,6 +11,8 @@ import type {
 } from "../dto/schedule-plan.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
+import { extendSchedulePlanBackwards } from "./schedule-plan-backdate-mutation";
+import { moveSchedulePlanStartForward } from "./schedule-plan-forward-start-mutation";
 import { lockSchedulePlanSeries } from "./schedule-locks";
 import {
   type NormalizedSchedulePlanCreate,
@@ -18,6 +20,7 @@ import {
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
 import { failSchedulePlan } from "./schedule-plan-definition.service";
+import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
 import { SchedulePlanRepository } from "./schedule-plan.repository";
 import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
@@ -54,6 +57,7 @@ export class SchedulePlanMutationService {
     private readonly materializer: ScheduleSeriesMaterializerService,
     private readonly settlement: LessonSettlementService,
     private readonly definition: SchedulePlanDefinitionService,
+    private readonly previews: SchedulePlanConstraintPreviewService,
   ) {}
 
   async create(
@@ -91,10 +95,11 @@ export class SchedulePlanMutationService {
       mutate: (client, version) =>
         this.createInTransaction(
           client,
-          actor.userId,
+          actor,
           planId,
           version,
           normalized,
+          dto,
         ),
     });
     return this.result(
@@ -135,7 +140,7 @@ export class SchedulePlanMutationService {
         payload: { entityId: planId, state: "updated" },
       },
       mutate: (client, version) =>
-        this.updateInTransaction(client, actor.userId, planId, version, dto),
+        this.updateInTransaction(client, actor, planId, version, dto),
     });
     return this.result(
       planId,
@@ -147,11 +152,13 @@ export class SchedulePlanMutationService {
 
   private async createInTransaction(
     client: PoolClient,
-    actorUserId: string,
+    actor: ActorContext,
     planId: string,
     version: number,
     normalized: NormalizedSchedulePlanCreate,
+    dto: CreateSchedulePlanDto,
   ): Promise<MutationReference> {
+    const actorUserId = actor.userId;
     const studentIds =
       normalized.kind === "individual"
         ? [normalized.studentId!]
@@ -165,6 +172,12 @@ export class SchedulePlanMutationService {
       participants: normalized.participants,
       rows: normalized.rows,
     });
+    const includePast = await this.previews.assertCreateHistoricalConfirmation(
+      client,
+      actor,
+      normalized,
+      dto,
+    );
     await this.repository.insertPlan(client, {
       id: planId,
       kind: normalized.kind,
@@ -189,59 +202,109 @@ export class SchedulePlanMutationService {
     }
     return this.insertAndMaterializeRows(
       client,
-      actorUserId,
+      actor,
       planId,
       version,
       normalized,
       studentIds,
+      includePast,
     );
   }
 
   private async updateInTransaction(
     client: PoolClient,
-    actorUserId: string,
+    actor: ActorContext,
     planId: string,
     version: number,
     dto: UpdateSchedulePlanDto,
   ): Promise<MutationReference> {
     const prepared = await this.definition.prepareUpdate(client, planId, dto);
+    const includePast = await this.previews.assertUpdateHistoricalConfirmation(
+      client,
+      actor,
+      planId,
+      dto,
+      prepared,
+    );
+    if (prepared.mode === "extend_backwards") {
+      return extendSchedulePlanBackwards({
+        client,
+        actor,
+        planId,
+        version,
+        dto,
+        prepared,
+        repository: this.repository,
+        series: this.series,
+        materializer: this.materializer,
+        definition: this.definition,
+        insertSeries: (input, storedDecision) =>
+          this.insertSeries(client, input, actor, storedDecision),
+      });
+    }
     await lockSchedulePlanSeries(
       client,
       prepared.activeSeries.map((series) => series.id),
     );
+    if (prepared.mode === "move_start_forward") {
+      return moveSchedulePlanStartForward({
+        client,
+        planId,
+        version,
+        prepared,
+        repository: this.repository,
+        definition: this.definition,
+      });
+    }
+    if (prepared.plan.kind === "individual" && prepared.plan.subscription_id) {
+      await this.repository.freezeActiveSeriesSubscription(
+        client,
+        prepared.activeSeries.map((series) => series.id),
+        prepared.plan.subscription_id,
+      );
+    }
+    await this.repository.updatePlan(client, {
+      planId,
+      title: dto.title?.trim() || prepared.plan.title,
+      subscriptionId: prepared.subscriptionId,
+      activeFrom: prepared.plan.active_from,
+      activeUntil: prepared.activeUntil,
+      version,
+    });
     const seriesIds = await this.insertContinuations(
       client,
-      actorUserId,
+      actor,
       planId,
       version,
       dto.rows,
       prepared,
     );
-    await this.retirePreviousSeries(client, prepared, dto.rows, seriesIds);
+    const replaceableDates = await this.retirePreviousSeries(
+      client,
+      prepared,
+      dto.rows,
+      seriesIds,
+    );
     await this.replaceParticipants(client, planId, version, prepared);
-    await this.repository.updatePlan(client, {
-      planId,
-      title: dto.title?.trim() || prepared.plan.title,
-      subscriptionId: prepared.subscriptionId,
-      activeUntil: prepared.activeUntil,
-      version,
-    });
     const lessonIds = await this.validateAndMaterialize(
       client,
       dto.rows,
       seriesIds,
       prepared,
+      includePast,
+      replaceableDates,
     );
     return { planId, seriesIds, lessonIds };
   }
 
   private async insertAndMaterializeRows(
     client: PoolClient,
-    actorUserId: string,
+    actor: ActorContext,
     planId: string,
     version: number,
     normalized: NormalizedSchedulePlanCreate,
     studentIds: string[],
+    includePast: boolean,
   ): Promise<MutationReference> {
     const seriesIds: string[] = [];
     const lessonIds: string[] = [];
@@ -252,20 +315,28 @@ export class SchedulePlanMutationService {
         normalized.activeFrom,
         normalized.activeUntil,
         studentIds,
+        includePast,
       );
       const seriesId = this.definition.seriesId(planId, version, index);
-      await this.insertSeries(client, {
-        id: seriesId,
-        planId,
-        studentId: normalized.studentId,
-        groupId: normalized.groupId,
-        validFrom: normalized.activeFrom,
-        validUntil: normalized.activeUntil,
-        row,
-        actorUserId,
-        version,
+      await this.insertSeries(
+        client,
+        {
+          id: seriesId,
+          planId,
+          studentId: normalized.studentId,
+          groupId: normalized.groupId,
+          validFrom: normalized.activeFrom,
+          validUntil: normalized.activeUntil,
+          row,
+          actorUserId: actor.userId,
+          version,
+          subscriptionId: normalized.subscriptionId,
+        },
+        actor,
+      );
+      await this.materializer.materializePlanSeries(client, seriesId, {
+        includePast,
       });
-      await this.materializer.materializePlanSeries(client, seriesId);
       seriesIds.push(seriesId);
       lessonIds.push(...(await this.definition.lessonIds(client, seriesId)));
     }
@@ -274,7 +345,7 @@ export class SchedulePlanMutationService {
 
   private async insertContinuations(
     client: PoolClient,
-    actorUserId: string,
+    actor: ActorContext,
     planId: string,
     version: number,
     rows: SchedulePlanRowDto[],
@@ -283,17 +354,24 @@ export class SchedulePlanMutationService {
     const seriesIds: string[] = [];
     for (const [index, row] of rows.entries()) {
       const seriesId = this.definition.seriesId(planId, version, index);
-      await this.insertSeries(client, {
-        id: seriesId,
-        planId,
-        studentId: prepared.plan.student_id,
-        groupId: prepared.plan.group_id,
-        validFrom: prepared.effectiveFrom,
-        validUntil: prepared.activeUntil,
-        row,
-        actorUserId,
-        version,
-      });
+      await this.insertSeries(
+        client,
+        {
+          id: seriesId,
+          planId,
+          studentId: prepared.plan.student_id,
+          groupId: prepared.plan.group_id,
+          validFrom: prepared.effectiveFrom,
+          validUntil: prepared.activeUntil,
+          row,
+          actorUserId: actor.userId,
+          version,
+          subscriptionId: prepared.subscriptionId,
+        },
+        actor,
+        prepared.activeSeries.find((series) => series.id === row.seriesId)
+          ?.planned_financial_decision ?? null,
+      );
       seriesIds.push(seriesId);
     }
     return seriesIds;
@@ -305,13 +383,49 @@ export class SchedulePlanMutationService {
       Parameters<SchedulePlanRepository["insertSeries"]>[1],
       "settlementPlan"
     >,
+    actor: ActorContext,
+    storedDecision: SchedulePlanRowDto["financialDecision"] | null = null,
   ) {
+    const financialDecision = await this.authorizedFinancialDecision(
+      client,
+      actor,
+      input.row,
+      storedDecision,
+    );
     const settlementPlan = await this.settlement.preparePlan(
       client,
       input.row.branchId,
-      input.row.financialDecision,
+      financialDecision,
     );
-    await this.repository.insertSeries(client, { ...input, settlementPlan });
+    await this.repository.insertSeries(client, {
+      ...input,
+      row: { ...input.row, financialDecision },
+      settlementPlan,
+    });
+  }
+
+  private authorizedFinancialDecision(
+    client: PoolClient,
+    actor: ActorContext,
+    row: SchedulePlanRowDto,
+    storedDecision: SchedulePlanRowDto["financialDecision"] | null,
+  ) {
+    if (this.policy.canManageTeacherCompensation(actor)) {
+      return Promise.resolve(row.financialDecision);
+    }
+    if (storedDecision) {
+      return Promise.resolve({
+        ...row.financialDecision,
+        teacherCompensationRuleKey: storedDecision.teacherCompensationRuleKey,
+        teacherCompensationValueMinor:
+          storedDecision.teacherCompensationValueMinor,
+      });
+    }
+    return this.settlement.applyDefaultTeacherCompensation(
+      client,
+      row.branchId,
+      row.financialDecision,
+    );
   }
 
   private async retirePreviousSeries(
@@ -321,17 +435,21 @@ export class SchedulePlanMutationService {
     seriesIds: string[],
   ) {
     const continuations = new Map<string, string>();
+    const replaceableDates = new Map<string, string[]>();
     rows.forEach((row, index) => {
       if (row.seriesId) continuations.set(row.seriesId, seriesIds[index]!);
     });
     for (const old of prepared.activeSeries) {
-      await this.repository.retireSeries(
+      const continuationId = continuations.get(old.id) ?? null;
+      const removedDates = await this.repository.retireSeries(
         client,
         old.id,
         prepared.effectiveFrom,
-        continuations.get(old.id) ?? null,
+        continuationId,
       );
+      if (continuationId) replaceableDates.set(continuationId, removedDates);
     }
+    return replaceableDates;
   }
 
   private async replaceParticipants(
@@ -356,6 +474,8 @@ export class SchedulePlanMutationService {
     rows: SchedulePlanRowDto[],
     seriesIds: string[],
     prepared: PreparedSchedulePlanUpdate,
+    includePast: boolean,
+    replaceableDates: Map<string, string[]>,
   ) {
     const lessonIds: string[] = [];
     for (const [index, row] of rows.entries()) {
@@ -365,9 +485,13 @@ export class SchedulePlanMutationService {
         prepared.effectiveFrom,
         prepared.activeUntil,
         prepared.studentIds,
+        includePast,
       );
       const seriesId = seriesIds[index]!;
-      await this.materializer.materializePlanSeries(client, seriesId);
+      await this.materializer.materializePlanSeries(client, seriesId, {
+        includePast,
+        replaceableLineageDates: replaceableDates.get(seriesId) ?? [],
+      });
       lessonIds.push(...(await this.definition.lessonIds(client, seriesId)));
     }
     return lessonIds;

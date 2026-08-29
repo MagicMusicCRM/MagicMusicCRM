@@ -76,6 +76,35 @@ void main() {
     );
   });
 
+  test('re-register preserves a dirty draft and rebinds its saver', () async {
+    final workspace = controller();
+    final tabId = workspace.state.activeTabId;
+    var saved = false;
+    workspace.registerForm(tabId, 'client-form', expectedVersion: 4);
+    workspace.updateForm(
+      tabId,
+      'client-form',
+      dirty: true,
+      draft: const {'name': 'Локальный ввод'},
+    );
+
+    workspace.registerForm(
+      tabId,
+      'client-form',
+      onSave: () async {
+        saved = true;
+        return true;
+      },
+    );
+
+    final form = workspace.state.activeTab.forms['client-form']!;
+    expect(form.dirty, isTrue);
+    expect(form.expectedVersion, 4);
+    expect(form.draft, const {'name': 'Локальный ввод'});
+    await workspace.saveDirtyForms(workspace.state.activeTab);
+    expect(saved, isTrue);
+  });
+
   test(
     'tab title follows its current route and accepts a loaded entity name',
     () {

@@ -78,6 +78,26 @@ export class LessonCommandRepository {
     );
   }
 
+  async loadEffectiveTeacherRate(
+    client: PoolClient,
+    teacherId: string,
+    scheduledAt: string,
+  ): Promise<number> {
+    const result = await client.query<{ rate: number | string }>(
+      `select coalesce((
+         select teacher_rate.rate
+         from app.teacher_rates teacher_rate
+         where teacher_rate.teacher_id = $1
+           and teacher_rate.deleted_at is null
+           and teacher_rate.effective_from <= $2::timestamptz::date
+         order by teacher_rate.effective_from desc, teacher_rate.created_at desc
+         limit 1
+       ), 0)::numeric as rate`,
+      [teacherId, scheduledAt],
+    );
+    return Number(result.rows[0]?.rate ?? 0);
+  }
+
   updateNotes(
     client: PoolClient,
     lessonId: string,

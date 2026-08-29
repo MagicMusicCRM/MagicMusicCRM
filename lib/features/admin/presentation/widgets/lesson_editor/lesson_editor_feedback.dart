@@ -110,6 +110,7 @@ class LessonEditorFeedbackModel {
     required this.clientSnapshotValue,
     required this.compensationLabel,
     required this.teacherSnapshotValue,
+    required this.canManageTeacherCompensation,
   });
 
   final LessonEditorSession session;
@@ -119,6 +120,7 @@ class LessonEditorFeedbackModel {
   final String clientSnapshotValue;
   final String compensationLabel;
   final String teacherSnapshotValue;
+  final bool canManageTeacherCompensation;
 }
 
 class LessonEditorFeedback extends StatelessWidget {
@@ -241,14 +243,15 @@ class _SnapshotPreview extends StatelessWidget {
             label: 'Списание клиента',
             value: '${model.settlementLabel} · ${model.clientSnapshotValue}',
           ),
-          _SnapshotRow(
-            key: const ValueKey('lesson-snapshot-teacher-compensation'),
-            label: 'Оплата преподавателю',
-            value:
-                '${model.compensationLabel} · '
-                '${model.teacherSnapshotValue}',
-            isLast: true,
-          ),
+          if (model.canManageTeacherCompensation)
+            _SnapshotRow(
+              key: const ValueKey('lesson-snapshot-teacher-compensation'),
+              label: 'Оплата преподавателю',
+              value:
+                  '${model.compensationLabel} · '
+                  '${model.teacherSnapshotValue}',
+              isLast: true,
+            ),
         ],
       ),
     );

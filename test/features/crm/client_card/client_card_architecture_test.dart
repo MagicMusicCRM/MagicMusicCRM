@@ -124,18 +124,25 @@ void main() {
     });
   }
 
-  testWidgets('edited dialog back still asks for discard confirmation', (
+  testWidgets('edited dialog back flushes autosave before closing', (
     tester,
   ) async {
+    final closeResults = <bool?>[];
     final api = FakeCardApiClient(
       lead: const {
         'id': 'lead-1',
+        'version': 1,
         'firstName': 'Иван',
         'lastName': 'Петров',
         'customData': <String, dynamic>{},
       },
     );
-    await pumpClientCard(tester, api: api, seed: const {'id': 'lead-1'});
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'lead-1'},
+      onClosed: closeResults.add,
+    );
     final nameField = find.widgetWithText(TextFormField, 'Имя');
     expect(nameField, findsOneWidget);
     await tester.enterText(nameField, 'Пётр');
@@ -144,12 +151,10 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    expect(find.text('Несохранённые изменения'), findsOneWidget);
-    expect(find.text('Остаться'), findsOneWidget);
-    await tester.tap(find.text('Остаться'));
-    await tester.pumpAndSettle();
     expect(find.text('Несохранённые изменения'), findsNothing);
-    expect(find.byType(ClientCardShell), findsOneWidget);
+    expect(api.updateLeadBody?['firstName'], 'Пётр');
+    expect(closeResults, [true]);
+    expect(find.byType(ClientCardShell), findsNothing);
   });
 
   for (final routed in [false, true]) {

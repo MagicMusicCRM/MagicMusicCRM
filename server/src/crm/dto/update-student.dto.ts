@@ -3,17 +3,25 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsInt,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { ClientCustomFieldInputDto } from "./client-config.dto";
 
 export class UpdateStudentDto {
+  // Optional at the HTTP boundary while pre-201 desktop clients remain supported.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
+
   @IsOptional()
   @IsString()
   @MaxLength(100)

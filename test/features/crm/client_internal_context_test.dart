@@ -57,16 +57,16 @@ void main() {
       find.byKey(const Key('client-internal-note-input')),
       'Позвонить за час',
     );
-    await tester.pump();
-    await tester.ensureVisible(
-      find.byKey(const Key('client-internal-note-save')),
-    );
-    await tester.tap(find.byKey(const Key('client-internal-note-save')));
+    await tester.pump(const Duration(milliseconds: 799));
+    expect(api.updateInternalNoteBody, isNull);
+    expect(find.byKey(const Key('client-internal-note-save')), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1));
     await tester.pumpAndSettle();
     expect(api.updateInternalNoteBody, {
       'body': 'Позвонить за час',
       'expectedVersion': 4,
     });
+    expect(find.text('Сохранено'), findsWidgets);
 
     expect(find.byKey(const Key('client-operational-history')), findsOneWidget);
     expect(find.text('Оплата удалена из статистики'), findsOneWidget);
@@ -94,5 +94,94 @@ void main() {
       ),
       isEmpty,
     );
+  });
+
+  testWidgets('closing the card flushes a pending internal note', (
+    tester,
+  ) async {
+    var closed = false;
+    final api = FakeCardApiClient(
+      role: 'admin',
+      student: _student,
+      internalNote: const {
+        'id': 'note-1',
+        'body': 'Старый текст',
+        'version': 2,
+        'updatedByName': 'Администратор',
+        'updatedAt': '2026-08-07T10:00:00.000Z',
+      },
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: _student,
+      entityType: 'student',
+      routed: true,
+      onClosed: (_) => closed = true,
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('client-internal-note-input')),
+      'Свежий текст',
+    );
+    await tester.tap(find.text('Назад').last);
+    await tester.pumpAndSettle();
+
+    expect(api.updateInternalNoteBody, {
+      'body': 'Свежий текст',
+      'expectedVersion': 2,
+    });
+    expect(closed, isTrue);
+  });
+
+  testWidgets('note conflict keeps local text and retries on latest version', (
+    tester,
+  ) async {
+    final api = FakeCardApiClient(
+      role: 'admin',
+      student: _student,
+      internalNote: const {
+        'id': 'note-1',
+        'body': 'Старый текст',
+        'version': 2,
+        'updatedByName': 'Администратор',
+        'updatedAt': '2026-08-07T10:00:00.000Z',
+      },
+    )..internalNotePutConflicts = 1;
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: _student,
+      entityType: 'student',
+      routed: true,
+    );
+
+    api.internalNote = const {
+      'id': 'note-1',
+      'body': 'Удалённое изменение',
+      'version': 3,
+      'updatedByName': 'Другой сотрудник',
+      'updatedAt': '2026-08-07T11:00:00.000Z',
+    };
+    await tester.enterText(
+      find.byKey(const Key('client-internal-note-input')),
+      'Мой локальный текст',
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Мой локальный текст'), findsOneWidget);
+    expect(find.byKey(const Key('client-internal-note-retry')), findsOneWidget);
+    expect(api.updateInternalNoteBodies.single['expectedVersion'], 2);
+
+    await tester.tap(find.byKey(const Key('client-internal-note-retry')));
+    await tester.pumpAndSettle();
+
+    expect(api.updateInternalNoteBodies, hasLength(2));
+    expect(api.updateInternalNoteBodies.last, {
+      'body': 'Мой локальный текст',
+      'expectedVersion': 3,
+    });
+    expect(find.text('Сохранено'), findsWidgets);
   });
 }

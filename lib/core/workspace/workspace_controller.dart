@@ -308,6 +308,30 @@ class WorkspaceController extends ChangeNotifier {
     }
   }
 
+  Future<bool> resolveAllDirtyTabs({
+    required DirtyCloseDecision decision,
+    required DirtyTabSaver saveDirty,
+    DirtyTabDiscarder? discardDirty,
+  }) async {
+    if (decision == DirtyCloseDecision.cancel) {
+      return !_state.tabs.any((tab) => tab.hasDirtyForms);
+    }
+    final dirtyTabIds = _state.tabs
+        .where((tab) => tab.hasDirtyForms)
+        .map((tab) => tab.tabId)
+        .toList(growable: false);
+    for (final tabId in dirtyTabIds) {
+      final resolved = await resolveDirtyTab(
+        tabId,
+        resolveDirty: (_) async => decision,
+        saveDirty: saveDirty,
+        discardDirty: discardDirty,
+      );
+      if (!resolved) return false;
+    }
+    return true;
+  }
+
   void updateCurrentView(String tabId, ContextViewState viewState) {
     _updateTab(tabId, (tab) {
       final routes = [...tab.routeStack];
@@ -392,6 +416,7 @@ class WorkspaceController extends ChangeNotifier {
       discard: onDiscard,
     );
     _updateTab(tabId, (tab) {
+      if (tab.forms.containsKey(formKey)) return tab;
       final forms = {...tab.forms};
       forms[formKey] = WorkspaceFormState(
         formKey: formKey,
@@ -427,10 +452,15 @@ class WorkspaceController extends ChangeNotifier {
     });
   }
 
-  void unregisterForm(String tabId, String formKey) {
+  void unregisterForm(
+    String tabId,
+    String formKey, {
+    bool preserveDirtyDraft = false,
+  }) {
     _formActions.remove(_formActionKey(tabId, formKey));
     _updateTab(tabId, (tab) {
-      if (!tab.forms.containsKey(formKey)) return tab;
+      final current = tab.forms[formKey];
+      if (current == null || (preserveDirtyDraft && current.dirty)) return tab;
       final forms = {...tab.forms}..remove(formKey);
       return tab.copyWith(forms: forms);
     });

@@ -360,9 +360,9 @@
       "file": "server/src/crm/crm-schedule.controller.ts",
       "line": 264,
       "boundary": "jwt-capability",
-      "capabilityKey": "schedule.lesson.write",
-      "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "capabilityKey": "commerce.teacher_payroll.write",
+      "scope": "resource",
+      "legacyPolicy": "CrmPolicy.assertCanManagePayrollHistory for bulk lesson-rate changes",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"

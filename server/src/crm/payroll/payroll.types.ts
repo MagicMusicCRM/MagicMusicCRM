@@ -1,8 +1,5 @@
 export type TeacherStatsUnitType =
-  | "group"
-  | "individual"
-  | "group_trial"
-  | "individual_trial";
+  "group" | "individual" | "group_trial" | "individual_trial";
 
 export interface PayrollMutationMetadata {
   idempotencyKey: string;
@@ -18,6 +15,7 @@ export interface PayrollLessonFilters {
 
 export interface PayrollLessonRow {
   id: string;
+  rate_mutation_version?: string | number;
   teacher_id: string;
   student_id: string | null;
   lead_id: string | null;

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
-import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 
 Future<bool?> showCreateGroupSurface(BuildContext context) {
   return showMagicAdaptiveSurface<bool>(
@@ -99,6 +101,9 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
 
     try {
       final rawPrice = _priceController.text.trim().replaceAll(',', '.');
+      final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
+      final canManageRate =
+          snapshot != null && crmCanManageTeacherRates(snapshot);
       await ref
           .read(magicCrmServiceProvider)
           .createGroup(
@@ -107,7 +112,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
             branchId: _branchId!,
             roomId: _roomId!,
             pricePerLesson: rawPrice.isEmpty ? null : num.parse(rawPrice),
-            teacherRate: _teacherRate,
+            teacherRate: canManageRate ? _teacherRate : null,
           );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -134,6 +139,9 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
+    final canManageRate =
+        snapshot != null && crmCanManageTeacherRates(snapshot);
     if (_loading) {
       return const SizedBox(
         height: 220,
@@ -269,12 +277,14 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                   : null;
             },
           ),
-          const SizedBox(height: 12),
-          TeacherRateSelector(
-            allowInherit: true,
-            label: 'Ставка педагога по группе',
-            onChanged: (rate) => _teacherRate = rate,
-          ),
+          if (canManageRate) ...[
+            const SizedBox(height: 12),
+            TeacherRateSelector(
+              allowInherit: true,
+              label: 'Ставка педагога по группе',
+              onChanged: (rate) => _teacherRate = rate,
+            ),
+          ],
           const SizedBox(height: 20),
           Row(
             children: [

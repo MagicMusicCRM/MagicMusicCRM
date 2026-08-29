@@ -76,6 +76,17 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
         drop view if exists app.lesson_teacher_compensation_facts_effective;
         drop view if exists app.lesson_client_charge_facts_effective;
       `);
+      // 0142 owns a trigger/function that reference schedule_series.plan_id.
+      // Roll the dependent layer down first, then restore it after 0104.
+      await client.query(
+        readFileSync(
+          resolve(
+            migrationRoot,
+            "0142_schedule_plan_series_subscription_snapshot.down.sql",
+          ),
+          "utf8",
+        ),
+      );
       await client.query(
         readFileSync(
           resolve(migrationRoot, "0104_v7_schedule_plans_notes.down.sql"),
@@ -89,6 +100,15 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
       await client.query(
         readFileSync(
           resolve(migrationRoot, "0104_v7_schedule_plans_notes.up.sql"),
+          "utf8",
+        ),
+      );
+      await client.query(
+        readFileSync(
+          resolve(
+            migrationRoot,
+            "0142_schedule_plan_series_subscription_snapshot.up.sql",
+          ),
           "utf8",
         ),
       );

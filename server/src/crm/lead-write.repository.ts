@@ -1,4 +1,8 @@
-import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { PoolClient } from "pg";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -11,7 +15,7 @@ import {
   ValidatedLeadCreate,
 } from "./clients/client-write.validator";
 import { sanitizeJsonObject } from "./crm-util";
-import { UpsertLeadDto } from "./dto/upsert-lead.dto";
+import { UpdateLeadDto, UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { extractBranchId } from "./branch-scope";
 import { LeadRow } from "./lead-model";
 import {
@@ -74,7 +78,7 @@ export class LeadWriteRepository {
   async update(
     actor: ActorContext,
     leadId: string,
-    dto: UpsertLeadDto,
+    dto: UpdateLeadDto,
     customFields?: ValidatedCustomFields,
   ): Promise<LeadWriteResult> {
     const branchId = extractBranchId(dto.customDataPatch);
@@ -82,6 +86,7 @@ export class LeadWriteRepository {
     const initialCustomData = sanitizeJsonObject(dto.customDataPatch);
     return this.database.transaction(async (client) => {
       const before = await this.lockLead(client, leadId);
+      this.assertExpectedVersion(before, dto.expectedVersion);
       await this.assertUpdateTransition(
         client,
         before,
@@ -211,7 +216,7 @@ export class LeadWriteRepository {
           source_id
         )
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        returning id, status_id, null::text as status_name, first_name,
+        returning id, version, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, source_id, notes, assigned_to,
           blacklisted, blacklist_reason, custom_data, created_by, created_at,
           updated_at
@@ -236,13 +241,29 @@ export class LeadWriteRepository {
 
   private async lockLead(client: PoolClient, leadId: string) {
     const result = await client.query<LeadRow & { branch_id: string | null }>(
-      `select id, status_id, null::text as status_name, first_name, last_name,
+      `select id, version, status_id, null::text as status_name, first_name, last_name,
          phone, email, source, source_id, notes, assigned_to, custom_data,
          created_by, created_at, updated_at, branch_id
        from app.leads where id = $1 and deleted_at is null for update`,
       [leadId],
     );
     return result.rows[0] ?? null;
+  }
+
+  private assertExpectedVersion(
+    before: (LeadRow & { branch_id: string | null }) | null,
+    expectedVersion: number | undefined,
+  ) {
+    if (!before || expectedVersion === undefined) return;
+    const currentVersion = Number(before.version ?? 1);
+    if (currentVersion === expectedVersion) return;
+    throw new ConflictException({
+      code: "CLIENT_VERSION_CONFLICT",
+      entityType: "lead",
+      expectedVersion,
+      currentVersion,
+      message: "Карточку лида уже изменил другой сотрудник.",
+    });
   }
 
   private async resolveSourceName(client: PoolClient, dto: UpsertLeadDto) {
@@ -286,13 +307,14 @@ export class LeadWriteRepository {
           assigned_to = case when $13::boolean then null
                              else coalesce($9, assigned_to) end,
           custom_data = case when $13::boolean then
-              (coalesce(custom_data, '{}'::jsonb) || $10::jsonb)
+              jsonb_strip_nulls(coalesce(custom_data, '{}'::jsonb) || $10::jsonb)
                 - 'responsible' - 'responsibleUserId' - 'responsibleName'
-            else coalesce(custom_data, '{}'::jsonb) || $10::jsonb end,
+            else jsonb_strip_nulls(coalesce(custom_data, '{}'::jsonb) || $10::jsonb) end,
           branch_id = coalesce($12::uuid, branch_id),
+          version = version + 1,
           updated_at = now()
         where id = $1 and deleted_at is null
-        returning id, status_id, null::text as status_name, first_name,
+        returning id, version, status_id, null::text as status_name, first_name,
           last_name, phone, email, source, source_id, notes, assigned_to,
           blacklisted, blacklist_reason, custom_data, created_by, created_at,
           updated_at

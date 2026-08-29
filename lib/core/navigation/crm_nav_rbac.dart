@@ -62,8 +62,8 @@ bool crmCanReadSubscriptionPackages(String role) =>
 bool crmCanManageSubscriptionPackages(String role) =>
     role == 'director' || role == 'system_admin';
 
-/// ПОРАЗРЕЗНЫЕ финансы: ставка педагога за занятие, зарплатный раздел, отчёт
-/// «Статистика преподавателей».
+/// Read-only payroll access: teacher rates, payroll and the teacher statistics
+/// report.
 ///
 /// ✔ Решение владельца 16.07.2026 — «ставки педагога и иная подобная НЕ
 /// обще-суммарная фин. информация» доступна Администратору и Управляющему.
@@ -71,6 +71,13 @@ bool crmCanManageSubscriptionPackages(String role) =>
 /// [crmHasSchoolFinanceAccess], но у́же операционного доступа: педагог и клиент
 /// ставок не видят.
 bool crmHasTeacherRatesAccess(String role) => crmHasManagerAccess(role);
+
+/// The role ceiling is authoritative even when an old/shared payroll-write
+/// capability is present. Salary and payout controls keep their existing
+/// payroll capability boundary.
+bool crmCanManageTeacherRates(CapabilitySnapshot snapshot) =>
+    crmHasSchoolFinanceAccess(snapshot.role) &&
+    snapshot.allows('commerce.teacher_payroll.write');
 
 /// Canonical CRM tab indices visible to [role], in display order.
 List<int> crmVisibleTabs(String role, {required bool isDesktop}) {

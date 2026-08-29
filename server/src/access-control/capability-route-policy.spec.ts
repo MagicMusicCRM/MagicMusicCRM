@@ -39,6 +39,11 @@ describe("capability route policy", () => {
     ["PATCH", "/crm/schedule-plans/id", "schedule.lesson.write"],
     ["GET", "/crm/configuration/lesson-decisions", "schedule.lesson.write"],
     ["POST", "/crm/lessons/constraints/preview", "schedule.lesson.write"],
+    [
+      "PATCH",
+      "/crm/lessons/teacher-rate",
+      "commerce.teacher_payroll.write",
+    ],
     ["PATCH", "/crm/lessons/id", "schedule.lesson.write"],
     ["GET", "/crm/lessons/id/settlement-history", "schedule.lesson.write"],
     [
@@ -195,6 +200,27 @@ describe("capability route policy", () => {
         "DELETE",
         "/crm/teachers/id/payouts/entry",
       ),
+    ).toMatchObject({
+      capabilityKey: "commerce.teacher_payroll.write",
+      legacyAllowedRoles: ["director", "system_admin"],
+    });
+  });
+
+  it("keeps payout creation staff-scoped but makes rate creation owner-only", () => {
+    expect(
+      resolveCapabilityRoutePolicy("POST", "/crm/teachers/id/payouts"),
+    ).toMatchObject({
+      capabilityKey: "commerce.teacher_payroll.write",
+      legacyAllowedRoles: ["admin", "manager", "director", "system_admin"],
+    });
+    expect(
+      resolveCapabilityRoutePolicy("POST", "/crm/teachers/id/rates"),
+    ).toMatchObject({
+      capabilityKey: "commerce.teacher_payroll.write",
+      legacyAllowedRoles: ["director", "system_admin"],
+    });
+    expect(
+      resolveCapabilityRoutePolicy("PATCH", "/crm/lessons/teacher-rate"),
     ).toMatchObject({
       capabilityKey: "commerce.teacher_payroll.write",
       legacyAllowedRoles: ["director", "system_admin"],

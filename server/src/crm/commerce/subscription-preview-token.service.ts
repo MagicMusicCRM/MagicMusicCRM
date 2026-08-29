@@ -8,6 +8,7 @@ import {
   AccountAdjustmentReversalPreviewTokenPayload,
   LessonTransitionPreviewTokenPayload,
   SchedulePlanEndPreviewTokenPayload,
+  SchedulePlanHistoryPreviewTokenPayload,
   PaymentReversalPreviewTokenPayload,
   PaymentCorrectionPreviewTokenPayload,
   signAccountAdjustmentReversalPreview,
@@ -15,6 +16,7 @@ import {
   signPaymentReversalPreview,
   signPaymentCorrectionPreview,
   signSchedulePlanEndPreview,
+  signSchedulePlanHistoryPreview,
   signSubscriptionCancelPreview,
   signSubscriptionPurchasePreview,
   signSubscriptionReplacePreview,
@@ -26,6 +28,7 @@ import {
   verifyPaymentCorrectionPreview,
   verifyAccountAdjustmentReversalPreview,
   verifySchedulePlanEndPreview,
+  verifySchedulePlanHistoryPreview,
   verifyLessonTransitionPreview,
   verifySubscriptionCancelPreview,
   verifySubscriptionPurchasePreview,
@@ -395,6 +398,45 @@ export class SubscriptionPreviewTokenService {
           error.code === "PREVIEW_TOKEN_EXPIRED"
             ? "Предпросмотр завершения расписания устарел. Обновите расчёт."
             : "Подписанный предпросмотр завершения расписания недействителен.",
+      });
+    }
+  }
+
+  issueSchedulePlanHistory(
+    payload: Omit<
+      SchedulePlanHistoryPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ) {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: SchedulePlanHistoryPreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signSchedulePlanHistoryPreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifySchedulePlanHistory(token: string, now = new Date()) {
+    try {
+      return verifySchedulePlanHistoryPreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: error.code,
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр исторических занятий устарел. Проверьте расписание снова."
+            : "Подписанный предпросмотр исторических занятий недействителен.",
       });
     }
   }

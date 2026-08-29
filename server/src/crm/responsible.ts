@@ -34,13 +34,13 @@ export async function ensureResponsible(
   actor: ActorContext,
   entityType: ResponsibleEntityType,
   entityId: string,
-): Promise<void> {
+): Promise<number | null> {
   if (!(RESPONSIBLE_AUTH_ROLES as readonly string[]).includes(actor.role)) {
-    return;
+    return null;
   }
 
   if (entityType === "lead") {
-    await database.query(
+    const claimed = await database.query<{ version: string | number }>(
       `
         with eligible_actor as (
           select u.id as user_id,
@@ -62,6 +62,7 @@ export async function ensureResponsible(
             and lower(btrim(sm.status)) = any($4::text[])
           order by sm.created_at desc, sm.id asc
           limit 1
+          for update of l
         ),
         target as (
           select l.id
@@ -69,18 +70,20 @@ export async function ensureResponsible(
           cross join eligible_actor
           where l.id = $1
             and l.deleted_at is null
-            and l.assigned_to is null
-            and nullif(btrim(coalesce(l.custom_data->>'responsible', '')), '') is null
+              and l.assigned_to is null
+              and nullif(btrim(coalesce(l.custom_data->>'responsible', '')), '') is null
+            returning l.version
           limit 1
         )
         update app.leads l
         set assigned_to = eligible_actor.user_id,
-          custom_data = coalesce(l.custom_data, '{}'::jsonb)
+              custom_data = coalesce(l.custom_data, '{}'::jsonb)
             || jsonb_build_object(
                  'responsible', eligible_actor.display_name,
                  'responsibleUserId', eligible_actor.user_id::text
-               ),
-          updated_at = now()
+                   ),
+              version = l.version + 1,
+              updated_at = now()
         from target, eligible_actor
         where l.id = target.id
           and l.assigned_to is null
@@ -93,10 +96,10 @@ export async function ensureResponsible(
         [...ACTIVE_RESPONSIBLE_STAFF_STATUSES],
       ],
     );
-    return;
+    return claimed.rows[0] ? Number(claimed.rows[0].version) : null;
   }
 
-  await database.query(
+  const claimed = await database.query<{ version: string | number }>(
     `
       with eligible_actor as (
         select u.id as user_id,
@@ -120,16 +123,18 @@ export async function ensureResponsible(
         limit 1
       )
       update app.students s
-      set custom_data = coalesce(s.custom_data, '{}'::jsonb)
+          set custom_data = coalesce(s.custom_data, '{}'::jsonb)
         || jsonb_build_object(
              'responsible', eligible_actor.display_name,
              'responsibleUserId', eligible_actor.user_id::text
-           ),
-        updated_at = now()
+               ),
+            version = s.version + 1,
+            updated_at = now()
       from eligible_actor
       where s.id = $1
         and s.deleted_at is null
         and coalesce(s.custom_data->>'responsible', '') = ''
+      returning s.version
     `,
     [
       entityId,
@@ -138,6 +143,7 @@ export async function ensureResponsible(
       [...ACTIVE_RESPONSIBLE_STAFF_STATUSES],
     ],
   );
+  return claimed.rows[0] ? Number(claimed.rows[0].version) : null;
 }
 
 /**
@@ -150,13 +156,14 @@ export async function ensureResponsibleSafe(
   actor: ActorContext,
   entityType: ResponsibleEntityType,
   entityId: string,
-): Promise<void> {
+): Promise<number | null> {
   try {
-    await ensureResponsible(database, actor, entityType, entityId);
+    return await ensureResponsible(database, actor, entityType, entityId);
   } catch (error: unknown) {
     logger.warn(
       `ensureResponsible failed for ${entityType} ${entityId}: ${String(error)}`,
     );
+    return null;
   }
 }
 

@@ -116,6 +116,7 @@ class LessonEditorSaveFlow {
     LessonEditorDraft draft,
     LessonEditorReferenceState references,
     LessonEditorScheduleRequest Function() scheduleRequest, {
+    required bool canManageTeacherCompensation,
     LessonEditorDecisionPolicy policy = const LessonEditorDecisionPolicy(),
   }) {
     final validation = policy.validate(
@@ -133,6 +134,7 @@ class LessonEditorSaveFlow {
                 session: session,
                 draft: draft,
                 references: references,
+                canManageTeacherCompensation: canManageTeacherCompensation,
               ),
         decisionRequest: session.isEdit
             ? policy.editRequest(session: session, draft: draft)

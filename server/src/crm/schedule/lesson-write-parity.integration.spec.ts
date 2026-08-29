@@ -305,7 +305,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       await expectCommandError(
         () =>
           commands.create(
-            actor,
+            { ...actor, role: "director" as const },
             {
               ...complete,
               financialDecision: {
@@ -322,7 +322,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       await expectCommandError(
         () =>
           commands.create(
-            actor,
+            { ...actor, role: "director" as const },
             {
               ...complete,
               financialDecision: { settlementTypeKey: "lesson" },
@@ -411,7 +411,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         charge_value: "1500.00",
         subscription_id: null,
         settlement_key: "lesson",
-        pay_rule_key: "none",
+        pay_rule_key: "standard",
         plan_revisions: "1",
         reservations: "0",
       });
@@ -452,6 +452,12 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       },
     };
     try {
+      await pool.query(
+        `insert into app.teacher_rates (
+           teacher_id, rate, effective_from, created_by
+         ) values ($1, 900, '2026-01-01', $2)`,
+        [fixture.teacherId, fixture.managerId],
+      );
       await expect(
         commands.previewConstraints(actor, {
           clientRef: draft.clientRef!,
@@ -528,13 +534,16 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         charge_type: "none",
         charge_value: "0.00",
         compensation_type: "hourly",
-        compensation_value: "1250.00",
+        compensation_value: "900.00",
         validation_state: "valid",
         settlement_key: "free_lesson",
         pay_rule_key: "standard",
         plan_revisions: "1",
       });
     } finally {
+      await pool.query("delete from app.teacher_rates where teacher_id = $1", [
+        fixture.teacherId,
+      ]);
       await cleanupFixture(pool, {
         ...fixture,
         actorKey: `user:${fixture.managerId}`,

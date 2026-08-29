@@ -30,6 +30,7 @@ class SchedulePlanMutationFlow {
     required this.groupId,
     required this.subjectName,
     required this.defaultBranchId,
+    required this.canManageTeacherCompensation,
   }) : assert((studentId == null) != (groupId == null));
 
   final MagicCrmService service;
@@ -41,6 +42,7 @@ class SchedulePlanMutationFlow {
   final String? groupId;
   final String? subjectName;
   final String? defaultBranchId;
+  final bool canManageTeacherCompensation;
 
   bool get _groupMode => groupId != null;
 
@@ -88,12 +90,13 @@ class SchedulePlanMutationFlow {
         rooms: references.rooms,
         defaultBranchId: defaultBranchId,
         decisionCatalogs: references.decisionCatalogs,
+        canManageTeacherCompensation: canManageTeacherCompensation,
       ),
     );
     if (draft == null || !context.mounted) {
       return SchedulePlanMutationResult.cancelled;
     }
-    final rowDrafts = await showMagicSheet<List<PreferredScheduleDraft>>(
+    final review = await showMagicSheet<SchedulePlanRowsReviewResult>(
       context,
       title: 'Проверка постоянного расписания',
       subtitle:
@@ -122,7 +125,7 @@ class SchedulePlanMutationFlow {
         ),
       ),
     );
-    if (rowDrafts == null || !context.mounted) {
+    if (review == null || !context.mounted) {
       return SchedulePlanMutationResult.cancelled;
     }
     await service.createSchedulePlan(
@@ -135,7 +138,8 @@ class SchedulePlanMutationFlow {
       participants: participantDraft?.participants ?? const [],
       activeFrom: _apiDate(draft.validFrom),
       activeUntil: draft.openEnded ? null : _apiDate(draft.validUntil),
-      rows: [for (final row in rowDrafts) ..._draftRows(row)],
+      rows: [for (final row in review.rows) ..._draftRows(row)],
+      historyPreviewToken: review.historyPreviewToken,
     );
     return SchedulePlanMutationResult.committed;
   }
@@ -157,8 +161,8 @@ class SchedulePlanMutationFlow {
             'weekday': row.weekday,
             'begin_time': row.beginTime,
             'duration_minutes': row.durationMinutes,
-            'valid_from': _apiDate(DateTime.now()),
-            'valid_until': plan.activeUntil,
+            'valid_from': row.validFrom,
+            'valid_until': row.validUntil,
             'notes': row.notes,
             'financial_decision': row.financialDecision,
           };
@@ -180,6 +184,7 @@ class SchedulePlanMutationFlow {
         defaultBranchId: defaultBranchId,
         series: source,
         decisionCatalogs: references.decisionCatalogs,
+        canManageTeacherCompensation: canManageTeacherCompensation,
       ),
     );
     if (draft == null || !context.mounted) {
@@ -203,7 +208,7 @@ class SchedulePlanMutationFlow {
       final index = rows.indexWhere((item) => item.seriesId == row.id);
       rows[index] = draft;
     }
-    final reviewedRows = await showMagicSheet<List<PreferredScheduleDraft>>(
+    final review = await showMagicSheet<SchedulePlanRowsReviewResult>(
       context,
       title: 'Проверка изменений расписания',
       subtitle: 'Все строки проверяются до сохранения изменений',
@@ -233,7 +238,7 @@ class SchedulePlanMutationFlow {
             ),
       ),
     );
-    if (reviewedRows == null || !context.mounted) {
+    if (review == null || !context.mounted) {
       return SchedulePlanMutationResult.cancelled;
     }
     await service.updateSchedulePlan(
@@ -244,9 +249,8 @@ class SchedulePlanMutationFlow {
       title: draft.title!,
       subscriptionId: plan.isGroup ? null : draft.subscriptionId,
       activeUntil: draft.openEnded ? null : _apiDate(draft.validUntil),
-      rows: [
-        for (final reviewedRow in reviewedRows) ..._draftRows(reviewedRow),
-      ],
+      rows: [for (final reviewedRow in review.rows) ..._draftRows(reviewedRow)],
+      historyPreviewToken: review.historyPreviewToken,
     );
     return SchedulePlanMutationResult.committed;
   }
@@ -290,7 +294,7 @@ class SchedulePlanMutationFlow {
           ),
         )
         .toList();
-    final reviewedRows = await showMagicSheet<List<PreferredScheduleDraft>>(
+    final review = await showMagicSheet<SchedulePlanRowsReviewResult>(
       context,
       title: 'Проверка расписания участников',
       subtitle: 'Проверяем каждого выбранного ученика по всем строкам',
@@ -320,7 +324,7 @@ class SchedulePlanMutationFlow {
             ),
       ),
     );
-    if (reviewedRows == null || !context.mounted) {
+    if (review == null || !context.mounted) {
       return SchedulePlanMutationResult.cancelled;
     }
     await service.updateSchedulePlan(
@@ -333,9 +337,8 @@ class SchedulePlanMutationFlow {
       title: plan.title,
       participants: draft.participants,
       activeUntil: plan.activeUntil,
-      rows: [
-        for (final reviewedRow in reviewedRows) ..._draftRows(reviewedRow),
-      ],
+      rows: [for (final reviewedRow in review.rows) ..._draftRows(reviewedRow)],
+      historyPreviewToken: review.historyPreviewToken,
     );
     return SchedulePlanMutationResult.committed;
   }
@@ -375,6 +378,7 @@ class SchedulePlanMutationFlow {
       showPeriod: false,
       requireFinancialDecision: true,
       decisionCatalogs: references.decisionCatalogs,
+      canManageTeacherCompensation: canManageTeacherCompensation,
     ),
   );
 
@@ -459,7 +463,16 @@ class SchedulePlanMutationFlow {
     openEnded: openEnded,
   );
 
-  List<Map<String, dynamic>> _draftRows(PreferredScheduleDraft draft) {
+  List<Map<String, dynamic>> _draftRows(PreferredScheduleDraft draft) =>
+      rowsFromDraft(
+        draft,
+        canManageTeacherCompensation: canManageTeacherCompensation,
+      );
+
+  static List<Map<String, dynamic>> rowsFromDraft(
+    PreferredScheduleDraft draft, {
+    required bool canManageTeacherCompensation,
+  }) {
     final rows = <Map<String, dynamic>>[];
     final weekdays = draft.weekdays.toList()..sort();
     for (final weekday in weekdays) {
@@ -480,7 +493,8 @@ class SchedulePlanMutationFlow {
           if (draft.notes.isNotEmpty) 'notes': draft.notes,
           'financialDecision': {
             'settlementTypeKey': draft.settlementTypeKey,
-            'teacherCompensationRuleKey': draft.teacherCompensationRuleKey,
+            if (canManageTeacherCompensation)
+              'teacherCompensationRuleKey': draft.teacherCompensationRuleKey,
           },
         });
       }

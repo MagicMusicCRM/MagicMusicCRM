@@ -21,6 +21,7 @@ const sources = {
 const moduleSource = readFileSync(resolve(__dirname, "..", "crm.module.ts"), "utf8");
 const otherNewSources = [
   readSource("lesson-command-metadata.ts"),
+  readSource("lesson-transition-group-draft.ts"),
   readSource("lesson-transition.types.ts"),
   readSource("lesson-transition.rules.ts"),
 ];

@@ -6,6 +6,7 @@ void main() {
     test('lead keeps legacy ids, snake_case keys, and null defaults', () {
       final result = legacyLeadForTesting({
         'id': 'lead-1',
+        'version': 7,
         'firstName': 'Алина',
         'lastName': 'Соколова',
         'phone': '+79990000000',
@@ -31,6 +32,7 @@ void main() {
         result.keys,
         orderedEquals([
           'id',
+          'version',
           'status_id',
           'status_key',
           'status',
@@ -60,6 +62,7 @@ void main() {
         ]),
       );
       expect(result['id'], 'lead-1');
+      expect(result['version'], 7);
       expect(result['status'], 'new');
       expect(result['status_id'], isNull);
       expect(result['custom_data'], isEmpty);

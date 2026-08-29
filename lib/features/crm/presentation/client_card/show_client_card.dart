@@ -35,12 +35,17 @@ Widget? buildClientWorkspaceSurface({
           : link.entityType == EntityLinkType.subscription
           ? 'subscriptions'
           : 'overview');
+  final entityType = isClient && link.rawEntityType == 'lead'
+      ? 'lead'
+      : 'student';
+  final entityId = isClient ? link.entityId : studentId!;
   return ClientCardRouteSurface(
-    key: ValueKey('workspace-client-$tabId'),
+    key: ValueKey('workspace-client-$tabId-$entityType-$entityId'),
     snapshot: snapshot,
-    entityType: isClient && link.rawEntityType == 'lead' ? 'lead' : 'student',
-    entityId: isClient ? link.entityId : studentId!,
+    entityType: entityType,
+    entityId: entityId,
     initialSection: section,
+    workspaceTabId: tabId,
     viewState: ContextViewState(
       filters: filter,
       date: route.viewState.date,
@@ -89,6 +94,7 @@ class ClientCardRouteSurface extends StatelessWidget {
     required this.entityId,
     this.initialSection = 'overview',
     this.viewState,
+    this.workspaceTabId,
     super.key,
   });
 
@@ -97,6 +103,7 @@ class ClientCardRouteSurface extends StatelessWidget {
   final String entityId;
   final String initialSection;
   final ContextViewState? viewState;
+  final String? workspaceTabId;
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +205,7 @@ class ClientCardRouteSurface extends StatelessWidget {
         entityType: entityType,
         routed: true,
         initialSection: routedSection,
+        workspaceTabId: workspaceTabId,
         capabilitySnapshot: snapshot,
         initialViewState: viewState,
         onViewStateChanged: viewStateChanged,

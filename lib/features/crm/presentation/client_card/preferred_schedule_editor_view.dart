@@ -19,6 +19,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required this.isEdit,
     required this.planMode,
     required this.requireFinancialDecision,
+    required this.canManageTeacherCompensation,
     required this.requireSubscription,
     required this.allowOpenEnded,
     required this.showPeriod,
@@ -54,6 +55,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
   final bool isEdit;
   final bool planMode;
   final bool requireFinancialDecision;
+  final bool canManageTeacherCompensation;
   final bool requireSubscription;
   final bool allowOpenEnded;
   final bool showPeriod;
@@ -96,6 +98,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
         _DecisionFields(
           state: state,
           catalog: decisionCatalog,
+          canManageTeacherCompensation: canManageTeacherCompensation,
           onSettlementChanged: onSettlementTypeChanged,
           onCompensationChanged: onCompensationRuleChanged,
         ),
@@ -397,12 +400,14 @@ class _DecisionFields extends StatelessWidget {
   const _DecisionFields({
     required this.state,
     required this.catalog,
+    required this.canManageTeacherCompensation,
     required this.onSettlementChanged,
     required this.onCompensationChanged,
   });
 
   final PreferredScheduleEditorState state;
   final LessonDecisionCatalog? catalog;
+  final bool canManageTeacherCompensation;
   final ValueChanged<String?> onSettlementChanged;
   final ValueChanged<String?> onCompensationChanged;
 
@@ -417,14 +422,15 @@ class _DecisionFields extends StatelessWidget {
         items: catalog?.settlementTypes ?? const [],
         onChanged: onSettlementChanged,
       ),
-      _dropdown(
-        key: const ValueKey('schedule-plan-compensation-rule'),
-        label: 'Оплата преподавателю *',
-        helperText: 'Сотрудник выбирает правило явно',
-        value: state.teacherCompensationRuleKey,
-        items: catalog?.compensationRules ?? const [],
-        onChanged: onCompensationChanged,
-      ),
+      if (canManageTeacherCompensation)
+        _dropdown(
+          key: const ValueKey('schedule-plan-compensation-rule'),
+          label: 'Оплата преподавателю *',
+          helperText: 'Сотрудник выбирает правило явно',
+          value: state.teacherCompensationRuleKey,
+          items: catalog?.compensationRules ?? const [],
+          onChanged: onCompensationChanged,
+        ),
     ],
   );
 

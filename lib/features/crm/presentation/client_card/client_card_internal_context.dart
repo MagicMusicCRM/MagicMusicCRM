@@ -62,6 +62,17 @@ extension _ClientCardInternalContext on _ClientCardState {
     return note;
   }
 
+  Future<ClientInternalNote> _reloadInternalNote() async {
+    final note = await ref
+        .read(magicCrmServiceProvider)
+        .getClientInternalNote(
+          clientType: widget.entityType,
+          clientId: _entityId,
+        );
+    if (mounted) _emitState(() => _internalNote = note);
+    return note;
+  }
+
   Future<void> _reloadOperationalHistory() async {
     if (!_internalContextAllowed) return;
     try {

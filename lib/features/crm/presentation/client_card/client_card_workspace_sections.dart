@@ -587,7 +587,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.card_membership_rounded),
-              label: const Text('Выдать абонемент'),
+              label: const Text('Продать абонемент'),
             ),
           ),
           const Padding(
@@ -595,8 +595,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
             child: MagicPageState(
               kind: MagicPageStateKind.empty,
               title: 'Абонемент ещё не выдан',
-              message:
-                  'Выдача оплаченного абонемента переведёт лида в ученики.',
+              message: 'Продажа абонемента переведёт лида в ученики.',
             ),
           ),
         ],
@@ -627,7 +626,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               key: const Key('subscription-add'),
               onPressed: _showIssueSubscriptionSheet,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Добавить абонемент'),
+              label: const Text('Продать абонемент'),
             ),
           ),
           if (_subscriptions.isEmpty)

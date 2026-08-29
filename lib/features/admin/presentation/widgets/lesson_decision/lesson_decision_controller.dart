@@ -9,6 +9,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     required MagicCrmService crm,
     required this.operation,
     required this.lesson,
+    required this.canManageTeacherCompensation,
     this.successor,
     this.initialSettlementTypeKey,
     this.initialCompensationRuleKey,
@@ -21,6 +22,8 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   final LessonDecisionOperation operation;
   @override
   final Map<String, dynamic> lesson;
+  @override
+  final bool canManageTeacherCompensation;
   @override
   final Map<String, dynamic>? successor;
   @override
@@ -71,8 +74,36 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   }
 
   @override
+  List<LessonDecisionParticipant> get settlementClients {
+    if (isGroupLesson) return groupParticipants;
+    final clientType = (lesson['client_type'] ?? lesson['clientType'])
+        ?.toString();
+    if (clientType != null && clientType != 'student') return const [];
+    final id =
+        (lesson['student_id'] ??
+                lesson['studentId'] ??
+                lesson['client_id'] ??
+                lesson['clientId'])
+            ?.toString();
+    if (id == null || id.isEmpty) return const [];
+    final name =
+        (lesson['student_name'] ??
+                lesson['studentName'] ??
+                lesson['client_name'] ??
+                lesson['clientName'])
+            ?.toString()
+            .trim();
+    return [
+      LessonDecisionParticipant(
+        id: id,
+        name: name?.isNotEmpty == true ? name! : 'Ученик',
+      ),
+    ];
+  }
+
+  @override
   Map<String, String> get participantNames => {
-    for (final participant in groupParticipants)
+    for (final participant in settlementClients)
       participant.id: participant.name,
   };
 
@@ -127,15 +158,76 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
 
   @override
   Future<LessonDecisionCatalog> loadCatalog() async {
-    final effectiveBranchId =
+    final response = await _crm.getLessonDecisionCatalog(
+      branchId: _effectiveBranchId,
+    );
+    return LessonDecisionCatalog.fromJson(response, operation);
+  }
+
+  @override
+  Future<List<LessonDecisionParticipant>> searchPayers(String query) async {
+    final seen = <String>{};
+    final result = <LessonDecisionParticipant>[];
+    for (final row in await _crm.searchClientRefs(
+      q: query,
+      type: 'student',
+      branchId: _effectiveBranchId,
+      limit: 50,
+    )) {
+      final ref = row['ref'];
+      final id = ref is Map ? ref['id']?.toString() : null;
+      if (id == null || id.isEmpty || !seen.add(id)) continue;
+      final name = row['label']?.toString().trim() ?? '';
+      result.add(
+        LessonDecisionParticipant(id: id, name: name.isEmpty ? 'Ученик' : name),
+      );
+    }
+    result.sort((left, right) => left.name.compareTo(right.name));
+    return List.unmodifiable(result);
+  }
+
+  @override
+  Future<List<LessonDecisionSubscription>> loadSubscriptions(
+    String payerId,
+  ) async {
+    final result = <LessonDecisionSubscription>[];
+    for (final row in await _crm.listSubscriptions(
+      studentId: payerId,
+      limit: 50,
+    )) {
+      final id = row['id']?.toString();
+      final remaining = num.tryParse(
+        (row['lessons_remaining'] ?? row['lessonsRemaining'])?.toString() ?? '',
+      );
+      if (id == null ||
+          id.isEmpty ||
+          row['status']?.toString() != 'active' ||
+          remaining == null ||
+          remaining <= 0) {
+        continue;
+      }
+      final name = (row['package_name'] ?? row['packageName'])
+          ?.toString()
+          .trim();
+      result.add(
+        LessonDecisionSubscription(
+          id: id,
+          label:
+              '${name?.isNotEmpty == true ? name : 'Абонемент'} · остаток ${_formatUnits(remaining)}',
+        ),
+      );
+    }
+    return List.unmodifiable(result);
+  }
+
+  String? get _effectiveBranchId {
+    final value =
         successor?['branchId'] ??
         successor?['branch_id'] ??
         lesson['branch_id'] ??
         lesson['branchId'];
-    final response = await _crm.getLessonDecisionCatalog(
-      branchId: effectiveBranchId?.toString(),
-    );
-    return LessonDecisionCatalog.fromJson(response, operation);
+    final id = value?.toString();
+    return id == null || id.isEmpty ? null : id;
   }
 
   @override
@@ -163,8 +255,10 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
             for (final decision in clientDecisions)
               Map<String, dynamic>.from(decision),
           ],
-        'teacherCompensationRuleKey': compensationRuleKey,
-        'teacherCompensationValueMinor': ?compensationValueMinor,
+        if (canManageTeacherCompensation) ...{
+          'teacherCompensationRuleKey': compensationRuleKey,
+          'teacherCompensationValueMinor': ?compensationValueMinor,
+        },
       },
       if (operation == LessonDecisionOperation.reschedule)
         'successor': successor ?? const <String, dynamic>{},
@@ -202,3 +296,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     );
   }
 }
+
+String _formatUnits(num value) => value == value.roundToDouble()
+    ? value.toInt().toString()
+    : value.toString();

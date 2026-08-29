@@ -7,7 +7,10 @@ import {
   SchedulePlanQuery,
   SchedulePlanRowDto,
 } from "../dto/schedule-plan.dto";
-import { PreparedLessonSettlementPlan } from "../commerce/lesson-settlement.port";
+import {
+  LessonFinancialDecision,
+  PreparedLessonSettlementPlan,
+} from "../commerce/lesson-settlement.port";
 
 export interface LockedSchedulePlan {
   id: string;
@@ -20,6 +23,19 @@ export interface LockedSchedulePlan {
   active_until: string | null;
   status: "active" | "ended";
   version: string | number;
+}
+
+export interface SchedulePlanSeriesSnapshot {
+  id: string;
+  valid_from: string;
+  teacher_id: string;
+  room_id: string;
+  branch_id: string;
+  weekday: number;
+  begin_time: string;
+  duration_minutes: number;
+  notes: string | null;
+  planned_financial_decision: LessonFinancialDecision | null;
 }
 
 export interface SchedulePlanEndImpact {
@@ -317,6 +333,8 @@ export class SchedulePlanRepository {
       actorUserId: string;
       version: number;
       settlementPlan: PreparedLessonSettlementPlan;
+      subscriptionId?: string | null;
+      supersededBy?: string | null;
     },
   ) {
     return client.query(
@@ -324,10 +342,11 @@ export class SchedulePlanRepository {
          id, plan_id, student_id, group_id, teacher_id, room_id, branch_id,
          weekday, begin_time, duration_minutes, valid_from, valid_until,
          notes, created_by, version, planned_financial_decision,
-         settlement_revision_id, compensation_revision_id
+         settlement_revision_id, compensation_revision_id, subscription_id,
+         superseded_by
        ) values (
          $1,$2,$3,$4,$5,$6,$7,$8,$9::time,$10,$11::date,$12::date,
-         $13,$14,$15,$16::jsonb,$17,$18
+         $13,$14,$15,$16::jsonb,$17,$18,$19,$20
        )`,
       [
         input.id,
@@ -348,16 +367,152 @@ export class SchedulePlanRepository {
         JSON.stringify(input.settlementPlan.decision),
         input.settlementPlan.settlementRevisionId,
         input.settlementPlan.compensationRevisionId,
+        input.subscriptionId ?? null,
+        input.supersededBy ?? null,
       ],
     );
   }
 
   activeSeries(client: PoolClient, planId: string) {
-    return client.query<{ id: string }>(
-      `select id from app.schedule_series
+    return client.query<SchedulePlanSeriesSnapshot>(
+      `select id, valid_from::text, teacher_id, room_id, branch_id, weekday,
+         to_char(begin_time, 'HH24:MI') as begin_time, duration_minutes, notes,
+         planned_financial_decision
+       from app.schedule_series
        where plan_id = $1 and deleted_at is null and superseded_by is null
        order by id for update`,
       [planId],
+    );
+  }
+
+  freezeActiveSeriesSubscription(
+    client: PoolClient,
+    seriesIds: string[],
+    subscriptionId: string,
+  ) {
+    return client.query(
+      `update app.schedule_series
+       set subscription_id = $2, updated_at = now()
+       where id = any($1::uuid[]) and subscription_id is null`,
+      [seriesIds, subscriptionId],
+    );
+  }
+
+  async hasImmutableLessonsInRange(
+    client: PoolClient,
+    planId: string,
+    from: string,
+    untilExclusive: string,
+  ) {
+    const result = await client.query<{ immutable: boolean }>(
+      `select (
+         lesson.deleted_at is not null
+         or lesson.lifecycle_state <> 'scheduled'
+         or lesson.original_scheduled_at is not null
+       ) as immutable
+       from app.lessons lesson
+       join app.schedule_series series on series.id = lesson.series_id
+       where series.plan_id = $1 and lesson.series_date >= $2::date
+         and lesson.series_date < $3::date
+       order by lesson.series_date, lesson.id
+       for update of lesson`,
+      [planId, from, untilExclusive],
+    );
+    return result.rows.some((row) => row.immutable);
+  }
+
+  async deleteScheduledLessonsInRange(
+    client: PoolClient,
+    planId: string,
+    from: string,
+    untilExclusive: string,
+  ) {
+    const removed = await client.query<{ id: string }>(
+      `update app.lessons lesson set deleted_at = now(), updated_at = now()
+       from app.schedule_series series
+       where series.plan_id = $1 and lesson.series_id = series.id
+         and lesson.series_date >= $2::date and lesson.series_date < $3::date
+         and lesson.lifecycle_state = 'scheduled'
+         and lesson.original_scheduled_at is null and lesson.deleted_at is null
+       returning lesson.id`,
+      [planId, from, untilExclusive],
+    );
+    if (removed.rows.length) {
+      await client.query(
+        `update app.lesson_reservations set state = 'released', updated_at = now()
+         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
+        [removed.rows.map((row) => row.id)],
+      );
+    }
+    return removed.rows.map((row) => row.id);
+  }
+
+  async isSimpleStartMove(
+    client: PoolClient,
+    plan: LockedSchedulePlan,
+    activeSeriesIds: string[],
+  ) {
+    const series = await client.query<{
+      id: string;
+      valid_from: string;
+      deleted_at: Date | string | null;
+      superseded_by: string | null;
+    }>(
+      `select id, valid_from::text, deleted_at, superseded_by
+       from app.schedule_series where plan_id = $1 order by id for update`,
+      [plan.id],
+    );
+    const activeIds = new Set(activeSeriesIds);
+    const simpleSeries =
+      series.rows.length === activeIds.size &&
+      series.rows.every(
+        (row) =>
+          activeIds.has(row.id) &&
+          row.valid_from === plan.active_from &&
+          row.deleted_at === null &&
+          row.superseded_by === null,
+      );
+    if (!simpleSeries || plan.kind !== "group") return simpleSeries;
+    const participants = await client.query<{
+      effective_from: string;
+      effective_until: string | null;
+    }>(
+      `select effective_from::text, effective_until::text
+       from app.schedule_plan_participants
+       where plan_id = $1 order by id for update`,
+      [plan.id],
+    );
+    return participants.rows.every(
+      (row) =>
+        row.effective_from === plan.active_from &&
+        row.effective_until === plan.active_until,
+    );
+  }
+
+  moveSeriesStart(
+    client: PoolClient,
+    seriesIds: string[],
+    activeFrom: string,
+    version: number,
+  ) {
+    return client.query(
+      `update app.schedule_series set valid_from = $2::date, version = $3,
+         updated_at = now() where id = any($1::uuid[])`,
+      [seriesIds, activeFrom, version],
+    );
+  }
+
+  moveParticipantStart(
+    client: PoolClient,
+    planId: string,
+    activeFrom: string,
+    version: number,
+  ) {
+    return client.query(
+      `update app.schedule_plan_participants
+       set effective_from = $2::date, version = $3, updated_at = now()
+       where plan_id = $1`,
+      [planId, activeFrom, version],
     );
   }
 
@@ -368,6 +523,33 @@ export class SchedulePlanRepository {
        order by id`,
       [planId],
     );
+  }
+
+  async hasTerminalHistoricalLesson(
+    client: PoolClient,
+    effectiveFrom: string,
+    seriesIds: string[],
+  ): Promise<boolean> {
+    if (seriesIds.length === 0) return false;
+    const terminal = await client.query<{ id: string }>(
+      `select lesson.id
+         from app.lessons lesson
+         join app.schedule_series series on series.id = lesson.series_id
+         left join app.branches branch on branch.id = series.branch_id
+        where series.id = any($1::uuid[])
+          and lesson.series_date >= $2::date
+          and lesson.series_date < timezone(
+            coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+            now()
+          )::date
+          and (lesson.lifecycle_state <> 'scheduled'
+            or lesson.original_scheduled_at is not null)
+        order by lesson.series_date, lesson.id
+        limit 1
+        for update of lesson`,
+      [seriesIds, effectiveFrom],
+    );
+    return Boolean(terminal.rows[0]);
   }
 
   async retireSeries(
@@ -389,20 +571,19 @@ export class SchedulePlanRepository {
        where id = $1 and superseded_by is null`,
       [seriesId, effectiveFrom, continuationId],
     );
-    if (continuationId) {
-      await client.query(
-        `update app.lessons set series_id = $2, updated_at = now()
-         where series_id = $1 and series_date >= $3::date
-           and (deleted_at is not null or lifecycle_state <> 'scheduled'
-             or original_scheduled_at is not null)`,
-        [seriesId, continuationId, effectiveFrom],
-      );
-    }
-    const removed = await client.query<{ id: string }>(
-      `update app.lessons set deleted_at = now(), updated_at = now()
-       where series_id = $1 and series_date >= $2::date
-         and lifecycle_state = 'scheduled' and original_scheduled_at is null
-         and deleted_at is null returning id`,
+    // Terminal, rescheduled and deleted lessons are immutable facts. They stay
+    // attached to the exact series snapshot that created them; the materializer
+    // treats their date as occupied throughout this plan row's lineage.
+    const removed = await client.query<{ id: string; series_date: string }>(
+      `update app.lessons lesson
+          set deleted_at = now(), updated_at = now()
+         from app.schedule_series series
+        where series.id = $1 and lesson.series_id = series.id
+          and lesson.series_date >= $2::date
+          and lesson.lifecycle_state = 'scheduled'
+          and lesson.original_scheduled_at is null
+          and lesson.deleted_at is null
+        returning lesson.id, lesson.series_date::text`,
       [seriesId, effectiveFrom],
     );
     if (removed.rows.length) {
@@ -412,6 +593,7 @@ export class SchedulePlanRepository {
         [removed.rows.map((row) => row.id)],
       );
     }
+    return removed.rows.map((row) => row.series_date);
   }
 
   updatePlan(
@@ -420,22 +602,41 @@ export class SchedulePlanRepository {
       planId: string;
       title: string;
       subscriptionId: string | null;
+      activeFrom: string;
       activeUntil: string | null;
       version: number;
     },
   ) {
     return client.query(
       `update app.schedule_plans
-       set title = $2, subscription_id = $3, active_until = $4::date,
-         version = $5, updated_at = now()
+       set title = $2, subscription_id = $3, active_from = $4::date,
+         active_until = $5::date, version = $6, updated_at = now()
        where id = $1`,
       [
         input.planId,
         input.title,
         input.subscriptionId,
+        input.activeFrom,
         input.activeUntil,
         input.version,
       ],
+    );
+  }
+
+  extendPlanStart(
+    client: PoolClient,
+    input: {
+      planId: string;
+      activeFrom: string;
+      title: string;
+      version: number;
+    },
+  ) {
+    return client.query(
+      `update app.schedule_plans
+       set active_from = $2::date, title = $3, version = $4, updated_at = now()
+       where id = $1`,
+      [input.planId, input.activeFrom, input.title, input.version],
     );
   }
 

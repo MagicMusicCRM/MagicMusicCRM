@@ -18,6 +18,11 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   final _reasonController = TextEditingController();
   final _compensationValueController = TextEditingController();
   final Map<String, String?> _clientSettlementKeys = {};
+  final Map<String, String?> _payerIds = {};
+  final Map<String, String?> _payerNames = {};
+  final Map<String, String?> _subscriptionIds = {};
+  final Map<String, List<LessonDecisionSubscription>> _subscriptions = {};
+  final Set<String> _loadingSubscriptions = {};
 
   LessonDecisionCatalog? _catalog;
   LessonDecisionPreview? _preview;
@@ -105,6 +110,43 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     _invalidatePreview();
   }
 
+  Future<void> _selectPayer(
+    String clientId,
+    LessonDecisionParticipant? payer,
+  ) async {
+    final payerId = payer?.id;
+    setState(() {
+      _payerIds[clientId] = payerId;
+      _payerNames[clientId] = payer?.name;
+      _subscriptionIds.remove(clientId);
+      _subscriptions.remove(clientId);
+      _loadingSubscriptions.remove(clientId);
+      if (payerId != null) _loadingSubscriptions.add(clientId);
+    });
+    _invalidatePreview();
+    if (payerId == null) return;
+    try {
+      final subscriptions = await widget.controller.loadSubscriptions(payerId);
+      if (!mounted || _payerIds[clientId] != payerId) return;
+      setState(() => _subscriptions[clientId] = subscriptions);
+    } catch (error) {
+      if (!mounted || _payerIds[clientId] != payerId) return;
+      setState(() {
+        _subscriptions[clientId] = const [];
+        _error = error;
+      });
+    } finally {
+      if (mounted && _payerIds[clientId] == payerId) {
+        setState(() => _loadingSubscriptions.remove(clientId));
+      }
+    }
+  }
+
+  void _selectSubscription(String clientId, String? subscriptionId) {
+    setState(() => _subscriptionIds[clientId] = subscriptionId);
+    _invalidatePreview();
+  }
+
   Future<void> _calculate() async {
     if (_busy) return;
     FocusScope.of(context).unfocus();
@@ -118,14 +160,18 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       final preview = await widget.controller.preview(
         reason: _reasonController.text,
         settlementTypeKey: _settlementKey!,
-        compensationRuleKey: _compensationKey!,
+        compensationRuleKey: widget.controller.canManageTeacherCompensation
+            ? _compensationKey!
+            : '',
         compensationValueMinor: _compensationValueMinor(
           _compensationRule,
           _compensationValueController.text,
         ),
         clientDecisions: _clientDecisions(
-          widget.controller.groupParticipants,
+          widget.controller.settlementClients,
           _clientSettlementKeys,
+          _payerIds,
+          _subscriptionIds,
         ),
       );
       if (!mounted) return;
@@ -196,11 +242,18 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       settlementKey: _settlementKey,
       compensationKey: _compensationKey,
       compensationRule: _compensationRule,
-      participants: widget.controller.groupParticipants,
+      participants: widget.controller.settlementClients,
       participantNames: widget.controller.participantNames,
       clientSettlementKeys: _clientSettlementKeys,
+      payerIds: _payerIds,
+      payerNames: _payerNames,
+      subscriptionIds: _subscriptionIds,
+      subscriptions: _subscriptions,
+      loadingSubscriptions: _loadingSubscriptions,
       groupLesson: widget.controller.isGroupLesson,
       completedReschedule: completedReschedule,
+      canManageTeacherCompensation:
+          widget.controller.canManageTeacherCompensation,
       busy: _busy,
       preview: _preview,
       error: _error,
@@ -210,12 +263,16 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       onCompensationChanged: _selectCompensation,
       onCompensationValueChanged: (_) => _invalidatePreview(),
       onClientSettlementChanged: _selectClientSettlement,
+      searchPayers: widget.controller.searchPayers,
+      onPayerChanged: _selectPayer,
+      onSubscriptionChanged: _selectSubscription,
       compensationValidator: (_) =>
-          _compensationValueMinor(
-                _compensationRule,
-                _compensationValueController.text,
-              ) ==
-              null
+          widget.controller.canManageTeacherCompensation &&
+              _compensationValueMinor(
+                    _compensationRule,
+                    _compensationValueController.text,
+                  ) ==
+                  null
           ? 'Введите корректное значение'
           : null,
       onClose: () => Navigator.pop(context, false),
@@ -293,10 +350,18 @@ String? _compensationValueMinor(LessonDecisionCatalogItem? rule, String input) {
 List<Map<String, dynamic>> _clientDecisions(
   List<LessonDecisionParticipant> participants,
   Map<String, String?> selectedKeys,
+  Map<String, String?> payerIds,
+  Map<String, String?> subscriptionIds,
 ) => [
   for (final participant in participants)
-    if (selectedKeys[participant.id] case final settlementKey?)
-      {'clientId': participant.id, 'settlementTypeKey': settlementKey},
+    if (selectedKeys[participant.id] != null ||
+        payerIds[participant.id] != null)
+      {
+        'clientId': participant.id,
+        'settlementTypeKey': ?selectedKeys[participant.id],
+        'payerStudentId': ?payerIds[participant.id],
+        'subscriptionId': ?subscriptionIds[participant.id],
+      },
 ];
 
 LessonDecisionCatalogItem? _catalogItem(

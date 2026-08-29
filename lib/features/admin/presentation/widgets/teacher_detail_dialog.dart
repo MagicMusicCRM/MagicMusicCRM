@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
@@ -203,11 +204,14 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final role = ref.watch(capabilitySnapshotProvider).asData?.value.role ?? '';
+    final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
+    final role = snapshot?.role ?? '';
     final canManageCredentials = const {
       'director',
       'system_admin',
     }.contains(role);
+    final canManageTeacherRates =
+        snapshot != null && crmCanManageTeacherRates(snapshot);
     return AlertDialog(
       title: const Text('Карточка преподавателя'),
       content: SizedBox(
@@ -225,6 +229,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             payrollController: _payrollController,
             actorRole: role,
             canManageCredentials: canManageCredentials,
+            canManageTeacherRates: canManageTeacherRates,
             saving: _saving,
             onProvisionAccess: _provisionAccess,
             onManageLifecycle: _manageLifecycle,

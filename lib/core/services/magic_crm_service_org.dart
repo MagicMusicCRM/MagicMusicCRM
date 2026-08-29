@@ -503,6 +503,7 @@ extension MagicCrmOrg on MagicCrmService {
     num? pricePerLesson,
     num? teacherRate,
     bool setTeacherRate = false,
+    int? expectedVersion,
   }) async {
     final data = <String, dynamic>{};
     if (name != null && name.trim().isNotEmpty) data['name'] = name.trim();
@@ -510,7 +511,10 @@ extension MagicCrmOrg on MagicCrmService {
     if (branchId != null) data['branchId'] = branchId;
     if (roomId != null) data['roomId'] = roomId;
     if (pricePerLesson != null) data['pricePerLesson'] = pricePerLesson;
-    if (setTeacherRate) data['teacherRate'] = teacherRate;
+    if (setTeacherRate) {
+      data['teacherRate'] = teacherRate;
+      data['expectedVersion'] = expectedVersion;
+    }
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/groups/$id',

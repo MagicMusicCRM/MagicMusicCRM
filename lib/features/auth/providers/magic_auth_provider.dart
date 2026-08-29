@@ -16,6 +16,12 @@ final magicAuthServiceProvider = Provider<MagicAuthService>((ref) {
       await ref.read(workspaceLogoutCoordinatorProvider).logoutAll();
       realtime.resetSession();
     },
+    onBeforeForcedSessionClear: () async {
+      await ref
+          .read(workspaceLogoutCoordinatorProvider)
+          .forceLogoutAllPreservingDrafts();
+      realtime.resetSession();
+    },
     onAfterSessionChange: () => ref.invalidate(crmRealtimeProvider),
   );
 });

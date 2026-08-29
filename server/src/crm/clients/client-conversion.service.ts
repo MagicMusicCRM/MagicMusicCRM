@@ -208,6 +208,12 @@ export class ClientConversionService {
          where lead_id = $1 and student_id is null`,
         [leadId, studentId],
       );
+      await client.query(
+        `update app.leads
+            set version = version + 1, updated_at = now()
+          where id = $1 and deleted_at is null`,
+        [leadId],
+      );
       return { studentId, replayed: false };
     });
 

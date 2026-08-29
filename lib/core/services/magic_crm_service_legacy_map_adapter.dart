@@ -442,6 +442,7 @@ Map<String, dynamic> _legacyLead(Map<String, dynamic> item) {
       : const <String, dynamic>{};
   return {
     'id': item['id'],
+    'version': item['version'],
     'status_id': statusId,
     'status_key': statusKey,
     'status': statusId ?? statusName ?? 'new',

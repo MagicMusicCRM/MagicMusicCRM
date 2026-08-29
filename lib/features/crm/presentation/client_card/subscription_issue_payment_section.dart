@@ -14,6 +14,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
     required this.fieldsEnabled,
     required this.searchPayers,
     required this.selectPayer,
+    required this.selectPaymentMethod,
     required this.selectFundingMode,
     required this.validatePurchaseReason,
     required this.setPurchaseReason,
@@ -24,6 +25,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
   final bool fieldsEnabled;
   final Future<List<SearchableSelectItem>> Function(String query) searchPayers;
   final ValueChanged<SearchableSelectItem> selectPayer;
+  final ValueChanged<SubscriptionPaymentMethod> selectPaymentMethod;
   final ValueChanged<SubscriptionFundingMode> selectFundingMode;
   final FormFieldValidator<String> validatePurchaseReason;
   final ValueChanged<String> setPurchaseReason;
@@ -62,6 +64,34 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
           onSelected: (item) {
             if (item != null) _change(() => selectPayer(item));
           },
+        ),
+        const SizedBox(height: AppSpace.md),
+        DropdownButtonFormField<SubscriptionPaymentMethod>(
+          menuMaxHeight: 256,
+          key: const Key('subscription-payment-method'),
+          initialValue: draft.paymentMethod,
+          items: const [
+            DropdownMenuItem(
+              value: SubscriptionPaymentMethod.cashless,
+              child: Text('Безналичная оплата'),
+            ),
+            DropdownMenuItem(
+              value: SubscriptionPaymentMethod.cash,
+              child: Text('Наличные'),
+            ),
+          ],
+          onChanged: fieldsEnabled
+              ? (value) {
+                  if (value != null) {
+                    _change(() => selectPaymentMethod(value));
+                  }
+                }
+              : null,
+          decoration: clientCardInputDecoration(
+            Theme.of(context).colorScheme,
+            label: 'Способ оплаты',
+            isDense: true,
+          ),
         ),
         const SizedBox(height: AppSpace.md),
         Wrap(

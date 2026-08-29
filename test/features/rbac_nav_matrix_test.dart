@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 
 /// 6-role RBAC matrix for CRM navigation (KVA-239):
 /// client < teacher < admin < manager < director < system_admin.
@@ -78,6 +79,30 @@ void main() {
       }
       expect(crmHasManagerAccess('teacher'), isFalse);
       expect(crmHasTeacherRatesAccess('teacher'), isFalse);
+    });
+  });
+
+  group('crmCanManageTeacherRates — изменение ставок', () {
+    CapabilitySnapshot snapshot(String role, {bool canWrite = true}) =>
+        CapabilitySnapshot(
+          accountId: '$role-a',
+          role: role,
+          accessVersion: 1,
+          capabilities: {if (canWrite) 'commerce.teacher_payroll.write'},
+          scopes: const {},
+        );
+
+    test('только director и system_admin с write capability', () {
+      for (final role in ['director', 'system_admin']) {
+        expect(crmCanManageTeacherRates(snapshot(role)), isTrue, reason: role);
+      }
+      for (final role in ['client', 'teacher', 'admin', 'manager']) {
+        expect(crmCanManageTeacherRates(snapshot(role)), isFalse, reason: role);
+      }
+      expect(
+        crmCanManageTeacherRates(snapshot('director', canWrite: false)),
+        isFalse,
+      );
     });
   });
 

@@ -295,73 +295,67 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets(
-      'review-required lesson exposes safe repair flow with current version',
-      (tester) async {
-        tester.view.physicalSize = const Size(1400, 1100);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        final api = _FakeClient(reviewRequired: true);
+    testWidgets('manager repair keeps teacher compensation server-owned', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = _FakeClient(reviewRequired: true);
 
-        await tester.pumpWidget(_host(const ScheduleWidget(), client: api));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('День'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('По преподавателям'));
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(const ValueKey('schedule-lesson-lesson-1')),
-        );
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(_host(const ScheduleWidget(), client: api));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('День'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('По преподавателям'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('schedule-lesson-lesson-1')));
+      await tester.pumpAndSettle();
 
-        // Keep this assertion close to the interaction so a regression cannot
-        // accidentally tap the empty grid and open the create dialog instead.
-        expect(find.text('Новое занятие'), findsNothing);
-        expect(find.text('Ольга Ученик'), findsNWidgets(2));
+      // Keep this assertion close to the interaction so a regression cannot
+      // accidentally tap the empty grid and open the create dialog instead.
+      expect(find.text('Новое занятие'), findsNothing);
+      expect(find.text('Ольга Ученик'), findsNWidgets(2));
 
-        expect(find.text('Конфликт'), findsWidgets);
-        expect(
-          find.byKey(const ValueKey('lesson-repair-settlement')),
-          findsOneWidget,
-        );
-        expect(find.textContaining('Причина конфликта'), findsOneWidget);
-        expect(find.textContaining('ConflictException'), findsNothing);
-        expect(find.textContaining('Провести занятие'), findsNothing);
+      expect(find.text('Конфликт'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey('lesson-repair-settlement')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Причина конфликта'), findsOneWidget);
+      expect(find.textContaining('ConflictException'), findsNothing);
+      expect(find.textContaining('Провести занятие'), findsNothing);
 
-        await tester.tap(
-          find.byKey(const ValueKey('lesson-repair-settlement')),
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('Исправление расчёта'), findsOneWidget);
-        await tester.enterText(
-          find.byKey(const Key('lesson-decision-reason')),
-          'Проверка расчёта сотрудником',
-        );
-        await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Занятие').last);
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Полная стандартная ставка').last);
-        await tester.pumpAndSettle();
-        await tester.ensureVisible(
-          find.byKey(const Key('lesson-decision-submit')),
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-        await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('lesson-repair-settlement')));
+      await tester.pumpAndSettle();
+      expect(find.text('Исправление расчёта'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Проверка расчёта сотрудником',
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Занятие').last);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('lesson-decision-compensation')),
+        findsNothing,
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
 
-        expect(api.previews, hasLength(1));
-        expect(api.previews.single['expectedVersion'], 2);
-        expect(api.previews.single['financialDecision'], {
-          'settlementTypeKey': 'lesson',
-          'teacherCompensationRuleKey': 'standard',
-        });
-        expect(find.text('Изменение готово к подтверждению'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      },
-    );
+      expect(api.previews, hasLength(1));
+      expect(api.previews.single['expectedVersion'], 2);
+      expect(api.previews.single['financialDecision'], {
+        'settlementTypeKey': 'lesson',
+      });
+      expect(find.text('Изменение готово к подтверждению'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('tapping an empty hour opens the (single) create dialog', (
       tester,

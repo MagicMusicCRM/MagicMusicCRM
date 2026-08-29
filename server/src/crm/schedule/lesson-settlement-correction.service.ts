@@ -115,8 +115,12 @@ export class LessonSettlementCorrectionService {
           false,
         );
       } finally {
-        await client.query("rollback to savepoint lesson_settlement_correction_preview");
-        await client.query("release savepoint lesson_settlement_correction_preview");
+        await client.query(
+          "rollback to savepoint lesson_settlement_correction_preview",
+        );
+        await client.query(
+          "release savepoint lesson_settlement_correction_preview",
+        );
       }
     });
     const correctionFingerprint = this.fingerprint(dto, preview.settled);
@@ -145,9 +149,12 @@ export class LessonSettlementCorrectionService {
     this.policy.assertCanWriteCrm(actor);
     this.assertMetadata(metadata);
     const signed = this.previewTokens.verifyLessonTransition(dto.previewToken);
-    if (signed.operation !== "correct" || signed.actorUserId !== actor.userId ||
-        signed.lessonId !== lessonId ||
-        signed.expectedVersion !== dto.expectedVersion) {
+    if (
+      signed.operation !== "correct" ||
+      signed.actorUserId !== actor.userId ||
+      signed.lessonId !== lessonId ||
+      signed.expectedVersion !== dto.expectedVersion
+    ) {
       throw new UnprocessableEntityException({
         code: "LESSON_SETTLEMENT_CORRECTION_PREVIEW_INVALID",
       });
@@ -189,8 +196,10 @@ export class LessonSettlementCorrectionService {
           correctionId,
           true,
         );
-        if (this.fingerprint(dto, applied.settled) !==
-            signed.transitionFingerprint) {
+        if (
+          this.fingerprint(dto, applied.settled) !==
+          signed.transitionFingerprint
+        ) {
           throw new UnprocessableEntityException({
             code: "LESSON_SETTLEMENT_CORRECTION_PREVIEW_STALE",
           });
@@ -202,14 +211,19 @@ export class LessonSettlementCorrectionService {
            returning version`,
           [lessonId, dto.expectedVersion],
         );
-        if (!updated.rows[0] || Number(updated.rows[0].version) !== nextVersion) {
+        if (
+          !updated.rows[0] ||
+          Number(updated.rows[0].version) !== nextVersion
+        ) {
           throw new ConflictException({ code: "LESSON_VERSION_DIVERGED" });
         }
         return {
           lessonId,
           correctionId,
           correctionVersion: applied.correctionVersion,
-          clientFinancialFactIds: applied.settled.clientFacts.map((fact) => fact.id),
+          clientFinancialFactIds: applied.settled.clientFacts.map(
+            (fact) => fact.id,
+          ),
           teacherFinancialFactId: applied.settled.teacherFact.id,
         };
       },
@@ -252,12 +266,22 @@ export class LessonSettlementCorrectionService {
         code: "LESSON_SETTLEMENT_CORRECTION_NOT_ALLOWED",
       });
     }
+    const decision = this.policy.canManageTeacherCompensation(actor)
+      ? dto.financialDecision
+      : await this.settlement.reuseStoredTeacherCompensation(
+          client,
+          lessonId,
+          dto.financialDecision,
+        );
     const prepared = await this.settlement.preparePlan(
       client,
       source.branch_id,
-      dto.financialDecision,
+      decision,
     );
-    const previous = await client.query<{ id: string; version: number | string }>(
+    const previous = await client.query<{
+      id: string;
+      version: number | string;
+    }>(
       `select id, version from app.lesson_settlement_corrections
        where lesson_id = $1 order by version desc limit 1
        ${lock ? "for update" : ""}`,
@@ -275,7 +299,7 @@ export class LessonSettlementCorrectionService {
         lessonId,
         correctionVersion,
         previous.rows[0]?.id ?? null,
-        JSON.stringify(dto.financialDecision),
+        JSON.stringify(decision),
         prepared.settlementRevisionId,
         prepared.compensationRevisionId,
         dto.reasonText.trim(),
@@ -284,7 +308,7 @@ export class LessonSettlementCorrectionService {
     );
     const settled = await this.settlement.settle(client, lessonId, {
       context: "settle",
-      decision: dto.financialDecision,
+      decision,
       reasonText: dto.reasonText.trim(),
       configurationRevisionIds: {
         settlementRevisionId: prepared.settlementRevisionId,
@@ -327,8 +351,11 @@ export class LessonSettlementCorrectionService {
   }
 
   private assertMetadata(metadata: LessonCommandMetadata) {
-    if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey) ||
-        !metadata.requestId || metadata.requestId.length > 160) {
+    if (
+      !/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey) ||
+      !metadata.requestId ||
+      metadata.requestId.length > 160
+    ) {
       throw new UnprocessableEntityException({
         code: "MUTATION_METADATA_REQUIRED",
       });
@@ -338,7 +365,8 @@ export class LessonSettlementCorrectionService {
   private stableCorrectionId(userId: string, lessonId: string, key: string) {
     const bytes = createHash("sha256")
       .update(`schedule.lesson.correction\0${userId}\0${lessonId}\0${key}`)
-      .digest().subarray(0, 16);
+      .digest()
+      .subarray(0, 16);
     bytes[6] = (bytes[6]! & 0x0f) | 0x50;
     bytes[8] = (bytes[8]! & 0x3f) | 0x80;
     const hex = bytes.toString("hex");

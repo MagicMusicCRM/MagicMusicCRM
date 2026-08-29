@@ -481,8 +481,11 @@ export class TeachersService {
       "teacher",
       dto.accessRole,
     );
-    if (dto.salary !== undefined || dto.rate !== undefined) {
+    if (dto.salary !== undefined) {
       this.policy.assertCanReadPayroll(actor);
+    }
+    if (dto.rate !== undefined) {
+      this.policy.assertCanManagePayrollHistory(actor);
     }
     const firstName = requiredTrim(
       dto.firstName,
@@ -697,8 +700,11 @@ export class TeachersService {
         "Отключение преподавателя выполняется через сценарий offboarding.",
       );
     }
-    if (dto.salary !== undefined || dto.rate !== undefined) {
+    if (dto.salary !== undefined) {
       this.policy.assertCanReadPayroll(actor);
+    }
+    if (dto.rate !== undefined) {
+      this.policy.assertCanManagePayrollHistory(actor);
     }
     if (dto.branchIds || dto.disciplineIds) {
       this.policy.assertCanManageSystemSettings(actor);

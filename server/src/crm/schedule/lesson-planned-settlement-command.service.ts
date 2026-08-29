@@ -45,7 +45,12 @@ export class LessonPlannedSettlementCommandService {
     const calculated = await this.database.transaction(async (client) => {
       await client.query("savepoint lesson_planned_settlement_preview");
       try {
-        return await this.calculateSettlementPlanChange(client, lessonId, dto);
+        return await this.calculateSettlementPlanChange(
+          client,
+          actor,
+          lessonId,
+          dto,
+        );
       } finally {
         await client.query(
           "rollback to savepoint lesson_planned_settlement_preview",
@@ -116,6 +121,7 @@ export class LessonPlannedSettlementCommandService {
       mutate: async (client, nextVersion) => {
         const calculated = await this.calculateSettlementPlanChange(
           client,
+          actor,
           lessonId,
           dto,
         );
@@ -150,6 +156,7 @@ export class LessonPlannedSettlementCommandService {
 
   private async calculateSettlementPlanChange(
     client: PoolClient,
+    actor: ActorContext,
     lessonId: string,
     dto: LessonSettlementPlanPreviewDto,
   ) {
@@ -174,10 +181,17 @@ export class LessonPlannedSettlementCommandService {
       client,
       lessonId,
     );
+    const decision = this.policy.canManageTeacherCompensation(actor)
+      ? dto.financialDecision
+      : await this.settlement.reuseStoredTeacherCompensation(
+          client,
+          lessonId,
+          dto.financialDecision,
+        );
     const prepared = await this.settlement.preparePlan(
       client,
       source.branch_id,
-      dto.financialDecision,
+      decision,
     );
     const allocations = await this.settlement.plannedSubscriptionAllocations(
       client,
@@ -203,6 +217,7 @@ export class LessonPlannedSettlementCommandService {
       after: allocations.map((item) => ({
         subscriptionId: item.subscriptionId,
         clientId: item.clientId,
+        ...(item.payerStudentId ? { payerStudentId: item.payerStudentId } : {}),
         units: item.units.toFixed(2),
       })),
     };

@@ -49,20 +49,32 @@ export class LessonTransitionCommitService {
     client: PoolClient,
     input: CommitTransitionInput,
   ): Promise<CommittedTransition> {
-    const source = await this.preparation.loadSource(input.lessonId, client, true);
-    this.preparation.assertSource(source, input.dto.expectedVersion, input.operation);
+    const source = await this.preparation.loadSource(
+      input.lessonId,
+      client,
+      true,
+    );
+    this.preparation.assertSource(
+      source,
+      input.dto.expectedVersion,
+      input.operation,
+    );
     await this.preparation.assertSettlementReviewPlan(
       client,
       input.lessonId,
       input.operation,
     );
-    const dto = effectiveTransitionDto(source, input.dto, input.operation);
-    const successor = input.operation === "reschedule"
-      ? this.preparation.successorDraft(
-          input.dto.successor!,
-          source,
-        )
-      : null;
+    const authorizedDto = await this.preparation.authorizedTransitionDto(
+      client,
+      input.actor,
+      source,
+      input.dto,
+    );
+    const dto = effectiveTransitionDto(source, authorizedDto, input.operation);
+    const successor =
+      input.operation === "reschedule"
+        ? this.preparation.successorDraft(authorizedDto.successor!, source)
+        : null;
     if (successor) {
       await this.acquireLocks(client, source, successor);
       await this.assertValidSuccessor(client, input.lessonId, successor);
@@ -109,9 +121,7 @@ export class LessonTransitionCommitService {
     const transition = await this.lifecycle.appendTransition(client, {
       lessonId: input.lessonId,
       fromState: source.lifecycleState as
-        | "scheduled"
-        | "settlement_pending"
-        | "successfully_completed",
+        "scheduled" | "settlement_pending" | "successfully_completed",
       toState,
       reasonCode: transitionReasonCode(dto),
       reasonText: dto.reasonText?.trim(),

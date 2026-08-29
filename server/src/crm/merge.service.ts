@@ -101,7 +101,11 @@ export class MergeService {
         id: string;
         custom_data: Record<string, unknown> | null;
       }>(
-        `select id, custom_data from app.leads where id in ($1, $2) and deleted_at is null`,
+        `select id, custom_data
+           from app.leads
+          where id in ($1, $2) and deleted_at is null
+          order by id
+          for update`,
         [loserId, winnerId],
       );
       if (existing.rows.length !== 2) {
@@ -123,7 +127,11 @@ export class MergeService {
         existing.rows.find((row) => row.id === winnerId)?.custom_data ?? {};
       const mergedData = mergeCustomData(winnerData, loserData);
       await client.query(
-        `update app.leads set custom_data = $2::jsonb, updated_at = now() where id = $1`,
+        `update app.leads
+            set custom_data = $2::jsonb,
+                version = version + 1,
+                updated_at = now()
+          where id = $1`,
         [winnerId, JSON.stringify(mergedData)],
       );
       const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
@@ -131,7 +139,10 @@ export class MergeService {
       // Real-FK lead references.
       repointed["students.lead_id"] = ids(
         (await client.query<{ id: string }>(
-          `update app.students set lead_id = $2, updated_at = now() where lead_id = $1 and deleted_at is null returning id`,
+          `update app.students
+              set lead_id = $2, version = version + 1, updated_at = now()
+            where lead_id = $1 and deleted_at is null
+            returning id`,
           [loserId, winnerId],
         )).rows,
       );
@@ -196,7 +207,9 @@ export class MergeService {
 
       // Soft-delete the loser (CASCADE never fires — no hard delete).
       await client.query(
-        `update app.leads set deleted_at = now(), updated_at = now() where id = $1`,
+        `update app.leads
+            set deleted_at = now(), version = version + 1, updated_at = now()
+          where id = $1`,
         [loserId],
       );
 
@@ -212,7 +225,7 @@ export class MergeService {
   // Reverse-op for each known repointed key. Hard-coded — never derives a table
   // name from stored data.
   private static readonly UNDO_REPOINT: Record<string, string> = {
-    "students.lead_id": "update app.students set lead_id = $1, updated_at = now() where id = any($2::uuid[])",
+    "students.lead_id": "update app.students set lead_id = $1, version = version + 1, updated_at = now() where id = any($2::uuid[])",
     "lessons.lead_id": "update app.lessons set lead_id = $1 where id = any($2::uuid[])",
     "lead_status_history.lead_id": `with mutation_scope as (
       select set_config('app.allow_lead_status_history_repoint', 'on', true)
@@ -235,7 +248,10 @@ export class MergeService {
         loser_id: string;
         repointed: Record<string, string[]>;
       }>(
-        `select loser_id, repointed from app.merge_log where id = $1 and undone_at is null`,
+        `select loser_id, repointed
+           from app.merge_log
+          where id = $1 and undone_at is null
+          for update`,
         [mergeLogId],
       );
       const log = logRes.rows[0];
@@ -250,7 +266,9 @@ export class MergeService {
       }
       // The duplicate_candidates reverse SQL ignores $1; pass null there.
       await client.query(
-        `update app.leads set deleted_at = null, updated_at = now() where id = $1`,
+        `update app.leads
+            set deleted_at = null, version = version + 1, updated_at = now()
+          where id = $1`,
         [log.loser_id],
       );
       await client.query(

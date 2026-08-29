@@ -15,7 +15,15 @@ import type {
 import {
   type LockedSchedulePlan,
   SchedulePlanRepository,
+  type SchedulePlanSeriesSnapshot,
 } from "./schedule-plan.repository";
+import {
+  assertUniqueSchedulePlanParticipants,
+  initialSchedulePlanUpdateMode,
+  prepareSchedulePlanUpdateMode,
+  previousScheduleDate,
+  type SchedulePlanUpdateMode,
+} from "./schedule-plan-backdate";
 
 export interface NormalizedSchedulePlanCreate {
   kind: "individual" | "group";
@@ -31,14 +39,14 @@ export interface NormalizedSchedulePlanCreate {
 
 export interface PreparedSchedulePlanUpdate {
   plan: LockedSchedulePlan;
+  mode: SchedulePlanUpdateMode;
   participants: SchedulePlanParticipantDto[];
   subscriptionId: string | null;
   activeUntil: string | null;
   studentIds: string[];
-  activeSeries: Awaited<
-    ReturnType<SchedulePlanRepository["activeSeries"]>
-  >["rows"];
+  activeSeries: SchedulePlanSeriesSnapshot[];
   effectiveFrom: string;
+  prefixUntil: string | null;
 }
 
 export interface SchedulePlanValidationInput {
@@ -77,7 +85,7 @@ export class SchedulePlanDefinitionService {
     const title = dto.title.trim();
     if (!title) failSchedulePlan("SCHEDULE_PLAN_TITLE_REQUIRED", ["title"]);
     const subject = this.createSubject(dto);
-    this.assertParticipants(subject.participants);
+    assertUniqueSchedulePlanParticipants(subject.participants);
     this.assertRows(dto.rows);
     if (dto.rows.some((row) => row.seriesId)) {
       failSchedulePlan("SCHEDULE_PLAN_NEW_ROW_HAS_SERIES", ["rows"]);
@@ -114,11 +122,18 @@ export class SchedulePlanDefinitionService {
     const plan = await this.repository.lock(client, planId);
     this.assertEditable(plan, dto);
     const effectiveFrom = dto.effectiveFrom.slice(0, 10);
+    let mode = initialSchedulePlanUpdateMode(plan, effectiveFrom);
+    const participantsAtOldStart =
+      plan.kind === "group"
+        ? await this.currentParticipants(client, planId, plan.active_from)
+        : [];
     const participants = await this.updateParticipants(
       client,
       plan,
       planId,
       effectiveFrom,
+      mode,
+      participantsAtOldStart,
       dto,
     );
     const subscriptionId =
@@ -129,7 +144,6 @@ export class SchedulePlanDefinitionService {
       ? (dto.activeUntil?.slice(0, 10) ?? null)
       : plan.active_until;
     this.assertPeriod(effectiveFrom, activeUntil);
-    await this.assertEffectiveDate(client, effectiveFrom, dto.rows);
     const studentIds =
       plan.kind === "individual"
         ? [plan.student_id!]
@@ -145,15 +159,32 @@ export class SchedulePlanDefinitionService {
     });
     const activeSeries = (await this.repository.activeSeries(client, planId))
       .rows;
-    this.assertRequestedSeries(dto.rows, activeSeries);
+    mode = await prepareSchedulePlanUpdateMode({
+      client,
+      repository: this.repository,
+      planId,
+      plan,
+      dto,
+      effectiveFrom,
+      subscriptionId,
+      activeUntil,
+      participants,
+      participantsAtOldStart,
+      activeSeries,
+    });
     return {
       plan,
+      mode,
       participants,
       subscriptionId,
       activeUntil,
       studentIds,
       activeSeries,
       effectiveFrom,
+      prefixUntil:
+        mode === "extend_backwards"
+          ? previousScheduleDate(plan.active_from)
+          : null,
     };
   }
 
@@ -273,7 +304,7 @@ export class SchedulePlanDefinitionService {
   private assertEditable(plan: LockedSchedulePlan, dto: UpdateSchedulePlanDto) {
     this.assertPlanState(plan, dto.expectedVersion);
     this.assertUpdateFields(plan, dto);
-    this.assertParticipants(dto.participants ?? []);
+    assertUniqueSchedulePlanParticipants(dto.participants ?? []);
   }
 
   private assertPlanState(plan: LockedSchedulePlan, expectedVersion: number) {
@@ -290,12 +321,6 @@ export class SchedulePlanDefinitionService {
   ) {
     if (dto.title !== undefined && !dto.title.trim()) {
       failSchedulePlan("SCHEDULE_PLAN_TITLE_REQUIRED", ["title"]);
-    }
-    const effectiveFrom = dto.effectiveFrom.slice(0, 10);
-    if (effectiveFrom < plan.active_from) {
-      failSchedulePlan("SCHEDULE_PLAN_EFFECTIVE_DATE_INVALID", [
-        "effectiveFrom",
-      ]);
     }
     if (plan.kind === "individual" && (dto.participants?.length ?? 0) > 0) {
       failSchedulePlan("SCHEDULE_PLAN_PARTICIPANTS_FORBIDDEN", [
@@ -314,9 +339,14 @@ export class SchedulePlanDefinitionService {
     plan: LockedSchedulePlan,
     planId: string,
     effectiveFrom: string,
+    mode: SchedulePlanUpdateMode,
+    participantsAtOldStart: SchedulePlanParticipantDto[],
     dto: UpdateSchedulePlanDto,
   ) {
     if (plan.kind !== "group") return [];
+    if (mode === "extend_backwards") {
+      return dto.participants ?? participantsAtOldStart;
+    }
     return (
       dto.participants ??
       this.currentParticipants(client, planId, effectiveFrom)
@@ -343,42 +373,6 @@ export class SchedulePlanDefinitionService {
       studentId: row.student_id,
       subscriptionId: row.subscription_id,
     }));
-  }
-
-  private async assertEffectiveDate(
-    client: PoolClient,
-    effectiveFrom: string,
-    rows: SchedulePlanRowDto[],
-  ) {
-    const effectiveDate = await client.query<{ valid: boolean }>(
-      `select not exists (
-         select 1 from app.branches branch
-         where branch.id = any($2::uuid[])
-           and $1::date < timezone(branch.timezone_name, now())::date
-       ) as valid`,
-      [effectiveFrom, [...new Set(rows.map((row) => row.branchId))]],
-    );
-    if (!effectiveDate.rows[0]?.valid) {
-      failSchedulePlan("SCHEDULE_PLAN_EFFECTIVE_DATE_PAST", ["effectiveFrom"]);
-    }
-  }
-
-  private assertRequestedSeries(
-    rows: SchedulePlanRowDto[],
-    activeSeries: Awaited<
-      ReturnType<SchedulePlanRepository["activeSeries"]>
-    >["rows"],
-  ) {
-    const activeIds = new Set(activeSeries.map((row) => row.id));
-    const requestedIds = rows
-      .map((row) => row.seriesId)
-      .filter((id): id is string => Boolean(id));
-    if (requestedIds.some((id) => !activeIds.has(id))) {
-      throw new ConflictException({
-        code: "SCHEDULE_PLAN_SERIES_STALE",
-        message: "One of the edited rows is no longer active.",
-      });
-    }
   }
 
   private subscriptionIds(input: SchedulePlanValidationInput) {
@@ -504,15 +498,6 @@ export class SchedulePlanDefinitionService {
         "groupId",
         "participants",
       ]);
-    }
-  }
-
-  private assertParticipants(participants: SchedulePlanParticipantDto[]) {
-    if (
-      new Set(participants.map((item) => item.studentId)).size !==
-      participants.length
-    ) {
-      failSchedulePlan("SCHEDULE_PLAN_DUPLICATE_PARTICIPANT", ["participants"]);
     }
   }
 

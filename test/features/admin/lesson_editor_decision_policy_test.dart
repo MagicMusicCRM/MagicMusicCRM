@@ -296,6 +296,7 @@ void main() {
         final payload = policy.createPayload(
           session: _createSession(draft),
           draft: draft,
+          canManageTeacherCompensation: true,
           references: _references(
             teachers: [_teacher('teacher-a', currentRate: 1800)],
             subscriptions: [_subscription('subscription-a')],
@@ -333,6 +334,25 @@ void main() {
       },
     );
 
+    test('operational create omits teacher rate and compensation decision', () {
+      final draft = _draft(
+        settlementTypeKey: 'standard',
+        compensationRuleKey: 'teacher-percent',
+        compensationValueMinor: '12500',
+      );
+
+      final payload = policy.createPayload(
+        session: _createSession(draft),
+        draft: draft,
+        references: _references(),
+        canManageTeacherCompensation: false,
+      );
+
+      expect(payload, isNot(contains('teacherCompensationType')));
+      expect(payload, isNot(contains('teacherCompensationValue')));
+      expect(payload['financialDecision'], {'settlementTypeKey': 'standard'});
+    });
+
     test(
       'keeps optional financial value, reason, subscription, and lead note sparse',
       () {
@@ -359,6 +379,7 @@ void main() {
           session: _createSession(standardDraft),
           draft: standardDraft,
           references: _references(),
+          canManageTeacherCompensation: true,
         );
         final fallbackLeadPayloads = fallbackLeadDrafts
             .map(
@@ -366,6 +387,7 @@ void main() {
                 session: _createSession(draft),
                 draft: draft,
                 references: _references(),
+                canManageTeacherCompensation: true,
               ),
             )
             .toList();
@@ -373,6 +395,7 @@ void main() {
           session: _createSession(namedLeadDraft, leadNoteSource: '  Мария  '),
           draft: namedLeadDraft,
           references: _references(),
+          canManageTeacherCompensation: true,
         );
 
         expect(standardPayload['financialDecision'], {

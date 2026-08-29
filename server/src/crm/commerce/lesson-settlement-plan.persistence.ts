@@ -262,6 +262,12 @@ function calculatePlanAllocation(
   settlementTypes: Map<string, LessonSettlementCatalog["settlement_types"][number]>,
 ): PlannedSubscriptionAllocation[] {
   const subscriptionId = selected?.subscriptionId ?? charge.subscription_id;
+  if (selected?.payerStudentId && !selected.subscriptionId) {
+    invalidLessonSettlementDecision(
+      "PAYER_SUBSCRIPTION_REQUIRED",
+      "clientDecisions",
+    );
+  }
   const settlement = settlementTypes.get(
     selected?.settlementTypeKey ?? decision.settlementTypeKey,
   );
@@ -296,6 +302,9 @@ function calculatePlanAllocation(
     {
       clientType: charge.client_type,
       clientId: charge.client_id,
+      ...(selected?.payerStudentId
+        ? { payerStudentId: selected.payerStudentId }
+        : {}),
       subscriptionId,
       units,
     },

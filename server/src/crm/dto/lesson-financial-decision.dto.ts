@@ -25,6 +25,10 @@ export class LessonClientFinancialDecisionDto {
   @IsOptional()
   @IsUUID()
   subscriptionId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  payerStudentId?: string;
 }
 
 export class ConfiguredLessonFinancialDecisionDto {
@@ -35,11 +39,14 @@ export class ConfiguredLessonFinancialDecisionDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(500)
-  @ArrayUnique((decision: LessonClientFinancialDecisionDto) => decision.clientId)
+  @ArrayUnique(
+    (decision: LessonClientFinancialDecisionDto) => decision.clientId,
+  )
   @ValidateNested({ each: true })
   @Type(() => LessonClientFinancialDecisionDto)
   clientDecisions?: LessonClientFinancialDecisionDto[];
 
+  @IsOptional()
   @IsString()
   @Matches(stableKey)
   teacherCompensationRuleKey!: string;

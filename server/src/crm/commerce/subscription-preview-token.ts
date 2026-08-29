@@ -14,6 +14,23 @@ const LESSON_TRANSITION_TOKEN_DOMAIN =
   "magicmusiccrm:lesson-transition-preview:v1";
 const SCHEDULE_PLAN_END_TOKEN_DOMAIN =
   "magicmusiccrm:schedule-plan-end-preview:v1";
+const SCHEDULE_PLAN_HISTORY_TOKEN_DOMAIN =
+  "magicmusiccrm:schedule-plan-history-preview:v1";
+
+export interface SchedulePlanHistoryPreviewTokenPayload {
+  kind: "schedule.plan.history";
+  operation: "create" | "update";
+  actorUserId: string;
+  planId: string | null;
+  expectedVersion: number;
+  activeFrom: string;
+  activeUntil: string | null;
+  clientFingerprint: string;
+  draftFingerprint: string;
+  historyFingerprint: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
 
 export interface SchedulePlanEndPreviewTokenPayload {
   kind: "schedule.plan.end";
@@ -394,6 +411,32 @@ export function verifySchedulePlanEndPreview(
   );
 }
 
+export function signSchedulePlanHistoryPreview(
+  secret: string,
+  payload: SchedulePlanHistoryPreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    SCHEDULE_PLAN_HISTORY_TOKEN_DOMAIN,
+    payload,
+    assertSchedulePlanHistoryPayload,
+  );
+}
+
+export function verifySchedulePlanHistoryPreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): SchedulePlanHistoryPreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    SCHEDULE_PLAN_HISTORY_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertSchedulePlanHistoryPayload,
+  );
+}
+
 type PreviewPayload = Record<string, unknown>;
 
 type PreviewPayloadRule = readonly [
@@ -436,10 +479,7 @@ function assertExactPayload(
 const schedulePlanEndRules: readonly PreviewPayloadRule[] = [
   ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
   ["planId", (payload) => !isUuid(payload.planId)],
-  [
-    "expectedVersion",
-    (payload) => !isPositiveInteger(payload.expectedVersion),
-  ],
+  ["expectedVersion", (payload) => !isPositiveInteger(payload.expectedVersion)],
   [
     "lastDate",
     (payload) =>
@@ -458,6 +498,37 @@ function assertSchedulePlanEndPayload(
   value: unknown,
 ): asserts value is SchedulePlanEndPreviewTokenPayload {
   assertExactPayload(value, "schedule.plan.end", schedulePlanEndRules);
+}
+
+const schedulePlanHistoryRules: readonly PreviewPayloadRule[] = [
+  [
+    "operation",
+    (payload) => !["create", "update"].includes(payload.operation as string),
+  ],
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["planId", (payload) => payload.planId !== null && !isUuid(payload.planId)],
+  [
+    "expectedVersion",
+    (payload) => !isNonnegativeInteger(payload.expectedVersion),
+  ],
+  ["activeFrom", (payload) => !isDateOnly(payload.activeFrom)],
+  [
+    "activeUntil",
+    (payload) =>
+      payload.activeUntil !== null && !isDateOnly(payload.activeUntil),
+  ],
+  ["clientFingerprint", (payload) => !isFingerprint(payload.clientFingerprint)],
+  ["draftFingerprint", (payload) => !isFingerprint(payload.draftFingerprint)],
+  [
+    "historyFingerprint",
+    (payload) => !isFingerprint(payload.historyFingerprint),
+  ],
+];
+
+function assertSchedulePlanHistoryPayload(
+  value: unknown,
+): asserts value is SchedulePlanHistoryPreviewTokenPayload {
+  assertExactPayload(value, "schedule.plan.history", schedulePlanHistoryRules);
 }
 
 function signPayload<T>(
@@ -540,14 +611,8 @@ const replaceRules: readonly PreviewPayloadRule[] = [
   ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
   ["studentId", (payload) => !isUuid(payload.studentId)],
   ["payerStudentId", (payload) => !isUuid(payload.payerStudentId)],
-  [
-    "issuedSubscriptionId",
-    (payload) => !isUuid(payload.issuedSubscriptionId),
-  ],
-  [
-    "expectedVersion",
-    (payload) => !isPositiveInteger(payload.expectedVersion),
-  ],
+  ["issuedSubscriptionId", (payload) => !isUuid(payload.issuedSubscriptionId)],
+  ["expectedVersion", (payload) => !isPositiveInteger(payload.expectedVersion)],
   ["newPackageId", (payload) => !isUuid(payload.newPackageId)],
   [
     "newPackageVersion",
@@ -567,8 +632,7 @@ const replaceRules: readonly PreviewPayloadRule[] = [
   ["reservedUnits", (payload) => !isUnits(payload.reservedUnits)],
   [
     "transferableReservationCount",
-    (payload) =>
-      !isNonnegativeInteger(payload.transferableReservationCount),
+    (payload) => !isNonnegativeInteger(payload.transferableReservationCount),
   ],
   [
     "transferableReservationUnits",
@@ -617,19 +681,10 @@ const cancelRules: readonly PreviewPayloadRule[] = [
   ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
   ["studentId", (payload) => !isUuid(payload.studentId)],
   ["payerStudentId", (payload) => !isUuid(payload.payerStudentId)],
-  [
-    "issuedSubscriptionId",
-    (payload) => !isUuid(payload.issuedSubscriptionId),
-  ],
-  [
-    "expectedVersion",
-    (payload) => !isPositiveInteger(payload.expectedVersion),
-  ],
+  ["issuedSubscriptionId", (payload) => !isUuid(payload.issuedSubscriptionId)],
+  ["expectedVersion", (payload) => !isPositiveInteger(payload.expectedVersion)],
   ["packageId", (payload) => !isUuid(payload.packageId)],
-  [
-    "packageVersion",
-    (payload) => !isPositiveInteger(payload.packageVersion),
-  ],
+  ["packageVersion", (payload) => !isPositiveInteger(payload.packageVersion)],
   ["unitCount", (payload) => !isUnits(payload.unitCount)],
   ["usedUnits", (payload) => !isUnits(payload.usedUnits)],
   [
@@ -647,10 +702,7 @@ const cancelRules: readonly PreviewPayloadRule[] = [
         payload.fundingMode as string,
       ),
   ],
-  [
-    "previousRefundMinor",
-    (payload) => !isMinor(payload.previousRefundMinor),
-  ],
+  ["previousRefundMinor", (payload) => !isMinor(payload.previousRefundMinor)],
   ["writeoffMinor", (payload) => !isMinor(payload.writeoffMinor)],
   ["balanceMinor", (payload) => !isSignedMinor(payload.balanceMinor)],
   [
@@ -686,24 +738,17 @@ function assertCancelPayload(
 
 const purchaseRules: readonly PreviewPayloadRule[] = [
   ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
-  [
-    "recipientStudentId",
-    (payload) => !isUuid(payload.recipientStudentId),
-  ],
+  ["recipientStudentId", (payload) => !isUuid(payload.recipientStudentId)],
   ["payerStudentId", (payload) => !isUuid(payload.payerStudentId)],
   [
     "recipientVersion",
     (payload) => !isPositiveInteger(payload.recipientVersion),
   ],
-  [
-    "payerVersion",
-    (payload) => !isPositiveInteger(payload.payerVersion),
-  ],
+  ["payerVersion", (payload) => !isPositiveInteger(payload.payerVersion)],
   [
     "recipientBranchId",
     (payload) =>
-      payload.recipientBranchId !== null &&
-      !isUuid(payload.recipientBranchId),
+      payload.recipientBranchId !== null && !isUuid(payload.recipientBranchId),
   ],
   [
     "payerBranchId",
@@ -711,10 +756,7 @@ const purchaseRules: readonly PreviewPayloadRule[] = [
       payload.payerBranchId !== null && !isUuid(payload.payerBranchId),
   ],
   ["packageId", (payload) => !isUuid(payload.packageId)],
-  [
-    "packageVersion",
-    (payload) => !isPositiveInteger(payload.packageVersion),
-  ],
+  ["packageVersion", (payload) => !isPositiveInteger(payload.packageVersion)],
   [
     "currencyCode",
     (payload) =>
@@ -722,10 +764,7 @@ const purchaseRules: readonly PreviewPayloadRule[] = [
       !/^[A-Z]{3}$/.test(payload.currencyCode),
   ],
   ["finalPriceMinor", (payload) => !isMinor(payload.finalPriceMinor)],
-  [
-    "payerBalanceMinor",
-    (payload) => !isSignedMinor(payload.payerBalanceMinor),
-  ],
+  ["payerBalanceMinor", (payload) => !isSignedMinor(payload.payerBalanceMinor)],
   [
     "fundingMode",
     (payload) =>
@@ -750,21 +789,13 @@ function assertPurchasePayload(
 const paymentReversalRules: readonly PreviewPayloadRule[] = [
   ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
   ["studentId", (payload) => !isUuid(payload.studentId)],
-  [
-    "recipientStudentId",
-    (payload) => !isUuid(payload.recipientStudentId),
-  ],
+  ["recipientStudentId", (payload) => !isUuid(payload.recipientStudentId)],
   ["paymentRecordId", (payload) => !isUuid(payload.paymentRecordId)],
-  [
-    "expectedVersion",
-    (payload) => !isPositiveInteger(payload.expectedVersion),
-  ],
+  ["expectedVersion", (payload) => !isPositiveInteger(payload.expectedVersion)],
   [
     "status",
     (payload) =>
-      !["unpaid", "posted_pending", "paid"].includes(
-        payload.status as string,
-      ),
+      !["unpaid", "posted_pending", "paid"].includes(payload.status as string),
   ],
   [
     "actualPaymentId",
@@ -806,15 +837,9 @@ function assertPaymentReversalPayload(
 const paymentCorrectionRules: readonly PreviewPayloadRule[] = [
   ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
   ["studentId", (payload) => !isUuid(payload.studentId)],
-  [
-    "recipientStudentId",
-    (payload) => !isUuid(payload.recipientStudentId),
-  ],
+  ["recipientStudentId", (payload) => !isUuid(payload.recipientStudentId)],
   ["paymentRecordId", (payload) => !isUuid(payload.paymentRecordId)],
-  [
-    "expectedVersion",
-    (payload) => !isPositiveInteger(payload.expectedVersion),
-  ],
+  ["expectedVersion", (payload) => !isPositiveInteger(payload.expectedVersion)],
   [
     "oldStatus",
     (payload) =>
@@ -857,9 +882,7 @@ const paymentCorrectionRules: readonly PreviewPayloadRule[] = [
   [
     "status",
     (payload) =>
-      !["unpaid", "posted_pending", "paid"].includes(
-        payload.status as string,
-      ),
+      !["unpaid", "posted_pending", "paid"].includes(payload.status as string),
   ],
   [
     "dueAt",
@@ -912,10 +935,7 @@ const accountAdjustmentReversalRules: readonly PreviewPayloadRule[] = [
   ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
   ["studentId", (payload) => !isUuid(payload.studentId)],
   ["adjustmentId", (payload) => !isUuid(payload.adjustmentId)],
-  [
-    "expectedVersion",
-    (payload) => !isPositiveInteger(payload.expectedVersion),
-  ],
+  ["expectedVersion", (payload) => !isPositiveInteger(payload.expectedVersion)],
   ["sourcePaymentId", (payload) => !isUuid(payload.sourcePaymentId)],
   [
     "amountMinor",
@@ -963,10 +983,7 @@ const lessonTransitionRules: readonly PreviewPayloadRule[] = [
   ],
   ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
   ["lessonId", (payload) => !isUuid(payload.lessonId)],
-  [
-    "expectedVersion",
-    (payload) => !isPositiveInteger(payload.expectedVersion),
-  ],
+  ["expectedVersion", (payload) => !isPositiveInteger(payload.expectedVersion)],
   [
     "transitionFingerprint",
     (payload) =>
@@ -1008,4 +1025,12 @@ function isSignedMinor(value: unknown): value is string {
 
 function isUnits(value: unknown): value is string {
   return typeof value === "string" && /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(value);
+}
+
+function isDateOnly(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isFingerprint(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 }

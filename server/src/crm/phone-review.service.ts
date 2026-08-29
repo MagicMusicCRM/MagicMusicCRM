@@ -117,7 +117,10 @@ export class PhoneReviewService {
             ? await client.query(
                 `
                   update app.leads
-                  set phone = $2, phone_normalized = $2, updated_at = now()
+                  set phone = $2,
+                      phone_normalized = $2,
+                      version = version + 1,
+                      updated_at = now()
                   where id = $1 and deleted_at is null
                   returning id
                 `,
@@ -125,10 +128,21 @@ export class PhoneReviewService {
               )
             : await client.query(
                 `
-                  update app.profiles
-                  set phone = $2, phone_normalized = $2, updated_at = now()
-                  where id = $1 and deleted_at is null
-                  returning id
+                  with updated_profile as (
+                    update app.profiles
+                    set phone = $2, phone_normalized = $2, updated_at = now()
+                    where id = $1 and deleted_at is null
+                    returning id
+                  ), updated_students as (
+                    update app.students student
+                    set version = student.version + 1,
+                        updated_at = now()
+                    from updated_profile profile
+                    where student.profile_id = profile.id
+                      and student.deleted_at is null
+                    returning student.id
+                  )
+                  select id from updated_profile
                 `,
                 [current.entity_id, resolvedPhone],
               );

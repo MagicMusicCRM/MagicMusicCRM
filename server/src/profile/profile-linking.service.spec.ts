@@ -72,6 +72,7 @@ describe("ProfileLinkingService", () => {
     } as never);
     const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
     expect(sql).toContain("update app.students");
+    expect(sql).toContain("version = student.version + 1");
     expect(sql).toContain("insert into app.user_crm_links");
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "profile.crm_student_linked", entityId: "profile-a" }),

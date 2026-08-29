@@ -607,6 +607,11 @@ void main() {
       for (final data in [preview.data, create.data]) {
         final rows = (data['rows'] as List).cast<Map<String, dynamic>>();
         expect(rows, hasLength(3));
+        for (final row in rows) {
+          expect(row['financialDecision'], {
+            'settlementTypeKey': 'free_lesson',
+          });
+        }
         expect(
           rows
               .where((row) => row['teacherId'] == 'teacher-1')
@@ -1264,12 +1269,10 @@ Future<void> _chooseReferences(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Бесплатное занятие').last);
   await tester.pumpAndSettle();
-  await tester.tap(
+  expect(
     find.byKey(const ValueKey('schedule-plan-compensation-rule')),
+    findsNothing,
   );
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Не оплачивать').last);
-  await tester.pumpAndSettle();
 }
 
 Future<void> _chooseSearchable(

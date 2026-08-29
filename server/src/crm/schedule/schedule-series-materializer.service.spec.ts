@@ -30,4 +30,32 @@ describe("ScheduleSeriesMaterializerService", () => {
     );
     expect(sql).not.toContain("now() at time zone 'Europe/Moscow'");
   });
+
+  it("starts confirmed plan materialization at valid_from for historical periods", async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [] });
+    const service = new ScheduleSeriesMaterializerService(
+      {} as DatabaseService,
+      {
+        validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+      } as unknown as ScheduleConstraintEngine,
+    );
+    const client = { query };
+
+    await (
+      service.materializePlanSeries as never as (
+        client: unknown,
+        seriesId: string,
+        options: { includePast: boolean },
+      ) => Promise<number>
+    )(client, "series-a", { includePast: true });
+
+    const sql = query.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(sql).toContain(
+      "case when $4::boolean then s.valid_from else greatest(s.valid_from, s.local_today) end",
+    );
+    expect(sql).toContain(
+      "case when $4::boolean then s.valid_from else greatest(",
+    );
+    expect(query.mock.calls.some((call) => call[1]?.includes(true))).toBe(true);
+  });
 });

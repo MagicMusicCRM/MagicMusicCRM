@@ -51,6 +51,63 @@ void main() {
     expect(canLogout, isTrue);
     expect(workspace.state.activeTab.forms['editor']!.draft, isEmpty);
   });
+
+  testWidgets('one logout decision saves dirty forms in every tab', (
+    tester,
+  ) async {
+    final workspace = _workspaceController();
+    final firstTabId = workspace.state.activeTabId;
+    final secondTabId = workspace.open(
+      EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: 'student-2',
+      ),
+      explicitNew: true,
+    );
+    final saved = <String>[];
+    for (final tabId in [firstTabId, secondTabId]) {
+      workspace.registerForm(
+        tabId,
+        'editor',
+        draft: {'tabId': tabId},
+        onSave: () async {
+          saved.add(tabId);
+          return true;
+        },
+      );
+      workspace.updateForm(tabId, 'editor', dirty: true);
+    }
+    bool? canLogout;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WorkspaceNavigationScope(
+          controller: workspace,
+          isDesktop: true,
+          child: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                canLogout = await requestWorkspaceDirtyExit(
+                  context,
+                  reason: DirtyFormExitReason.logout,
+                );
+              },
+              child: const Text('Выйти'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Выйти'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сохранить изменения?'), findsOneWidget);
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+
+    expect(canLogout, isTrue);
+    expect(saved, [firstTabId, secondTabId]);
+    expect(workspace.state.tabs.any((tab) => tab.hasDirtyForms), isFalse);
+  });
 }
 
 WorkspaceController _workspaceController() => WorkspaceController(

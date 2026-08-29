@@ -467,10 +467,15 @@ void main() {
           ),
         );
         var beforeChanges = 0;
+        var forcedChanges = 0;
         var afterChanges = 0;
         final service = MagicAuthService(
           _client(adapter, store),
           onBeforeSessionChange: () => beforeChanges++,
+          onBeforeForcedSessionClear: () {
+            forcedChanges++;
+            throw StateError('revoked session cannot save over network');
+          },
           onAfterSessionChange: () => afterChanges++,
         );
         final events = service.watchSession().take(2).toList();
@@ -482,8 +487,72 @@ void main() {
 
         expect(await events, [isA<MagicAuthSession>(), isNull]);
         expect(await store.read(), isNull);
-        expect(beforeChanges, 1);
+        expect(beforeChanges, 0);
+        expect(forcedChanges, 1);
         expect(afterChanges, 1);
+      },
+    );
+
+    test(
+      'logout-all clears revoked credentials despite draft-save failure',
+      () async {
+        final adapter = _FakeAdapter([
+          const _FakeResponse(
+            path: '/auth/logout-all',
+            statusCode: 200,
+            body: <String, dynamic>{},
+          ),
+        ]);
+        final store = MemoryMagicTokenStore(
+          const MagicApiTokens(
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            tokenType: 'Bearer',
+            expiresIn: 900,
+          ),
+        );
+        final service = MagicAuthService(
+          _client(adapter, store),
+          onBeforeForcedSessionClear: () =>
+              throw StateError('local draft write failed'),
+        );
+
+        await service.logoutAllDevices();
+
+        expect(await store.read(), isNull);
+      },
+    );
+
+    test(
+      'email change clears revoked credentials despite draft-save failure',
+      () async {
+        final adapter = _FakeAdapter([
+          const _FakeResponse(
+            path: '/auth/email',
+            statusCode: 200,
+            body: <String, dynamic>{},
+          ),
+        ]);
+        final store = MemoryMagicTokenStore(
+          const MagicApiTokens(
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            tokenType: 'Bearer',
+            expiresIn: 900,
+          ),
+        );
+        final service = MagicAuthService(
+          _client(adapter, store),
+          onBeforeForcedSessionClear: () =>
+              throw StateError('local draft write failed'),
+        );
+
+        await service.changeEmail(
+          email: 'new@example.com',
+          currentPassword: 'password-123',
+        );
+
+        expect(await store.read(), isNull);
       },
     );
   });

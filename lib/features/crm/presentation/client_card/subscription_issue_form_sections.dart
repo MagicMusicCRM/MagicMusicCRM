@@ -29,6 +29,7 @@ class SubscriptionIssueFormSections extends StatelessWidget {
           fieldsEnabled: fieldsEnabled,
           searchPayers: searchPayers,
           selectPayer: controller.selectPayer,
+          selectPaymentMethod: controller.selectPaymentMethod,
           selectFundingMode: controller.selectFundingMode,
           validatePurchaseReason: controller.validatePurchaseReason,
           setPurchaseReason: controller.setPurchaseReason,

@@ -103,6 +103,7 @@ describe("PhoneReviewService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(clientQuery.mock.calls[0][0]).toContain("for update");
     expect(clientQuery.mock.calls[1][0]).toContain("update app.leads");
+    expect(clientQuery.mock.calls[1][0]).toContain("version = version + 1");
     expect(clientQuery.mock.calls[1][1]).toEqual(["l1", "+79991234567"]);
     expect(clientQuery.mock.calls[2][1]).toEqual([
       "q1",
@@ -118,6 +119,37 @@ describe("PhoneReviewService", () => {
         metadata: expect.objectContaining({ action: "corrected" }),
       }),
     );
+  });
+
+  it("version-bumps a Student when correcting its linked profile", async () => {
+    const { service, clientQuery } = createService();
+    clientQuery
+      .mockResolvedValueOnce({
+        rows: [{ id: "q3", entity_type: "profile", entity_id: "p1" }],
+      })
+      .mockResolvedValueOnce({ rows: [{ id: "p1" }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: "q3",
+          entity_type: "profile",
+          entity_id: "p1",
+          resolution_action: "corrected",
+          resolution_note: "Исправлено",
+          resolved_phone: "+79991234567",
+          resolved_at: "2026-08-12T10:00:00.000Z",
+        }],
+      });
+
+    await service.resolvePhoneReview(actor, "q3", {
+      action: "corrected",
+      phone: "+79991234567",
+      resolutionNote: "Исправлено",
+    });
+
+    const sql = String(clientQuery.mock.calls[1]?.[0]);
+    expect(sql).toContain("update app.profiles");
+    expect(sql).toContain("update app.students");
+    expect(sql).toContain("version = student.version + 1");
   });
 
   it("accepts an intentional source value without changing the entity", async () => {

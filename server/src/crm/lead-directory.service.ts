@@ -41,7 +41,7 @@ export class LeadDirectoryService {
     const limitParam = add(limit);
     const result = await this.database.query<LeadRow>(
       `
-        select l.id, l.status_id, ls.stage_key as status_key,
+        select l.id, l.version, l.status_id, ls.stage_key as status_key,
           ls.name as status_name, l.first_name,
           l.last_name, l.phone, l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
           l.created_by, l.created_at, l.updated_at

@@ -161,7 +161,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.listen<_RouteGateState>(_routeGateStateProvider, (_, next) {
     if (next.phase == _RouteGatePhase.gateError &&
         _isUnauthorizedRouteError(next.error)) {
-      unawaited(ref.read(magicAuthServiceProvider).signOut());
+      unawaited(ref.read(magicAuthServiceProvider).clearRevokedSession());
     }
   });
 

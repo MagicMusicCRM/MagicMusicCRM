@@ -128,6 +128,7 @@ export class LessonScheduleMutationService {
 
   async createLesson(actor: ActorContext, rawDto: UpsertLessonDto) {
     this.policy.assertCanWriteCrm(actor);
+    this.assertCanSupplyTeacherCompensation(actor, rawDto);
     const dto = this.applyClientRef(rawDto);
     if (dto.force === true) {
       throw new BadRequestException(
@@ -258,6 +259,7 @@ export class LessonScheduleMutationService {
     lessonId: string,
     rawDto: UpsertLessonDto,
   ) {
+    this.assertCanSupplyTeacherCompensation(actor, rawDto);
     const dto = this.applyClientRef(rawDto);
     if (dto.status !== undefined) {
       throw new BadRequestException({
@@ -329,6 +331,23 @@ export class LessonScheduleMutationService {
       affectedUserIds,
     });
     return toLessonDto(lesson);
+  }
+
+  private assertCanSupplyTeacherCompensation(
+    actor: ActorContext,
+    dto: UpsertLessonDto,
+  ): void {
+    this.policy.assertCanSupplyTeacherCompensation(actor, {
+      teacherRate: dto.teacherRate,
+      teacherCompensationType: dto.teacherCompensationType,
+      teacherCompensationValue: dto.teacherCompensationValue,
+      financialDecision: {
+        teacherCompensationRuleKey:
+          dto.financialDecision?.teacherCompensationRuleKey,
+        teacherCompensationValueMinor:
+          dto.financialDecision?.teacherCompensationValueMinor,
+      },
+    });
   }
 
   /**

@@ -229,19 +229,37 @@ export class ClientLinkingService {
 
     const rawPhone = await this.getClientPhone(entityType, entityId);
     const matchedPhone = this.normalizeContactPhone(rawPhone);
+    const aggregateTable =
+      entityType === "lead" ? "app.leads" : "app.students";
 
     await this.database.query(
       `
-        insert into app.user_crm_links
-          (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
-        values ($1, $2::app.crm_entity_type, $3, $4, 'manual_phone', $5, now())
-        on conflict (entity_type, entity_id) where deleted_at is null
-        do update set
-          user_id = excluded.user_id,
-          matched_phone = excluded.matched_phone,
-          link_source = 'manual_phone',
-          deleted_at = null,
-          confirmed_at = now()
+        with target as (
+          select id, version
+          from ${aggregateTable}
+          where id = $3 and deleted_at is null
+          for update
+        ), linked as (
+          insert into app.user_crm_links
+            (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
+          select $1, $2::app.crm_entity_type, $3, $4, 'manual_phone', $5, now()
+          from target
+          on conflict (entity_type, entity_id) where deleted_at is null
+          do update set
+            user_id = excluded.user_id,
+            matched_phone = excluded.matched_phone,
+            link_source = 'manual_phone',
+            deleted_at = null,
+            confirmed_at = now()
+          returning entity_id
+        ), bumped as (
+          update ${aggregateTable} aggregate
+          set version = target.version + 1, updated_at = now()
+          from target, linked
+          where aggregate.id = target.id
+          returning aggregate.id
+        )
+        select id from bumped
       `,
       [userId, entityType, entityId, matchedPhone, actor.userId],
     );

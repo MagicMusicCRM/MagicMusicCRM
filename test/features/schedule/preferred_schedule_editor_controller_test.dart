@@ -83,31 +83,35 @@ void main() {
     expect(controller.roomsForBranch.map((item) => item['id']), ['room-b']);
   });
 
-  test('clamps an edited past start and applies subscription fallback', () {
-    final controller = _controller(
-      allowOpenEnded: true,
-      initialSubscriptionId: 'missing',
-      subscriptionOptions: const [
-        {'id': 'subscription-a', 'label': 'Абонемент'},
-      ],
-      series: const {
-        'id': 'series-a',
-        'branch_id': 'branch-a',
-        'weekday': 2,
-        'begin_time': '16:30',
-        'duration_minutes': 45,
-        'valid_from': '2025-01-01',
-        'valid_until': null,
-        'teacher_id': 'teacher-a',
-        'room_id': 'room-a',
-      },
-    )..initialize(now: DateTime(2026, 8, 27, 18));
+  test(
+    'keeps a plan period past start editable and applies subscription fallback',
+    () {
+      final controller = _controller(
+        allowOpenEnded: true,
+        initialSubscriptionId: 'missing',
+        subscriptionOptions: const [
+          {'id': 'subscription-a', 'label': 'Абонемент'},
+        ],
+        planMode: true,
+        series: const {
+          'id': 'series-a',
+          'branch_id': 'branch-a',
+          'weekday': 2,
+          'begin_time': '16:30',
+          'duration_minutes': 45,
+          'valid_from': '2025-01-01',
+          'valid_until': null,
+          'teacher_id': 'teacher-a',
+          'room_id': 'room-a',
+        },
+      )..initialize(now: DateTime(2026, 8, 27, 18));
 
-    expect(controller.state.validFrom, DateTime(2026, 8, 27));
-    expect(controller.state.validUntil, DateTime(2026, 11, 25));
-    expect(controller.state.openEnded, isTrue);
-    expect(controller.state.subscriptionId, 'subscription-a');
-  });
+      expect(controller.state.validFrom, DateTime(2025, 1, 1));
+      expect(controller.state.validUntil, DateTime(2025, 4, 1));
+      expect(controller.state.openEnded, isTrue);
+      expect(controller.state.subscriptionId, 'subscription-a');
+    },
+  );
 
   test('synchronizes financial decisions with the selected branch', () {
     final controller = _controller(
@@ -212,6 +216,21 @@ void main() {
     expect(() => draft.weekdays.add(7), throwsUnsupportedError);
   });
 
+  test('operational editor does not require teacher compensation input', () {
+    final controller = _controller(
+      planMode: true,
+      requireFinancialDecision: true,
+      canManageTeacherCompensation: false,
+      initialDraft: _draft(
+        teacherId: 'teacher-a',
+        roomId: 'room-a',
+        settlementTypeKey: 'visit',
+      ),
+    )..initialize(now: DateTime(2026, 8, 27));
+
+    expect(controller.validate(title: 'План'), isTrue);
+  });
+
   test('keeps services out of the view and validation out of the shell', () {
     final view = File(
       'lib/features/crm/presentation/client_card/'
@@ -241,6 +260,7 @@ PreferredScheduleEditorController _controller({
   bool requireSubscription = false,
   bool allowOpenEnded = false,
   bool requireFinancialDecision = false,
+  bool canManageTeacherCompensation = true,
   List<Map<String, dynamic>> subscriptionOptions = const [],
   String? initialSubscriptionId,
   Map<String, LessonDecisionCatalog> decisionCatalogs = _catalogs,
@@ -258,6 +278,7 @@ PreferredScheduleEditorController _controller({
   allowOpenEnded: allowOpenEnded,
   decisionCatalogs: decisionCatalogs,
   requireFinancialDecision: requireFinancialDecision,
+  canManageTeacherCompensation: canManageTeacherCompensation,
 );
 
 PreferredScheduleDraft _draft({

@@ -165,6 +165,7 @@ describe("StudentMutationExecutor", () => {
   it("keeps update snapshot, validation, replacement, and history in one transaction", async () => {
     const events: string[] = [];
     const beforeStudent = {
+      version: 1,
       status: "active",
       branch_id: branchId,
       first_name: "Анна",
@@ -264,6 +265,7 @@ describe("StudentMutationExecutor", () => {
     const executor = new StudentMutationExecutor(database, funnel);
     const command: PreparedStudentUpdate = {
       studentId,
+      expectedVersion: 1,
       firstName: "Алина",
       lastName: "Иванова",
       phone: "+79990000000",
@@ -301,6 +303,7 @@ describe("StudentMutationExecutor", () => {
   it("does not touch typed values or append history when both are unchanged", async () => {
     const queries: string[] = [];
     const beforeStudent = {
+      version: 1,
       status: "active",
       branch_id: branchId,
       first_name: "Алина",
@@ -329,6 +332,7 @@ describe("StudentMutationExecutor", () => {
     } as unknown as StudentFunnelService);
     const command: PreparedStudentUpdate = {
       studentId,
+      expectedVersion: 1,
       firstName: null,
       lastName: null,
       phone: null,
@@ -350,5 +354,115 @@ describe("StudentMutationExecutor", () => {
     expect(
       queries.some((sql) => sql.includes("student_status_history")),
     ).toBe(false);
+    expect(queries.find((sql) => sql.includes("with target as"))).toContain(
+      "jsonb_strip_nulls",
+    );
+  });
+
+  it("rejects a stale autosave before changing the student profile", async () => {
+    const query = jest.fn(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes("for update of s")) {
+        return {
+          rows: [
+            {
+              version: 5,
+              status: "active",
+              branch_id: branchId,
+              first_name: "Анна",
+              last_name: "Иванова",
+              phone: "+79990000000",
+              email: "anna@example.com",
+              custom_data: {},
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected SQL after stale snapshot: ${sql}`);
+    });
+    const client = { query } as unknown as PoolClient;
+    const database = {
+      transaction: jest.fn(async <T>(work: (value: PoolClient) => Promise<T>) =>
+        work(client),
+      ),
+    } as unknown as DatabaseService;
+    const executor = new StudentMutationExecutor(database, {
+      assertCreateStatus: jest.fn(),
+      assertTransition: jest.fn(),
+    } as unknown as StudentFunnelService);
+    const command: PreparedStudentUpdate = {
+      studentId,
+      expectedVersion: 4,
+      firstName: "Мария",
+      lastName: null,
+      phone: null,
+      email: null,
+      status: null,
+      customDataPatch: {},
+      requestedResponsibleId: undefined,
+      branchId: null,
+      clearResponsible: false,
+      sourceId: null,
+    };
+
+    await expect(executor.update(command)).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "CLIENT_VERSION_CONFLICT",
+        entityType: "student",
+        expectedVersion: 4,
+        currentVersion: 5,
+      }),
+    });
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps released clients compatible when expectedVersion is omitted", async () => {
+    const beforeStudent = {
+      version: 5,
+      status: "active",
+      branch_id: branchId,
+      first_name: "Анна",
+      last_name: "Иванова",
+      phone: "+79990000000",
+      email: "anna@example.com",
+      custom_data: {},
+    };
+    const updatedStudent = { ...student, version: 6, status: "active" };
+    const query = jest.fn(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes("for update of s")) return { rows: [beforeStudent] };
+      if (sql.includes("with target as")) return { rows: [updatedStudent] };
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    const client = { query } as unknown as PoolClient;
+    const database = {
+      transaction: jest.fn(async <T>(work: (value: PoolClient) => Promise<T>) =>
+        work(client),
+      ),
+    } as unknown as DatabaseService;
+    const executor = new StudentMutationExecutor(database, {
+      assertCreateStatus: jest.fn(),
+      assertTransition: jest.fn(),
+    } as unknown as StudentFunnelService);
+    const command: PreparedStudentUpdate = {
+      studentId,
+      firstName: "Мария",
+      lastName: null,
+      phone: null,
+      email: null,
+      status: null,
+      customDataPatch: {},
+      requestedResponsibleId: undefined,
+      branchId: null,
+      clearResponsible: false,
+      sourceId: null,
+    };
+
+    await expect(executor.update(command)).resolves.toEqual({
+      beforeStudent,
+      student: updatedStudent,
+    });
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(String(query.mock.calls[1]?.[0])).toContain("version = s.version + 1");
   });
 });

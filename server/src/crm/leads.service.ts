@@ -6,7 +6,7 @@ import {
 } from "./clients/client-write.validator";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { LeadBoardQuery } from "./dto/lead-board.query";
-import { UpsertLeadDto } from "./dto/upsert-lead.dto";
+import { UpdateLeadDto, UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { LeadBoardService } from "./lead-board.service";
 import { LeadCardService } from "./lead-card.service";
 import { LeadCommandService } from "./lead-command.service";
@@ -63,7 +63,7 @@ export class LeadsService {
   updateLead(
     actor: ActorContext,
     leadId: string,
-    dto: UpsertLeadDto,
+    dto: UpdateLeadDto,
     customFields?: ValidatedCustomFields,
   ) {
     return this.commands.update(actor, leadId, dto, customFields);

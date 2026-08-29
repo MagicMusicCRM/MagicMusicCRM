@@ -25,6 +25,7 @@ class PreferredScheduleEditor extends StatefulWidget {
     this.showPeriod = true,
     this.decisionCatalogs = const {},
     this.requireFinancialDecision = false,
+    this.canManageTeacherCompensation = false,
     super.key,
   });
 
@@ -43,6 +44,7 @@ class PreferredScheduleEditor extends StatefulWidget {
   final bool showPeriod;
   final Map<String, LessonDecisionCatalog> decisionCatalogs;
   final bool requireFinancialDecision;
+  final bool canManageTeacherCompensation;
 
   @override
   State<PreferredScheduleEditor> createState() =>
@@ -77,6 +79,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       allowOpenEnded: widget.allowOpenEnded,
       decisionCatalogs: widget.decisionCatalogs,
       requireFinancialDecision: widget.requireFinancialDecision,
+      canManageTeacherCompensation: widget.canManageTeacherCompensation,
     )..initialize();
     _controller.addListener(_refresh);
     _notesController = TextEditingController(
@@ -128,13 +131,14 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
 
   Future<void> _pickDate({required bool start}) async {
     final state = _controller.state;
+    final today = DateUtils.dateOnly(DateTime.now());
     final picked = await showDatePicker(
       context: context,
       initialDate: start ? state.validFrom : state.validUntil,
-      firstDate: start ? DateUtils.dateOnly(DateTime.now()) : state.validFrom,
-      lastDate: DateUtils.dateOnly(
-        DateTime.now().add(const Duration(days: 730)),
-      ),
+      firstDate: start
+          ? (widget.planMode ? DateTime(1900) : today)
+          : state.validFrom,
+      lastDate: DateUtils.dateOnly(today.add(const Duration(days: 730))),
     );
     if (picked == null || !mounted) return;
     _changed(
@@ -178,6 +182,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       isEdit: _controller.isEdit,
       planMode: widget.planMode,
       requireFinancialDecision: widget.requireFinancialDecision,
+      canManageTeacherCompensation: widget.canManageTeacherCompensation,
       requireSubscription: widget.requireSubscription,
       allowOpenEnded: widget.allowOpenEnded,
       showPeriod: widget.showPeriod,

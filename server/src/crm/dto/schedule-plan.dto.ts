@@ -99,6 +99,16 @@ export class CreateSchedulePlanDto {
   @IsDateString()
   activeUntil?: string | null;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(16_384)
+  previewToken?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  confirmHistorical?: boolean;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
@@ -131,6 +141,16 @@ export class UpdateSchedulePlanDto {
   @IsOptional()
   @IsDateString()
   activeUntil?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16_384)
+  previewToken?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  confirmHistorical?: boolean;
 
   @IsOptional()
   @IsUUID()

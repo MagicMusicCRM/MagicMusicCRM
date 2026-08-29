@@ -2,6 +2,8 @@ import 'dart:async';
 // ignore_for_file: annotate_overrides
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
@@ -95,6 +97,11 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   bool _saving = false;
   LessonEditorValidation _valid = const LessonEditorValidation.valid();
   LessonScheduleAnalysis? _conflicts;
+  bool get _canManageTeacherCompensation {
+    final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
+    return snapshot != null && crmCanManageTeacherRates(snapshot);
+  }
+
   void initState() {
     super.initState();
     _session = const LessonEditorInitialMapper().fromSource(widget);
@@ -139,7 +146,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     });
   }
 
-  void _updateDraft(LessonEditorDraft value, {bool scheduleChanged = false}) {
+  void _update(LessonEditorDraft value, {bool scheduleChanged = false}) {
     setState(() {
       _draft = value;
       if (!scheduleChanged) return;
@@ -153,6 +160,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     (_conflicts, _loadState.$1, _saving, _scheduleState.$1),
     (_valid.message, _loadState.$2, _scheduleState.$2),
     actions: this,
+    canManageTeacherCompensation: _canManageTeacherCompensation,
     pageMode: widget.pageMode,
     title: lessonEditorTitle(_session, widget.leadId != null),
     scrollController: _scroll,
@@ -160,17 +168,17 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   );
   searchClients(String q) => _data.searchClients(q);
   void selectClient(LessonClientRef? value) => unawaited(
-    _requestPatch(
+    _patch(
       _data.selectClient(value, draft: _draft, references: _refs),
       'Не удалось выбрать клиента.',
     ),
   );
   void edit(LessonEditorEdit edit) {
     final change = _policy.applyEdit(_draft, _refs, edit);
-    _updateDraft(change.draft, scheduleChanged: change.scheduleChanged);
+    _update(change.draft, scheduleChanged: change.scheduleChanged);
     if (change.branchToLoad case final branchId?) {
       unawaited(
-        _requestPatch(
+        _patch(
           _data.loadBranch(branchId, draft: _draft, references: _refs),
           'Не удалось загрузить данные филиала.',
         ),
@@ -186,7 +194,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       lastDate: request.lastDate,
     );
     if (!mounted || date == null) return;
-    _updateDraft(_draft.withDate(date), scheduleChanged: true);
+    _update(_draft.withDate(date), scheduleChanged: true);
   }
 
   Future<void> selectTime(LessonTimePickerRequest request) async {
@@ -196,15 +204,11 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       builder: lessonTimePicker24HourBuilder,
     );
     if (!mounted || time == null) return;
-    _updateDraft(
-      _draft.withTime(time.hour, time.minute),
-      scheduleChanged: true,
-    );
+    _update(_draft.withTime(time.hour, time.minute), scheduleChanged: true);
   }
 
   Future<void> applySuggestion(ScheduleSuggestion value) async {
-    final draft = _schedule.applySuggestion(_draft, value);
-    _updateDraft(draft, scheduleChanged: true);
+    _update(_schedule.applySuggestion(_draft, value), scheduleChanged: true);
     await analyzeSchedule();
   }
 
@@ -214,15 +218,12 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     }
   }
 
-  Future<void> _requestPatch(
-    Future<LessonEditorLoadPatch?> request,
-    String fallback,
-  ) async {
+  Future<void> _patch(Future<LessonEditorLoadPatch?> load, String text) async {
     try {
-      final patch = await request;
+      final patch = await load;
       if (mounted && patch != null) _acceptPatch(patch);
     } catch (error) {
-      if (mounted) _showError(error, fallback);
+      if (mounted) _showError(error, text);
     }
   }
 
@@ -247,6 +248,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       _draft,
       _refs,
       () => _schedule.requestFor(session: _session, draft: _draft),
+      canManageTeacherCompensation: _canManageTeacherCompensation,
     );
     if (!mounted) return;
     try {
@@ -259,17 +261,17 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
           final analysis = LessonScheduleAnalysis.fromViolations(violations);
           setState(() => _conflicts = analysis);
           await _showViolations(violations);
-        case LessonSaveDecision(:final request):
+        case LessonSaveDecision(request: final edit):
           final changed = await showLessonDecisionFlow(
             context,
             crm: ref.read(magicCrmServiceProvider),
-            operation: request.operation,
-            lesson: request.lesson,
-            successor: request.successor,
-            initialSettlementTypeKey: request.initialSettlementTypeKey,
-            initialCompensationRuleKey: request.initialCompensationRuleKey,
-            initialCompensationValueMinor:
-                request.initialCompensationValueMinor,
+            operation: edit.operation,
+            lesson: edit.lesson,
+            successor: edit.successor,
+            initialSettlementTypeKey: edit.initialSettlementTypeKey,
+            initialCompensationRuleKey: edit.initialCompensationRuleKey,
+            initialCompensationValueMinor: edit.initialCompensationValueMinor,
+            canManageTeacherCompensation: _canManageTeacherCompensation,
           );
           if (changed == true && mounted) {
             _finishSave('Изменения занятия применены');
@@ -309,9 +311,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _showError(Object error, String fallback) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(lessonEditorErrorMessage(error, fallback))),
-    );
-  }
+  void _showError(Object error, String fallback) =>
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(lessonEditorErrorMessage(error, fallback))),
+      );
 }

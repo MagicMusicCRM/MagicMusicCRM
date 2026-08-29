@@ -5,6 +5,7 @@ import { StudentRow } from "./student-read";
 
 export interface LeadRow {
   id: string;
+  version?: string | number;
   status_id: string | null;
   status_key?: string | null;
   status_name: string | null;
@@ -95,6 +96,7 @@ export function toLeadDto(row: LeadRow) {
   const age = resolveAge(row.custom_data);
   return {
     id: row.id,
+    version: Number(row.version ?? 1),
     statusId: row.status_id,
     statusKey: row.status_key,
     statusName: row.status_name,
@@ -171,6 +173,7 @@ export function toCommentDto(row: CommentRow) {
 export function toStudentDto(row: StudentRow) {
   return {
     id: row.id,
+    version: Number(row.version ?? 1),
     leadId: row.lead_id,
     status: row.status,
     customData: row.custom_data ?? {},

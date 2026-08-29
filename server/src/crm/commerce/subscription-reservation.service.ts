@@ -61,6 +61,7 @@ export class SubscriptionReservationService {
       lessonId: string;
       clientType: "lead" | "student";
       clientId: string;
+      payerStudentId?: string;
       chargeType: "subscription" | "personal_account" | "none";
       subscriptionId: string | null;
       units: number;
@@ -81,8 +82,13 @@ export class SubscriptionReservationService {
       input.subscriptionId,
     );
     if (!subscription || subscription.status !== "active"
-      || subscription.student_id !== input.clientId
-      || !(await this.coversLesson(client, input.subscriptionId, input.lessonId))) {
+      || subscription.student_id !== (input.payerStudentId ?? input.clientId)
+      || !(await this.coversLesson(
+        client,
+        input.subscriptionId,
+        input.lessonId,
+        input.clientId,
+      ))) {
       this.capacityViolation(input.subscriptionId, input.units, "0");
     }
 
@@ -344,17 +350,39 @@ export class SubscriptionReservationService {
         subscription_id: string | null;
       }>(
         `
-          select
-            fact.client_id as student_id,
+          select distinct
+            target.student_id,
             fact.subscription_id
           from app.lesson_client_charge_facts_effective fact
-          where fact.lesson_id = $1 and fact.client_type = 'student'
+          left join app.subscriptions subscription
+            on subscription.id = fact.subscription_id
+          cross join lateral (
+            values (fact.client_id), (subscription.student_id)
+          ) as target(student_id)
+          where fact.lesson_id = $1
+            and fact.client_type = 'student'
+            and target.student_id is not null
         `,
         [lessonId],
       );
-      const userIds = Array.from(new Set((await Promise.all(
-        result.rows.map((row) => this.clientUserIds(row.student_id)),
-      )).flat()));
+      const userIdsByStudent = new Map(
+        await Promise.all(
+          Array.from(new Set(result.rows.map((row) => row.student_id))).map(
+            async (studentId) => [
+              studentId,
+              await this.clientUserIds(studentId),
+            ] as const,
+          ),
+        ),
+      );
+      const affectedUserIds = (
+        rows: Array<{ student_id: string }>,
+      ): string[] => Array.from(
+        new Set(
+          rows.flatMap((row) => userIdsByStudent.get(row.student_id) ?? []),
+        ),
+      );
+      const userIds = affectedUserIds(result.rows);
       this.realtime.emitCrmChanged({
         entity: "lesson",
         action: "updated",
@@ -364,11 +392,14 @@ export class SubscriptionReservationService {
       for (const subscriptionId of new Set(
         result.rows.map((row) => row.subscription_id).filter(Boolean),
       )) {
+        const subscriptionUserIds = affectedUserIds(
+          result.rows.filter((row) => row.subscription_id === subscriptionId),
+        );
         this.realtime.emitCrmChanged({
           entity: "subscription",
           action: "updated",
           id: subscriptionId,
-          affectedUserIds: userIds,
+          affectedUserIds: subscriptionUserIds,
         });
       }
       this.realtime.emitFinanceChanged(userIds);
@@ -406,15 +437,27 @@ export class SubscriptionReservationService {
     client: PoolClient,
     subscriptionId: string,
     lessonId: string,
+    recipientStudentId: string,
   ): Promise<boolean> {
     const result = await client.query<{ covered: boolean }>(
       `select exists (
          select 1
          from app.subscriptions subscription
          join app.lessons lesson on lesson.id = $2
+         join app.students owner
+           on owner.id = subscription.student_id
+          and owner.deleted_at is null
+         join app.students recipient
+           on recipient.id = $3
+          and recipient.deleted_at is null
          left join app.schedule_series series on series.id = lesson.series_id
          left join app.branches branch on branch.id = lesson.branch_id
+         left join app.subscription_packages package
+           on package.id = subscription.package_id
          where subscription.id = $1
+           and owner.branch_id = lesson.branch_id
+           and recipient.branch_id = lesson.branch_id
+           and (package.branch_id is null or package.branch_id = lesson.branch_id)
            and (subscription.starts_at is null or subscription.starts_at <=
              timezone(coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
                lesson.scheduled_at)::date)
@@ -422,7 +465,7 @@ export class SubscriptionReservationService {
              timezone(coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
                lesson.scheduled_at)::date)
        ) as covered`,
-      [subscriptionId, lessonId],
+      [subscriptionId, lessonId, recipientStudentId],
     );
     return result.rows[0]?.covered === true;
   }

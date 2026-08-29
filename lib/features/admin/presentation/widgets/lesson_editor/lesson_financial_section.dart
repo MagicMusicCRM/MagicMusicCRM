@@ -16,6 +16,7 @@ class LessonFinancialSectionModel {
     required this.isSaving,
     required this.requiresCompensationValue,
     required this.compensationNeedsReason,
+    required this.canManageTeacherCompensation,
     this.allowsNoFunding = false,
   });
 
@@ -25,6 +26,7 @@ class LessonFinancialSectionModel {
   final bool isSaving;
   final bool requiresCompensationValue;
   final bool compensationNeedsReason;
+  final bool canManageTeacherCompensation;
   final bool allowsNoFunding;
 }
 
@@ -48,7 +50,8 @@ class LessonFinancialSection extends StatelessWidget {
         _CompletionControl(model: model, actions: actions),
         const SizedBox(height: 16),
         _DecisionFields(model: model, actions: actions),
-        _CompensationOverride(model: model, actions: actions),
+        if (model.canManageTeacherCompensation)
+          _CompensationOverride(model: model, actions: actions),
         const SizedBox(height: 16),
         _FundingField(model: model, actions: actions),
         _SubscriptionField(model: model, actions: actions),
@@ -153,25 +156,27 @@ class _DecisionFields extends StatelessWidget {
   Widget build(BuildContext context) {
     final draft = model.draft;
     final catalog = model.references.catalog;
-    return _ResponsivePair(
-      first: DropdownButtonFormField<String>(
-        menuMaxHeight: 256,
-        key: const ValueKey('lesson-settlement-type-field'),
-        initialValue: draft.settlementTypeKey,
-        decoration: const InputDecoration(
-          labelText: 'Тип списания *',
-          helperText: 'Выбирается до назначения занятия',
-        ),
-        items: [
-          for (final item in catalog?.settlementTypes ?? const [])
-            DropdownMenuItem(value: item.key, child: Text(item.label)),
-        ],
-        onChanged: model.session.isEdit
-            ? null
-            : (value) => actions.edit(
-                LessonReferenceEdit(LessonReferenceTarget.settlement, value),
-              ),
+    final settlement = DropdownButtonFormField<String>(
+      menuMaxHeight: 256,
+      key: const ValueKey('lesson-settlement-type-field'),
+      initialValue: draft.settlementTypeKey,
+      decoration: const InputDecoration(
+        labelText: 'Тип списания *',
+        helperText: 'Выбирается до назначения занятия',
       ),
+      items: [
+        for (final item in catalog?.settlementTypes ?? const [])
+          DropdownMenuItem(value: item.key, child: Text(item.label)),
+      ],
+      onChanged: model.session.isEdit
+          ? null
+          : (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.settlement, value),
+            ),
+    );
+    if (!model.canManageTeacherCompensation) return settlement;
+    return _ResponsivePair(
+      first: settlement,
       second: DropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: const ValueKey('lesson-compensation-rule-field'),

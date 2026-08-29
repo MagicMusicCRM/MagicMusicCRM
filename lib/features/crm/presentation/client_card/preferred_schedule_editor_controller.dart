@@ -21,6 +21,7 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     this.allowOpenEnded = false,
     this.decisionCatalogs = const {},
     this.requireFinancialDecision = false,
+    this.canManageTeacherCompensation = false,
   });
 
   final List<Map<String, dynamic>> branches;
@@ -36,6 +37,7 @@ class PreferredScheduleEditorController extends ChangeNotifier {
   final bool allowOpenEnded;
   final Map<String, LessonDecisionCatalog> decisionCatalogs;
   final bool requireFinancialDecision;
+  final bool canManageTeacherCompensation;
 
   late PreferredScheduleEditorState _state;
 
@@ -60,7 +62,7 @@ class PreferredScheduleEditorController extends ChangeNotifier {
         _date(series?['valid_from']) ??
         initialDraft?.validFrom ??
         today.add(const Duration(days: 1));
-    final validFrom = isEdit && requestedStart.isBefore(today)
+    final validFrom = isEdit && !planMode && requestedStart.isBefore(today)
         ? today
         : requestedStart;
     var validUntil =
@@ -208,8 +210,11 @@ class PreferredScheduleEditorController extends ChangeNotifier {
       _update(_state.copyWith(subscriptionId: value));
   void selectSettlementType(String? value) =>
       _update(_state.copyWith(settlementTypeKey: value));
-  void selectTeacherCompensationRule(String? value) =>
-      _update(_state.copyWith(teacherCompensationRuleKey: value));
+  void selectTeacherCompensationRule(String? value) {
+    if (!canManageTeacherCompensation) return;
+    _update(_state.copyWith(teacherCompensationRuleKey: value));
+  }
+
   void setOpenEnded(bool value) => _update(_state.copyWith(openEnded: value));
 
   void setValidFrom(DateTime value) {
@@ -272,8 +277,9 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     if (_state.settlementTypeKey == null || _state.settlementTypeKey!.isEmpty) {
       return 'Выберите тип списания.';
     }
-    if (_state.teacherCompensationRuleKey == null ||
-        _state.teacherCompensationRuleKey!.isEmpty) {
+    if (canManageTeacherCompensation &&
+        (_state.teacherCompensationRuleKey == null ||
+            _state.teacherCompensationRuleKey!.isEmpty)) {
       return 'Выберите оплату преподавателю.';
     }
     return null;

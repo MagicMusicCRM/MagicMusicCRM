@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/preferred_schedule_editor.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 
 const _branches = [
   {'id': 'branch-a', 'name': 'Сокол'},
@@ -109,6 +110,86 @@ void main() {
     expect(result!.weekdays, contains(DateTime.monday));
     expect(result!.lessonsPerDay, 2);
   });
+
+  testWidgets('plan editor opens the date picker for a historical start', (
+    tester,
+  ) async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final historicalStart = today.subtract(const Duration(days: 30));
+    await _openEditor(
+      tester,
+      width: 840,
+      editor: PreferredScheduleEditor(
+        branches: _branches,
+        teachers: _teachers,
+        rooms: _rooms,
+        defaultBranchId: 'branch-a',
+        planMode: true,
+        initialTitle: 'Исторический период',
+        initialDraft: PreferredScheduleDraft(
+          branchId: 'branch-a',
+          weekdays: const {DateTime.monday},
+          beginTime: '10:00',
+          durationMinutes: 60,
+          lessonsPerDay: 1,
+          validFrom: historicalStart,
+          validUntil: today.add(const Duration(days: 30)),
+          teacherId: 'teacher-a',
+          roomId: 'room-a',
+          notes: '',
+        ),
+      ),
+    );
+
+    final startField = find.byKey(const ValueKey('preferred-schedule-start'));
+    await tester.ensureVisible(startField);
+    await tester.tap(startField);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('operational plan editor hides teacher compensation control', (
+    tester,
+  ) async {
+    await _openEditor(
+      tester,
+      width: 840,
+      editor: const PreferredScheduleEditor(
+        branches: _branches,
+        teachers: _teachers,
+        rooms: _rooms,
+        defaultBranchId: 'branch-a',
+        planMode: true,
+        initialTitle: 'План',
+        canManageTeacherCompensation: false,
+        decisionCatalogs: {
+          'branch-a': LessonDecisionCatalog(
+            settlementTypes: [
+              LessonDecisionCatalogItem(key: 'visit', label: 'Визит', order: 0),
+            ],
+            compensationRules: [
+              LessonDecisionCatalogItem(
+                key: 'hourly',
+                label: 'Почасовая',
+                order: 0,
+              ),
+            ],
+          ),
+        },
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('schedule-plan-settlement-type')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('schedule-plan-compensation-rule')),
+      findsNothing,
+    );
+  });
 }
 
 Future<void> _choose(WidgetTester tester, Key field, String option) async {
@@ -127,6 +208,7 @@ Future<void> _openEditor(
   WidgetTester tester, {
   required double width,
   ValueChanged<PreferredScheduleDraft?>? onResult,
+  PreferredScheduleEditor? editor,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width, 900);
@@ -141,12 +223,14 @@ Future<void> _openEditor(
                 final result = await showMagicSheet<PreferredScheduleDraft>(
                   context,
                   title: 'Добавить предпочтение',
-                  builder: (_) => const PreferredScheduleEditor(
-                    branches: _branches,
-                    teachers: _teachers,
-                    rooms: _rooms,
-                    defaultBranchId: 'branch-a',
-                  ),
+                  builder: (_) =>
+                      editor ??
+                      const PreferredScheduleEditor(
+                        branches: _branches,
+                        teachers: _teachers,
+                        rooms: _rooms,
+                        defaultBranchId: 'branch-a',
+                      ),
                 );
                 onResult?.call(result);
               },

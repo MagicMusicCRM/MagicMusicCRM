@@ -970,6 +970,7 @@ void main() {
       final student = await service.getStudent('student-a');
       final updated = await service.updateStudent(
         'student-a',
+        expectedVersion: 1,
         firstName: 'Анна',
         lastName: 'Иванова',
         phone: '+79990000000',
@@ -2076,6 +2077,7 @@ void main() {
       );
       final updated = await service.updateLead(
         'lead-a',
+        expectedVersion: 1,
         lastName: 'Сидоров',
         statusId: 'status-b',
         notes: 'Важно',
@@ -2109,11 +2111,25 @@ void main() {
         ]);
         final service = MagicCrmService(_client(adapter));
 
-        await service.updateLead('lead-a', clearAssignedTo: true);
-        await service.updateStudent('student-a', clearResponsible: true);
+        await service.updateLead(
+          'lead-a',
+          expectedVersion: 1,
+          clearAssignedTo: true,
+        );
+        await service.updateStudent(
+          'student-a',
+          expectedVersion: 1,
+          clearResponsible: true,
+        );
 
-        expect(adapter.requests[0].body, {'clearAssignedTo': true});
-        expect(adapter.requests[1].body, {'clearResponsible': true});
+        expect(adapter.requests[0].body, {
+          'expectedVersion': 1,
+          'clearAssignedTo': true,
+        });
+        expect(adapter.requests[1].body, {
+          'expectedVersion': 1,
+          'clearResponsible': true,
+        });
       },
     );
 
@@ -3038,29 +3054,6 @@ void main() {
     );
 
     test(
-      'updateScheduleSeries sends explicit null to clear validUntil',
-      () async {
-        final adapter = _FakeAdapter([
-          _FakeResponse(
-            path: '/crm/schedule-series/series-a',
-            statusCode: 200,
-            body: {'id': 'series-b'},
-          ),
-        ]);
-        final service = MagicCrmService(_client(adapter));
-
-        await service.updateScheduleSeries(
-          'series-a',
-          clearValidUntil: true,
-          effectiveFrom: '2026-08-01',
-        );
-
-        expect(adapter.requests.single.body.containsKey('validUntil'), true);
-        expect(adapter.requests.single.body['validUntil'], isNull);
-      },
-    );
-
-    test(
       'issueLeadSubscription converts only through the package endpoint',
       () async {
         final adapter = _FakeAdapter([
@@ -3117,72 +3110,6 @@ void main() {
         'lessonId': 'trial-a',
       });
     });
-
-    test('createScheduleSeries sends selected room branch', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/schedule-series',
-          statusCode: 201,
-          body: {'id': 'series-a'},
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
-
-      await service.createScheduleSeries(
-        studentId: 'student-a',
-        teacherId: 'teacher-a',
-        roomId: 'room-a',
-        branchId: 'branch-a',
-        weekday: DateTime.tuesday,
-        beginTime: '12:00',
-        validFrom: '2026-07-21',
-      );
-
-      expect(adapter.requests.single.body['branchId'], 'branch-a');
-      expect(adapter.requests.single.body['weekday'], DateTime.tuesday);
-      expect(adapter.requests.single.body['beginTime'], '12:00');
-    });
-
-    test(
-      'client preferred schedule uses typed clientRef and finite range',
-      () async {
-        final adapter = _FakeAdapter([
-          _FakeResponse(
-            path: '/crm/schedule-series',
-            statusCode: 201,
-            body: {'id': 'series-a'},
-          ),
-        ]);
-        final service = MagicCrmService(_client(adapter));
-
-        await service.createScheduleSeries(
-          clientType: 'lead',
-          clientId: 'lead-a',
-          teacherId: 'teacher-a',
-          roomId: 'room-a',
-          branchId: 'branch-a',
-          weekday: DateTime.monday,
-          beginTime: '15:00',
-          durationMinutes: 60,
-          validFrom: '2026-08-10',
-          validUntil: '2026-11-10',
-          notes: 'После школы',
-        );
-
-        expect(adapter.requests.single.body, {
-          'weekday': DateTime.monday,
-          'beginTime': '15:00',
-          'validFrom': '2026-08-10',
-          'clientRef': {'type': 'lead', 'id': 'lead-a'},
-          'teacherId': 'teacher-a',
-          'roomId': 'room-a',
-          'branchId': 'branch-a',
-          'durationMinutes': 60,
-          'validUntil': '2026-11-10',
-          'notes': 'После школы',
-        });
-      },
-    );
 
     test(
       'group schedule plan preview, create and update keep participant contract',

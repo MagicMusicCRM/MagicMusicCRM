@@ -138,6 +138,13 @@ class LessonDecisionParticipant {
   final String name;
 }
 
+class LessonDecisionSubscription {
+  const LessonDecisionSubscription({required this.id, required this.label});
+
+  final String id;
+  final String label;
+}
+
 class LessonDecisionRequest {
   const LessonDecisionRequest({
     required this.operation,
@@ -165,10 +172,14 @@ abstract interface class LessonDecisionFormLifecycle {
   String? get initialCompensationValueMinor;
   bool get isGroupLesson;
   List<LessonDecisionParticipant> get groupParticipants;
+  List<LessonDecisionParticipant> get settlementClients;
   Map<String, String> get participantNames;
   bool get isCompletedReschedule;
+  bool get canManageTeacherCompensation;
 
   Future<LessonDecisionCatalog> loadCatalog();
+  Future<List<LessonDecisionParticipant>> searchPayers(String query);
+  Future<List<LessonDecisionSubscription>> loadSubscriptions(String payerId);
 
   Future<LessonDecisionPreview> preview({
     required String reason,

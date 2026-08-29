@@ -14,6 +14,7 @@ extension _ClientCardLoaders on _ClientCardState {
   }) async {
     final id = studentId ?? _studentId;
     if (id.isEmpty) return;
+    final requestEditRevision = _editRevision;
     if (mounted) {
       _emitState(() {
         _loadingStudent = true;
@@ -56,11 +57,21 @@ extension _ClientCardLoaders on _ClientCardState {
           fallback: 'Не удалось загрузить воронку.',
         );
       }
+      final applyIdentity = !_edited && requestEditRevision == _editRevision;
       _emitState(() {
-        _student = student;
+        if (applyIdentity) {
+          _student = student;
+        } else if (_student != null) {
+          final incomingVersion = _clientVersion(student['version']);
+          final currentVersion = _clientVersion(_student?['version']);
+          if (incomingVersion != null &&
+              (currentVersion == null || incomingVersion > currentVersion)) {
+            _student!['version'] = incomingVersion;
+          }
+        }
         _studentFunnel = funnel;
         _studentFunnelError = funnelError;
-        _editorEpoch++;
+        if (applyIdentity) _editorEpoch++;
         // Never merge finance keys from the broad base-card response. Teacher
         // therefore performs zero commerce requests and still cannot surface
         // stale/accidental balance, payment or subscription fields.
@@ -85,8 +96,11 @@ extension _ClientCardLoaders on _ClientCardState {
         );
         _loadingStudent = false;
       });
-      _syncWorkspaceTitle();
-      then?.call();
+      if (applyIdentity) {
+        _syncWorkspaceTitle();
+        then?.call();
+      }
+      _tryApplyRestoredWorkspaceDraft();
     } catch (e) {
       debugPrint('Error loading student card: $e');
       if (mounted) {
@@ -129,12 +143,14 @@ extension _ClientCardLoaders on _ClientCardState {
       if (mounted) _emitState(() => _loadingCard = false);
       return;
     }
+    final requestEditRevision = _editRevision;
     try {
       final card = await ref.read(magicCrmServiceProvider).getLeadCard(id);
       if (!mounted) return;
+      final applyIdentity = !_edited && requestEditRevision == _editRevision;
       _emitState(() {
-        _leadCard = card;
-        if (card['lead'] is Map<String, dynamic>) {
+        if (applyIdentity) _leadCard = card;
+        if (applyIdentity && card['lead'] is Map<String, dynamic>) {
           _leadData = {..._leadData, ...(card['lead'] as Map<String, dynamic>)};
           _leadData['custom_data'] = {
             ...Map<String, dynamic>.from(
@@ -148,11 +164,22 @@ extension _ClientCardLoaders on _ClientCardState {
           // After merging the lead record, `_leadData['id']` is the lead id —
           // keep `_resolvedLeadId` in sync so lead-side ops target it.
           _resolvedLeadId = _leadData['id']?.toString() ?? id;
+        } else if (card['lead'] is Map<String, dynamic>) {
+          final lead = card['lead'] as Map<String, dynamic>;
+          final incomingVersion = _clientVersion(lead['version']);
+          final currentVersion = _clientVersion(_leadData['version']);
+          if (incomingVersion != null &&
+              (currentVersion == null || incomingVersion > currentVersion)) {
+            _leadData['version'] = incomingVersion;
+          }
         }
         _loadingCard = false;
       });
-      _syncWorkspaceTitle();
-      then?.call();
+      if (applyIdentity) {
+        _syncWorkspaceTitle();
+        then?.call();
+      }
+      _tryApplyRestoredWorkspaceDraft();
     } catch (e) {
       debugPrint('Lead card load failed: $e');
       if (mounted) _emitState(() => _loadingCard = false);

@@ -269,6 +269,8 @@ describe("ClientLinkingService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
 
     const insertSql = String(query.mock.calls[2][0]);
+    expect(insertSql).toContain("for update");
+    expect(insertSql).toContain("version = target.version + 1");
     expect(insertSql).toContain("insert into app.user_crm_links");
     expect(insertSql).toContain(
       "on conflict (entity_type, entity_id) where deleted_at is null",

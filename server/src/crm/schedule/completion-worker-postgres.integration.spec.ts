@@ -63,10 +63,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       emitFinanceChanged: jest.fn(),
     } as unknown as RealtimeBus);
     completion = new LessonCompletionService(
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       repository,
       settlement,
       reservations,
@@ -74,16 +71,14 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
     );
     correction = new LessonSettlementCorrectionService(
       database,
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       new CrmPolicy(),
       settlement,
       new SubscriptionPreviewTokenService({
-        get: (key: string) => key === "COMMERCE_PREVIEW_SECRET"
-          ? "completion-correction-preview-secret-32-bytes"
-          : "",
+        get: (key: string) =>
+          key === "COMMERCE_PREVIEW_SECRET"
+            ? "completion-correction-preview-secret-32-bytes"
+            : "",
       } as unknown as ConfigService),
       reservations,
     );
@@ -117,11 +112,13 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
         client.release();
       }
 
-      await expect(repository.claimDue("legacy-safe", {
-        limit: 1,
-        leaseSeconds: 60,
-        maxAttempts: 5,
-      })).resolves.toHaveLength(0);
+      await expect(
+        repository.claimDue("legacy-safe", {
+          limit: 1,
+          leaseSeconds: 60,
+          maxAttempts: 5,
+        }),
+      ).resolves.toHaveLength(0);
       await expect(repository.metrics()).resolves.toMatchObject({ due: 0 });
     } finally {
       await cleanupFixture(pool, fixture);
@@ -146,9 +143,9 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
         status: "completed",
       });
       expect(Number(evidence.lesson.version)).toBe(2);
-      expect(Number(evidence.lesson.completion_latency_seconds)).toBeLessThanOrEqual(
-        60,
-      );
+      expect(
+        Number(evidence.lesson.completion_latency_seconds),
+      ).toBeLessThanOrEqual(60);
       expect(evidence.counts).toEqual({
         transitions: 1,
         client_facts: 1,
@@ -185,16 +182,10 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
   });
 
   it("waits for due time and lets the polling worker settle exactly once", async () => {
-    const fixture = await createFixture(
-      pool,
-      database,
-      settlement,
-      "valid",
-      {
-        chargeType: "subscription",
-        scheduledEndOffsetSeconds: 2.5,
-      },
-    );
+    const fixture = await createFixture(pool, database, settlement, "valid", {
+      chargeType: "subscription",
+      scheduledEndOffsetSeconds: 2.5,
+    });
     const previousEnabled = process.env.LESSON_COMPLETION_WORKER_ENABLED;
     const previousPollMs = process.env.LESSON_COMPLETION_WORKER_POLL_MS;
     const worker = new LessonCompletionWorker(repository, completion);
@@ -287,10 +278,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       );
     } finally {
       worker.onModuleDestroy();
-      restoreEnvironment(
-        "LESSON_COMPLETION_WORKER_ENABLED",
-        previousEnabled,
-      );
+      restoreEnvironment("LESSON_COMPLETION_WORKER_ENABLED", previousEnabled);
       restoreEnvironment("LESSON_COMPLETION_WORKER_POLL_MS", previousPollMs);
       await cleanupFixture(pool, fixture);
     }
@@ -347,9 +335,11 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
     );
     try {
       const worker = new LessonCompletionWorker(repository, completion);
-      await expect(worker.runOnce({
-        workerId: `trial-free-${scenario.chargeType}-${scenario.trial}`,
-      })).resolves.toMatchObject({ claimed: 1, completed: 1 });
+      await expect(
+        worker.runOnce({
+          workerId: `trial-free-${scenario.chargeType}-${scenario.trial}`,
+        }),
+      ).resolves.toMatchObject({ claimed: 1, completed: 1 });
 
       const persisted = await pool.query<{
         lesson_trial: boolean;
@@ -602,8 +592,9 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
     const actor = { userId: fixture.managerId, role: "manager" as const };
     try {
       const worker = new LessonCompletionWorker(repository, completion);
-      await expect(worker.runOnce({ workerId: "completion-before-correction" }))
-        .resolves.toMatchObject({ completed: 1 });
+      await expect(
+        worker.runOnce({ workerId: "completion-before-correction" }),
+      ).resolves.toMatchObject({ completed: 1 });
       const original = await pool.query<{
         client_id: string;
         client_amount_minor: string;
@@ -633,7 +624,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
         canConfirm: true,
         financialPreview: {
           clientFacts: [{ amountMinor: "0", units: "0.00" }],
-          teacherFact: { amountMinor: "0" },
+          teacherFact: { amountMinor: "90000" },
         },
       });
       await pool.query(`
@@ -652,15 +643,17 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
         for each row execute function app.test_reject_correction_teacher_fact();
       `);
       try {
-        await expect(correction.commit(
-          actor,
-          fixture.lessonId,
-          { ...dto, previewToken: preview.previewToken, confirm: true },
-          {
-            idempotencyKey: `settlement-correction-fault-${randomUUID()}`,
-            requestId: `settlement-correction-fault-${randomUUID()}`,
-          },
-        )).rejects.toThrow("injected correction write failure");
+        await expect(
+          correction.commit(
+            actor,
+            fixture.lessonId,
+            { ...dto, previewToken: preview.previewToken, confirm: true },
+            {
+              idempotencyKey: `settlement-correction-fault-${randomUUID()}`,
+              requestId: `settlement-correction-fault-${randomUUID()}`,
+            },
+          ),
+        ).rejects.toThrow("injected correction write failure");
       } finally {
         await pool.query(`
           drop trigger if exists test_reject_correction_teacher_fact
@@ -718,15 +711,16 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       );
       if (fulfilled.length !== 1) throw rejected[0]?.reason;
       expect(rejected).toHaveLength(1);
-      const winningMetadata = attempts[0]!.status === "fulfilled"
-        ? leftMetadata
-        : rightMetadata;
-      await expect(correction.commit(
-        actor,
-        fixture.lessonId,
-        { ...dto, previewToken: preview.previewToken, confirm: true },
-        winningMetadata,
-      )).resolves.toMatchObject({ version: 3, replayed: true });
+      const winningMetadata =
+        attempts[0]!.status === "fulfilled" ? leftMetadata : rightMetadata;
+      await expect(
+        correction.commit(
+          actor,
+          fixture.lessonId,
+          { ...dto, previewToken: preview.previewToken, confirm: true },
+          winningMetadata,
+        ),
+      ).resolves.toMatchObject({ version: 3, replayed: true });
 
       const facts = await pool.query<{
         raw_client: number;
@@ -762,7 +756,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
         effective_client: 1,
         effective_teacher: 1,
         effective_client_amount: "0",
-        effective_teacher_amount: "0",
+        effective_teacher_amount: "90000",
         corrections: 1,
         lesson_version: "3",
       });
@@ -787,6 +781,9 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
           expect.objectContaining({
             kind: "correction",
             reason: dto.reasonText,
+            decision: expect.objectContaining({
+              teacherCompensationRuleKey: "standard",
+            }),
             effective: true,
           }),
           expect.objectContaining({ kind: "planned", effective: false }),
@@ -819,8 +816,7 @@ async function createFixture(
   const trial = options.trial ?? false;
   const chargeType = options.chargeType ?? "personal_account";
   const settlementTypeKey = options.settlementTypeKey ?? "lesson";
-  const scheduledEndOffsetSeconds =
-    options.scheduledEndOffsetSeconds ?? -5;
+  const scheduledEndOffsetSeconds = options.scheduledEndOffsetSeconds ?? -5;
   const branch = await pool.query<{ id: string }>(
     `
       insert into app.branches (name, timezone_name)
@@ -846,9 +842,7 @@ async function createFixture(
     ],
   );
   const managerId = users.rows.find((row) => row.role === "manager")!.id;
-  const teacherUserId = users.rows.find(
-    (row) => row.role === "teacher",
-  )!.id;
+  const teacherUserId = users.rows.find((row) => row.role === "teacher")!.id;
   const clientUserId = users.rows.find((row) => row.role === "client")!.id;
   const profiles = await pool.query<{ id: string; user_id: string }>(
     `
@@ -933,14 +927,16 @@ async function createFixture(
         clientId: studentId,
         completionType: "standard.success",
         clientChargeType: chargeType,
-        clientChargeValue: chargeType === "subscription"
-          ? 1
-          : chargeType === "personal_account" ? 800 : 0,
+        clientChargeValue:
+          chargeType === "subscription"
+            ? 1
+            : chargeType === "personal_account"
+              ? 800
+              : 0,
         teacherCompensationType: "hourly",
         teacherCompensationValue: 900,
-        subscriptionId: chargeType === "subscription"
-          ? subscriptionId
-          : undefined,
+        subscriptionId:
+          chargeType === "subscription" ? subscriptionId : undefined,
         trial,
       });
       if (chargeType === "subscription") {
@@ -1259,10 +1255,9 @@ async function cleanupFixture(
     await client.query("delete from app.teachers where id = $1", [
       fixture.teacherId,
     ]);
-    await client.query(
-      "delete from app.profiles where id = any($1::uuid[])",
-      [fixture.profileIds],
-    );
+    await client.query("delete from app.profiles where id = any($1::uuid[])", [
+      fixture.profileIds,
+    ]);
     await client.query("delete from app.users where id = any($1::uuid[])", [
       fixture.userIds,
     ]);

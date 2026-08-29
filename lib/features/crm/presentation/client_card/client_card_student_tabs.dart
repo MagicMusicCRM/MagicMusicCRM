@@ -194,7 +194,7 @@ Widget _paymentsView(
               key: const Key('open-payment-form'),
               onPressed: onCreate,
               icon: const Icon(Icons.add_card_rounded),
-              label: const Text('Добавить оплату'),
+              label: const Text('Внести оплату'),
             ),
         ],
       ),

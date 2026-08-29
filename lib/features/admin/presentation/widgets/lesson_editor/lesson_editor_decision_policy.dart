@@ -333,6 +333,7 @@ class LessonEditorDecisionPolicy {
     required LessonEditorSession session,
     required LessonEditorDraft draft,
     required LessonEditorReferenceState references,
+    required bool canManageTeacherCompensation,
   }) {
     final client = draft.client;
     final rule = _catalogItemByKey(
@@ -345,8 +346,10 @@ class LessonEditorDecisionPolicy {
     );
     final financialDecision = <String, dynamic>{
       'settlementTypeKey': draft.settlementTypeKey,
-      'teacherCompensationRuleKey': draft.compensationRuleKey,
-      'teacherCompensationValueMinor': ?draft.compensationValueMinor,
+      if (canManageTeacherCompensation) ...{
+        'teacherCompensationRuleKey': draft.compensationRuleKey,
+        'teacherCompensationValueMinor': ?draft.compensationValueMinor,
+      },
     };
     return {
       ...schedulePayload(draft),
@@ -358,10 +361,13 @@ class LessonEditorDecisionPolicy {
         draft: draft,
         references: references,
       ),
-      'teacherCompensationType': teacherRate.$1,
-      'teacherCompensationValue': teacherRate.$2,
+      if (canManageTeacherCompensation) ...{
+        'teacherCompensationType': teacherRate.$1,
+        'teacherCompensationValue': teacherRate.$2,
+      },
       'financialDecision': financialDecision,
-      if (compensationNeedsReason(draft: draft, rule: rule))
+      if (canManageTeacherCompensation &&
+          compensationNeedsReason(draft: draft, rule: rule))
         'plannedSettlementReason': draft.plannedSettlementReason.trim(),
       if (requiresSubscription(draft)) 'subscriptionId': draft.subscriptionId,
       'notes': ?_leadNote(session: session, client: client),

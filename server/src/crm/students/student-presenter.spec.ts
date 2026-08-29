@@ -8,6 +8,7 @@ import {
 describe("student presenter", () => {
   const studentRow = {
     id: "student-a",
+    version: 9,
     lead_id: "lead-a",
     source_id: "source-a",
     source_name: "Рекомендация",
@@ -29,6 +30,7 @@ describe("student presenter", () => {
     expect(toStudentDto(studentRow)).toEqual(
       expect.objectContaining({
         appealAt: "2024-02-03T00:00:00.000Z",
+        version: 9,
         appealAtSource: "manual",
         age: 12,
         ageMonths: null,

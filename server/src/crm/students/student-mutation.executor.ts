@@ -121,7 +121,7 @@ export class StudentMutationExecutor {
           )
           select id, $6, $7, $8::jsonb, $9::uuid, $10::uuid
           from inserted_profile
-          returning id, status, profile_id, lead_id, source_id, custom_data, created_at,
+          returning id, version, status, profile_id, lead_id, source_id, custom_data, created_at,
             blacklisted, blacklist_reason
         ),
         inserted_student_link as (
@@ -144,7 +144,7 @@ export class StudentMutationExecutor {
           on conflict do nothing
           returning entity_id
         )
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+        select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.source_id, source.display_name as source_name,
           s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
@@ -187,6 +187,7 @@ export class StudentMutationExecutor {
       client,
       command.studentId,
     );
+    this.assertExpectedVersion(beforeStudent, command);
     await this.validateFunnel(client, beforeStudent, command);
     await this.validateSource(client, command.sourceId);
     const customData = await this.withEligibleResponsible(
@@ -205,7 +206,7 @@ export class StudentMutationExecutor {
     studentId: string,
   ): Promise<StudentWriteSnapshot | null> {
     const result = await client.query<StudentWriteSnapshot>(
-      `select s.status, s.branch_id, s.custom_data,
+      `select s.version, s.status, s.branch_id, s.custom_data,
          p.first_name, p.last_name, p.phone, u.email
        from app.students s
        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -215,6 +216,22 @@ export class StudentMutationExecutor {
       [studentId],
     );
     return result.rows[0] ?? null;
+  }
+
+  private assertExpectedVersion(
+    beforeStudent: StudentWriteSnapshot | null,
+    command: PreparedStudentUpdate,
+  ): void {
+    if (!beforeStudent || command.expectedVersion === undefined) return;
+    const currentVersion = Number(beforeStudent.version);
+    if (currentVersion === command.expectedVersion) return;
+    throw new ConflictException({
+      code: "CLIENT_VERSION_CONFLICT",
+      entityType: "student",
+      expectedVersion: command.expectedVersion,
+      currentVersion,
+      message: "Карточку ученика уже изменил другой сотрудник.",
+    });
   }
 
   private async validateFunnel(
@@ -296,18 +313,19 @@ export class StudentMutationExecutor {
           update app.students s
           set status = coalesce($6, s.status),
             custom_data = case when $9::boolean then
-                (coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb)
+                jsonb_strip_nulls(coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb)
                   - 'responsible' - 'responsibleUserId' - 'responsibleName'
-              else coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb end,
+              else jsonb_strip_nulls(coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb) end,
             branch_id = coalesce($8::uuid, s.branch_id),
             source_id = coalesce($10::uuid, s.source_id),
+            version = s.version + 1,
             updated_at = now()
           from target
           where s.id = target.id
-          returning s.id, s.status, s.profile_id, s.lead_id, s.source_id, s.custom_data,
+          returning s.id, s.version, s.status, s.profile_id, s.lead_id, s.source_id, s.custom_data,
             s.blacklisted, s.blacklist_reason, s.created_at
         )
-        select us.id, us.status, us.profile_id,
+        select us.id, us.version, us.status, us.profile_id,
           coalesce(updated_profile_dependency.user_id, p.user_id) as profile_user_id,
           us.lead_id, us.source_id, source.display_name as source_name,
           us.custom_data, us.blacklisted, us.blacklist_reason,
@@ -327,7 +345,7 @@ export class StudentMutationExecutor {
         left join app.lessons l on l.student_id = s.id and l.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        group by us.id, us.status, us.profile_id, us.lead_id, us.source_id, us.custom_data,
+        group by us.id, us.version, us.status, us.profile_id, us.lead_id, us.source_id, us.custom_data,
           us.blacklisted, us.blacklist_reason, us.created_at, p.id, u.id,
           updated_profile_dependency.user_id,
           updated_profile_dependency.first_name,

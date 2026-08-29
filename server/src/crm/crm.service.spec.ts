@@ -226,6 +226,7 @@ describe("CrmService", () => {
     const { service, query, audit, policy } = createService([
       {
         id: "student-a",
+        version: 1,
         status: "active",
         profile_id: "profile-a",
         profile_user_id: "user-a",
@@ -648,6 +649,7 @@ describe("CrmService", () => {
     const { service, query, audit, policy } = createService([
       {
         id: "student-a",
+        version: 1,
         status: "active",
         custom_data: { middleName: "Сергеевна", notes: "Важно" },
         profile_id: "profile-a",
@@ -663,6 +665,7 @@ describe("CrmService", () => {
 
     await expect(
       service.updateStudent(actor, "student-a", {
+        expectedVersion: 1,
         firstName: " Анна ",
         lastName: " Иванова ",
         phone: " +79990000000 ",
@@ -720,6 +723,7 @@ describe("CrmService", () => {
           rows: [
             {
               id: "student-a",
+              version: 1,
               status: "active",
               profile_id: "profile-a",
               profile_user_id: "client-a",
@@ -788,6 +792,7 @@ describe("CrmService", () => {
           rows: [
             {
               id: "student-a",
+              version: 1,
               status: "active",
               branch_id: null,
               custom_data: {
@@ -817,6 +822,7 @@ describe("CrmService", () => {
       ]);
 
       await service.updateStudent(actor, "student-a", {
+        expectedVersion: 1,
         clearResponsible: true,
       });
 
@@ -1138,6 +1144,7 @@ describe("CrmService", () => {
   describe("student boundary characterization", () => {
     const studentRow = {
       id: "student-boundary-a",
+      version: 1,
       lead_id: "lead-boundary-a",
       source_id: "source-boundary-a",
       source_name: "Рекомендация",
@@ -1156,6 +1163,7 @@ describe("CrmService", () => {
     };
     const expectedStudentDto = {
       id: "student-boundary-a",
+      version: 1,
       leadId: "lead-boundary-a",
       sourceId: "source-boundary-a",
       sourceName: "Рекомендация",
@@ -1417,7 +1425,7 @@ describe("CrmService", () => {
 
     it.each([
       ["create", (service: CrmService) => service.createStudent(actor, { firstName: "Алина" })],
-      ["update", (service: CrmService) => service.updateStudent(actor, studentRow.id, { firstName: "Алина" })],
+      ["update", (service: CrmService) => service.updateStudent(actor, studentRow.id, { expectedVersion: 1, firstName: "Алина" })],
     ])("publishes %s only after transaction and responsible fallback", async (_, run) => {
       const { events, realtime, service } = createPublicationHarness();
 

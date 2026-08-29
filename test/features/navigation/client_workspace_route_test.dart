@@ -11,6 +11,8 @@ import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
+import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
@@ -36,6 +38,48 @@ Widget _app(FakeCardApiClient api, Widget child) {
     ],
     child: MaterialApp(home: Scaffold(body: child)),
   );
+}
+
+class _ClientSurfaceSwitchHost extends StatefulWidget {
+  const _ClientSurfaceSwitchHost({required this.snapshot});
+
+  final CapabilitySnapshot snapshot;
+
+  @override
+  State<_ClientSurfaceSwitchHost> createState() =>
+      _ClientSurfaceSwitchHostState();
+}
+
+class _ClientSurfaceSwitchHostState extends State<_ClientSurfaceSwitchHost> {
+  var _showLead = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final entityId = _showLead ? 'lead-1' : 'student-1';
+    return Column(
+      children: [
+        TextButton(
+          key: const Key('switch-client-entity'),
+          onPressed: () => setState(() => _showLead = true),
+          child: const Text('Другой клиент'),
+        ),
+        Expanded(
+          child: buildClientWorkspaceSurface(
+            snapshot: widget.snapshot,
+            route: ContextRouteState(
+              link: EntityLink(
+                entityType: EntityLinkType.client,
+                entityId: entityId,
+                rawEntityType: _showLead ? 'lead' : 'student',
+              ),
+              viewState: ContextViewState(),
+            ),
+            tabId: 'tab-1',
+          )!,
+        ),
+      ],
+    );
+  }
 }
 
 void main() {
@@ -481,6 +525,219 @@ void main() {
     expect(find.byType(ClientCardRouteSurface), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     expect(find.text('Обзор'), findsOneWidget);
+  });
+
+  testWidgets('desktop tab Save flushes pending card and note before unmount', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final api = FakeCardApiClient(
+      role: 'admin',
+      student: const {
+        ..._student,
+        'version': 2,
+        'status': 'active',
+        'phone': '+79990000000',
+      },
+      internalNote: const {
+        'id': 'note-1',
+        'body': 'Старый текст',
+        'version': 2,
+        'updatedByName': 'Администратор',
+        'updatedAt': '2026-08-07T10:00:00.000Z',
+      },
+    );
+    const snapshot = CapabilitySnapshot(
+      accountId: 'account-1',
+      role: 'admin',
+      accessVersion: 1,
+      capabilities: {'crm.client.read.basic'},
+      scopes: {},
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+          crmRealtimeProvider.overrideWith(
+            (ref) => const Stream<CrmChangedEvent>.empty(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: StaffWorkspaceScreen(
+            initialLink: EntityLink(
+              entityType: EntityLinkType.client,
+              entityId: 'student-1',
+              rawEntityType: 'student',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final workspace = tester
+        .widget<DesktopWorkspaceShell>(find.byType(DesktopWorkspaceShell))
+        .controller;
+    final clientTabId = workspace.state.activeTabId;
+    workspace.open(
+      const EntityLink(
+        entityType: EntityLinkType.client,
+        entityId: 'student-2',
+        rawEntityType: 'student',
+      ),
+      explicitNew: true,
+    );
+    workspace.selectTab(clientTabId);
+    await tester.pump();
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Имя'),
+      'Свежая Анна',
+    );
+    await tester.pump();
+    expect(find.text('Сохраняем…'), findsWidgets);
+    expect(
+      workspace.state.activeTab.forms.values.any((form) => form.dirty),
+      isTrue,
+    );
+    await tester.enterText(
+      find.byKey(const Key('client-internal-note-input')),
+      'Свежая заметка',
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(ValueKey('workspace-tab-close-$clientTabId')));
+    await tester.pump();
+    expect(find.text('Сохранить изменения?'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+    await tester.pumpAndSettle();
+
+    expect(api.updateInternalNoteBody, {
+      'body': 'Свежая заметка',
+      'expectedVersion': 2,
+    });
+    expect(
+      workspace.state.tabs.any((tab) => tab.tabId == clientTabId),
+      isFalse,
+      reason: 'The dirty form save must finish before the tab is removed.',
+    );
+    expect(
+      api.updateStudentBody?['firstName'],
+      'Свежая Анна',
+      reason:
+          'PATCH requests: ${api.patchRequests}; tab exists: '
+          '${workspace.state.tabs.any((tab) => tab.tabId == clientTabId)}',
+    );
+  });
+
+  testWidgets('same workspace tab mounts state for the new client entity', (
+    tester,
+  ) async {
+    final api = FakeCardApiClient(
+      role: 'admin',
+      student: const {..._student, 'version': 1, 'status': 'active'},
+      lead: const {
+        'id': 'lead-1',
+        'version': 1,
+        'firstName': 'Борис',
+        'lastName': 'Соколов',
+        'customData': <String, dynamic>{},
+      },
+    );
+    const snapshot = CapabilitySnapshot(
+      accountId: 'account-1',
+      role: 'admin',
+      accessVersion: 1,
+      capabilities: {'crm.client.read.basic'},
+      scopes: {},
+    );
+    await tester.pumpWidget(
+      _app(api, const _ClientSurfaceSwitchHost(snapshot: snapshot)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Анна'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('switch-client-entity')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Борис'), findsWidgets);
+    expect(api.getRequests, contains('/crm/leads/lead-1/card'));
+  });
+
+  testWidgets('direct client-card unmount unregisters its workspace form', (
+    tester,
+  ) async {
+    final api = FakeCardApiClient(
+      role: 'admin',
+      student: const {..._student, 'version': 1, 'status': 'active'},
+    );
+    const snapshot = CapabilitySnapshot(
+      accountId: 'account-1',
+      role: 'admin',
+      accessVersion: 1,
+      capabilities: {'crm.client.read.basic'},
+      scopes: {},
+    );
+    final workspace = WorkspaceController(
+      accountId: 'account-1',
+      initialLink: const EntityLink(
+        entityType: EntityLinkType.client,
+        entityId: 'student-1',
+        rawEntityType: 'student',
+      ),
+      sharedScope: WorkspaceSharedScope(
+        session: Object(),
+        cache: Object(),
+        realtime: Object(),
+      ),
+      titleResolver: (_) => 'Клиент',
+    );
+    addTearDown(workspace.dispose);
+    late StateSetter updateHost;
+    var mounted = true;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          crmRealtimeProvider.overrideWith(
+            (ref) => const Stream<CrmChangedEvent>.empty(),
+          ),
+        ],
+        child: MaterialApp(
+          home: WorkspaceNavigationScope(
+            controller: workspace,
+            isDesktop: true,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                updateHost = setState;
+                return mounted
+                    ? buildClientWorkspaceSurface(
+                        snapshot: snapshot,
+                        route: workspace.state.activeTab.currentRoute,
+                        tabId: workspace.state.activeTabId,
+                      )!
+                    : const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(workspace.state.activeTab.forms, isNotEmpty);
+
+    updateHost(() => mounted = false);
+    await tester.pump();
+
+    expect(workspace.state.activeTab.forms, isEmpty);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('section selection updates the direct link without refetch', (

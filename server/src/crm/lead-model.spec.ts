@@ -4,6 +4,7 @@ describe("lead model", () => {
   it("maps canonical lead fields and safe numeric statistics", () => {
     const result = toLeadDto({
       id: "lead-a",
+      version: 7,
       status_id: null,
       status_name: null,
       first_name: "Анна",
@@ -24,6 +25,7 @@ describe("lead model", () => {
     expect(result).toEqual(
       expect.objectContaining({
         id: "lead-a",
+        version: 7,
         email: "anna@example.com",
         blacklisted: true,
         blacklistReason: "spam",

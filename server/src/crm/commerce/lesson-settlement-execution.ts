@@ -1,4 +1,7 @@
-import { ConflictException } from "@nestjs/common";
+import {
+  ConflictException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import type { PoolClient } from "pg";
 import {
   calculateClientSettlement,
@@ -218,6 +221,12 @@ function calculateConfiguredClientFact(
     );
   }
   const subscriptionId = decision?.subscriptionId ?? charge.subscription_id;
+  if (decision?.payerStudentId && !decision.subscriptionId) {
+    invalidLessonSettlementDecision(
+      "PAYER_SUBSCRIPTION_REQUIRED",
+      "clientDecisions",
+    );
+  }
   const chargeType: ClientChargeFactType = subscriptionId
     ? "subscription"
     : charge.charge_type;
@@ -240,6 +249,7 @@ function calculateConfiguredClientFact(
     charge,
     chargeType,
     subscriptionId: chargeType === "subscription" ? subscriptionId : null,
+    payerStudentId: decision?.payerStudentId ?? null,
     settlement,
     calculation,
   };
@@ -305,6 +315,20 @@ async function assertExistingLessonSettlementDecision(
       .filter((decision) => !excludedClients.has(decision.clientId))
       .map((decision) => [decision.clientId, decision]),
   );
+  for (const decision of clients.values()) {
+    if (decision.payerStudentId && !decision.subscriptionId) {
+      invalidLessonSettlementDecision(
+        "PAYER_SUBSCRIPTION_REQUIRED",
+        "clientDecisions",
+      );
+    }
+  }
+  const ownerBySubscription = await loadExistingSubscriptionOwners(
+    client,
+    existing,
+    clients,
+  );
+  assertExistingSubscriptionOwners(existing, clients, ownerBySubscription);
   const existingClientIds = new Set(
     existing.clientFacts.map((fact) => fact.clientId),
   );
@@ -312,11 +336,22 @@ async function assertExistingLessonSettlementDecision(
     [...clients.keys()].every((id) => existingClientIds.has(id)) &&
     existing.clientFacts.every((fact) => {
       const decision = clients.get(fact.clientId);
+      const subscriptionOwner = fact.subscriptionId
+        ? ownerBySubscription.get(fact.subscriptionId)
+        : undefined;
+      const requiresExplicitPayer =
+        fact.subscriptionId !== null && subscriptionOwner !== fact.clientId;
       return (
         fact.settlementTypeKey ===
           (decision?.settlementTypeKey ?? input.decision.settlementTypeKey) &&
-        (!decision?.subscriptionId ||
-          decision.subscriptionId === fact.subscriptionId)
+        (requiresExplicitPayer
+          ? Boolean(
+              subscriptionOwner &&
+                decision?.subscriptionId === fact.subscriptionId &&
+                decision.payerStudentId === subscriptionOwner,
+            )
+          : !decision?.subscriptionId ||
+            decision.subscriptionId === fact.subscriptionId)
       );
     }) &&
     existing.teacherFact.compensationRuleKey ===
@@ -328,6 +363,62 @@ async function assertExistingLessonSettlementDecision(
     throw new ConflictException({
       code: "LESSON_ALREADY_SETTLED_WITH_DIFFERENT_DECISION",
       lessonId: existing.lessonId,
+    });
+  }
+}
+
+async function loadExistingSubscriptionOwners(
+  client: PoolClient,
+  existing: LessonSettlementResult,
+  decisions: Map<string, ClientDecision>,
+): Promise<Map<string, string>> {
+  const selected = [...decisions.values()].filter(
+    (decision): decision is ClientDecision & { subscriptionId: string } =>
+      Boolean(decision.subscriptionId),
+  );
+  const subscriptionIds = [
+    ...new Set([
+      ...existing.clientFacts.flatMap((fact) =>
+        fact.subscriptionId ? [fact.subscriptionId] : [],
+      ),
+      ...selected.map((decision) => decision.subscriptionId),
+    ]),
+  ];
+  if (subscriptionIds.length === 0) return new Map();
+  const owners = await client.query<{ id: string; student_id: string }>(
+    `select id, student_id from app.subscriptions
+     where id = any($1::uuid[])`,
+    [subscriptionIds],
+  );
+  return new Map(
+    owners.rows.map((row) => [row.id, row.student_id]),
+  );
+}
+
+function assertExistingSubscriptionOwners(
+  existing: LessonSettlementResult,
+  decisions: Map<string, ClientDecision>,
+  ownerBySubscription: Map<string, string>,
+): void {
+  const selected = [...decisions.values()].filter(
+    (decision): decision is ClientDecision & { subscriptionId: string } =>
+      Boolean(decision.subscriptionId),
+  );
+  for (const decision of selected) {
+    const expectedOwner = decision.payerStudentId ?? decision.clientId;
+    if (ownerBySubscription.get(decision.subscriptionId) === expectedOwner) {
+      continue;
+    }
+    const fact = existing.clientFacts.find(
+      (candidate) => candidate.clientId === decision.clientId,
+    );
+    throw new UnprocessableEntityException({
+      code: "SUBSCRIPTION_CAPACITY",
+      subscriptionId: decision.subscriptionId,
+      clientId: decision.clientId,
+      payerStudentId: decision.payerStudentId ?? null,
+      requestedUnits: fact?.units ?? "0.00",
+      availableUnits: "0",
     });
   }
 }

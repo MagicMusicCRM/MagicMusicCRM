@@ -23,6 +23,7 @@ import { ScheduleSeriesMaterializerService } from "./schedule-series-materialize
 
 interface ScheduleSeriesRow {
   id: string;
+  plan_id?: string | null;
   client_type?: "lead" | "student" | null;
   client_id?: string | null;
   student_id: string | null;
@@ -131,68 +132,10 @@ export class ScheduleSeriesService {
 
   async createScheduleSeries(
     actor: ActorContext,
-    dto: CreateScheduleSeriesDto,
+    _dto: CreateScheduleSeriesDto,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    this.assertSeriesDateWithinBookingWindow(dto.validFrom);
-    const subjectCount =
-      Number(dto.studentId != null) + Number(dto.groupId != null);
-    if (subjectCount > 1) {
-      throw new BadRequestException(
-        "Для серии можно выбрать только одного участника: ученика или группу.",
-      );
-    }
-    if (!dto.studentId && !dto.groupId) {
-      throw new BadRequestException("Укажите ученика или группу.");
-    }
-    const { seriesId, created } = await this.database.transaction(
-      async (client) => {
-        const result = await client.query<{ id: string }>(
-          `
-        insert into app.schedule_series (
-          student_id, group_id, teacher_id, room_id, branch_id,
-          weekday, begin_time, duration_minutes, valid_from, valid_until,
-          notes, created_by
-        )
-        values ($1, $2, $3, $4, $5, $6, $7::time, $8, $9::date, $10::date, $11, $12)
-        returning id
-      `,
-          [
-            dto.studentId ?? null,
-            dto.groupId ?? null,
-            dto.teacherId ?? null,
-            dto.roomId ?? null,
-            dto.branchId ?? null,
-            dto.weekday,
-            dto.beginTime,
-            dto.durationMinutes ?? 60,
-            dto.validFrom,
-            dto.validUntil ?? null,
-            dto.notes?.trim() || null,
-            actor.userId,
-          ],
-        );
-        const seriesId = result.rows[0].id;
-        const created = await this.materializer.materializeSeries(
-          seriesId,
-          client as unknown as ScheduleQueryExecutor,
-        );
-        return { seriesId, created };
-      },
-    );
-    await this.recordAuditSafe({
-      actor,
-      action: "crm.schedule_series_created",
-      entityType: "schedule_series",
-      entityId: seriesId,
-      metadata: { lessonsCreated: created },
-    });
-    this.realtime.emitCrmChanged({
-      entity: "lesson",
-      action: "created",
-      id: seriesId,
-    });
-    return { id: seriesId, lessonsCreated: created };
+    throw this.schedulePlanMutationRequired();
   }
 
   /**
@@ -224,7 +167,7 @@ export class ScheduleSeriesService {
           seriesId,
         );
         const existing = await client.query<ScheduleSeriesRow>(
-          `select id, student_id, group_id, teacher_id, room_id, branch_id,
+          `select id, plan_id, student_id, group_id, teacher_id, room_id, branch_id,
            weekday, begin_time, duration_minutes,
            valid_from::text as valid_from,
            valid_until::text as valid_until,
@@ -237,6 +180,7 @@ export class ScheduleSeriesService {
         const series = existing.rows[0];
         if (!series)
           throw new NotFoundException("Серия расписания не найдена.");
+        this.assertLegacySeriesMutationAllowed(series.plan_id);
         if (series.superseded_by) {
           throw new ConflictException(
             "Серия уже изменена; обновите расписание и повторите для её продолжения.",
@@ -328,11 +272,19 @@ export class ScheduleSeriesService {
           [seriesId, newSeriesId, effectiveFrom],
         );
         await client.query(
-          `update app.lessons
-         set deleted_at = now(), updated_at = now()
-         where series_id = $1 and series_date >= $2::date
-           and status = 'scheduled' and original_scheduled_at is null
-           and deleted_at is null`,
+          `with removed as (
+             update app.lessons
+                set deleted_at = now(), updated_at = now()
+              where series_id = $1 and series_date >= $2::date
+                and status = 'scheduled' and original_scheduled_at is null
+                and deleted_at is null
+              returning id
+           )
+           update app.lesson_reservations reservation
+              set state = 'released', financial_fact_id = null,
+                  updated_at = now()
+            where reservation.lesson_id in (select id from removed)
+              and reservation.state = 'reserved'`,
           [seriesId, effectiveFrom],
         );
         await client.query(
@@ -381,9 +333,10 @@ export class ScheduleSeriesService {
       );
       const current = await client.query<{
         id: string;
+        plan_id: string | null;
         superseded_by: string | null;
       }>(
-        `select id, superseded_by
+        `select id, plan_id, superseded_by
          from app.schedule_series
          where id = $1 and deleted_at is null
          for update`,
@@ -392,6 +345,7 @@ export class ScheduleSeriesService {
       if (!current.rows[0]) {
         throw new NotFoundException("Серия расписания не найдена.");
       }
+      this.assertLegacySeriesMutationAllowed(current.rows[0].plan_id);
       if (current.rows[0].superseded_by) {
         throw new ConflictException(
           "Серия уже изменена; остановите её актуальное продолжение.",
@@ -422,14 +376,20 @@ export class ScheduleSeriesService {
         throw new ConflictException("Состояние серии уже изменилось.");
       }
       await client.query(
-        `
-        update app.lessons
-        set deleted_at = now(), updated_at = now()
-        where series_id = $1
-          and (scheduled_at at time zone 'Europe/Moscow')::date >= $2::date
-          and status = 'scheduled'
-          and deleted_at is null
-      `,
+        `with removed as (
+           update app.lessons
+              set deleted_at = now(), updated_at = now()
+            where series_id = $1
+              and (scheduled_at at time zone 'Europe/Moscow')::date >= $2::date
+              and status = 'scheduled'
+              and deleted_at is null
+            returning id
+         )
+         update app.lesson_reservations reservation
+            set state = 'released', financial_fact_id = null,
+                updated_at = now()
+          where reservation.lesson_id in (select id from removed)
+            and reservation.state = 'reserved'`,
         [seriesId, stopFrom],
       );
     });
@@ -498,14 +458,25 @@ export class ScheduleSeriesService {
   private assertSeriesDateWithinBookingWindow(value: string): void {
     if (
       value.slice(0, 10) >
-      this.moscowDate(
-        ScheduleSeriesMaterializerService.MAX_BOOKING_AHEAD_DAYS,
-      )
+      this.moscowDate(ScheduleSeriesMaterializerService.MAX_BOOKING_AHEAD_DAYS)
     ) {
       throw new BadRequestException(
         `Schedule date cannot be more than ${ScheduleSeriesMaterializerService.MAX_BOOKING_AHEAD_DAYS} days ahead.`,
       );
     }
+  }
+
+  private assertLegacySeriesMutationAllowed(planId?: string | null): void {
+    if (!planId) return;
+    throw this.schedulePlanMutationRequired();
+  }
+
+  private schedulePlanMutationRequired(): ConflictException {
+    return new ConflictException({
+      code: "SCHEDULE_PLAN_MUTATION_REQUIRED",
+      message:
+        "Эта серия управляется постоянным расписанием. Измените постоянное расписание целиком.",
+    });
   }
 
   private assertSeriesMutationDateNotPast(value: string): void {

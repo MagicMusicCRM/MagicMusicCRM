@@ -125,6 +125,8 @@ extension _ClientCardAssignmentEditors on _ClientCardState {
         }
       }
       _edited = true;
+      if (updateLead) _leadResponsibleEditRevision = _editRevision;
+      if (updateStudent) _studentResponsibleEditRevision = _editRevision;
     });
   }
 

@@ -27,7 +27,7 @@ import { QueueLimitQuery } from "./dto/queue-limit.query";
 import { LinkStudentDto } from "./dto/link-student.dto";
 import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { SetBlacklistDto } from "./dto/set-blacklist.dto";
-import { UpsertLeadDto } from "./dto/upsert-lead.dto";
+import { UpdateLeadDto } from "./dto/upsert-lead.dto";
 import { StrictCreateLeadDto } from "./dto/client-config.dto";
 import { ResolvePhoneReviewDto } from "./dto/resolve-phone-review.dto";
 import { ClientWriteValidator } from "./clients/client-write.validator";
@@ -156,7 +156,7 @@ export class CrmLeadsController {
   async updateLead(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() dto: UpsertLeadDto,
+    @Body() dto: UpdateLeadDto,
   ) {
     const customFields = dto.customFields
       ? await this.clientWrites.validateCustomFields("lead", dto.customFields)

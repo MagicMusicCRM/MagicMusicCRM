@@ -776,6 +776,7 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
               final result = await showLessonDecisionFlow(
                 context,
                 crm: MagicCrmService(_decisionApi),
+                canManageTeacherCompensation: true,
                 operation: LessonDecisionOperation.reschedule,
                 lesson: const {
                   'id': '10000000-0000-4000-8000-000000000001',
@@ -800,6 +801,7 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
               final result = await showLessonDecisionFlow(
                 context,
                 crm: MagicCrmService(_completedDecisionApi),
+                canManageTeacherCompensation: true,
                 operation: LessonDecisionOperation.reschedule,
                 lesson: const {
                   'id': '10000000-0000-4000-8000-000000000002',
@@ -828,6 +830,7 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
               final result = await showLessonDecisionFlow(
                 context,
                 crm: MagicCrmService(_cancelDecisionApi),
+                canManageTeacherCompensation: true,
                 operation: LessonDecisionOperation.cancel,
                 lesson: _cancelLesson,
               );

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
@@ -32,8 +33,8 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       reportFileOpener: ref.read(reportFileOpenerProvider),
       filterRange: widget.filterRange,
       branchId: widget.branchId,
-      canCorrectSettledPayroll: _canCorrect(
-        ref.read(capabilitySnapshotProvider).asData?.value.role,
+      canCorrectSettledPayroll: _canManageRates(
+        ref.read(capabilitySnapshotProvider).asData?.value,
       ),
     )..addListener(_refresh);
     unawaited(_controller.initialize());
@@ -62,13 +63,13 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
     if (mounted) setState(() {});
   }
 
-  bool _canCorrect(String? role) =>
-      const {'director', 'system_admin'}.contains(role);
+  bool _canManageRates(CapabilitySnapshot? snapshot) =>
+      snapshot != null && crmCanManageTeacherRates(snapshot);
 
   @override
   Widget build(BuildContext context) {
-    final role = ref.watch(capabilitySnapshotProvider).asData?.value.role;
-    _controller.updateCorrectionPolicy(_canCorrect(role));
+    final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
+    _controller.updateCorrectionPolicy(_canManageRates(snapshot));
     return TeacherStatsView(controller: _controller);
   }
 }

@@ -69,12 +69,20 @@ export class TeacherStatsReportService {
       from: period.from,
       to: period.to,
     });
+    const rateMutationVersion = Number(
+      loadedLessons[0]?.rate_mutation_version ?? 0,
+    );
     const lessons = this.filterLessons(loadedLessons, query);
     const lessonTeacherIds = [...new Set(lessons.map((row) => row.teacher_id))];
     const rates = await this.repository.loadTeacherRates(lessonTeacherIds);
     const rows = await this.selectTeachers(query, period, lessonTeacherIds);
     const teacherIds = rows.map((row) => row.id);
-    if (!teacherIds.length) return this.emptyReport(period, query);
+    if (!teacherIds.length) {
+      return {
+        ...this.emptyReport(period, query),
+        rateMutationVersion,
+      };
+    }
 
     await this.mergeMovementOnlyRates(rates, teacherIds, lessonTeacherIds);
     const movements = await this.repository.loadPeriodMovements(
@@ -83,9 +91,7 @@ export class TeacherStatsReportService {
       period.to,
     );
     const teachers = this.initializeTeachers(teacherIds);
-    const names = new Map(
-      rows.map((row) => [row.id, row.name || "Без имени"]),
-    );
+    const names = new Map(rows.map((row) => [row.id, row.name || "Без имени"]));
     const salaries = new Map(
       rows.map((row) => [row.id, this.numericSalary(row)]),
     );
@@ -103,6 +109,7 @@ export class TeacherStatsReportService {
     return {
       ...period,
       movementsScope: this.movementsScope(query),
+      rateMutationVersion,
       items,
       totals: this.projectTotals(totals),
     };
@@ -165,8 +172,11 @@ export class TeacherStatsReportService {
     lessonTeacherIds: string[],
   ): Promise<void> {
     const lessonTeacherSet = new Set(lessonTeacherIds);
-    const movementOnlyIds = teacherIds.filter((id) => !lessonTeacherSet.has(id));
-    const movementRates = await this.repository.loadTeacherRates(movementOnlyIds);
+    const movementOnlyIds = teacherIds.filter(
+      (id) => !lessonTeacherSet.has(id),
+    );
+    const movementRates =
+      await this.repository.loadTeacherRates(movementOnlyIds);
     for (const [teacherId, entries] of movementRates) {
       rates.set(teacherId, entries);
     }
@@ -210,7 +220,8 @@ export class TeacherStatsReportService {
     const unit = teacher.units.get(key) ?? this.newUnit(lesson, accrual.rate);
     teacher.units.set(key, unit);
     unit.lessonIds.push(lesson.id);
-    if (lesson.settlement_fact_id == null) unit.editableLessonIds.push(lesson.id);
+    if (lesson.settlement_fact_id == null)
+      unit.editableLessonIds.push(lesson.id);
     else unit.settledLessons += 1;
     unit.completedLessons += 1;
     teacher.completedLessons += 1;
@@ -264,7 +275,10 @@ export class TeacherStatsReportService {
         deduction: 0,
       };
       const periodBalance =
-        teacher.accruedTotal + movement.bonus - movement.deduction - movement.paid;
+        teacher.accruedTotal +
+        movement.bonus -
+        movement.deduction -
+        movement.paid;
       this.addTeacherTotals(totals, teacher, movement, periodBalance);
       const currentRate = this.currentRate(rates.get(teacherId) ?? []);
       return {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -102,12 +103,14 @@ void main() {
   ];
 
   Map<String, dynamic> rawLead({
+    int version = 4,
     String? statusId,
     String? assignedTo,
     String? assignedName,
     Map<String, dynamic> customData = const {},
   }) => {
     'id': 'lead-1',
+    'version': version,
     'firstName': 'Иван',
     'lastName': 'Петров',
     'phone': '+79990000000',
@@ -128,8 +131,8 @@ void main() {
       statuses: statuses,
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
-    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Пётр');
+    await _waitForClientAutoSave(tester);
 
     final body = api.updateLeadBody;
     expect(body, isNotNull);
@@ -139,7 +142,275 @@ void main() {
     // сохраняет существующие заметки нетронутыми.
     expect(body.containsKey('notes'), isFalse);
     expect(body.containsKey('clearAssignedTo'), isFalse);
-    expect(body['firstName'], 'Иван');
+    expect(body['firstName'], 'Пётр');
+    expect(body['expectedVersion'], 4);
+  });
+
+  testWidgets('version conflict keeps the draft and retries explicitly', (
+    tester,
+  ) async {
+    final student = <String, dynamic>{
+      'id': 'student-1',
+      'version': 2,
+      'status': 'active',
+      'firstName': 'Иван',
+      'lastName': 'Петров',
+      'phone': '+79990000000',
+      'customData': <String, dynamic>{},
+    };
+    final api = FakeCardApiClient(student: student)..studentPatchConflicts = 1;
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'student-1'},
+      entityType: 'student',
+    );
+
+    student['version'] = 3; // another operator saved after this card loaded
+    await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Пётр');
+    await _waitForClientAutoSave(tester);
+
+    expect(find.byKey(const Key('client-autosave-retry')), findsOneWidget);
+    final nameEditor = find.descendant(
+      of: find.widgetWithText(TextFormField, 'Имя'),
+      matching: find.byType(EditableText),
+    );
+    expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
+    expect(api.updateStudentBodies.single['expectedVersion'], 2);
+
+    await tester.tap(find.byKey(const Key('client-autosave-retry')));
+    await tester.pumpAndSettle();
+    expect(find.text('Карточка изменилась'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('client-autosave-conflict-apply')));
+    await tester.pumpAndSettle();
+
+    expect(api.updateStudentBodies, hasLength(2));
+    expect(api.updateStudentBodies.last['expectedVersion'], 3);
+    expect(api.updateStudentBodies.last['firstName'], 'Пётр');
+    expect(api.updateStudentBodies.last.containsKey('phone'), isFalse);
+    expect(
+      api.updateStudentBodies.last.containsKey('customDataPatch'),
+      isFalse,
+    );
+    expect(find.text('Сохранено'), findsWidgets);
+  });
+
+  testWidgets('queued edit waits for explicit apply after a version conflict', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final student = <String, dynamic>{
+      'id': 'student-1',
+      'version': 2,
+      'status': 'active',
+      'firstName': 'Иван',
+      'lastName': 'Петров',
+      'phone': '+79990000000',
+      'customData': <String, dynamic>{'remoteFlag': 'old'},
+    };
+    final api = FakeCardApiClient(student: student)
+      ..studentPatchGate = gate
+      ..studentPatchConflicts = 1;
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'student-1'},
+      entityType: 'student',
+    );
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Пётр');
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Павел');
+    student
+      ..['version'] = 3
+      ..['phone'] = '+78880000000'
+      ..['customData'] = <String, dynamic>{'remoteFlag': 'new'};
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(api.updateStudentBodies, hasLength(1));
+    expect(find.byKey(const Key('client-autosave-retry')), findsOneWidget);
+    final nameEditor = find.descendant(
+      of: find.widgetWithText(TextFormField, 'Имя'),
+      matching: find.byType(EditableText),
+    );
+    expect(tester.widget<EditableText>(nameEditor).controller.text, 'Павел');
+
+    await tester.tap(find.byKey(const Key('client-autosave-retry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('client-autosave-conflict-apply')));
+    await tester.pumpAndSettle();
+
+    expect(api.updateStudentBodies, hasLength(2));
+    expect(api.updateStudentBodies.last['expectedVersion'], 3);
+    expect(api.updateStudentBodies.last['firstName'], 'Павел');
+    expect(api.updateStudentBodies.last.containsKey('phone'), isFalse);
+    expect(
+      api.updateStudentBodies.last.containsKey('customDataPatch'),
+      isFalse,
+    );
+  });
+
+  testWidgets(
+    'lead status and responsible edits made in flight are saved next',
+    (tester) async {
+      final gate = Completer<void>();
+      final api = FakeCardApiClient(lead: rawLead())..leadPatchGate = gate;
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: const {'id': 'lead-1'},
+        statuses: statuses,
+      );
+
+      await _chooseResponsible(tester);
+      await _chooseDropdownValue(tester, 'Новый');
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(api.updateLeadBodies, hasLength(1));
+
+      await _chooseDropdownValue(tester, 'В работе');
+      final clearLeadResponsible = find.byTooltip('Очистить');
+      await tester.ensureVisible(clearLeadResponsible);
+      await tester.tap(clearLeadResponsible);
+      await tester.pump(const Duration(milliseconds: 800));
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(api.updateLeadBodies, hasLength(2));
+      expect(api.updateLeadBodies.first['statusId'], uuid);
+      expect(
+        api.updateLeadBodies.first['assignedTo'],
+        '55555555-5555-4555-8555-555555555555',
+      );
+      expect(
+        api.updateLeadBodies.last['statusId'],
+        'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff',
+      );
+      expect(api.updateLeadBodies.last['clearAssignedTo'], isTrue);
+      expect(api.updateLeadBodies.last['expectedVersion'], 5);
+    },
+  );
+
+  testWidgets(
+    'student status and responsible edits made in flight are saved next',
+    (tester) async {
+      final gate = Completer<void>();
+      final api = FakeCardApiClient(
+        student: <String, dynamic>{
+          'id': 'student-1',
+          'version': 2,
+          'status': 'active',
+          'firstName': 'Иван',
+          'lastName': 'Петров',
+          'phone': '+79990000000',
+          'customData': <String, dynamic>{},
+        },
+        clientPipelineStages: const [
+          {
+            'key': 'active',
+            'label': 'Занимается',
+            'style': 'green',
+            'active': true,
+            'allowedTransitions': <String>['trial', 'paused'],
+          },
+          {
+            'key': 'trial',
+            'label': 'Пробный',
+            'style': 'blue',
+            'active': true,
+            'allowedTransitions': <String>['paused'],
+          },
+          {
+            'key': 'paused',
+            'label': 'Пауза',
+            'style': 'grey',
+            'active': true,
+            'allowedTransitions': <String>[],
+          },
+        ],
+      )..studentPatchGate = gate;
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: const {'id': 'student-1'},
+        entityType: 'student',
+      );
+
+      await _chooseResponsible(tester);
+      await _chooseDropdownValue(tester, 'Пробный');
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(api.updateStudentBodies, hasLength(1));
+
+      await _chooseDropdownValue(tester, 'Пауза');
+      final clearStudentResponsible = find.byTooltip('Очистить');
+      await tester.ensureVisible(clearStudentResponsible);
+      await tester.tap(clearStudentResponsible);
+      await tester.pump(const Duration(milliseconds: 800));
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(api.updateStudentBodies, hasLength(2));
+      expect(api.updateStudentBodies.first['status'], 'trial');
+      expect(
+        api.updateStudentBodies.first['customDataPatch'],
+        containsPair(
+          'responsibleUserId',
+          '55555555-5555-4555-8555-555555555555',
+        ),
+      );
+      expect(api.updateStudentBodies.last['status'], 'paused');
+      expect(api.updateStudentBodies.last['clearResponsible'], isTrue);
+      expect(api.updateStudentBodies.last['expectedVersion'], 3);
+    },
+  );
+
+  testWidgets('late realtime card response cannot overwrite a local draft', (
+    tester,
+  ) async {
+    final events = StreamController<CrmChangedEvent>();
+    addTearDown(events.close);
+    final api = FakeCardApiClient(
+      student: <String, dynamic>{
+        'id': 'student-1',
+        'version': 2,
+        'status': 'active',
+        'firstName': 'Иван',
+        'lastName': 'Петров',
+        'phone': '+79990000000',
+        'customData': <String, dynamic>{},
+      },
+    );
+    final container = ProviderContainer(
+      overrides: [
+        magicApiClientProvider.overrideWithValue(api),
+        crmRealtimeProvider.overrideWith((ref) => events.stream),
+      ],
+    );
+    addTearDown(container.dispose);
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'student-1'},
+      entityType: 'student',
+      container: container,
+    );
+
+    final lateLoad = Completer<void>();
+    api.nextStudentCardGate = lateLoad;
+    events.add(
+      const CrmChangedEvent(entity: 'task', action: 'updated', id: 'task-1'),
+    );
+    await tester.pump();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Пётр');
+    lateLoad.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final nameEditor = find.descendant(
+      of: find.widgetWithText(TextFormField, 'Имя'),
+      matching: find.byType(EditableText),
+    );
+    expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
   });
 
   testWidgets('неизменённый UUID-статус тоже не отправляется', (tester) async {
@@ -151,8 +422,8 @@ void main() {
       statuses: statuses,
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
-    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Пётр');
+    await _waitForClientAutoSave(tester);
 
     expect(api.updateLeadBody, isNotNull);
     expect(api.updateLeadBody!.containsKey('statusId'), isFalse);
@@ -175,8 +446,7 @@ void main() {
     await tester.tap(find.text('Новый').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
-    await tester.pumpAndSettle();
+    await _waitForClientAutoSave(tester);
 
     expect(api.updateLeadBody, isNotNull);
     expect(api.updateLeadBody!['statusId'], uuid);
@@ -211,8 +481,8 @@ void main() {
       statuses: statuses,
       container: container,
     );
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
-    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Пётр');
+    await _waitForClientAutoSave(tester);
 
     expect(api.leadBoardQueries.where((query) => query == 'UAT').length, 2);
   });
@@ -263,13 +533,11 @@ void main() {
     await tester.tap(find.text('Мария Управляющая'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
-    await tester.pumpAndSettle();
+    await _waitForClientAutoSave(tester);
 
     final body = api.updateLeadBody!;
     expect(body['assignedTo'], '55555555-5555-4555-8555-555555555555');
-    final customData = body['customDataPatch'] as Map<String, dynamic>;
-    expect(customData.containsKey('responsibleUserId'), isFalse);
+    expect(body.containsKey('customDataPatch'), isFalse);
   });
 
   testWidgets('explicit lead responsible clear sends clearAssignedTo', (
@@ -298,16 +566,12 @@ void main() {
     await tester.ensureVisible(clear);
     await tester.tap(clear);
     await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
-    await tester.pumpAndSettle();
+    await _waitForClientAutoSave(tester);
 
     final body = api.updateLeadBody!;
     expect(body['clearAssignedTo'], isTrue);
     expect(body.containsKey('assignedTo'), isFalse);
-    final customData = body['customDataPatch'] as Map<String, dynamic>;
-    expect(customData.containsKey('responsible'), isFalse);
-    expect(customData.containsKey('responsibleUserId'), isFalse);
-    expect(customData.containsKey('responsibleName'), isFalse);
+    expect(body.containsKey('customDataPatch'), isFalse);
   });
 
   testWidgets('converted clear is mirrored to lead and student halves', (
@@ -327,6 +591,7 @@ void main() {
       ),
       student: {
         'id': 'student-1',
+        'version': 1,
         'leadId': 'lead-1',
         'status': 'active',
         'firstName': 'Иван',
@@ -348,7 +613,6 @@ void main() {
     await tester.ensureVisible(clear);
     await tester.tap(clear);
     await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
     for (var i = 0; i < 12; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -358,10 +622,7 @@ void main() {
     expect(leadBody['clearAssignedTo'], isTrue);
     expect(studentBody['clearResponsible'], isTrue);
     for (final body in [leadBody, studentBody]) {
-      final customData = body['customDataPatch'] as Map<String, dynamic>;
-      expect(customData.containsKey('responsible'), isFalse);
-      expect(customData.containsKey('responsibleUserId'), isFalse);
-      expect(customData.containsKey('responsibleName'), isFalse);
+      expect(body.containsKey('customDataPatch'), isFalse);
     }
   });
 
@@ -494,8 +755,7 @@ void main() {
       ),
       'Зелёный',
     );
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
-    await tester.pumpAndSettle();
+    await _waitForClientAutoSave(tester);
 
     expect(api.updateLeadBody?['customFields'], [
       {'definitionId': definitionId, 'value': 'Зелёный'},
@@ -556,4 +816,31 @@ void main() {
     );
     expect(half.width, closeTo(third.width * 1.5, 5));
   });
+}
+
+Future<void> _waitForClientAutoSave(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 800));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseResponsible(WidgetTester tester) async {
+  final control = find
+      .ancestor(of: find.text('Ответственный'), matching: find.byType(InkWell))
+      .first;
+  await tester.ensureVisible(control);
+  await tester.tap(control);
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextField).last, 'Мария');
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.tap(find.text('Мария Управляющая'));
+  await tester.pump(const Duration(milliseconds: 200));
+}
+
+Future<void> _chooseDropdownValue(WidgetTester tester, String label) async {
+  final dropdown = find.byType(DropdownButtonFormField<String>).first;
+  await tester.ensureVisible(dropdown);
+  await tester.tap(dropdown);
+  await tester.pump(const Duration(milliseconds: 200));
+  await tester.tap(find.text(label).last);
+  await tester.pump(const Duration(milliseconds: 200));
 }

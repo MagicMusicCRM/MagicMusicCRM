@@ -634,6 +634,7 @@ void main() {
                 onPressed: () => showLessonDecisionFlow(
                   context,
                   crm: MagicCrmService(api),
+                  canManageTeacherCompensation: true,
                   operation: operation,
                   lesson: const {
                     'id': 'lesson-1',
@@ -715,6 +716,7 @@ void main() {
                   onPressed: () => showLessonDecisionFlow(
                     context,
                     crm: MagicCrmService(api),
+                    canManageTeacherCompensation: true,
                     operation: LessonDecisionOperation.plannedSettlement,
                     lesson: const {
                       'id': 'lesson-five-pay-rules',
@@ -813,6 +815,7 @@ void main() {
                     onPressed: () => showLessonDecisionFlow(
                       context,
                       crm: MagicCrmService(api),
+                      canManageTeacherCompensation: true,
                       operation: LessonDecisionOperation.plannedSettlement,
                       lesson: const {
                         'id': 'lesson-group-decision',

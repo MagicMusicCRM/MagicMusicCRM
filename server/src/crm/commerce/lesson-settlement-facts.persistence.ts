@@ -42,6 +42,7 @@ export interface CalculatedLessonClientFact {
   charge: LessonSettlementChargeSource;
   chargeType: ClientChargeFactType;
   subscriptionId: string | null;
+  payerStudentId: string | null;
   settlement: LessonSettlementTypeConfig;
   calculation: { units: string; amountMinor: string };
 }

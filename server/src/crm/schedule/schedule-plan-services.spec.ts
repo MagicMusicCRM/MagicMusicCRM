@@ -9,7 +9,8 @@ import type { LessonSettlementService } from "../commerce/lesson-settlement.serv
 import type { CrmPolicy } from "../crm.policy";
 import type { SchedulePlanRowDto } from "../dto/schedule-plan.dto";
 import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
-import type { LessonSeriesCommandService } from "./lesson-series-command.service";
+import { LessonSeriesCommandService } from "./lesson-series-command.service";
+import type { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
 import { SchedulePlanDefinitionService } from "./schedule-plan-definition.service";
 import { SchedulePlanEndService } from "./schedule-plan-end.service";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
@@ -41,6 +42,47 @@ const scheduleRow = (
 });
 
 describe("Schedule plan semantic owners", () => {
+  it("rejects a centuries-long historical range before occurrence expansion", async () => {
+    const client = {
+      query: jest.fn(async (sql: string) => {
+        expect(sql).not.toContain("generate_series");
+        return {
+          rows: [{ id: "branch-a", local_today: "2026-08-29" }],
+        };
+      }),
+    } as unknown as PoolClient;
+    const series = new LessonSeriesCommandService(
+      {} as PlatformIntegrityService,
+      {} as CrmPolicy,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as LessonLifecycleRepository,
+      {} as SubscriptionReservationService,
+    );
+
+    await expect(
+      (
+        series as unknown as {
+          assertPlanExpansionBounds(
+            client: PoolClient,
+            rows: SchedulePlanRowDto[],
+            validFrom: string,
+            validUntil: string | null,
+          ): Promise<void>;
+        }
+      ).assertPlanExpansionBounds(
+        client,
+        [scheduleRow()],
+        "1900-01-01",
+        "2100-01-01",
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "SCHEDULE_PLAN_HISTORICAL_RANGE_TOO_LARGE" },
+    });
+    expect(client.query).toHaveBeenCalledTimes(1);
+  });
+
   it("locks plan subjects and resources in sorted unique order before subscriptions", async () => {
     const advisoryKeys: string[] = [];
     let subscriptionSql = "";
@@ -159,7 +201,10 @@ describe("Schedule plan semantic owners", () => {
       insertSeries: jest.fn(async () =>
         updateEvents.push("insert-continuations"),
       ),
-      retireSeries: jest.fn(async () => updateEvents.push("retire-old-series")),
+      retireSeries: jest.fn(async () => {
+        updateEvents.push("retire-old-series");
+        return [];
+      }),
       replaceParticipants: jest.fn(async () =>
         updateEvents.push("replace-participants"),
       ),
@@ -182,7 +227,14 @@ describe("Schedule plan semantic owners", () => {
         compensationRevisionId: null,
       })),
     } as unknown as LessonSettlementService;
-    const policy = { assertCanWriteCrm: jest.fn() } as unknown as CrmPolicy;
+    const policy = {
+      assertCanWriteCrm: jest.fn(),
+      assertCanSupplyTeacherCompensation: jest.fn(),
+      canManageTeacherCompensation: jest.fn(() => true),
+    } as unknown as CrmPolicy;
+    const previews = {
+      assertUpdateHistoricalConfirmation: jest.fn(async () => false),
+    } as unknown as SchedulePlanConstraintPreviewService;
     const mutation = new SchedulePlanMutationService(
       platform,
       policy,
@@ -191,6 +243,7 @@ describe("Schedule plan semantic owners", () => {
       materializer,
       settlement,
       definition,
+      previews,
     );
 
     const lockSpy = jest
@@ -223,10 +276,10 @@ describe("Schedule plan semantic owners", () => {
       "subscription-lock",
       "active-series-read",
       "series-locks",
+      "update-plan",
       "insert-continuations",
       "retire-old-series",
       "replace-participants",
-      "update-plan",
       "validate-new-series",
       "materialize-new-series",
     ]);

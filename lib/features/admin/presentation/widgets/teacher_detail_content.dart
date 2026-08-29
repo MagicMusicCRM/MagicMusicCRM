@@ -22,6 +22,7 @@ class TeacherDetailContent extends StatelessWidget {
     required this.payrollController,
     required this.actorRole,
     required this.canManageCredentials,
+    required this.canManageTeacherRates,
     required this.saving,
     required this.onProvisionAccess,
     required this.onManageLifecycle,
@@ -39,6 +40,7 @@ class TeacherDetailContent extends StatelessWidget {
   final TeacherPayrollController payrollController;
   final String actorRole;
   final bool canManageCredentials;
+  final bool canManageTeacherRates;
   final bool saving;
   final VoidCallback onProvisionAccess;
   final VoidCallback onManageLifecycle;
@@ -129,6 +131,7 @@ class TeacherDetailContent extends StatelessWidget {
           key: employmentKey,
           gateway: employmentReferenceGateway,
           initial: employmentInitial,
+          canManageRate: canManageTeacherRates,
           enabled: !saving,
         ),
       ],

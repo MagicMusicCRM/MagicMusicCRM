@@ -335,7 +335,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           (select lifecycle_state from app.clients
             where id = $1) as lifecycle_state,
           (select count(*)::text from app.client_custom_field_values
-            where definition_id = $4 and client_id = $1) as value_count
+            where definition_id = $4 and client_id = $1) as value_count,
+          (select version::text from app.leads where id = $1) as lead_version
       `,
       [leadId, studentId, linkedUserId, studentDefinitionId],
     );
@@ -349,6 +350,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       client_count: "1",
       lifecycle_state: "student",
       value_count: "1",
+      lead_version: "2",
     });
 
     await database.query(
@@ -543,7 +545,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
         { userId: managerId, role: "manager" },
         leadId,
         {
-          expectedVersion: 1,
+          expectedVersion: 2,
           confirm: true,
           reason: "conversion.complete",
         },
@@ -554,7 +556,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
         { userId: directorId, role: "director" },
         leadId,
         {
-          expectedVersion: 1,
+          expectedVersion: 2,
           confirm: true,
           reason: "conversion.complete",
         },

@@ -9,7 +9,7 @@ import {
 } from "./clients/client-write.validator";
 import { CrmPolicy } from "./crm.policy";
 import { diffEntityFields } from "./crm-mappers";
-import { UpsertLeadDto } from "./dto/upsert-lead.dto";
+import { UpdateLeadDto, UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { attachStudentToLead } from "./lead-student-link";
 import { toLeadDto } from "./lead-model";
 import { LeadWriteRepository } from "./lead-write.repository";
@@ -44,7 +44,13 @@ export class LeadCommandService {
     this.policy.assertCanWriteCrm(actor);
     const { lead, branchId } = await this.writes.create(actor, dto, validated);
     if (!dto.clearAssignedTo && !dto.assignedTo) {
-      await ensureResponsibleSafe(this.database, actor, "lead", lead.id);
+      const claimedVersion = await ensureResponsibleSafe(
+        this.database,
+        actor,
+        "lead",
+        lead.id,
+      );
+      if (claimedVersion !== null) lead.version = claimedVersion;
     }
     await this.audit.record({
       actor,
@@ -67,7 +73,7 @@ export class LeadCommandService {
   async update(
     actor: ActorContext,
     leadId: string,
-    dto: UpsertLeadDto,
+    dto: UpdateLeadDto,
     customFields?: ValidatedCustomFields,
   ) {
     this.policy.assertCanWriteCrm(actor);
@@ -79,7 +85,13 @@ export class LeadCommandService {
     );
     if (!lead) throw new NotFoundException("Лид не найден.");
     if (!dto.clearAssignedTo && !dto.assignedTo) {
-      await ensureResponsibleSafe(this.database, actor, "lead", lead.id);
+      const claimedVersion = await ensureResponsibleSafe(
+        this.database,
+        actor,
+        "lead",
+        lead.id,
+      );
+      if (claimedVersion !== null) lead.version = claimedVersion;
     }
     await this.audit.record({
       actor,

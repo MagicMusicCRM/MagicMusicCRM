@@ -156,6 +156,7 @@ describe("CrmStudentsController", () => {
     );
     const actor = { userId: "admin-a", role: "admin" as const };
     const dto = {
+      expectedVersion: 1,
       firstName: "Анна",
       customFields: [{ definitionId: "field-a", value: 12 }],
     };

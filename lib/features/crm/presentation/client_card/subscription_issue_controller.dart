@@ -73,6 +73,10 @@ class SubscriptionIssueController extends ChangeNotifier {
     _updateDraft(_draft.copyWith(fundingMode: mode));
   }
 
+  void selectPaymentMethod(SubscriptionPaymentMethod method) {
+    _updateDraft(_draft.copyWith(paymentMethod: method));
+  }
+
   void selectDiscountMode(SubscriptionIssueDiscountMode mode) {
     if (!fieldsEnabled || _draft.discountMode == mode) return;
     _updateDraft(_draft.copyWith(discountMode: mode, discountValue: ''));
@@ -146,6 +150,7 @@ class SubscriptionIssueController extends ChangeNotifier {
       purchaseReason: _draft.purchaseReason,
       issue: IssueSubscriptionInput(
         packageId: _draft.packageId,
+        paymentMethod: _draft.paymentMethod,
         discount: discount,
         installments: currentPricing.installments,
         surcharge: _draft.surchargeEnabled

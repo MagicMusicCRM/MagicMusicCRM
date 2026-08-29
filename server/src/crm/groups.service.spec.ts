@@ -1,11 +1,17 @@
+import { ForbiddenException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 import { CrmPolicy } from "./crm.policy";
 import { GroupsService } from "./groups.service";
 
 describe("GroupsService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
+  const metadata = {
+    idempotencyKey: "group-rate-test-001",
+    requestId: "group-rate-request-001",
+  };
 
   const build = (query: jest.Mock) => {
     const database = {
@@ -20,15 +26,34 @@ describe("GroupsService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertCanManageSystemSettings: jest.fn(),
+      assertCanManagePayrollHistory: jest.fn(
+        (targetActor: { role: string }) => {
+          if (
+            targetActor.role === "director" ||
+            targetActor.role === "system_admin"
+          ) {
+            return;
+          }
+          throw new ForbiddenException();
+        },
+      ),
     };
     const realtime = { emitCrmChanged: jest.fn() };
+    const integrity = {
+      executeVersionedMutation: jest.fn(async (command: any) => ({
+        resultRef: await command.mutate({ query }, command.expectedVersion + 1),
+        version: command.expectedVersion + 1,
+        replayed: false,
+      })),
+    };
     const service = new GroupsService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       realtime as unknown as RealtimeBus,
+      integrity as unknown as PlatformIntegrityService,
     );
-    return { service, query, audit, policy, realtime };
+    return { service, query, audit, policy, realtime, integrity };
   };
 
   const createService = (rows: Record<string, unknown>[] = []) =>
@@ -217,6 +242,8 @@ describe("GroupsService", () => {
       "Фортепиано",
       3000,
       null, // KVA-238: teacherRate не передан
+      null,
+      null,
     ]);
     expect(query.mock.calls[0][0]).toContain("tb.active_from <= current_date");
     expect(query.mock.calls[0][0]).toContain("tb.active_until >= current_date");
@@ -227,6 +254,123 @@ describe("GroupsService", () => {
         entityId: "group-b",
       }),
     );
+  });
+
+  it.each(["client", "teacher", "admin", "manager"] as const)(
+    "rejects an initial group rate from non-owner role %s before database work",
+    async (role) => {
+      const { service, query } = createService([]);
+
+      await expect(
+        service.createGroup(
+          { userId: `${role}-a`, role },
+          {
+            name: "Фортепиано",
+            teacherId: "teacher-a",
+            branchId: "branch-a",
+            roomId: "room-a",
+            teacherRate: 900,
+          },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(query).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["client", "teacher", "admin", "manager"] as const)(
+    "rejects a group-rate change from non-owner role %s before database work",
+    async (role) => {
+      const { service, query } = createService([]);
+
+      await expect(
+        service.updateGroup({ userId: `${role}-a`, role }, "group-a", {
+          teacherRate: null,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(query).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["director", "system_admin"] as const)(
+    "allows owner role %s to create a group rate",
+    async (role) => {
+      const { service, query } = createService([
+        {
+          id: "group-b",
+          teacher_id: "teacher-a",
+          branch_id: "branch-a",
+          room_id: "room-a",
+          name: "Фортепиано",
+          price_per_lesson: null,
+          teacher_rate: "900",
+          teacher_name: "Мария Петрова",
+          branch_name: "Центр",
+          room_name: "101",
+          created_at: "2026-06-13T00:00:00.000Z",
+        },
+      ]);
+
+      await expect(
+        service.createGroup(
+          { userId: `${role}-a`, role },
+          {
+            name: "Фортепиано",
+            teacherId: "teacher-a",
+            branchId: "branch-a",
+            roomId: "room-a",
+            teacherRate: 900,
+          },
+          metadata,
+        ),
+      ).resolves.toMatchObject({ teacherRate: 900 });
+      expect(query).toHaveBeenCalled();
+    },
+  );
+
+  it("replays initial group-rate creation without inserting a second group", async () => {
+    const replayedGroup = {
+      id: "group-replayed",
+      teacher_id: "teacher-a",
+      branch_id: "branch-a",
+      room_id: "room-a",
+      name: "Фортепиано",
+      price_per_lesson: null,
+      teacher_rate: "900",
+      teacher_name: "Мария Петрова",
+      branch_name: "Центр",
+      room_name: "101",
+      lifecycle_state: "active",
+      version: 1,
+      archived_at: null,
+      archive_reason: null,
+      archive_effective_date: null,
+      created_at: "2026-06-13T00:00:00.000Z",
+    };
+    const { service, query, integrity } = createService([replayedGroup]);
+    (integrity.executeVersionedMutation as jest.Mock).mockResolvedValueOnce({
+      resultRef: { groupId: "group-replayed" },
+      version: 1,
+      replayed: true,
+    });
+
+    await expect(
+      service.createGroup(
+        { userId: "director-a", role: "director" },
+        {
+          name: "Фортепиано",
+          teacherId: "teacher-a",
+          branchId: "branch-a",
+          roomId: "room-a",
+          teacherRate: 900,
+        },
+        metadata,
+      ),
+    ).resolves.toMatchObject({ id: "group-replayed", teacherRate: 900 });
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(
+      query.mock.calls.map((call) => String(call[0])).join("\n"),
+    ).not.toContain("insert into app.groups");
   });
 
   it("keeps rate-only updates available for imported incomplete groups", async () => {
@@ -246,10 +390,11 @@ describe("GroupsService", () => {
     await service.updateGroup(
       { userId: "director-a", role: "director" },
       "legacy-group",
-      { teacherRate: 1200 },
+      { teacherRate: 1200, expectedVersion: 1 },
+      metadata,
     );
 
-    expect(query.mock.calls[1][1]).toEqual([
+    expect(query.mock.calls[2][1]).toEqual([
       "legacy-group",
       null,
       null,
@@ -259,9 +404,58 @@ describe("GroupsService", () => {
       true,
       1200,
       false,
+      2,
+      1,
     ]);
-    expect(query.mock.calls[1][0]).toContain("where not $9::boolean");
+    expect(query.mock.calls[2][0]).toContain("where not $9::boolean");
   });
+
+  it.each([900, null])(
+    "replays a group-rate update of %s without a second group write",
+    async (teacherRate) => {
+      const replayedGroup = {
+        id: "group-replayed",
+        teacher_id: "teacher-a",
+        branch_id: "branch-a",
+        room_id: "room-a",
+        name: "Фортепиано",
+        price_per_lesson: null,
+        teacher_rate: teacherRate === null ? null : String(teacherRate),
+        teacher_name: "Мария Петрова",
+        branch_name: "Центр",
+        room_name: "101",
+        lifecycle_state: "active",
+        version: 2,
+        archived_at: null,
+        archive_reason: null,
+        archive_effective_date: null,
+        created_at: "2026-06-13T00:00:00.000Z",
+      };
+      const { service, query, integrity } = createService([replayedGroup]);
+      (integrity.executeVersionedMutation as jest.Mock).mockResolvedValueOnce({
+        resultRef: { groupId: "group-replayed" },
+        version: 2,
+        replayed: true,
+      });
+
+      await expect(
+        service.updateGroup(
+          { userId: "director-a", role: "director" },
+          "group-replayed",
+          { teacherRate, expectedVersion: 1 },
+          metadata,
+        ),
+      ).resolves.toMatchObject({
+        id: "group-replayed",
+        teacherRate,
+        version: 2,
+      });
+      expect(integrity.executeVersionedMutation).toHaveBeenCalledTimes(1);
+      expect(
+        query.mock.calls.map((call) => String(call[0])).join("\n"),
+      ).not.toContain("update app.groups");
+    },
+  );
 
   it("rejects manager updates for imported groups without a branch", async () => {
     const { service, query } = createService([

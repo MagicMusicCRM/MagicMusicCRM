@@ -25,6 +25,38 @@ describe("LessonScheduleMutationService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertManagerOnly: jest.fn(),
+      assertCanManagePayrollHistory: jest.fn(
+        (targetActor: { role: string }) => {
+          if (
+            targetActor.role === "director" ||
+            targetActor.role === "system_admin"
+          ) {
+            return;
+          }
+          throw new ForbiddenException();
+        },
+      ),
+      assertCanSupplyTeacherCompensation: jest.fn(
+        (targetActor: { role: string }, input: Record<string, unknown>) => {
+          const decision = input.financialDecision as
+            Record<string, unknown> | undefined;
+          const supplied = [
+            input.teacherRate,
+            input.teacherCompensationType,
+            input.teacherCompensationValue,
+            decision?.teacherCompensationRuleKey,
+            decision?.teacherCompensationValueMinor,
+          ].some((value) => value !== undefined);
+          if (!supplied) return;
+          if (
+            targetActor.role === "director" ||
+            targetActor.role === "system_admin"
+          ) {
+            return;
+          }
+          throw new ForbiddenException();
+        },
+      ),
       // Per-lesson teacher rates: staff-only (admin/manager/director), not
       // clients or teachers — the default mock says no so a leak has to be
       // opted into explicitly by a test.
@@ -42,9 +74,8 @@ describe("LessonScheduleMutationService", () => {
       query,
       // Transactional writes share the same query mock so call indices in
       // the assertions below stay stable.
-      transaction: (
-        work: (client: { query: jest.Mock }) => Promise<unknown>,
-      ) => work({ query }),
+      transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query }),
     } as unknown as DatabaseService;
     return new LessonScheduleMutationService(
       database,
@@ -83,12 +114,6 @@ describe("LessonScheduleMutationService", () => {
     const service = construct(query, deps);
     return { service, query, ...deps };
   };
-
-
-
-
-
-
 
   it("stamps original_scheduled_at when a series lesson is moved (KVA-236)", async () => {
     const { service, query } = createServiceWithQueryResults([
@@ -214,6 +239,80 @@ describe("LessonScheduleMutationService", () => {
       }),
     );
   });
+
+  it.each(["client", "teacher", "admin", "manager"] as const)(
+    "rejects a per-lesson rate from non-owner role %s before storage",
+    async (role) => {
+      const { service, query } = createServiceWithQueryResults([]);
+
+      await expect(
+        service.createLesson(
+          { userId: `${role}-a`, role },
+          {
+            studentId: "student-a",
+            teacherId: "teacher-a",
+            branchId: "branch-a",
+            roomId: "room-a",
+            scheduledAt: "2026-09-12T12:00:00.000Z",
+            teacherRate: 900,
+          },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(query).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["director", "system_admin"] as const)(
+    "allows owner role %s to create a per-lesson rate",
+    async (role) => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [] },
+        {
+          rows: [
+            {
+              id: "lesson-rate-a",
+              student_id: "student-a",
+              group_id: null,
+              lead_id: null,
+              teacher_id: "teacher-a",
+              branch_id: "branch-a",
+              room_id: "room-a",
+              scheduled_at: "2026-09-12T12:00:00.000Z",
+              duration_minutes: 60,
+              status: "scheduled",
+              is_trial: false,
+              notes: null,
+              teacher_rate: "900",
+              student_user_id: null,
+              teacher_user_id: null,
+              student_name: null,
+              lead_name: null,
+              teacher_name: null,
+              branch_name: null,
+              room_name: null,
+              group_name: null,
+              group_price_per_lesson: null,
+            },
+          ],
+        },
+      ]);
+
+      await expect(
+        service.createLesson(
+          { userId: `${role}-a`, role },
+          {
+            studentId: "student-a",
+            teacherId: "teacher-a",
+            branchId: "branch-a",
+            roomId: "room-a",
+            scheduledAt: "2026-09-12T12:00:00.000Z",
+            teacherRate: 900,
+          },
+        ),
+      ).resolves.toMatchObject({ teacherRate: 900 });
+      expect(query).toHaveBeenCalled();
+    },
+  );
 
   it("allows teachers to update notes without exposing lifecycle writes", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
@@ -729,7 +828,6 @@ describe("LessonScheduleMutationService", () => {
     expect(deps.notifications.notifyUser).not.toHaveBeenCalled();
   });
 
-
   describe("schedule conflicts (контракты 1-2, правки №2)", () => {
     const busyRow = {
       lesson_id: "lesson-busy",
@@ -865,7 +963,6 @@ describe("LessonScheduleMutationService", () => {
       expect(insertCall?.[1]?.[0]).toBeNull();
       expect(insertCall?.[1]?.[2]).toBe("lead-b");
     });
-
   });
 
   describe("lesson subject invariants", () => {
@@ -954,22 +1051,21 @@ describe("LessonScheduleMutationService", () => {
       });
       expect(query).not.toHaveBeenCalled();
     });
-
-
   });
 
   it("stops a teacher from setting the pay rate on their own lesson", async () => {
     const teacherActor = { userId: "teacher-user-a", role: "teacher" as const };
     const { service, policy } = createServiceWithQueryResults([{ rows: [] }]);
-    policy.assertCanWriteCrm.mockImplementation(() => {
-      throw new ForbiddenException();
-    });
 
     // teacher_rate is what the school PAYS: a teacher editing it on their own
     // lesson is a self-granted raise. They may still edit status/notes there.
     await expect(
       service.updateLesson(teacherActor, "lesson-a", { teacherRate: 5000 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(teacherActor);
+    expect(policy.assertCanSupplyTeacherCompensation).toHaveBeenCalledWith(
+      teacherActor,
+      expect.objectContaining({ teacherRate: 5000 }),
+    );
+    expect(policy.assertCanWriteCrm).not.toHaveBeenCalled();
   });
 });

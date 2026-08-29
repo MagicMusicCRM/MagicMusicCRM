@@ -65,11 +65,12 @@ export class StudentCommandService {
     const command = await this.prepareCreate(dto, validated);
     try {
       const student = await this.mutations.create(command);
-      await this.ensureFallbackResponsible(
+      const claimedVersion = await this.ensureFallbackResponsible(
         actor,
         student.id,
         command.requestedResponsibleId,
       );
+      if (claimedVersion !== null) student.version = claimedVersion;
       await this.publishCreated(actor, student, command);
       return {
         ...toStudentDto(student),
@@ -90,7 +91,13 @@ export class StudentCommandService {
     const command = this.prepareUpdate(studentId, dto, customFields);
     const { beforeStudent, student } = await this.mutations.update(command);
     if (!student) throw new NotFoundException("Ученик не найден.");
-    await this.ensureUpdateFallbackResponsible(actor, dto, command, student.id);
+    const claimedVersion = await this.ensureUpdateFallbackResponsible(
+      actor,
+      dto,
+      command,
+      student.id,
+    );
+    if (claimedVersion !== null) student.version = claimedVersion;
     await this.publishUpdated(
       actor,
       student,
@@ -235,6 +242,7 @@ export class StudentCommandService {
     const branchId = extractBranchId(dto.customDataPatch);
     return {
       studentId,
+      expectedVersion: dto.expectedVersion,
       firstName: trimOptional(dto.firstName),
       lastName: trimOptional(dto.lastName),
       phone: trimOptional(dto.phone),
@@ -253,9 +261,9 @@ export class StudentCommandService {
     actor: ActorContext,
     studentId: string,
     requestedResponsibleId: string | undefined,
-  ): Promise<void> {
-    if (requestedResponsibleId) return;
-    await ensureResponsibleSafe(this.database, actor, "student", studentId);
+  ): Promise<number | null> {
+    if (requestedResponsibleId) return null;
+    return ensureResponsibleSafe(this.database, actor, "student", studentId);
   }
 
   private async ensureUpdateFallbackResponsible(
@@ -263,9 +271,9 @@ export class StudentCommandService {
     dto: UpdateStudentDto,
     command: PreparedStudentUpdate,
     studentId: string,
-  ): Promise<void> {
-    if (dto.clearResponsible || command.requestedResponsibleId) return;
-    await ensureResponsibleSafe(this.database, actor, "student", studentId);
+  ): Promise<number | null> {
+    if (dto.clearResponsible || command.requestedResponsibleId) return null;
+    return ensureResponsibleSafe(this.database, actor, "student", studentId);
   }
 
   private async publishCreated(

@@ -1,6 +1,11 @@
 part of 'schedule_widget.dart';
 
 extension _ScheduleActions on _ScheduleWidgetState {
+  bool get _canManageTeacherCompensation {
+    final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
+    return snapshot != null && crmCanManageTeacherRates(snapshot);
+  }
+
   Future<void> _openLeadCreateFromSchedule(
     ScheduleFocusState focus,
     DateTime day,
@@ -328,6 +333,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       crm: ref.read(magicCrmServiceProvider),
       operation: LessonDecisionOperation.cancel,
       lesson: lesson,
+      canManageTeacherCompensation: _canManageTeacherCompensation,
     );
     if (changed == true && mounted) {
       await _refreshEditedSchedule();
@@ -347,6 +353,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       crm: ref.read(magicCrmServiceProvider),
       operation: LessonDecisionOperation.settle,
       lesson: lesson,
+      canManageTeacherCompensation: _canManageTeacherCompensation,
     );
     if (changed == true && mounted) {
       await _refreshEditedSchedule();
@@ -369,6 +376,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       crm: ref.read(magicCrmServiceProvider),
       operation: operation,
       lesson: lesson,
+      canManageTeacherCompensation: _canManageTeacherCompensation,
     );
     if (changed == true && mounted) {
       await _refreshEditedSchedule();

@@ -68,6 +68,44 @@ void main() {
     expect(restored.activeTab.forms, isEmpty);
   });
 
+  test('restores encrypted client-card draft with its base version', () async {
+    final backend = InMemoryWorkspaceKeyValueStore();
+    final store = AccountWorkspaceStore(backend);
+    final workspace = controller('account-1');
+    final clientTab = workspace.open(link('client-1'), titleHint: 'Клиент');
+    const formKey = 'client-card:lead:client-1';
+    workspace.registerForm(
+      clientTab,
+      formKey,
+      expectedVersion: 7,
+      draft: const {
+        'schemaVersion': 1,
+        'entityType': 'lead',
+        'entityId': 'client-1',
+        'lead': {
+          'expectedVersion': 7,
+          'core': {'phone': '+79990001122'},
+        },
+      },
+    );
+    workspace.updateForm(clientTab, formKey, dirty: true, expectedVersion: 7);
+
+    await store.save(workspace.state);
+    final restored = await store.restore(
+      accountId: 'account-1',
+      fallback: controller('account-1').state,
+      routeAllowed: (_) => true,
+    );
+
+    final form = restored.activeTab.forms[formKey];
+    expect(form?.dirty, isTrue);
+    expect(form?.expectedVersion, 7);
+    expect(
+      ((form?.draft['lead'] as Map)['core'] as Map)['phone'],
+      '+79990001122',
+    );
+  });
+
   test('persists and restores per-tab Back and Forward history', () async {
     final backend = InMemoryWorkspaceKeyValueStore();
     final store = AccountWorkspaceStore(backend);
@@ -167,12 +205,25 @@ void main() {
       final first = controller('account-1')..open(link('client-1'));
       final second = controller('account-1')..open(link('client-2'));
       await store.save(first.state);
+      final firstBinding = WorkspacePersistenceBinding(
+        controller: first,
+        store: store,
+      );
+      final secondBinding = WorkspacePersistenceBinding(
+        controller: second,
+        store: store,
+      );
+      addTearDown(firstBinding.dispose);
+      addTearDown(secondBinding.dispose);
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
       final coordinator = WorkspaceLogoutCoordinator(store)
         ..attach(first)
         ..attach(second);
 
       final stopwatch = Stopwatch()..start();
       await coordinator.logout('account-1');
+      await Future.wait([firstBinding.flush(), secondBinding.flush()]);
       stopwatch.stop();
 
       expect(first.state.loggedOut, isTrue);
@@ -180,6 +231,103 @@ void main() {
       expect(backend.values, isEmpty);
       expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
       expect(() => first.open(link('late-event')), throwsA(isA<StateError>()));
+    },
+  );
+
+  test('global logout saves every dirty window and fails closed', () async {
+    final backend = InMemoryWorkspaceKeyValueStore();
+    final store = AccountWorkspaceStore(backend);
+    final first = controller('account-1');
+    final second = controller('account-1');
+    final saves = <String>[];
+    first.registerForm(
+      first.state.activeTabId,
+      'first',
+      onSave: () async {
+        saves.add('first');
+        return true;
+      },
+    );
+    second.registerForm(
+      second.state.activeTabId,
+      'second',
+      onSave: () async {
+        saves.add('second');
+        return false;
+      },
+    );
+    first.updateForm(first.state.activeTabId, 'first', dirty: true);
+    second.updateForm(second.state.activeTabId, 'second', dirty: true);
+    final coordinator = WorkspaceLogoutCoordinator(store)
+      ..attach(first)
+      ..attach(second);
+
+    await expectLater(coordinator.logoutAll(), throwsA(isA<StateError>()));
+
+    expect(saves, containsAll(['first', 'second']));
+    expect(first.state.loggedOut, isFalse);
+    expect(second.state.loggedOut, isFalse);
+    expect(second.state.activeTab.hasDirtyForms, isTrue);
+  });
+
+  test(
+    'forced logout preserves a local draft and never waits for network save',
+    () async {
+      final backend = InMemoryWorkspaceKeyValueStore();
+      final store = AccountWorkspaceStore(backend);
+      final workspace = controller('account-1');
+      const formKey = 'client-card:lead:home';
+      var networkSaveCalls = 0;
+      workspace.registerForm(
+        workspace.state.activeTabId,
+        formKey,
+        expectedVersion: 3,
+        draft: const {
+          'schemaVersion': 1,
+          'entityType': 'lead',
+          'entityId': 'home',
+          'lead': {
+            'expectedVersion': 3,
+            'core': {'firstName': 'Черновик'},
+          },
+        },
+        onSave: () async {
+          networkSaveCalls++;
+          return false;
+        },
+      );
+      workspace.updateForm(
+        workspace.state.activeTabId,
+        formKey,
+        dirty: true,
+        expectedVersion: 3,
+      );
+      final binding = WorkspacePersistenceBinding(
+        controller: workspace,
+        store: store,
+      );
+      addTearDown(binding.dispose);
+      addTearDown(workspace.dispose);
+      final coordinator = WorkspaceLogoutCoordinator(store)..attach(workspace);
+
+      await coordinator.forceLogoutAllPreservingDrafts();
+      await binding.flush();
+
+      final restored = await store.restore(
+        accountId: 'account-1',
+        fallback: controller('account-1').state,
+        routeAllowed: (_) => true,
+      );
+
+      expect(networkSaveCalls, 0);
+      expect(workspace.state.loggedOut, isTrue);
+      expect(backend.values.values.single, contains('Черновик'));
+      expect(restored.activeTab.forms[formKey]?.dirty, isTrue);
+      expect(
+        ((restored.activeTab.forms[formKey]?.draft['lead'] as Map)['core']
+            as Map)['firstName'],
+        'Черновик',
+      );
     },
   );
 }

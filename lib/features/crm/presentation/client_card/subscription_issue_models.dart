@@ -33,6 +33,7 @@ class SubscriptionIssueDraft {
     required this.payerStudentId,
     required this.payerLabel,
     required this.currencyCode,
+    this.paymentMethod = SubscriptionPaymentMethod.cashless,
     this.fundingMode = SubscriptionFundingMode.personalAccount,
     this.discountMode = SubscriptionIssueDiscountMode.none,
     this.discountValue = '',
@@ -65,6 +66,7 @@ class SubscriptionIssueDraft {
   final String payerStudentId;
   final String payerLabel;
   final String currencyCode;
+  final SubscriptionPaymentMethod paymentMethod;
   final SubscriptionFundingMode fundingMode;
   final SubscriptionIssueDiscountMode discountMode;
   final String discountValue;
@@ -78,6 +80,7 @@ class SubscriptionIssueDraft {
   SubscriptionIssueDraft copyWith({
     String? payerStudentId,
     String? payerLabel,
+    SubscriptionPaymentMethod? paymentMethod,
     SubscriptionFundingMode? fundingMode,
     SubscriptionIssueDiscountMode? discountMode,
     String? discountValue,
@@ -95,6 +98,7 @@ class SubscriptionIssueDraft {
       payerStudentId: payerStudentId ?? this.payerStudentId,
       payerLabel: payerLabel ?? this.payerLabel,
       currencyCode: currencyCode,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
       fundingMode: fundingMode ?? this.fundingMode,
       discountMode: discountMode ?? this.discountMode,
       discountValue: discountValue ?? this.discountValue,

@@ -13,10 +13,12 @@ import {
   type LessonSettlementPort,
 } from "../commerce/lesson-settlement.port";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { CrmPolicy } from "../crm.policy";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import type { LessonDraftInput } from "./lesson-draft.contracts";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
+import { groupTransitionSuccessorDraft } from "./lesson-transition-group-draft";
 import {
   draftProjection,
   effectiveTransitionDto,
@@ -28,7 +30,6 @@ import {
 } from "./lesson-transition.rules";
 import type {
   CalculatedTransitionPreview,
-  GroupLessonDraft,
   TransitionLessonRow,
   TransitionOperation,
   TransitionPreviewDto,
@@ -56,6 +57,7 @@ type CompleteIndividualSnapshotRow = TransitionLessonRow & {
 export class LessonTransitionPreparationService {
   constructor(
     private readonly database: DatabaseService,
+    private readonly policy: CrmPolicy,
     private readonly validator: LessonRequiredFieldValidator,
     private readonly constraints: ScheduleConstraintEngine,
     @Inject(LESSON_SETTLEMENT_PORT)
@@ -142,7 +144,7 @@ export class LessonTransitionPreparationService {
     dto: LessonDraftInput,
     source: TransitionSource,
   ): TransitionSuccessor {
-    if (source.groupId) return this.groupSuccessorDraft(dto, source);
+    if (source.groupId) return groupTransitionSuccessorDraft(dto, source);
     return { kind: "individual", ...this.validator.update(dto, source) };
   }
 
@@ -151,27 +153,36 @@ export class LessonTransitionPreparationService {
     lessonId: string,
     successor: TransitionSuccessor,
   ): Promise<{ valid: boolean; violations: unknown[] }> {
-    const clients = successor.kind === "individual"
-      ? [successor.clientRef]
-      : successor.participants.map((participant) => ({
-          type: "student" as const,
-          id: participant.studentId,
-        }));
+    const clients =
+      successor.kind === "individual"
+        ? [successor.clientRef]
+        : successor.participants.map((participant) => ({
+            type: "student" as const,
+            id: participant.studentId,
+          }));
     const validations = await Promise.all(
-      clients.map((clientRef) => this.constraints.validate({
-        clientRef,
-        teacherId: successor.teacherId,
-        branchId: successor.branchId,
-        roomId: successor.roomId,
-        startAt: successor.scheduledAt,
-        endAt: successor.endAt,
-        excludeLessonId: lessonId,
-      }, client)),
+      clients.map((clientRef) =>
+        this.constraints.validate(
+          {
+            clientRef,
+            teacherId: successor.teacherId,
+            branchId: successor.branchId,
+            roomId: successor.roomId,
+            startAt: successor.scheduledAt,
+            endAt: successor.endAt,
+            excludeLessonId: lessonId,
+          },
+          client,
+        ),
+      ),
     );
-    const violations = Array.from(new Map(
-      validations.flatMap((validation) => validation.violations)
-        .map((violation) => [JSON.stringify(violation), violation]),
-    ).values());
+    const violations = Array.from(
+      new Map(
+        validations
+          .flatMap((validation) => validation.violations)
+          .map((violation) => [JSON.stringify(violation), violation]),
+      ).values(),
+    );
     return { valid: violations.length === 0, violations };
   }
 
@@ -185,10 +196,21 @@ export class LessonTransitionPreparationService {
     const source = await this.loadSource(lessonId, client, true);
     this.assertSource(source, dto.expectedVersion, operation);
     await this.assertSettlementReviewPlan(client, lessonId, operation);
-    const effectiveDto = effectiveTransitionDto(source, dto, operation);
-    const successor = operation === "reschedule"
-      ? this.successorDraft(dto.successor!, source)
-      : null;
+    const authorizedDto = await this.authorizedTransitionDto(
+      client,
+      actor,
+      source,
+      dto,
+    );
+    const effectiveDto = effectiveTransitionDto(
+      source,
+      authorizedDto,
+      operation,
+    );
+    const successor =
+      operation === "reschedule"
+        ? this.successorDraft(authorizedDto.successor!, source)
+        : null;
     const validation = successor
       ? await this.validateSuccessor(client, lessonId, successor)
       : { valid: true, violations: [] };
@@ -219,11 +241,12 @@ export class LessonTransitionPreparationService {
     return {
       ...base,
       financialPreview: financial,
-      warnings: source.lifecycleState === "successfully_completed"
-        ? ["COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED"]
-        : successor && hasTransitionClientCharge(financial)
-          ? ["SUCCESSOR_MAY_CHARGE_AGAIN"]
-          : [],
+      warnings:
+        source.lifecycleState === "successfully_completed"
+          ? ["COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED"]
+          : successor && hasTransitionClientCharge(financial)
+            ? ["SUCCESSOR_MAY_CHARGE_AGAIN"]
+            : [],
       transitionFingerprint: transitionFingerprint({
         operation,
         source,
@@ -235,6 +258,29 @@ export class LessonTransitionPreparationService {
     };
   }
 
+  async authorizedTransitionDto(
+    client: PoolClient,
+    actor: ActorContext,
+    source: TransitionSource,
+    dto: TransitionPreviewDto,
+  ): Promise<TransitionPreviewDto> {
+    if (this.policy.canManageTeacherCompensation(actor)) return dto;
+    const current = await this.settlement.loadPlan(client, source.id, true);
+    const snapshot = source.groupId ? source.groupSnapshot : source.snapshot;
+    const ruleKey =
+      current?.decision.teacherCompensationRuleKey ??
+      (snapshot?.teacherCompensationType === "none" ? "none" : "standard");
+    return {
+      ...dto,
+      financialDecision: {
+        ...dto.financialDecision,
+        teacherCompensationRuleKey: ruleKey,
+        teacherCompensationValueMinor:
+          current?.decision.teacherCompensationValueMinor,
+      },
+    };
+  }
+
   private mapSource(row: TransitionLessonRow): TransitionSource {
     const commonSnapshot = this.commonSnapshot(row);
     return {
@@ -243,9 +289,10 @@ export class LessonTransitionPreparationService {
       lifecycleState: row.lifecycle_state,
       studentId: row.student_id,
       leadId: row.lead_id,
-      groupId: row.snapshot_group_id === row.lesson_group_id
-        ? row.snapshot_group_id
-        : null,
+      groupId:
+        row.snapshot_group_id === row.lesson_group_id
+          ? row.snapshot_group_id
+          : null,
       teacherId: row.teacher_id,
       branchId: row.branch_id,
       roomId: row.room_id,
@@ -254,9 +301,8 @@ export class LessonTransitionPreparationService {
       isTrial: row.is_trial,
       notes: row.notes,
       snapshot: this.individualSnapshot(row, commonSnapshot),
-      groupSnapshot: row.snapshot_group_id && commonSnapshot
-        ? commonSnapshot
-        : null,
+      groupSnapshot:
+        row.snapshot_group_id && commonSnapshot ? commonSnapshot : null,
       participants: (row.participants ?? []).map((participant) => ({
         ...participant,
         chargeValue: Number(participant.chargeValue),
@@ -320,11 +366,13 @@ export class LessonTransitionPreparationService {
       this.isSettleAllowed(source, operation) ||
       this.isOrdinaryTransitionAllowed(source, operation) ||
       this.isCompletedReschedule(source, operation)
-    ) return;
+    )
+      return;
     throw new ConflictException({
-      code: operation === "settle"
-        ? "LESSON_SETTLEMENT_REVIEW_NOT_REQUIRED"
-        : "LESSON_ALREADY_TERMINAL",
+      code:
+        operation === "settle"
+          ? "LESSON_SETTLEMENT_REVIEW_NOT_REQUIRED"
+          : "LESSON_ALREADY_TERMINAL",
       state: source.lifecycleState,
     });
   }
@@ -333,159 +381,42 @@ export class LessonTransitionPreparationService {
     source: TransitionSource,
     operation: TransitionOperation,
   ): boolean {
-    return operation === "settle" &&
-      source.lifecycleState === "settlement_pending";
+    return (
+      operation === "settle" && source.lifecycleState === "settlement_pending"
+    );
   }
 
   private isOrdinaryTransitionAllowed(
     source: TransitionSource,
     operation: TransitionOperation,
   ): boolean {
-    return operation !== "settle" &&
-      ["scheduled", "settlement_pending"].includes(source.lifecycleState);
+    return (
+      operation !== "settle" &&
+      ["scheduled", "settlement_pending"].includes(source.lifecycleState)
+    );
   }
 
   private isCompletedReschedule(
     source: TransitionSource,
     operation: TransitionOperation,
   ): boolean {
-    return operation === "reschedule" &&
-      source.lifecycleState === "successfully_completed";
+    return (
+      operation === "reschedule" &&
+      source.lifecycleState === "successfully_completed"
+    );
   }
 
   private assertCompleteSnapshot(source: TransitionSource): void {
-    const individualValid = source.snapshot?.validationState === "valid" &&
-      !source.groupId;
-    const groupValid = source.groupSnapshot?.validationState === "valid" &&
-      Boolean(source.groupId) && source.participants.length > 0;
+    const individualValid =
+      source.snapshot?.validationState === "valid" && !source.groupId;
+    const groupValid =
+      source.groupSnapshot?.validationState === "valid" &&
+      Boolean(source.groupId) &&
+      source.participants.length > 0;
     if (individualValid || groupValid) return;
     throw new UnprocessableEntityException({
       code: "LESSON_SNAPSHOT_INCOMPLETE",
       fields: ["snapshot"],
     });
   }
-
-  private groupSuccessorDraft(
-    dto: LessonDraftInput,
-    source: TransitionSource,
-  ): GroupLessonDraft {
-    const snapshot = source.groupSnapshot;
-    if (!snapshot || snapshot.validationState !== "valid") {
-      invalidGroupDraft("LESSON_SNAPSHOT_INCOMPLETE", ["snapshot"]);
-    }
-    const immutableChanges = [
-      ...this.groupSubjectChanges(dto, source),
-      ...this.groupFinancialChanges(dto),
-      ...this.groupCompensationChanges(dto, snapshot!),
-      ...this.groupControlChanges(dto, snapshot!),
-    ];
-    if (immutableChanges.length > 0) {
-      invalidGroupDraft("IMMUTABLE_LESSON_SNAPSHOT", immutableChanges);
-    }
-    return this.buildGroupDraft(dto, source, snapshot!);
-  }
-
-  private groupSubjectChanges(dto: LessonDraftInput, source: TransitionSource) {
-    return [
-      dto.clientRef || dto.studentId || dto.leadId ? "clientRef" : null,
-      dto.groupId !== undefined && dto.groupId !== source.groupId ? "groupId" : null,
-      dto.status !== undefined ? "status" : null,
-    ].filter((field): field is string => field !== null);
-  }
-
-  private groupFinancialChanges(dto: LessonDraftInput) {
-    return [
-      dto.clientChargeType !== undefined && dto.clientChargeType !== "none"
-        ? "clientChargeType" : null,
-      dto.clientChargeValue !== undefined && dto.clientChargeValue !== 0
-        ? "clientChargeValue" : null,
-      dto.subscriptionId !== undefined ? "subscriptionId" : null,
-    ].filter((field): field is string => field !== null);
-  }
-
-  private groupCompensationChanges(
-    dto: LessonDraftInput,
-    snapshot: NonNullable<TransitionSource["groupSnapshot"]>,
-  ) {
-    return [
-      dto.teacherCompensationType !== undefined &&
-          dto.teacherCompensationType !== snapshot.teacherCompensationType
-        ? "teacherCompensationType" : null,
-      dto.teacherCompensationValue !== undefined &&
-          dto.teacherCompensationValue !== snapshot.teacherCompensationValue
-        ? "teacherCompensationValue" : null,
-      dto.teacherRate !== undefined &&
-          dto.teacherRate !== snapshot.teacherCompensationValue
-        ? "teacherRate" : null,
-    ].filter((field): field is string => field !== null);
-  }
-
-  private groupControlChanges(
-    dto: LessonDraftInput,
-    snapshot: NonNullable<TransitionSource["groupSnapshot"]>,
-  ) {
-    return [
-      dto.isTrial !== undefined && dto.isTrial !== snapshot.trial ? "isTrial" : null,
-      dto.completionType !== undefined &&
-          dto.completionType.trim() !== snapshot.completionType
-        ? "completionType" : null,
-      dto.force === true ? "force" : null,
-    ].filter((field): field is string => field !== null);
-  }
-
-  private buildGroupDraft(
-    dto: LessonDraftInput,
-    source: TransitionSource,
-    snapshot: NonNullable<TransitionSource["groupSnapshot"]>,
-  ): GroupLessonDraft {
-    const resources = this.groupResources(dto, source);
-    const interval = this.groupInterval(dto, source);
-    return {
-      kind: "group",
-      groupId: source.groupId!,
-      ...resources,
-      ...interval,
-      isTrial: snapshot.trial,
-      notes: this.groupNotes(dto, source),
-      completionType: snapshot.completionType,
-      teacherCompensationType: snapshot.teacherCompensationType,
-      teacherCompensationValue: snapshot.teacherCompensationValue,
-      participants: source.participants,
-    };
-  }
-
-  private groupResources(dto: LessonDraftInput, source: TransitionSource) {
-    const teacherId = dto.teacherId ?? source.teacherId;
-    const branchId = dto.branchId ?? source.branchId;
-    const roomId = dto.roomId ?? source.roomId;
-    const missing = [!teacherId ? "teacherId" : null, !branchId ? "branchId" : null,
-      !roomId ? "roomId" : null].filter((field): field is string => field !== null);
-    if (missing.length > 0) invalidGroupDraft("LESSON_REQUIRED_FIELDS", missing);
-    return { teacherId: teacherId!, branchId: branchId!, roomId: roomId! };
-  }
-
-  private groupInterval(dto: LessonDraftInput, source: TransitionSource) {
-    const start = new Date(dto.scheduledAt ?? source.scheduledAt);
-    const durationMinutes = dto.durationMinutes ?? source.durationMinutes;
-    const end = new Date(start.getTime() + durationMinutes * 60_000);
-    if (!Number.isFinite(start.getTime()) || start >= end) {
-      invalidGroupDraft("INVALID_INTERVAL", ["scheduledAt", "durationMinutes"]);
-    }
-    return {
-      scheduledAt: start.toISOString(),
-      durationMinutes,
-      endAt: end.toISOString(),
-    };
-  }
-
-  private groupNotes(dto: LessonDraftInput, source: TransitionSource) {
-    return dto.notes === undefined ? source.notes : dto.notes.trim() || null;
-  }
 }
-
-const invalidGroupDraft = (code: string, fields: string[]): never => {
-  throw new UnprocessableEntityException({
-    code,
-    fields: [...new Set(fields)].sort(),
-  });
-};

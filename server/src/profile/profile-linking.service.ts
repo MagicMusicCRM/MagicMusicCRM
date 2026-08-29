@@ -623,6 +623,57 @@ export class ProfileLinkingService {
     normalizedPhone: string,
     source: "auto_phone" | "manual_phone",
   ) {
+    if (entityType === "student" || entityType === "lead") {
+      const aggregateTable =
+        entityType === "student" ? "app.students" : "app.leads";
+      await this.database.query(
+        `
+          with target as (
+            select id, version
+            from ${aggregateTable}
+            where id = $3::uuid and deleted_at is null
+            for update
+          ), linked as (
+            insert into app.user_crm_links (
+              user_id,
+              entity_type,
+              entity_id,
+              matched_phone,
+              link_source,
+              confirmed_at,
+              created_by
+            )
+            select $1, $2::app.crm_entity_type, $3::uuid, $4, $5, now(), $6::uuid
+            from target
+            where not exists (
+              select 1
+              from app.user_crm_links existing
+              where existing.user_id = $1
+                and existing.entity_type = $2::app.crm_entity_type
+                and existing.entity_id = $3::uuid
+                and existing.deleted_at is null
+            )
+            returning entity_id
+          ), bumped as (
+            update ${aggregateTable} aggregate
+            set version = target.version + 1, updated_at = now()
+            from target, linked
+            where aggregate.id = target.id
+            returning aggregate.id
+          )
+          select id from bumped
+        `,
+        [
+          profile.user_id,
+          entityType,
+          entityId,
+          normalizedPhone,
+          source,
+          actor.userId,
+        ],
+      );
+      return;
+    }
     await this.database.query(
       `
         insert into app.user_crm_links (

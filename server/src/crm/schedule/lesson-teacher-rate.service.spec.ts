@@ -1,43 +1,93 @@
+import { ForbiddenException } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import { DatabaseService } from "../../db/database.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { CrmPolicy } from "../crm.policy";
 import { LessonTeacherRateService } from "./lesson-teacher-rate.service";
 
 describe("LessonTeacherRateService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
+  const metadata = {
+    idempotencyKey: "bulk-rate-test-001",
+    requestId: "bulk-rate-request-001",
+  };
 
-  const buildDeps = () => ({
+  const buildDeps = (policyOverride?: CrmPolicy) => ({
     audit: { record: jest.fn().mockResolvedValue(undefined) },
-    policy: { assertManagerOnly: jest.fn() },
+    policy: policyOverride ?? { assertCanManagePayrollHistory: jest.fn() },
   });
 
   const createServiceWithQueryResults = (
     results: { rows: Record<string, unknown>[] }[],
+    policyOverride?: CrmPolicy,
   ) => {
     const queuedResults = [...results];
-    const query = jest.fn().mockImplementation(() =>
-      Promise.resolve(queuedResults.shift()),
-    );
-    const deps = buildDeps();
+    const query = jest
+      .fn()
+      .mockImplementation(() => Promise.resolve(queuedResults.shift()));
+    const deps = buildDeps(policyOverride);
     const database = {
       query,
-      transaction: (
-        work: (client: { query: jest.Mock }) => Promise<unknown>,
-      ) => work({ query }),
+      transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query }),
     } as unknown as DatabaseService;
+    const platform = {
+      executeVersionedMutation: jest.fn(async ({ mutate }) => ({
+        resultRef: await mutate({ query } as never, 1),
+        version: 1,
+        replayed: false,
+      })),
+    } as unknown as PlatformIntegrityService;
     const service = new LessonTeacherRateService(
-      database,
-      deps.audit as unknown as AuditService,
       deps.policy as unknown as CrmPolicy,
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+      platform,
     );
-    return { service, query, ...deps };
+    return { service, query, platform, ...deps };
   };
 
-describe("bulk teacher rate", () => {
+  describe("bulk teacher rate", () => {
+    it.each([
+      ["client", false],
+      ["teacher", false],
+      ["admin", false],
+      ["manager", false],
+      ["director", true],
+      ["system_admin", true],
+    ] as const)(
+      "allows bulk lesson-rate mutation only for owner role %s",
+      async (role, allowed) => {
+        const { service, query } = createServiceWithQueryResults(
+          [
+            { rows: [{ id: "lesson-a", locked: false }] },
+            { rows: [{ id: "lesson-a" }] },
+          ],
+          new CrmPolicy(),
+        );
+        const mutation = service.setLessonsTeacherRate(
+          { userId: `${role}-a`, role },
+          {
+            lessonIds: ["lesson-a"],
+            teacherRate: 900,
+            reasonText: "Плановое изменение ставки",
+            expectedVersion: 0,
+          },
+          metadata,
+        );
+
+        if (allowed) {
+          await expect(mutation).resolves.toMatchObject({ updated: 1 });
+          expect(query).toHaveBeenCalledTimes(2);
+        } else {
+          await expect(mutation).rejects.toBeInstanceOf(ForbiddenException);
+          expect(query).not.toHaveBeenCalled();
+        }
+      },
+    );
+
     it("reprices every lesson in one statement and reports the count", async () => {
-      const { service, query, audit } = createServiceWithQueryResults([
+      const { service, query, platform } = createServiceWithQueryResults([
         {
           rows: [
             { id: "lesson-a", locked: false },
@@ -48,11 +98,16 @@ describe("bulk teacher rate", () => {
       ]);
 
       await expect(
-        service.setLessonsTeacherRate(actor, {
-          lessonIds: ["lesson-a", "lesson-b"],
-          teacherRate: 0,
-          reasonText: "Исправление ставки",
-        }),
+        service.setLessonsTeacherRate(
+          actor,
+          {
+            lessonIds: ["lesson-a", "lesson-b"],
+            teacherRate: 0,
+            reasonText: "Исправление ставки",
+            expectedVersion: 0,
+          },
+          metadata,
+        ),
       ).resolves.toEqual({
         updated: 2,
         correctedSettled: 0,
@@ -62,12 +117,44 @@ describe("bulk teacher rate", () => {
       // One locked validation plus one atomic update, not one PATCH per lesson.
       expect(query).toHaveBeenCalledTimes(2);
       expect(query.mock.calls[1][1]).toEqual([["lesson-a", "lesson-b"], 0]);
-      expect(audit.record).toHaveBeenCalledWith(
+      expect(platform.executeVersionedMutation).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: "crm.lessons_teacher_rate_bulk_set",
-          metadata: expect.objectContaining({ teacherRate: 0, updated: 2 }),
+          expectedVersion: 0,
+          audit: expect.objectContaining({
+            action: "crm.lessons_teacher_rate_bulk_set",
+          }),
+          outbox: expect.objectContaining({
+            type: "crm.lesson_teacher_rate.changed",
+          }),
         }),
       );
+    });
+
+    it("replays the stored batch result without a duplicate compensation fact", async () => {
+      const { service, query, platform } = createServiceWithQueryResults([]);
+      (platform.executeVersionedMutation as jest.Mock).mockResolvedValueOnce({
+        resultRef: { lessonIds: ["lesson-a"], correctedSettled: 1 },
+        version: 4,
+        replayed: true,
+      });
+
+      await expect(
+        service.setLessonsTeacherRate(
+          { userId: "director-a", role: "director" },
+          {
+            lessonIds: ["lesson-a"],
+            teacherRate: 900,
+            reasonText: "Повтор запроса после сетевой ошибки",
+            expectedVersion: 3,
+          },
+          metadata,
+        ),
+      ).resolves.toEqual({
+        updated: 1,
+        correctedSettled: 1,
+        lessonIds: ["lesson-a"],
+      });
+      expect(query).not.toHaveBeenCalled();
     });
 
     it("keeps a rate of 0 rather than treating it as 'no rate given'", async () => {
@@ -76,11 +163,16 @@ describe("bulk teacher rate", () => {
         { rows: [{ id: "lesson-a" }] },
       ]);
 
-      await service.setLessonsTeacherRate(actor, {
-        lessonIds: ["lesson-a"],
-        teacherRate: 0,
-        reasonText: "Исправление ставки",
-      });
+      await service.setLessonsTeacherRate(
+        actor,
+        {
+          lessonIds: ["lesson-a"],
+          teacherRate: 0,
+          reasonText: "Исправление ставки",
+          expectedVersion: 0,
+        },
+        metadata,
+      );
 
       // 0 is «входит в оклад» — the whole point of the bulk pass. A `|| null`
       // anywhere in this path would silently turn it into "clear the override".
@@ -93,10 +185,15 @@ describe("bulk teacher rate", () => {
         { rows: [{ id: "lesson-a" }] },
       ]);
 
-      await service.setLessonsTeacherRate(actor, {
-        lessonIds: ["lesson-a"],
-        reasonText: "Вернуть наследуемую ставку",
-      });
+      await service.setLessonsTeacherRate(
+        actor,
+        {
+          lessonIds: ["lesson-a"],
+          reasonText: "Вернуть наследуемую ставку",
+          expectedVersion: 0,
+        },
+        metadata,
+      );
 
       // Sets, not coalesces: falling back to the group/history rate has to be
       // expressible, and coalesce cannot express it.
@@ -106,18 +203,23 @@ describe("bulk teacher rate", () => {
       expect(query.mock.calls[1][1][1]).toBeNull();
     });
 
-    it("is manager-only — it writes payroll inputs across the schedule", async () => {
+    it("requires owner-level payroll authorization", async () => {
       const { service, policy } = createServiceWithQueryResults([
         { rows: [{ id: "lesson-a", locked: false }] },
         { rows: [{ id: "lesson-a" }] },
       ]);
 
-      await service.setLessonsTeacherRate(actor, {
-        lessonIds: ["lesson-a"],
-        reasonText: "Исправление ставки",
-      });
+      await service.setLessonsTeacherRate(
+        actor,
+        {
+          lessonIds: ["lesson-a"],
+          reasonText: "Исправление ставки",
+          expectedVersion: 0,
+        },
+        metadata,
+      );
 
-      expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+      expect(policy.assertCanManagePayrollHistory).toHaveBeenCalledWith(actor);
     });
 
     it("rejects immutable settled lessons before changing any rate", async () => {
@@ -126,11 +228,16 @@ describe("bulk teacher rate", () => {
       ]);
 
       await expect(
-        service.setLessonsTeacherRate(actor, {
-          lessonIds: ["lesson-a"],
-          teacherRate: 0,
-          reasonText: "Исправление ставки",
-        }),
+        service.setLessonsTeacherRate(
+          actor,
+          {
+            lessonIds: ["lesson-a"],
+            teacherRate: 0,
+            reasonText: "Исправление ставки",
+            expectedVersion: 0,
+          },
+          metadata,
+        ),
       ).rejects.toMatchObject({
         response: expect.objectContaining({
           code: "SETTLED_TEACHER_RATE_IMMUTABLE",
@@ -147,35 +254,31 @@ describe("bulk teacher rate", () => {
 
     it("lets a director correct settled rates with a superseding fact", async () => {
       const director = { userId: "director-a", role: "director" as const };
-      const { service, query, audit } = createServiceWithQueryResults([
+      const { service, query, platform } = createServiceWithQueryResults([
         { rows: [{ id: "lesson-a", locked: true }] },
         { rows: [{ id: "lesson-a" }] },
         { rows: [] },
       ]);
 
       await expect(
-        service.setLessonsTeacherRate(director, {
-          lessonIds: ["lesson-a"],
-          teacherRate: 900,
-          reasonText: "Исправление ошибочной ставки администратора",
-        }),
+        service.setLessonsTeacherRate(
+          director,
+          {
+            lessonIds: ["lesson-a"],
+            teacherRate: 900,
+            reasonText: "Исправление ошибочной ставки администратора",
+            expectedVersion: 0,
+          },
+          metadata,
+        ),
       ).resolves.toEqual({
         updated: 1,
         correctedSettled: 1,
         lessonIds: ["lesson-a"],
       });
 
-      expect(String(query.mock.calls[2][0])).toContain(
-        "supersedes_fact_id",
-      );
-      expect(audit.record).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            correctedSettled: 1,
-            reason: "Исправление ошибочной ставки администратора",
-          }),
-        }),
-      );
+      expect(String(query.mock.calls[2][0])).toContain("supersedes_fact_id");
+      expect(platform.executeVersionedMutation).toHaveBeenCalledTimes(1);
     });
   });
 });

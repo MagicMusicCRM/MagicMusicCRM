@@ -108,7 +108,12 @@ describe("CrmPolicy", () => {
   // Управляющий мог массово проставить «входит в оклад», но не мог открыть
   // отчёт, из которого это делается.
   it("opens payroll to admin and manager, not just the director", () => {
-    for (const role of ["system_admin", "director", "manager", "admin"] as const) {
+    for (const role of [
+      "system_admin",
+      "director",
+      "manager",
+      "admin",
+    ] as const) {
       expect(() =>
         policy.assertCanReadPayroll({ userId: "u", role }),
       ).not.toThrow();
@@ -117,9 +122,9 @@ describe("CrmPolicy", () => {
 
   it("still keeps payroll away from teachers and clients", () => {
     for (const role of ["teacher", "client"] as const) {
-      expect(() =>
-        policy.assertCanReadPayroll({ userId: "u", role }),
-      ).toThrow(ForbiddenException);
+      expect(() => policy.assertCanReadPayroll({ userId: "u", role })).toThrow(
+        ForbiddenException,
+      );
     }
   });
 
@@ -129,6 +134,67 @@ describe("CrmPolicy", () => {
       expect(policy.canReadTeacherRates({ userId: "u", role })).toBe(true);
       expect(policy.canReadSchoolFinance({ userId: "u", role })).toBe(false);
     }
+  });
+
+  describe("teacher compensation mutation fields", () => {
+    const roles = [
+      "system_admin",
+      "director",
+      "manager",
+      "admin",
+      "teacher",
+      "client",
+    ] as const;
+
+    it.each(roles)("enforces the six-role matrix for %s", (role) => {
+      const actor = { userId: `user-${role}`, role };
+      if (role === "director" || role === "system_admin") {
+        expect(policy.canManageTeacherCompensation(actor)).toBe(true);
+        expect(() =>
+          policy.assertCanSupplyTeacherCompensation(actor, {
+            teacherCompensationRuleKey: "fixed",
+            teacherCompensationValueMinor: "50000",
+          }),
+        ).not.toThrow();
+        return;
+      }
+      expect(policy.canManageTeacherCompensation(actor)).toBe(false);
+      expect(() =>
+        policy.assertCanSupplyTeacherCompensation(actor, {
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "50000",
+        }),
+      ).toThrow(ForbiddenException);
+    });
+
+    it("allows operational lesson mutations when compensation fields are omitted", () => {
+      for (const role of ["manager", "admin"] as const) {
+        expect(() =>
+          policy.assertCanSupplyTeacherCompensation(
+            { userId: `user-${role}`, role },
+            {},
+          ),
+        ).not.toThrow();
+      }
+    });
+
+    it("rejects compensation fields nested in schedule-plan rows", () => {
+      expect(() =>
+        policy.assertCanSupplyTeacherCompensation(
+          { userId: "manager-a", role: "manager" },
+          {
+            rows: [
+              {
+                financialDecision: {
+                  settlementTypeKey: "visit",
+                  teacherCompensationRuleKey: "fixed",
+                },
+              },
+            ],
+          },
+        ),
+      ).toThrow(ForbiddenException);
+    });
   });
 
   // KVA-239: общешкольные финансы — только director/system_admin.
@@ -193,10 +259,12 @@ describe("CrmPolicy", () => {
       expect(() =>
         policy.assertCanReadStudentFinance({ userId: "d", role: "director" }),
       ).not.toThrow();
-      expect(() => policy.assertManagerOnly({ userId: "d", role: "director" }))
-        .not.toThrow();
-      expect(() => policy.assertCanWriteCrm({ userId: "d", role: "director" }))
-        .not.toThrow();
+      expect(() =>
+        policy.assertManagerOnly({ userId: "d", role: "director" }),
+      ).not.toThrow();
+      expect(() =>
+        policy.assertCanWriteCrm({ userId: "d", role: "director" }),
+      ).not.toThrow();
     });
 
     it("manager keeps card finance access (карточные финансы не отрезаны)", () => {

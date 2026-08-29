@@ -378,6 +378,7 @@ extension MagicCrmSchedule on MagicCrmService {
   Future<List<Map<String, dynamic>>> searchClientRefs({
     String? q,
     String? type,
+    String? branchId,
     int limit = 25,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
@@ -385,6 +386,8 @@ extension MagicCrmSchedule on MagicCrmService {
       queryParameters: {
         if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
         if (type != null && type.trim().isNotEmpty) 'type': type.trim(),
+        if (branchId != null && branchId.trim().isNotEmpty)
+          'branchId': branchId.trim(),
         'limit': limit,
       },
     );
@@ -449,10 +452,12 @@ extension MagicCrmSchedule on MagicCrmService {
     required List<String> lessonIds,
     required num? teacherRate,
     required String reasonText,
+    required int expectedVersion,
   }) async {
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/lessons/teacher-rate',
       data: {
+        'expectedVersion': expectedVersion,
         'lessonIds': lessonIds,
         'teacherRate': teacherRate,
         'reasonText': reasonText.trim(),
@@ -663,6 +668,7 @@ extension MagicCrmSchedule on MagicCrmService {
     required String activeFrom,
     required String? activeUntil,
     required List<Map<String, dynamic>> rows,
+    String? historyPreviewToken,
   }) {
     return _api.postIdempotent<Map<String, dynamic>>(
       '/crm/schedule-plans',
@@ -677,6 +683,10 @@ extension MagicCrmSchedule on MagicCrmService {
         'activeFrom': activeFrom,
         'activeUntil': activeUntil,
         'rows': rows,
+        if (historyPreviewToken != null) ...{
+          'previewToken': historyPreviewToken,
+          'confirmHistorical': true,
+        },
       },
     );
   }
@@ -718,6 +728,7 @@ extension MagicCrmSchedule on MagicCrmService {
     List<Map<String, dynamic>>? participants,
     required String? activeUntil,
     required List<Map<String, dynamic>> rows,
+    String? historyPreviewToken,
   }) {
     return _api.patchIdempotent<Map<String, dynamic>>(
       '/crm/schedule-plans/$planId',
@@ -730,6 +741,7 @@ extension MagicCrmSchedule on MagicCrmService {
         participants: participants,
         activeUntil: activeUntil,
         rows: rows,
+        historyPreviewToken: historyPreviewToken,
       ),
     );
   }
@@ -766,6 +778,7 @@ extension MagicCrmSchedule on MagicCrmService {
     required List<Map<String, dynamic>>? participants,
     required String? activeUntil,
     required List<Map<String, dynamic>> rows,
+    String? historyPreviewToken,
   }) => {
     'expectedVersion': expectedVersion,
     'effectiveFrom': effectiveFrom,
@@ -774,6 +787,10 @@ extension MagicCrmSchedule on MagicCrmService {
     'participants': ?participants,
     'activeUntil': activeUntil,
     'rows': rows,
+    if (historyPreviewToken != null) ...{
+      'previewToken': historyPreviewToken,
+      'confirmHistorical': true,
+    },
   };
 
   Future<SchedulePlanEndPreview> previewSchedulePlanEnd(
@@ -855,80 +872,5 @@ extension MagicCrmSchedule on MagicCrmService {
           },
         )
         .toList();
-  }
-
-  Future<Map<String, dynamic>> createScheduleSeries({
-    String? clientType,
-    String? clientId,
-    String? studentId,
-    String? groupId,
-    String? teacherId,
-    String? roomId,
-    String? branchId,
-    required int weekday,
-    required String beginTime,
-    int? durationMinutes,
-    required String validFrom,
-    String? validUntil,
-    String? notes,
-  }) async {
-    final data = <String, dynamic>{
-      'weekday': weekday,
-      'beginTime': beginTime,
-      'validFrom': validFrom,
-    };
-    if (clientType != null && clientId != null) {
-      data['clientRef'] = {'type': clientType, 'id': clientId};
-    }
-    if (studentId != null) data['studentId'] = studentId;
-    if (groupId != null) data['groupId'] = groupId;
-    if (teacherId != null) data['teacherId'] = teacherId;
-    if (roomId != null) data['roomId'] = roomId;
-    if (branchId != null) data['branchId'] = branchId;
-    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
-    if (validUntil != null) data['validUntil'] = validUntil;
-    if (notes != null && notes.trim().isNotEmpty) data['notes'] = notes.trim();
-    return _api.post<Map<String, dynamic>>('/crm/schedule-series', data: data);
-  }
-
-  Future<Map<String, dynamic>> updateScheduleSeries(
-    String id, {
-    String? teacherId,
-    String? roomId,
-    int? weekday,
-    String? beginTime,
-    int? durationMinutes,
-    String? validUntil,
-    bool clearValidUntil = false,
-    String? effectiveFrom,
-    String? notes,
-  }) async {
-    final data = <String, dynamic>{};
-    if (teacherId != null) data['teacherId'] = teacherId;
-    if (roomId != null) data['roomId'] = roomId;
-    if (weekday != null) data['weekday'] = weekday;
-    if (beginTime != null) data['beginTime'] = beginTime;
-    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
-    if (clearValidUntil) {
-      data['validUntil'] = null;
-    } else if (validUntil != null) {
-      data['validUntil'] = validUntil;
-    }
-    if (effectiveFrom != null) data['effectiveFrom'] = effectiveFrom;
-    if (notes != null) data['notes'] = notes;
-    return _api.patch<Map<String, dynamic>>(
-      '/crm/schedule-series/$id',
-      data: data,
-    );
-  }
-
-  Future<Map<String, dynamic>> deleteScheduleSeries(
-    String id, {
-    String? from,
-  }) async {
-    return _api.delete<Map<String, dynamic>>(
-      '/crm/schedule-series/$id',
-      queryParameters: from != null ? {'from': from} : null,
-    );
   }
 }

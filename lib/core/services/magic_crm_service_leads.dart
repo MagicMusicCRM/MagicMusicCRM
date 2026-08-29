@@ -367,6 +367,7 @@ extension MagicCrmLeads on MagicCrmService {
 
   Future<Map<String, dynamic>> updateLead(
     String id, {
+    required int expectedVersion,
     String? firstName,
     String? lastName,
     String? phone,
@@ -385,6 +386,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? statusComment,
   }) async {
     final data = <String, dynamic>{};
+    data['expectedVersion'] = expectedVersion;
     if (firstName != null) data['firstName'] = firstName.trim();
     if (lastName != null) data['lastName'] = lastName.trim();
     if (phone != null) data['phone'] = phone.trim();

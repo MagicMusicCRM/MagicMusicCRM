@@ -10,6 +10,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
@@ -497,7 +498,18 @@ Widget _host(
   ValueNotifier<bool?>? dialogResult,
 }) {
   return ProviderScope(
-    overrides: [magicApiClientProvider.overrideWithValue(client)],
+    overrides: [
+      magicApiClientProvider.overrideWithValue(client),
+      capabilitySnapshotProvider.overrideWith(
+        (ref) async => const CapabilitySnapshot(
+          accountId: 'director-account',
+          role: 'director',
+          accessVersion: 1,
+          capabilities: {'commerce.teacher_payroll.write'},
+          scopes: {},
+        ),
+      ),
+    ],
     child: MaterialApp(
       home: Scaffold(
         body: Builder(
@@ -531,6 +543,7 @@ Widget _decisionHost(_FakeApiClient client, LessonDecisionOperation operation) {
           onPressed: () => showLessonDecisionFlow(
             context,
             crm: MagicCrmService(client),
+            canManageTeacherCompensation: true,
             operation: operation,
             lesson: const {
               'id': '66666666-6666-6666-6666-666666666666',

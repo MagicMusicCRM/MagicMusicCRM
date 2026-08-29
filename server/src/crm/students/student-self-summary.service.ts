@@ -61,7 +61,7 @@ export class StudentSelfSummaryService {
   private async listClientStudents(userId: string): Promise<StudentRow[]> {
     const result = await this.database.query<StudentRow>(
       `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+        select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.students s
@@ -80,7 +80,7 @@ export class StudentSelfSummaryService {
   ): Promise<StudentRow[]> {
     const result = await this.database.query<StudentRow>(
       `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+        select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.profiles acct
@@ -112,7 +112,7 @@ export class StudentSelfSummaryService {
   ): Promise<StudentRow[]> {
     const result = await this.database.query<StudentRow>(
       `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+        select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.user_crm_links link

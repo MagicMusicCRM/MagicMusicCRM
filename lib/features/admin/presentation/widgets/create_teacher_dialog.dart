@@ -3,6 +3,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -118,8 +119,10 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final actorRole =
-        ref.watch(capabilitySnapshotProvider).asData?.value.role ?? '';
+    final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
+    final actorRole = snapshot?.role ?? '';
+    final canManageRate =
+        snapshot != null && crmCanManageTeacherRates(snapshot);
     final accessRoles = personAccessRoleOptions(
       actorRole: actorRole,
       teacher: true,
@@ -245,7 +248,8 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
         TeacherEmploymentFields(
           key: _employmentKey,
           gateway: _employmentReferenceGateway,
-          requireRate: true,
+          requireRate: canManageRate,
+          canManageRate: canManageRate,
           enabled: !_saving,
         ),
         const SizedBox(height: 20),

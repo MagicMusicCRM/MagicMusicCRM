@@ -261,9 +261,14 @@ export class CrmFacilitiesController {
   @Post("groups")
   createGroup(
     @CurrentActor() actor: ActorContext,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: UpsertGroupDto,
   ) {
-    return this.groups.createGroup(actor, dto);
+    return this.groups.createGroup(actor, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Get("groups/:id")
@@ -278,9 +283,14 @@ export class CrmFacilitiesController {
   updateGroup(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: UpdateGroupDto,
   ) {
-    return this.groups.updateGroup(actor, id, dto);
+    return this.groups.updateGroup(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Get("groups/:id/students")

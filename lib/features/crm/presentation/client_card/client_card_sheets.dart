@@ -13,12 +13,12 @@ import 'client_card_ui.dart';
 /// (or `null` on cancel); the card keeps the thin wrapper that talks to the CRM
 /// service and mutates card state. Presentation only — no card state reached.
 
-/// «Выдать абонемент» sheet. [packages] must be non-empty (the caller guards).
+/// «Продать абонемент» sheet. [packages] must be non-empty (the caller guards).
 /// Returns the selected package map, or `null` if dismissed.
 Future<Map<String, dynamic>?> showIssueSubscriptionSheet(
   BuildContext context, {
   required List<Map<String, dynamic>> packages,
-  String title = 'Выдать абонемент',
+  String title = 'Продать абонемент',
   String subtitle = 'Выберите пакет занятий',
 }) {
   return showMagicSheet<Map<String, dynamic>>(
@@ -44,7 +44,7 @@ Future<Map<String, dynamic>?> showIssueSubscriptionSheet(
   );
 }
 
-/// Selectable subscription-package row inside the «Выдать абонемент» sheet
+/// Selectable subscription-package row inside the «Продать абонемент» sheet
 /// (ported from student_detail_screen).
 class SubscriptionPackageTile extends StatelessWidget {
   final Map<String, dynamic> package;

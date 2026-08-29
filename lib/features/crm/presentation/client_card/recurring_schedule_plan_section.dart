@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/magic_toast.dart';
@@ -61,7 +63,13 @@ class _RecurringSchedulePlanSectionState
     groupId: widget.groupId,
     subjectName: widget.subjectName,
     defaultBranchId: widget.defaultBranchId,
+    canManageTeacherCompensation: _canManageTeacherCompensation,
   );
+
+  bool get _canManageTeacherCompensation {
+    final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
+    return snapshot != null && crmCanManageTeacherRates(snapshot);
+  }
 
   @override
   void initState() {

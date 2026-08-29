@@ -134,6 +134,30 @@ List<String> _normalizedTexts(WidgetTester tester, Finder parent) => tester
     .toList(growable: false);
 
 void main() {
+  testWidgets('existing subscription sale sends the selected payment method', (
+    tester,
+  ) async {
+    PurchaseSubscriptionInput? previewInput;
+    await _openSheet(
+      tester,
+      onPreview: (input) async {
+        previewInput = input;
+        return _preview();
+      },
+      onSubmit: (_) async {},
+    );
+
+    final method = tester
+        .widget<DropdownButtonFormField<SubscriptionPaymentMethod>>(
+          find.byKey(const Key('subscription-payment-method')),
+        );
+    method.onChanged!(SubscriptionPaymentMethod.cash);
+    await tester.pump();
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+
+    expect(previewInput?.issue.paymentMethod, SubscriptionPaymentMethod.cash);
+  });
+
   testWidgets('disposing during preview ignores the late completion', (
     tester,
   ) async {

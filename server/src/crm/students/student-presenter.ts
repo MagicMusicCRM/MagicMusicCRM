@@ -38,6 +38,7 @@ export function toStudentDto(row: StudentRow) {
   const age = resolveAge(row.custom_data);
   return {
     id: row.id,
+    version: Number(row.version ?? 1),
     leadId: row.lead_id,
     sourceId: row.source_id ?? null,
     sourceName: row.source_name ?? null,

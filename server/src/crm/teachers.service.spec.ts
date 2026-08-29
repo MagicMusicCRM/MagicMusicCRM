@@ -1,4 +1,5 @@
 import { AuditService } from "../audit/audit.service";
+import { ForbiddenException } from "@nestjs/common";
 import { DatabaseService } from "../db/database.service";
 import { CrmPolicy } from "./crm.policy";
 import { PersonAccountService } from "./person-account.service";
@@ -8,15 +9,21 @@ import { PlatformIntegrityService } from "../platform/platform-integrity.service
 describe("TeachersService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
 
-  const createService = (rows: Record<string, unknown>[] = []) => {
+  const createService = (
+    rows: Record<string, unknown>[] = [],
+    policyOverride?: CrmPolicy,
+  ) => {
     const query = jest.fn().mockResolvedValue({ rows });
     const database = { query };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
-    const policy = {
-      assertCanWriteCrm: jest.fn(),
-      assertCanReadPayroll: jest.fn(),
-      assertCanManageSystemSettings: jest.fn(),
-    };
+    const policy =
+      policyOverride ??
+      ({
+        assertCanWriteCrm: jest.fn(),
+        assertCanReadPayroll: jest.fn(),
+        assertCanManagePayrollHistory: jest.fn(),
+        assertCanManageSystemSettings: jest.fn(),
+      } as unknown as CrmPolicy);
     const accounts = {
       resolveInitialRole: jest
         .fn()
@@ -762,6 +769,118 @@ describe("TeachersService", () => {
       }),
     );
   });
+
+  it.each([
+    ["client", false],
+    ["teacher", false],
+    ["admin", false],
+    ["manager", false],
+    ["director", true],
+    ["system_admin", true],
+  ] as const)(
+    "accepts a base-rate profile mutation only for the owner roles: %s",
+    async (role, allowed) => {
+      const { service, query, integrity } = createService(
+        [
+          {
+            id: "teacher-a",
+            status: "active",
+            specialization: null,
+            custom_data: {},
+            salary: null,
+            current_rate: "900",
+            assigned_branches: [],
+            disciplines: [],
+          },
+        ],
+        new CrmPolicy(),
+      );
+      const mutation = service.updateTeacher(
+        { userId: `${role}-a`, role },
+        "teacher-a",
+        {
+          rate: 900,
+          rateEffectiveFrom: "2026-08-10",
+          payrollExpectedVersion: 0,
+          payrollReasonText: "Плановое изменение ставки",
+        },
+        {
+          idempotencyKey: "teacher-rate-001",
+          requestId: "request-teacher-rate-001",
+        },
+      );
+
+      if (allowed) {
+        await expect(mutation).resolves.toMatchObject({
+          id: "teacher-a",
+          currentRate: 900,
+        });
+        expect(query).toHaveBeenCalledTimes(1);
+        expect(integrity.executeVersionedMutation).toHaveBeenCalledTimes(1);
+      } else {
+        await expect(mutation).rejects.toBeInstanceOf(ForbiddenException);
+        expect(query).not.toHaveBeenCalled();
+        expect(integrity.executeVersionedMutation).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each(["admin", "manager"] as const)(
+    "keeps salary-only profile mutations available to payroll staff: %s",
+    async (role) => {
+      const { service, integrity } = createService(
+        [
+          {
+            id: "teacher-a",
+            status: "active",
+            specialization: null,
+            custom_data: {},
+            salary: "20000",
+            current_rate: null,
+            assigned_branches: [],
+            disciplines: [],
+          },
+        ],
+        new CrmPolicy(),
+      );
+
+      await expect(
+        service.updateTeacher(
+          { userId: `${role}-a`, role },
+          "teacher-a",
+          {
+            salary: 20000,
+            payrollExpectedVersion: 0,
+            payrollReasonText: "Плановое изменение оклада",
+          },
+          {
+            idempotencyKey: "teacher-salary-001",
+            requestId: "request-teacher-salary-001",
+          },
+        ),
+      ).resolves.toMatchObject({ id: "teacher-a", salary: 20000 });
+      expect(integrity.executeVersionedMutation).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["admin", "manager"] as const)(
+    "rejects an initial base rate from non-owner staff: %s",
+    async (role) => {
+      const { service, query } = createService([], new CrmPolicy());
+
+      await expect(
+        service.createTeacher(
+          { userId: `${role}-a`, role },
+          {
+            firstName: "Мария",
+            branchIds: [],
+            rate: 900,
+          },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(query).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects a payroll edit without version and audit reason", async () => {
     const { service, query, integrity } = createService([]);

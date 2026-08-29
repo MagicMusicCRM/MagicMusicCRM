@@ -543,6 +543,7 @@ void main() {
               session: _session(),
               draft: ready,
               references: patch.references,
+              canManageTeacherCompensation: true,
             )
             .containsKey('plannedSettlementReason'),
         isFalse,

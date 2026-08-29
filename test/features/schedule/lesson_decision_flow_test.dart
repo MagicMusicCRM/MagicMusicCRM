@@ -16,6 +16,7 @@ const _replacementBranchId = '20000000-0000-4000-8000-000000000002';
 const _groupLessonId = '30000000-0000-4000-8000-000000000001';
 const _firstGroupStudentId = '40000000-0000-4000-8000-000000000001';
 const _secondGroupStudentId = '50000000-0000-4000-8000-000000000001';
+const _crossPayerSubscriptionId = '70000000-0000-4000-8000-000000000001';
 
 const _lesson = <String, dynamic>{
   'id': _lessonId,
@@ -235,6 +236,7 @@ class _GroupLessonDecisionApi extends MagicApiClient {
 
   final previews = <Map<String, dynamic>>[];
   final commits = <Map<String, dynamic>>[];
+  final payerQueries = <Map<String, dynamic>>[];
 
   @override
   Future<T> get<T>(
@@ -242,6 +244,32 @@ class _GroupLessonDecisionApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    if (path == '/crm/clients/search') {
+      payerQueries.add(Map<String, dynamic>.from(queryParameters ?? const {}));
+      expect(queryParameters?['type'], 'student');
+      expect(queryParameters?['branchId'], _branchId);
+      expect(queryParameters?['limit'], 50);
+      return <String, dynamic>{
+            'items': const [
+              {
+                'ref': {'type': 'student', 'id': _firstGroupStudentId},
+                'label': 'Анна Иванова',
+                'branchId': _branchId,
+              },
+            ],
+          }
+          as T;
+    }
+    if (path == '/crm/students/$_firstGroupStudentId/commerce') {
+      return _studentCommerce(
+            _firstGroupStudentId,
+            subscriptionId: _crossPayerSubscriptionId,
+          )
+          as T;
+    }
+    if (path == '/crm/students/$_secondGroupStudentId/commerce') {
+      return _studentCommerce(_secondGroupStudentId) as T;
+    }
     expect(path, '/crm/configuration/lesson-decisions');
     expect(queryParameters?['branchId'], _branchId);
     return <String, dynamic>{
@@ -334,11 +362,72 @@ class _GroupLessonDecisionApi extends MagicApiClient {
   }
 }
 
+Map<String, dynamic> _studentCommerce(
+  String studentId, {
+  String? subscriptionId,
+}) => {
+  'projection': 'manager_scoped',
+  'student': {
+    'studentId': studentId,
+    'accounts': const [],
+    'subscriptions': [
+      if (subscriptionId != null)
+        {
+          'id': subscriptionId,
+          'status': 'active',
+          'startsAt': '2026-08-01T00:00:00.000Z',
+          'expiresAt': '2026-12-31T00:00:00.000Z',
+          'units': const {
+            'total': 10,
+            'used': 2,
+            'reserved': 0,
+            'paid': 2,
+            'available': 8,
+            'remaining': 8,
+          },
+          'financial': const {
+            'actualPaidMinor': '800000',
+            'obligationMinor': '800000',
+            'debtMinor': '0',
+            'pendingMinor': '0',
+            'remainingObligationMinor': '0',
+            'overpaymentMinor': '0',
+            'nextPaymentAt': null,
+          },
+          'terms': const {
+            'displayName': 'Семейный абонемент',
+            'validityDays': 120,
+            'basePriceMinor': '800000',
+            'finalPriceMinor': '800000',
+            'currencyCode': 'RUB',
+            'discount': {'type': 'none'},
+            'surcharge': {'type': 'none'},
+          },
+          'installments': const [],
+        },
+    ],
+    'movements': const [],
+    'technicalHistory': const [],
+    'lessonBalance': {
+      'activeSubscriptionCount': subscriptionId == null ? 0 : 1,
+      'total': subscriptionId == null ? 0 : 10,
+      'used': subscriptionId == null ? 0 : 2,
+      'reserved': 0,
+      'paid': subscriptionId == null ? 0 : 2,
+      'available': subscriptionId == null ? 0 : 8,
+      'debts': const [],
+      'nextPaymentAt': null,
+      'expiresAt': subscriptionId == null ? null : '2026-12-31T00:00:00.000Z',
+    },
+  },
+};
+
 Widget _host(
   _LessonDecisionApi api, {
   Map<String, dynamic> lesson = _lesson,
   Map<String, dynamic> successor = _successor,
   LessonDecisionOperation operation = LessonDecisionOperation.reschedule,
+  bool canManageTeacherCompensation = true,
 }) => MaterialApp(
   home: Scaffold(
     body: Builder(
@@ -346,6 +435,7 @@ Widget _host(
         onPressed: () => showLessonDecisionFlow(
           context,
           crm: MagicCrmService(api),
+          canManageTeacherCompensation: canManageTeacherCompensation,
           operation: operation,
           lesson: lesson,
           successor: successor,
@@ -442,6 +532,7 @@ void main() {
     final api = _LessonDecisionApi();
     final controller = LessonDecisionController(
       crm: MagicCrmService(api),
+      canManageTeacherCompensation: true,
       operation: LessonDecisionOperation.reschedule,
       lesson: _lesson,
       successor: _successor,
@@ -459,10 +550,52 @@ void main() {
   });
 
   test(
+    'operational controller omits every teacher compensation field',
+    () async {
+      final api = _LessonDecisionApi();
+      final controller = LessonDecisionController(
+        crm: MagicCrmService(api),
+        canManageTeacherCompensation: false,
+        operation: LessonDecisionOperation.reschedule,
+        lesson: _lesson,
+        successor: _successor,
+      );
+
+      await controller.preview(
+        reason: 'Отмена',
+        settlementTypeKey: 'free_lesson',
+        compensationRuleKey: 'fixed',
+        compensationValueMinor: '125000',
+      );
+
+      final decision = Map<String, dynamic>.from(
+        api.previews.single['financialDecision'] as Map,
+      );
+      expect(decision, {'settlementTypeKey': 'free_lesson'});
+    },
+  );
+
+  testWidgets('operational flow renders no compensation controls', (
+    tester,
+  ) async {
+    final api = _LessonDecisionApi();
+    await tester.pumpWidget(_host(api, canManageTeacherCompensation: false));
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('lesson-decision-compensation')), findsNothing);
+    expect(
+      find.byKey(const Key('lesson-decision-compensation-value')),
+      findsNothing,
+    );
+  });
+
+  test(
     'clears preview identity and adopts current version after stale commit',
     () {
       final controller = LessonDecisionController(
         crm: MagicCrmService(_LessonDecisionApi()),
+        canManageTeacherCompensation: true,
         operation: LessonDecisionOperation.reschedule,
         lesson: _lesson,
         successor: _successor,
@@ -756,6 +889,113 @@ void main() {
   });
 
   testWidgets(
+    "group recipient finds a payer beyond the first page and uses their subscription",
+    (tester) async {
+      final api = _GroupLessonDecisionApi();
+      tester.view.physicalSize = const Size(1500, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () => showLessonDecisionFlow(
+                  context,
+                  crm: MagicCrmService(api),
+                  canManageTeacherCompensation: true,
+                  operation: LessonDecisionOperation.plannedSettlement,
+                  lesson: const {
+                    'id': _groupLessonId,
+                    'version': 4,
+                    'branchId': _branchId,
+                    'groupId': '60000000-0000-4000-8000-000000000001',
+                    'scheduledAt': '2026-08-13T09:00:00.000Z',
+                    'groupParticipants': [
+                      {
+                        'clientId': _firstGroupStudentId,
+                        'clientName': 'Анна Иванова',
+                      },
+                      {
+                        'clientId': _secondGroupStudentId,
+                        'clientName': 'Борис Петров',
+                      },
+                    ],
+                  },
+                ),
+                child: const Text('Открыть оплату'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Открыть оплату'));
+      await tester.pumpAndSettle();
+
+      final payerField = find.byKey(
+        const Key('lesson-decision-payer-$_secondGroupStudentId'),
+      );
+      expect(payerField, findsOneWidget);
+      await tester.ensureVisible(payerField);
+      await tester.tap(payerField);
+      await tester.enterText(
+        find.descendant(of: payerField, matching: find.byType(TextField)),
+        'Анна',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(api.payerQueries, hasLength(1));
+      expect(api.payerQueries.single['q'], 'Анна');
+      await tester.tap(find.text('Анна Иванова').last);
+      await tester.pumpAndSettle();
+
+      final subscriptionField = find.byKey(
+        const Key('lesson-decision-subscription-$_secondGroupStudentId'),
+      );
+      expect(subscriptionField, findsOneWidget);
+      await tester.ensureVisible(subscriptionField);
+      await tester.tap(subscriptionField);
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Семейный абонемент').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Абонемент Анны оплачивает занятие Бориса',
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Занятие').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-compensation')),
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Полная стандартная ставка').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+
+      expect(api.previews.single['financialDecision'], {
+        'settlementTypeKey': 'lesson',
+        'clientDecisions': [
+          {
+            'clientId': _secondGroupStudentId,
+            'payerStudentId': _firstGroupStudentId,
+            'subscriptionId': _crossPayerSubscriptionId,
+          },
+        ],
+        'teacherCompensationRuleKey': 'standard',
+      });
+      expect(find.textContaining('Преподаватель:'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'group lesson sends common settlement and one named participant override',
     (tester) async {
       final api = _GroupLessonDecisionApi();
@@ -770,6 +1010,7 @@ void main() {
                 onPressed: () => showLessonDecisionFlow(
                   context,
                   crm: MagicCrmService(api),
+                  canManageTeacherCompensation: true,
                   operation: LessonDecisionOperation.plannedSettlement,
                   lesson: const {
                     'id': _groupLessonId,

@@ -11,6 +11,7 @@ import { SubscriptionReservationService } from "../commerce/subscription-reserva
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
+import type { ConfiguredLessonFinancialDecisionDto } from "../dto/lesson-financial-decision.dto";
 import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
@@ -95,15 +96,17 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           ? "schedule-plan-test-preview-secret-0123456789abcdef"
           : fallback,
     } as unknown as ConfigService);
+    const previews = new SchedulePlanConstraintPreviewService(
+      policy,
+      database,
+      definition,
+      series,
+      settlement,
+      previewTokens,
+    );
     plans = new SchedulePlanService(
       new SchedulePlanQueryService(repository),
-      new SchedulePlanConstraintPreviewService(
-        policy,
-        database,
-        definition,
-        series,
-        settlement,
-      ),
+      previews,
       new SchedulePlanMutationService(
         platform,
         policy,
@@ -112,6 +115,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         materializer,
         settlement,
         definition,
+        previews,
       ),
       new SchedulePlanEndService(
         platform,
@@ -136,8 +140,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const key = `plan-individual-${randomUUID()}`;
     let additional:
-      | Awaited<ReturnType<typeof createAdditionalPlanResource>>
-      | undefined;
+      Awaited<ReturnType<typeof createAdditionalPlanResource>> | undefined;
     try {
       additional = await createAdditionalPlanResource(pool, fixture.branchId);
       const dto = {
@@ -248,6 +251,1653 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("reviews and confirms historical occurrences without directly using subscription units", async () => {
+    const fixture = await createFixture(pool);
+    let additional:
+      Awaited<ReturnType<typeof createAdditionalPlanResource>> | undefined;
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const activeFrom = addDays(fixture.today, -21);
+    const activeUntil = addDays(fixture.today, 21);
+    const dto = {
+      kind: "individual" as const,
+      title: "Исторический закрытый период",
+      studentId: fixture.studentIds[0],
+      subscriptionId: fixture.subscriptionIds[0],
+      activeFrom,
+      activeUntil,
+      rows: [row(fixture, 1, "10:00")],
+    };
+    try {
+      const preview = await plans.previewConstraints(actor, dto);
+      const historical = (
+        preview as unknown as {
+          historical: {
+            confirmRequired: boolean;
+            count: number;
+            from: string;
+            until: string;
+            previewToken: string;
+          };
+        }
+      ).historical;
+      expect(preview.valid).toBe(true);
+      expect(historical).toMatchObject({
+        confirmRequired: true,
+      });
+      expect(historical.count).toBeGreaterThan(0);
+      expect(historical.from.localeCompare(activeFrom)).toBeGreaterThanOrEqual(
+        0,
+      );
+      expect(historical.until.localeCompare(fixture.today)).toBeLessThan(0);
+
+      await expect(
+        plans.create(actor, dto, {
+          idempotencyKey: `plan-history-unconfirmed-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_HISTORY_CONFIRMATION_REQUIRED" },
+      });
+
+      additional = await createAdditionalPlanResource(pool, fixture.branchId);
+      await expect(
+        plans.create(
+          actor,
+          {
+            ...dto,
+            rows: [
+              row(fixture, 1, "10:00", {
+                teacherId: additional.teacherId,
+                roomId: additional.roomId,
+              }),
+            ],
+            confirmHistorical: true,
+            previewToken: historical.previewToken,
+          } as never,
+          {
+            idempotencyKey: `plan-history-stale-resource-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_HISTORY_PREVIEW_STALE" },
+      });
+
+      const metadata = {
+        idempotencyKey: `plan-history-confirmed-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      };
+      const created = await plans.create(
+        actor,
+        {
+          ...dto,
+          confirmHistorical: true,
+          previewToken: historical.previewToken,
+        } as never,
+        metadata,
+      );
+      const replay = await plans.create(
+        actor,
+        {
+          ...dto,
+          confirmHistorical: true,
+          previewToken: historical.previewToken,
+        } as never,
+        metadata,
+      );
+      expect(replay).toEqual({ ...created, replayed: true });
+      const state = await pool.query<{
+        historical_lessons: string;
+        lessons: string;
+        used_units: string;
+        reserved_units: string;
+        available_units: string;
+      }>(
+        `select
+          (select count(*)::text from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = $1 and lesson.series_date < $3::date
+               and lesson.deleted_at is null) as historical_lessons,
+          (select count(*)::text from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = $1 and lesson.deleted_at is null) as lessons,
+          subscription.lessons_used::text as used_units,
+          coalesce((select sum(reservation.units)::text
+            from app.lesson_reservations reservation
+            join app.lessons lesson on lesson.id = reservation.lesson_id
+            join app.schedule_series series on series.id = lesson.series_id
+            where series.plan_id = $1 and reservation.state = 'reserved'), '0')
+              as reserved_units,
+          (subscription.lessons_total - subscription.lessons_used
+            - coalesce((select sum(reservation.units)
+                from app.lesson_reservations reservation
+                where reservation.subscription_id = subscription.id
+                  and reservation.state = 'reserved'), 0))::text
+              as available_units
+         from app.subscriptions subscription where subscription.id = $2`,
+        [created.id, fixture.subscriptionIds[0], fixture.today],
+      );
+      const persisted = state.rows[0]!;
+      expect(Number(persisted.historical_lessons)).toBe(historical.count);
+      expect(Number(persisted.lessons)).toBeGreaterThan(historical.count);
+      expect(Number(persisted.lessons)).toBe(created.lessonIds.length);
+      expect(Number(persisted.used_units)).toBe(0);
+      expect(Number(persisted.reserved_units)).toBeGreaterThan(0);
+      expect(
+        Number(persisted.available_units) + Number(persisted.reserved_units),
+      ).toBe(500);
+    } finally {
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
+  it("splits a confirmed past edit and keeps the earlier lesson snapshot immutable", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const activeFrom = addDays(fixture.today, -28);
+    const effectiveFrom = addDays(fixture.today, -10);
+    const activeUntil = addDays(fixture.today, 21);
+    const sourceRow = row(fixture, 1, "10:00");
+    try {
+      const createDto = {
+        kind: "individual" as const,
+        title: "Редактируемый закрытый период",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom,
+        activeUntil,
+        rows: [sourceRow],
+      };
+      const createPreview = await plans.previewConstraints(actor, createDto);
+      const createToken = (
+        createPreview as unknown as {
+          historical: { previewToken: string };
+        }
+      ).historical.previewToken;
+      const created = await plans.create(
+        actor,
+        {
+          ...createDto,
+          confirmHistorical: true,
+          previewToken: createToken,
+        } as never,
+        {
+          idempotencyKey: `plan-history-edit-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const before = await pool.query<{ id: string; snapshot: string }>(
+        `select lesson.id, row_to_json(snapshot.*)::text as snapshot
+           from app.lessons lesson
+           join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
+          where lesson.series_id = $1 and lesson.series_date < $2::date
+          order by lesson.series_date, lesson.id`,
+        [created.seriesIds[0], effectiveFrom],
+      );
+      expect(before.rows.length).toBeGreaterThan(0);
+
+      const updateDto = {
+        expectedVersion: 1,
+        effectiveFrom,
+        activeUntil,
+        rows: [
+          {
+            ...sourceRow,
+            seriesId: created.seriesIds[0],
+            beginTime: "12:00",
+          },
+        ],
+      };
+      const updatePreview = await plans.previewUpdateConstraints(
+        actor,
+        created.id,
+        updateDto,
+      );
+      const updateHistory = (
+        updatePreview as unknown as {
+          historical: { confirmRequired: boolean; previewToken: string };
+        }
+      ).historical;
+      expect(updatePreview.valid).toBe(true);
+      expect(updateHistory.confirmRequired).toBe(true);
+
+      await plans.update(
+        actor,
+        created.id,
+        {
+          ...updateDto,
+          confirmHistorical: true,
+          previewToken: updateHistory.previewToken,
+        } as never,
+        {
+          idempotencyKey: `plan-history-edit-confirmed-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+
+      const after = await pool.query<{ id: string; snapshot: string }>(
+        `select lesson.id, row_to_json(snapshot.*)::text as snapshot
+           from app.lessons lesson
+           join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
+          where lesson.id = any($1::uuid[])
+          order by lesson.series_date, lesson.id`,
+        [before.rows.map((lesson) => lesson.id)],
+      );
+      expect(after.rows).toEqual(before.rows);
+      const split = await pool.query<{
+        old_valid_until: string;
+        new_valid_from: string;
+        old_active_after_split: string;
+        old_deleted_after_split: string;
+        new_historical_after_split: string;
+      }>(
+        `select old.valid_until::text as old_valid_until,
+          continuation.valid_from::text as new_valid_from,
+          (select count(*)::text from app.lessons lesson
+            where lesson.series_id = old.id and lesson.series_date >= $3::date
+              and lesson.deleted_at is null) as old_active_after_split,
+          (select count(*)::text from app.lessons lesson
+            where lesson.series_id = old.id and lesson.series_date >= $3::date
+              and lesson.deleted_at is not null) as old_deleted_after_split,
+          (select count(*)::text from app.lessons lesson
+            where lesson.series_id = continuation.id
+              and lesson.series_date >= $3::date
+              and lesson.series_date < $4::date
+              and lesson.deleted_at is null) as new_historical_after_split
+         from app.schedule_series old
+         join app.schedule_series continuation on continuation.id = old.superseded_by
+         where old.id = $1 and continuation.plan_id = $2`,
+        [created.seriesIds[0], created.id, effectiveFrom, fixture.today],
+      );
+      expect(split.rows[0]).toMatchObject({
+        old_valid_until: addDays(effectiveFrom, -1),
+        new_valid_from: effectiveFrom,
+        old_active_after_split: "0",
+      });
+      expect(Number(split.rows[0]!.old_deleted_after_split)).toBeGreaterThan(0);
+      expect(Number(split.rows[0]!.new_historical_after_split)).toBeGreaterThan(
+        0,
+      );
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects a past split that would rewrite an already-terminal lesson", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const activeFrom = addDays(fixture.today, -28);
+    const effectiveFrom = addDays(fixture.today, -14);
+    const sourceRow = row(fixture, 1, "10:00");
+    try {
+      const createDto = {
+        kind: "individual" as const,
+        title: "Неизменяемая история",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom,
+        activeUntil: addDays(fixture.today, 14),
+        rows: [sourceRow],
+      };
+      const createPreview = await plans.previewConstraints(actor, createDto);
+      const previewToken = (
+        createPreview as unknown as {
+          historical: { previewToken: string };
+        }
+      ).historical.previewToken;
+      const created = await plans.create(
+        actor,
+        {
+          ...createDto,
+          confirmHistorical: true,
+          previewToken,
+        } as never,
+        {
+          idempotencyKey: `plan-terminal-history-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const terminal = await pool.query<{
+        id: string;
+        series_id: string;
+        snapshot: string;
+      }>(
+        `select lesson.id, lesson.series_id,
+          row_to_json(snapshot.*)::text as snapshot
+         from app.lessons lesson
+         join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
+         where lesson.series_id = $1
+           and lesson.series_date >= $2::date
+           and lesson.series_date < $3::date
+         order by lesson.series_date, lesson.id limit 1`,
+        [created.seriesIds[0], effectiveFrom, fixture.today],
+      );
+      expect(terminal.rows[0]).toBeDefined();
+      await pool.query(
+        "update app.lessons set lifecycle_state = 'cancelled' where id = $1",
+        [terminal.rows[0]!.id],
+      );
+      await pool.query(
+        "update app.lesson_reservations set state = 'released' where lesson_id = $1",
+        [terminal.rows[0]!.id],
+      );
+
+      await expect(
+        plans.previewUpdateConstraints(actor, created.id, {
+          expectedVersion: 1,
+          effectiveFrom,
+          activeUntil: createDto.activeUntil,
+          rows: [
+            {
+              ...sourceRow,
+              seriesId: created.seriesIds[0],
+              beginTime: "12:00",
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_TERMINAL_HISTORY_IMMUTABLE" },
+      });
+      const unchanged = await pool.query<{
+        series_id: string;
+        snapshot: string;
+      }>(
+        `select lesson.series_id, row_to_json(snapshot.*)::text as snapshot
+         from app.lessons lesson
+         join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
+         where lesson.id = $1`,
+        [terminal.rows[0]!.id],
+      );
+      expect(unchanged.rows[0]).toEqual({
+        series_id: terminal.rows[0]!.series_id,
+        snapshot: terminal.rows[0]!.snapshot,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("keeps future cancelled, rescheduled, and deleted occurrences immutable across a split", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const sourceRow = row(fixture, 1, "10:00");
+    const effectiveFrom = addDays(fixture.today, 7);
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Неизменяемые будущие исключения",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-future-exceptions-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const targets = await pool.query<{ id: string; series_date: string }>(
+        `select id, series_date::text
+           from app.lessons
+          where series_id = $1 and series_date >= $2::date
+          order by series_date, id limit 3`,
+        [created.seriesIds[0], effectiveFrom],
+      );
+      expect(targets.rows).toHaveLength(3);
+      const [cancelled, rescheduled, deleted] = targets.rows;
+      await pool.query(
+        `update app.lessons
+            set lifecycle_state = 'cancelled', updated_at = clock_timestamp()
+          where id = $1`,
+        [cancelled!.id],
+      );
+      await pool.query(
+        `update app.lessons
+            set original_scheduled_at = scheduled_at,
+                scheduled_at = scheduled_at + interval '5 hours',
+                updated_at = clock_timestamp()
+          where id = $1`,
+        [rescheduled!.id],
+      );
+      await pool.query(
+        `update app.lessons
+            set deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+          where id = $1`,
+        [deleted!.id],
+      );
+      await pool.query(
+        `update app.lesson_reservations
+            set state = 'released', updated_at = clock_timestamp()
+          where lesson_id = any($1::uuid[]) and state = 'reserved'`,
+        [[cancelled!.id, deleted!.id]],
+      );
+      const before = await pool.query<{
+        id: string;
+        series_id: string;
+        updated_at: string;
+        snapshot: string;
+      }>(
+        `select id, series_id, updated_at::text,
+                row_to_json(lesson.*)::text as snapshot
+           from app.lessons lesson
+          where id = any($1::uuid[])
+          order by id`,
+        [targets.rows.map((lesson) => lesson.id)],
+      );
+
+      const updateDto = {
+        expectedVersion: 1,
+        effectiveFrom,
+        activeUntil: fixture.until60,
+        rows: [
+          {
+            ...sourceRow,
+            seriesId: created.seriesIds[0],
+            beginTime: "12:00",
+          },
+        ],
+      };
+      const preview = await plans.previewUpdateConstraints(
+        actor,
+        created.id,
+        updateDto,
+      );
+      expect(preview.valid).toBe(true);
+      const updated = await plans.update(actor, created.id, updateDto, {
+        idempotencyKey: `plan-future-exceptions-update-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      });
+      await database.transaction((client) =>
+        materializer.materializePlanSeries(client, updated.seriesIds[0]!),
+      );
+
+      const after = await pool.query<{
+        id: string;
+        series_id: string;
+        updated_at: string;
+        snapshot: string;
+      }>(
+        `select id, series_id, updated_at::text,
+                row_to_json(lesson.*)::text as snapshot
+           from app.lessons lesson
+          where id = any($1::uuid[])
+          order by id`,
+        [targets.rows.map((lesson) => lesson.id)],
+      );
+      expect(after.rows).toEqual(before.rows);
+      const occurrences = await pool.query<{
+        series_date: string;
+        occurrence_count: string;
+        replacement_count: string;
+      }>(
+        `select lesson.series_date::text,
+                count(*)::text as occurrence_count,
+                count(*) filter (where lesson.series_id = $2)::text
+                  as replacement_count
+           from app.lessons lesson
+           join app.schedule_series series on series.id = lesson.series_id
+          where series.plan_id = $3
+            and lesson.series_date = any($1::date[])
+          group by lesson.series_date
+          order by lesson.series_date`,
+        [
+          targets.rows.map((lesson) => lesson.series_date),
+          updated.seriesIds[0],
+          created.id,
+        ],
+      );
+      expect(occurrences.rows).toEqual(
+        targets.rows
+          .map((lesson) => lesson.series_date)
+          .sort()
+          .map((seriesDate) => ({
+            series_date: seriesDate,
+            occurrence_count: "1",
+            replacement_count: "0",
+          })),
+      );
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("extends an individual plan backwards with prefix-only series and preserves every old artifact", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const sourceRow = row(fixture, 2, "10:00");
+    const newStart = addDays(fixture.today, -21);
+    const prefixUntil = addDays(fixture.today, -1);
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Расширяемый назад план",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-backdate-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const exceptions = await pool.query<{ id: string }>(
+        `select id from app.lessons where series_id = $1
+         order by series_date, id limit 3`,
+        [created.seriesIds[0]],
+      );
+      expect(exceptions.rows).toHaveLength(3);
+      await pool.query(
+        `update app.lessons set lifecycle_state = 'cancelled' where id = $1`,
+        [exceptions.rows[0]!.id],
+      );
+      await pool.query(
+        `update app.lessons set original_scheduled_at = scheduled_at,
+           scheduled_at = scheduled_at + interval '5 hours' where id = $1`,
+        [exceptions.rows[1]!.id],
+      );
+      await pool.query(
+        `update app.lessons set deleted_at = clock_timestamp() where id = $1`,
+        [exceptions.rows[2]!.id],
+      );
+      await pool.query(
+        `update app.lesson_reservations set state = 'released'
+         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
+        [[exceptions.rows[0]!.id, exceptions.rows[2]!.id]],
+      );
+      const beforeArtifacts = await planSeriesArtifacts(
+        pool,
+        created.seriesIds,
+      );
+      const updateDto = {
+        expectedVersion: 1,
+        effectiveFrom: newStart,
+        title: "Расширяемый назад план",
+        subscriptionId: fixture.subscriptionIds[0],
+        activeUntil: fixture.until60,
+        rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+      };
+      await expect(
+        plans.previewUpdateConstraints(actor, created.id, {
+          ...updateDto,
+          rows: [{ ...updateDto.rows[0], beginTime: "11:00" }],
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_BACKDATE_SHAPE_CHANGE" },
+      });
+      const preview = await plans.previewUpdateConstraints(
+        actor,
+        created.id,
+        updateDto,
+      );
+      expect(preview.valid).toBe(true);
+      expect(preview.historical).toMatchObject({
+        confirmRequired: true,
+        from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        until: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      });
+      expect(
+        preview.historical.from!.localeCompare(newStart),
+      ).toBeGreaterThanOrEqual(0);
+      expect(
+        preview.historical.until!.localeCompare(prefixUntil),
+      ).toBeLessThanOrEqual(0);
+
+      const stateBeforeRejectedWrites = await planPersistenceShape(
+        pool,
+        created.id,
+      );
+      await expect(
+        plans.update(
+          actor,
+          created.id,
+          {
+            ...updateDto,
+            title: "Токен не относится к этому заголовку",
+            confirmHistorical: true,
+            previewToken: preview.historical.previewToken,
+          } as never,
+          {
+            idempotencyKey: `plan-backdate-stale-token-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_HISTORY_PREVIEW_STALE" },
+      });
+      await expect(
+        plans.update(
+          actor,
+          created.id,
+          {
+            ...updateDto,
+            expectedVersion: 2,
+            confirmHistorical: true,
+            previewToken: preview.historical.previewToken,
+          } as never,
+          {
+            idempotencyKey: `plan-backdate-stale-version-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toBeDefined();
+      expect(await planPersistenceShape(pool, created.id)).toEqual(
+        stateBeforeRejectedWrites,
+      );
+
+      const metadata = {
+        idempotencyKey: `plan-backdate-confirmed-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      };
+      const command = {
+        ...updateDto,
+        confirmHistorical: true,
+        previewToken: preview.historical.previewToken,
+      } as never;
+      const updated = await plans.update(actor, created.id, command, metadata);
+      const replay = await plans.update(actor, created.id, command, metadata);
+      expect(replay).toEqual({ ...updated, replayed: true });
+      expect(updated.lessonIds).toHaveLength(preview.historical.count);
+      expect(await planSeriesArtifacts(pool, created.seriesIds)).toEqual(
+        beforeArtifacts,
+      );
+      const prefix = await pool.query<{
+        active_from: string;
+        version: string;
+        valid_from: string;
+        valid_until: string;
+        superseded_by: string;
+        subscription_id: string;
+        prefix_series: string;
+        prefix_lessons: string;
+      }>(
+        `select plan.active_from::text, plan.version::text,
+          series.valid_from::text, series.valid_until::text,
+          series.superseded_by, series.subscription_id,
+          (select count(*)::text from app.schedule_series candidate
+            where candidate.plan_id = plan.id and candidate.valid_from = $2::date)
+            as prefix_series,
+          (select count(*)::text from app.lessons lesson
+            where lesson.series_id = series.id) as prefix_lessons
+         from app.schedule_plans plan
+         join app.schedule_series series on series.id = $3
+         where plan.id = $1`,
+        [created.id, newStart, updated.seriesIds[0]],
+      );
+      expect(prefix.rows[0]).toEqual({
+        active_from: newStart,
+        version: "2",
+        valid_from: newStart,
+        valid_until: prefixUntil,
+        superseded_by: created.seriesIds[0],
+        subscription_id: fixture.subscriptionIds[0],
+        prefix_series: "1",
+        prefix_lessons: String(preview.historical.count),
+      });
+      const stateAfterBackdate = await planPersistenceShape(pool, created.id);
+      await expect(
+        plans.previewUpdateConstraints(actor, created.id, {
+          ...updateDto,
+          expectedVersion: 2,
+          effectiveFrom: addDays(newStart, 7),
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_PREFIX_EDIT_UNSUPPORTED" },
+      });
+      expect(await planPersistenceShape(pool, created.id)).toEqual(
+        stateAfterBackdate,
+      );
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("keeps the Plan series subscription snapshot rolling-compatible and immutable once set", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const legacySeriesId = randomUUID();
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Совместимый снимок абонемента",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, 4, "10:00")],
+        },
+        {
+          idempotencyKey: `plan-subscription-snapshot-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      await expect(
+        pool.query(
+          `insert into app.schedule_series (
+             id, plan_id, student_id, group_id, teacher_id, room_id, branch_id,
+             weekday, begin_time, duration_minutes, valid_from, valid_until,
+             notes, created_by, version, planned_financial_decision,
+             settlement_revision_id, compensation_revision_id, superseded_by
+           )
+           select $2, plan_id, student_id, group_id, teacher_id, room_id,
+             branch_id, weekday, begin_time, duration_minutes,
+             (valid_from - interval '14 days')::date,
+             (valid_from - interval '8 days')::date, notes, created_by, version,
+             planned_financial_decision, settlement_revision_id,
+             compensation_revision_id, id
+           from app.schedule_series where id = $1`,
+          [created.seriesIds[0], legacySeriesId],
+        ),
+      ).resolves.toBeDefined();
+      const legacy = await pool.query<{ subscription_id: string | null }>(
+        "select subscription_id from app.schedule_series where id = $1",
+        [legacySeriesId],
+      );
+      expect(legacy.rows[0]!.subscription_id).toBeNull();
+      await expect(
+        pool.query(
+          "update app.schedule_series set subscription_id = $2 where id = $1",
+          [legacySeriesId, fixture.subscriptionIds[1]],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await expect(
+        pool.query(
+          "update app.schedule_series set subscription_id = $2 where id = $1",
+          [legacySeriesId, fixture.subscriptionIds[0]],
+        ),
+      ).resolves.toBeDefined();
+      await expect(
+        pool.query(
+          "update app.schedule_series set subscription_id = null where id = $1",
+          [legacySeriesId],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      const immutable = await pool.query<{ subscription_id: string }>(
+        "select subscription_id from app.schedule_series where id = $1",
+        [legacySeriesId],
+      );
+      expect(immutable.rows[0]!.subscription_id).toBe(
+        fixture.subscriptionIds[0],
+      );
+      await expect(new MigrationRunner(pool).down()).rejects.toThrow(
+        /0142 rollback is unsafe/,
+      );
+      const migrationStillApplied = await pool.query<{ applied: boolean }>(
+        `select exists (select 1 from app_schema_migrations
+          where id = '0142_schedule_plan_series_subscription_snapshot') as applied`,
+      );
+      expect(migrationStillApplied.rows[0]!.applied).toBe(true);
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("changes an individual subscription before inserting its immutable continuation snapshot", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const sourceRow = row(fixture, 5, "10:00");
+    try {
+      const alternative = await pool.query<{ id: string }>(
+        `insert into app.subscriptions (
+           student_id, lessons_total, lessons_used, status
+         ) values ($1, 500, 0, 'active') returning id`,
+        [fixture.studentIds[0]],
+      );
+      const alternativeId = alternative.rows[0]!.id;
+      fixture.subscriptionIds.push(alternativeId);
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Смена абонемента",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-subscription-change-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const legacyClient = await pool.connect();
+      try {
+        await legacyClient.query("begin");
+        await legacyClient.query(
+          "set local session_replication_role = replica",
+        );
+        await legacyClient.query(
+          "update app.schedule_series set subscription_id = null where id = $1",
+          [created.seriesIds[0]],
+        );
+        await legacyClient.query("commit");
+      } catch (error) {
+        await legacyClient.query("rollback");
+        throw error;
+      } finally {
+        legacyClient.release();
+      }
+      const updated = await plans.update(
+        actor,
+        created.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          subscriptionId: alternativeId,
+          activeUntil: fixture.until60,
+          rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+        },
+        {
+          idempotencyKey: `plan-subscription-change-update-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const snapshots = await pool.query<{
+        active_from: string;
+        plan_subscription_id: string;
+        old_subscription_id: string;
+        new_subscription_id: string;
+        new_lesson_subscriptions: string;
+      }>(
+        `select plan.active_from::text, plan.subscription_id as plan_subscription_id,
+          old_series.subscription_id as old_subscription_id,
+          new_series.subscription_id as new_subscription_id,
+          (select count(distinct snapshot.subscription_id)::text
+             from app.lesson_snapshots snapshot join app.lessons lesson
+               on lesson.id = snapshot.lesson_id
+            where lesson.series_id = new_series.id
+              and snapshot.subscription_id = new_series.subscription_id)
+            as new_lesson_subscriptions
+         from app.schedule_plans plan
+         join app.schedule_series old_series on old_series.id = $2
+         join app.schedule_series new_series on new_series.id = $3
+         where plan.id = $1`,
+        [created.id, created.seriesIds[0], updated.seriesIds[0]],
+      );
+      expect(snapshots.rows[0]).toEqual({
+        active_from: fixture.today,
+        plan_subscription_id: alternativeId,
+        old_subscription_id: fixture.subscriptionIds[0],
+        new_subscription_id: alternativeId,
+        new_lesson_subscriptions: "1",
+      });
+      await expect(
+        database.transaction((client) =>
+          materializer.materializePlanSeries(client, updated.seriesIds[0]!),
+        ),
+      ).resolves.toBe(0);
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("moves the plan start only for a date-only update and preserves it for a later row change", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const sourceRow = row(fixture, 6, "10:00");
+    const rowChangeDate = addDays(fixture.today, 14);
+    const movedStart = addDays(fixture.today, 35);
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Дата начала без скрытой смены истории",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-forward-start-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const oldPeriod = await pool.query<{ id: string }>(
+        `select id from app.lessons where series_id = $1
+          and series_date < $2::date and deleted_at is null order by id`,
+        [created.seriesIds[0], rowChangeDate],
+      );
+      expect(oldPeriod.rows.length).toBeGreaterThan(0);
+      const changedRow = { ...sourceRow, beginTime: "12:00" };
+      const changed = await plans.update(
+        actor,
+        created.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: rowChangeDate,
+          title: "Дата начала без скрытой смены истории",
+          subscriptionId: fixture.subscriptionIds[0],
+          activeUntil: fixture.until60,
+          rows: [{ ...changedRow, seriesId: created.seriesIds[0] }],
+        },
+        {
+          idempotencyKey: `plan-forward-start-row-change-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const afterRowChange = await pool.query<{
+        active_from: string;
+        preserved: string;
+      }>(
+        `select plan.active_from::text,
+          (select count(*)::text from app.lessons lesson
+            where lesson.id = any($2::uuid[]) and lesson.deleted_at is null)
+            as preserved
+         from app.schedule_plans plan where plan.id = $1`,
+        [created.id, oldPeriod.rows.map((lesson) => lesson.id)],
+      );
+      expect(afterRowChange.rows[0]).toEqual({
+        active_from: fixture.today,
+        preserved: String(oldPeriod.rows.length),
+      });
+      expect(changed).toMatchObject({ version: 2 });
+
+      const simpleRow = row(fixture, 1, "16:00");
+      const simpleActiveFrom = addDays(fixture.today, -21);
+      const simpleCreateDto = {
+        kind: "individual" as const,
+        title: "Только перенос даты начала",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: simpleActiveFrom,
+        activeUntil: fixture.until60,
+        rows: [simpleRow],
+      };
+      const simpleCreatePreview = await plans.previewConstraints(
+        actor,
+        simpleCreateDto,
+      );
+      const movable = await plans.create(
+        actor,
+        {
+          ...simpleCreateDto,
+          confirmHistorical: true,
+          previewToken: simpleCreatePreview.historical.previewToken,
+        } as never,
+        {
+          idempotencyKey: `plan-forward-start-simple-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const futureBeforeMove = await pool.query<{ id: string }>(
+        `select id from app.lessons where series_id = $1
+          and series_date >= $2::date and deleted_at is null order by id`,
+        [movable.seriesIds[0], movedStart],
+      );
+      expect(futureBeforeMove.rows.length).toBeGreaterThan(0);
+      const moveDto = {
+        expectedVersion: 1,
+        effectiveFrom: movedStart,
+        title: "Только перенос даты начала",
+        subscriptionId: fixture.subscriptionIds[0],
+        activeUntil: fixture.until60,
+        rows: [{ ...simpleRow, seriesId: movable.seriesIds[0] }],
+      };
+      const movePreview = await plans.previewUpdateConstraints(
+        actor,
+        movable.id,
+        moveDto,
+      );
+      const prefixProjection = await pool.query<{
+        total: string;
+        historical: string;
+        historical_from: string | null;
+        historical_until: string | null;
+      }>(
+        `select count(*)::text as total,
+          count(*) filter (where series_date < $4::date)::text as historical,
+          min(series_date) filter (where series_date < $4::date)::text
+            as historical_from,
+          max(series_date) filter (where series_date < $4::date)::text
+            as historical_until
+         from app.lessons where series_id = $1
+           and series_date >= $2::date and series_date < $3::date
+           and deleted_at is null`,
+        [movable.seriesIds[0], simpleActiveFrom, movedStart, fixture.today],
+      );
+      expect(movePreview.rows[0]!.occurrencesChecked).toBe(
+        Number(prefixProjection.rows[0]!.total),
+      );
+      expect(movePreview.historical).toMatchObject({
+        confirmRequired: true,
+        count: Number(prefixProjection.rows[0]!.historical),
+        from: prefixProjection.rows[0]!.historical_from,
+        until: prefixProjection.rows[0]!.historical_until,
+      });
+      const beforeStale = {
+        shape: await planPersistenceShape(pool, movable.id),
+        artifacts: await planSeriesArtifacts(pool, movable.seriesIds),
+      };
+      await expect(
+        plans.update(
+          actor,
+          movable.id,
+          {
+            ...moveDto,
+            effectiveFrom: addDays(movedStart, -7),
+            confirmHistorical: true,
+            previewToken: movePreview.historical.previewToken,
+          } as never,
+          {
+            idempotencyKey: `plan-forward-start-stale-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_HISTORY_PREVIEW_STALE" },
+      });
+      expect({
+        shape: await planPersistenceShape(pool, movable.id),
+        artifacts: await planSeriesArtifacts(pool, movable.seriesIds),
+      }).toEqual(beforeStale);
+
+      const completedId = futureBeforeMove.rows[0]!.id;
+      await pool.query(
+        `update app.lessons set lifecycle_state = 'successfully_completed'
+         where id = $1`,
+        [completedId],
+      );
+      const completedBeforeMove = await lessonArtifact(pool, completedId);
+      const moved = await plans.update(
+        actor,
+        movable.id,
+        {
+          ...moveDto,
+          confirmHistorical: true,
+          previewToken: movePreview.historical.previewToken,
+        } as never,
+        {
+          idempotencyKey: `plan-forward-start-date-only-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const afterMove = await pool.query<{
+        active_from: string;
+        active_before_start: string;
+        released_before_start: string;
+        continuation_from: string;
+      }>(
+        `select plan.active_from::text,
+          (select count(*)::text from app.lessons lesson
+            join app.schedule_series series on series.id = lesson.series_id
+            where series.plan_id = plan.id and lesson.series_date < $2::date
+              and lesson.deleted_at is null) as active_before_start,
+          (select count(*)::text from app.lesson_reservations reservation
+            join app.lessons lesson on lesson.id = reservation.lesson_id
+            join app.schedule_series series on series.id = lesson.series_id
+            where series.plan_id = plan.id and lesson.series_date < $2::date
+              and reservation.state = 'released') as released_before_start,
+          (select valid_from::text from app.schedule_series where id = $3)
+            as continuation_from
+         from app.schedule_plans plan where plan.id = $1`,
+        [movable.id, movedStart, moved.seriesIds[0]],
+      );
+      expect(afterMove.rows[0]).toMatchObject({
+        active_from: movedStart,
+        active_before_start: "0",
+        continuation_from: movedStart,
+      });
+      expect(Number(afterMove.rows[0]!.released_before_start)).toBeGreaterThan(
+        0,
+      );
+      expect(moved.seriesIds).toEqual(movable.seriesIds);
+      const futureAfterMove = await pool.query<{ id: string }>(
+        `select id from app.lessons where series_id = $1
+          and series_date >= $2::date and deleted_at is null order by id`,
+        [movable.seriesIds[0], movedStart],
+      );
+      expect(futureAfterMove.rows).toEqual(futureBeforeMove.rows);
+      expect(await lessonArtifact(pool, completedId)).toEqual(
+        completedBeforeMove,
+      );
+
+      const groupParticipants = fixture.studentIds.map((studentId, index) => ({
+        studentId,
+        subscriptionId: fixture.subscriptionIds[index]!,
+      }));
+      const groupRow = row(fixture, 3, "18:00");
+      const movableGroup = await plans.create(
+        actor,
+        {
+          kind: "group",
+          title: "Перенос начала группы",
+          groupId: fixture.groupId,
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          participants: groupParticipants,
+          rows: [groupRow],
+        },
+        {
+          idempotencyKey: `plan-forward-start-group-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const groupMovedStart = addDays(fixture.today, 21);
+      const movedGroup = await plans.update(
+        actor,
+        movableGroup.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: groupMovedStart,
+          title: "Перенос начала группы",
+          activeUntil: fixture.until60,
+          participants: groupParticipants,
+          rows: [{ ...groupRow, seriesId: movableGroup.seriesIds[0] }],
+        },
+        {
+          idempotencyKey: `plan-forward-start-group-update-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const groupStart = await pool.query<{
+        active_from: string;
+        series_from: string;
+        participant_count: string;
+        shifted_count: string;
+        overlaps: boolean;
+      }>(
+        `select plan.active_from::text,
+          (select valid_from::text from app.schedule_series where id = $3)
+            as series_from,
+          (select count(*)::text from app.schedule_plan_participants participant
+            where participant.plan_id = plan.id) as participant_count,
+          (select count(*)::text from app.schedule_plan_participants participant
+            where participant.plan_id = plan.id
+              and participant.effective_from = $2::date
+              and participant.effective_until = plan.active_until)
+            as shifted_count,
+          exists (
+            select 1 from app.schedule_plan_participants left_assignment
+            join app.schedule_plan_participants right_assignment
+              on right_assignment.plan_id = left_assignment.plan_id
+             and right_assignment.student_id = left_assignment.student_id
+             and right_assignment.id > left_assignment.id
+             and daterange(left_assignment.effective_from,
+                   coalesce(left_assignment.effective_until, 'infinity'::date), '[]')
+               && daterange(right_assignment.effective_from,
+                   coalesce(right_assignment.effective_until, 'infinity'::date), '[]')
+            where left_assignment.plan_id = plan.id
+          ) as overlaps
+         from app.schedule_plans plan where plan.id = $1`,
+        [movableGroup.id, groupMovedStart, movedGroup.seriesIds[0]],
+      );
+      expect(groupStart.rows[0]).toEqual({
+        active_from: groupMovedStart,
+        series_from: groupMovedStart,
+        participant_count: String(groupParticipants.length),
+        shifted_count: String(groupParticipants.length),
+        overlaps: false,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects a forward start move when completion terminalizes a locked prefix lesson", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const activeFrom = addDays(fixture.today, 7);
+    const movedStart = addDays(fixture.today, 28);
+    const sourceRow = row(fixture, isoWeekday(activeFrom), "10:00");
+    const title = "Completion wins the start-move race";
+    const completionClient = await pool.connect();
+    let completionTransactionOpen = false;
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title,
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-forward-completion-first-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const prefix = await pool.query<{ id: string; active_count: string }>(
+        `select lesson.id,
+          (select count(*)::text from app.lessons candidate
+            where candidate.series_id = lesson.series_id
+              and candidate.series_date >= $2::date
+              and candidate.series_date < $3::date
+              and candidate.deleted_at is null) as active_count
+         from app.lessons lesson
+         where lesson.series_id = $1 and lesson.series_date >= $2::date
+           and lesson.series_date < $3::date and lesson.deleted_at is null
+         order by lesson.series_date, lesson.id limit 1`,
+        [created.seriesIds[0], activeFrom, movedStart],
+      );
+      const lessonId = prefix.rows[0]!.id;
+      const activePrefixCount = prefix.rows[0]!.active_count;
+
+      await completionClient.query("begin");
+      completionTransactionOpen = true;
+      const blockerPid = await backendPid(completionClient);
+      await completionClient.query(
+        `update app.lessons set lifecycle_state = 'successfully_completed'
+         where id = $1 and lifecycle_state = 'scheduled' and deleted_at is null`,
+        [lessonId],
+      );
+
+      const moveOutcome = plans
+        .update(
+          actor,
+          created.id,
+          {
+            expectedVersion: 1,
+            effectiveFrom: movedStart,
+            title,
+            subscriptionId: fixture.subscriptionIds[0],
+            activeUntil: fixture.until60,
+            rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+          },
+          {
+            idempotencyKey: `plan-forward-completion-first-update-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        )
+        .then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => ({ ok: false as const, error }),
+        );
+      await waitForBlockedBy(pool, blockerPid);
+      await completionClient.query("commit");
+      completionTransactionOpen = false;
+
+      const outcome = await moveOutcome;
+      expect(outcome).toMatchObject({
+        ok: false,
+        error: {
+          response: { code: "SCHEDULE_PLAN_START_HISTORY_IMMUTABLE" },
+        },
+      });
+      const state = await pool.query<{
+        active_from: string;
+        plan_version: string;
+        series_from: string;
+        series_version: string;
+        lifecycle_state: string;
+        deleted_at: string | null;
+        active_prefix_count: string;
+      }>(
+        `select plan.active_from::text, plan.version::text as plan_version,
+          series.valid_from::text as series_from,
+          series.version::text as series_version,
+          lesson.lifecycle_state, lesson.deleted_at::text,
+          (select count(*)::text from app.lessons candidate
+            where candidate.series_id = series.id
+              and candidate.series_date >= $4::date
+              and candidate.series_date < $5::date
+              and candidate.deleted_at is null) as active_prefix_count
+         from app.schedule_plans plan
+         join app.schedule_series series on series.id = $2
+         join app.lessons lesson on lesson.id = $3
+         where plan.id = $1`,
+        [created.id, created.seriesIds[0], lessonId, activeFrom, movedStart],
+      );
+      expect(state.rows[0]).toEqual({
+        active_from: activeFrom,
+        plan_version: "1",
+        series_from: activeFrom,
+        series_version: "1",
+        lifecycle_state: "successfully_completed",
+        deleted_at: null,
+        active_prefix_count: activePrefixCount,
+      });
+    } finally {
+      if (completionTransactionOpen) {
+        await completionClient.query("rollback");
+      }
+      completionClient.release();
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("makes completion observe a deleted prefix lesson when the start move locks first", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const activeFrom = addDays(fixture.today, 7);
+    const movedStart = addDays(fixture.today, 28);
+    const sourceRow = row(fixture, isoWeekday(activeFrom), "12:00");
+    const title = "Start move wins the completion race";
+    const moveClient = await pool.connect();
+    const completionClient = await pool.connect();
+    let moveTransactionOpen = false;
+    let completionTransactionOpen = false;
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title,
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-forward-move-first-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const target = await pool.query<{ id: string }>(
+        `select id from app.lessons where series_id = $1
+          and series_date >= $2::date and series_date < $3::date
+          and lifecycle_state = 'scheduled' and deleted_at is null
+         order by series_date, id limit 1`,
+        [created.seriesIds[0], activeFrom, movedStart],
+      );
+      const lessonId = target.rows[0]!.id;
+      const repository = new SchedulePlanRepository(database);
+
+      await moveClient.query("begin");
+      moveTransactionOpen = true;
+      const movePid = await backendPid(moveClient);
+      await expect(
+        repository.hasImmutableLessonsInRange(
+          moveClient,
+          created.id,
+          activeFrom,
+          movedStart,
+        ),
+      ).resolves.toBe(false);
+
+      await completionClient.query("begin");
+      completionTransactionOpen = true;
+      const completionPid = await backendPid(completionClient);
+      const completionSource = completionClient.query<{ id: string }>(
+        `select id from app.lessons
+         where id = $1 and lifecycle_state = 'scheduled' and deleted_at is null
+         for update`,
+        [lessonId],
+      );
+      await waitForSpecificBlock(pool, completionPid, movePid);
+
+      const removed = await repository.deleteScheduledLessonsInRange(
+        moveClient,
+        created.id,
+        activeFrom,
+        movedStart,
+      );
+      expect(removed).toContain(lessonId);
+      await repository.moveSeriesStart(
+        moveClient,
+        created.seriesIds,
+        movedStart,
+        2,
+      );
+      await repository.updatePlan(moveClient, {
+        planId: created.id,
+        title,
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: movedStart,
+        activeUntil: fixture.until60,
+        version: 2,
+      });
+      await moveClient.query("commit");
+      moveTransactionOpen = false;
+
+      await expect(completionSource).resolves.toMatchObject({ rows: [] });
+      await completionClient.query("commit");
+      completionTransactionOpen = false;
+      const state = await pool.query<{
+        active_from: string;
+        series_from: string;
+        deleted: boolean;
+        reservation_state: string;
+      }>(
+        `select plan.active_from::text,
+          series.valid_from::text as series_from,
+          lesson.deleted_at is not null as deleted,
+          reservation.state as reservation_state
+         from app.schedule_plans plan
+         join app.schedule_series series on series.id = $2
+         join app.lessons lesson on lesson.id = $3
+         join app.lesson_reservations reservation on reservation.lesson_id = lesson.id
+         where plan.id = $1`,
+        [created.id, created.seriesIds[0], lessonId],
+      );
+      expect(state.rows[0]).toEqual({
+        active_from: movedStart,
+        series_from: movedStart,
+        deleted: true,
+        reservation_state: "released",
+      });
+    } finally {
+      if (completionTransactionOpen) {
+        await completionClient.query("rollback");
+      }
+      if (moveTransactionOpen) {
+        await moveClient.query("rollback");
+      }
+      completionClient.release();
+      moveClient.release();
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rolls a group prefix back on capacity failure and inserts non-overlapping old-start assignments", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const sourceRow = row(fixture, 3, "14:00");
+    const newStart = addDays(fixture.today, -14);
+    const prefixUntil = addDays(fixture.today, -1);
+    const participants = fixture.studentIds.map((studentId, index) => ({
+      studentId,
+      subscriptionId: fixture.subscriptionIds[index]!,
+    }));
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "group",
+          title: "Группа с историческим префиксом",
+          groupId: fixture.groupId,
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          participants,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-group-backdate-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      await expect(
+        pool.query(
+          "update app.schedule_series set subscription_id = $2 where id = $1",
+          [created.seriesIds[0], fixture.subscriptionIds[0]],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      const updateDto = {
+        expectedVersion: 1,
+        effectiveFrom: newStart,
+        activeUntil: fixture.until60,
+        participants,
+        rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+      };
+      const preview = await plans.previewUpdateConstraints(
+        actor,
+        created.id,
+        updateDto,
+      );
+      expect(preview.valid).toBe(true);
+      await pool.query(
+        `update app.subscriptions subscription
+         set lessons_total = ceil(coalesce((
+           select sum(reservation.units) from app.lesson_reservations reservation
+           where reservation.subscription_id = subscription.id
+             and reservation.state = 'reserved'
+         ), 0))
+         where subscription.id = $1`,
+        [fixture.subscriptionIds[0]],
+      );
+      const beforeFailure = await planPersistenceShape(pool, created.id);
+      await expect(
+        plans.update(
+          actor,
+          created.id,
+          {
+            ...updateDto,
+            confirmHistorical: true,
+            previewToken: preview.historical.previewToken,
+          } as never,
+          {
+            idempotencyKey: `plan-group-backdate-capacity-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          violations: expect.arrayContaining([
+            expect.objectContaining({ code: "SUBSCRIPTION_CAPACITY" }),
+          ]),
+        },
+      });
+      expect(await planPersistenceShape(pool, created.id)).toEqual(
+        beforeFailure,
+      );
+
+      await pool.query(
+        "update app.subscriptions set lessons_total = 500 where id = $1",
+        [fixture.subscriptionIds[0]],
+      );
+      const metadata = {
+        idempotencyKey: `plan-group-backdate-confirmed-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      };
+      const command = {
+        ...updateDto,
+        confirmHistorical: true,
+        previewToken: preview.historical.previewToken,
+      } as never;
+      const updated = await plans.update(actor, created.id, command, metadata);
+      expect(await plans.update(actor, created.id, command, metadata)).toEqual({
+        ...updated,
+        replayed: true,
+      });
+      const assignments = await pool.query<{
+        prefix: string;
+        original: string;
+        overlaps: string;
+        prefix_series: string;
+      }>(
+        `select
+          count(*) filter (where effective_from = $2::date
+            and effective_until = $3::date)::text as prefix,
+          count(*) filter (where effective_from = $4::date)::text as original,
+          (select count(*)::text
+             from app.schedule_plan_participants left_row
+             join app.schedule_plan_participants right_row
+               on right_row.plan_id = left_row.plan_id
+              and right_row.student_id = left_row.student_id
+              and right_row.id > left_row.id
+              and daterange(left_row.effective_from,
+                    coalesce(left_row.effective_until, 'infinity'::date), '[]')
+                && daterange(right_row.effective_from,
+                    coalesce(right_row.effective_until, 'infinity'::date), '[]')
+            where left_row.plan_id = $1) as overlaps,
+          (select count(*)::text from app.schedule_series series
+            where series.plan_id = $1 and series.valid_from = $2::date)
+            as prefix_series
+         from app.schedule_plan_participants where plan_id = $1`,
+        [created.id, newStart, prefixUntil, fixture.today],
+      );
+      expect(assignments.rows[0]).toEqual({
+        prefix: "2",
+        original: "2",
+        overlaps: "0",
+        prefix_series: "1",
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects an oversized historical span in preview and commit", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const dto = {
+      kind: "individual" as const,
+      title: "Слишком длинная история",
+      studentId: fixture.studentIds[0],
+      subscriptionId: fixture.subscriptionIds[0],
+      activeFrom: addDays(fixture.today, -367),
+      activeUntil: addDays(fixture.today, 30),
+      rows: [row(fixture, 1, "10:00")],
+    };
+    try {
+      await expect(plans.previewConstraints(actor, dto)).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_HISTORICAL_RANGE_TOO_LARGE" },
+      });
+      await expect(
+        plans.create(
+          actor,
+          {
+            ...dto,
+            confirmHistorical: true,
+            previewToken: "invalid-preview-token",
+          } as never,
+          {
+            idempotencyKey: `plan-history-range-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_HISTORICAL_RANGE_TOO_LARGE" },
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects too many plan occurrences before expanding rows", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      ...row(
+        fixture,
+        (index % 7) + 1,
+        `${String(index + 8).padStart(2, "0")}:00`,
+      ),
+      durationMinutes: 30,
+    }));
+    try {
+      await expect(
+        plans.previewConstraints(actor, {
+          kind: "individual",
+          title: "Слишком много занятий",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: addDays(fixture.today, -300),
+          activeUntil: addDays(fixture.today, 60),
+          rows,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_OCCURRENCE_LIMIT_EXCEEDED" },
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("previews every row and explains overlaps inside the new plan before create", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
@@ -316,7 +1966,13 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       const command = {
         expectedVersion: 1,
         effectiveFrom: fixture.effectiveFrom,
-        rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+        rows: [
+          {
+            ...sourceRow,
+            notes: "Изменённая строка",
+            seriesId: created.seriesIds[0],
+          },
+        ],
       };
 
       const ownLessonsExcluded = await plans.previewUpdateConstraints(
@@ -1300,6 +2956,137 @@ async function seriesLessonCount(client: PoolClient, seriesId: string) {
   return Number(result.rows[0]?.count ?? 0);
 }
 
+async function backendPid(client: PoolClient) {
+  const result = await client.query<{ pid: number }>(
+    "select pg_backend_pid() as pid",
+  );
+  return result.rows[0]!.pid;
+}
+
+async function waitForBlockedBy(pool: Pool, blockerPid: number) {
+  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    const result = await pool.query<{ pid: number }>(
+      `select pid from pg_stat_activity
+       where $1::int = any(pg_blocking_pids(pid))
+       order by pid limit 1`,
+      [blockerPid],
+    );
+    if (result.rows[0]) return result.rows[0].pid;
+  }
+  throw new Error(`No backend became blocked by PostgreSQL pid ${blockerPid}.`);
+}
+
+async function waitForSpecificBlock(
+  pool: Pool,
+  blockedPid: number,
+  blockerPid: number,
+) {
+  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    const result = await pool.query<{ blocked: boolean }>(
+      "select $2::int = any(pg_blocking_pids($1::int)) as blocked",
+      [blockedPid, blockerPid],
+    );
+    if (result.rows[0]!.blocked) return;
+  }
+  throw new Error(
+    `PostgreSQL pid ${blockedPid} was not blocked by pid ${blockerPid}.`,
+  );
+}
+
+function isoWeekday(date: string) {
+  const day = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+async function planPersistenceShape(pool: Pool, planId: string) {
+  const result = await pool.query<{
+    active_from: string;
+    version: string;
+    series: string;
+    lessons: string;
+    participants: string;
+  }>(
+    `select plan.active_from::text, plan.version::text,
+      (select count(*)::text from app.schedule_series series
+        where series.plan_id = plan.id) as series,
+      (select count(*)::text from app.lessons lesson
+        join app.schedule_series series on series.id = lesson.series_id
+        where series.plan_id = plan.id) as lessons,
+      (select count(*)::text from app.schedule_plan_participants participant
+        where participant.plan_id = plan.id) as participants
+     from app.schedule_plans plan where plan.id = $1`,
+    [planId],
+  );
+  return result.rows[0]!;
+}
+
+async function planSeriesArtifacts(pool: Pool, seriesIds: string[]) {
+  const result = await pool.query<{
+    series: string;
+    lessons: string;
+    snapshots: string;
+    participants: string;
+    settlement_plans: string;
+    settlement_revisions: string;
+    reservations: string;
+  }>(
+    `select
+      coalesce((select jsonb_agg(to_jsonb(series) order by series.id)
+        from app.schedule_series series where series.id = any($1::uuid[])),
+        '[]'::jsonb)::text as series,
+      coalesce((select jsonb_agg(to_jsonb(lesson) order by lesson.id)
+        from app.lessons lesson where lesson.series_id = any($1::uuid[])),
+        '[]'::jsonb)::text as lessons,
+      coalesce((select jsonb_agg(to_jsonb(snapshot) order by snapshot.lesson_id)
+        from app.lesson_snapshots snapshot join app.lessons lesson
+          on lesson.id = snapshot.lesson_id
+        where lesson.series_id = any($1::uuid[])), '[]'::jsonb)::text as snapshots,
+      coalesce((select jsonb_agg(to_jsonb(participant)
+          order by participant.lesson_id, participant.student_id)
+        from app.lesson_snapshot_participants participant join app.lessons lesson
+          on lesson.id = participant.lesson_id
+        where lesson.series_id = any($1::uuid[])), '[]'::jsonb)::text as participants,
+      coalesce((select jsonb_agg(to_jsonb(plan) order by plan.lesson_id)
+        from app.lesson_settlement_plans plan join app.lessons lesson
+          on lesson.id = plan.lesson_id
+        where lesson.series_id = any($1::uuid[])), '[]'::jsonb)::text
+        as settlement_plans,
+      coalesce((select jsonb_agg(to_jsonb(revision)
+          order by revision.lesson_id, revision.version)
+        from app.lesson_settlement_plan_revisions revision join app.lessons lesson
+          on lesson.id = revision.lesson_id
+        where lesson.series_id = any($1::uuid[])), '[]'::jsonb)::text
+        as settlement_revisions,
+      coalesce((select jsonb_agg(to_jsonb(reservation) order by reservation.id)
+        from app.lesson_reservations reservation join app.lessons lesson
+          on lesson.id = reservation.lesson_id
+        where lesson.series_id = any($1::uuid[])), '[]'::jsonb)::text
+        as reservations`,
+    [seriesIds],
+  );
+  return result.rows[0]!;
+}
+
+async function lessonArtifact(pool: Pool, lessonId: string) {
+  const result = await pool.query<{
+    lesson: string;
+    snapshots: string;
+    reservations: string;
+  }>(
+    `select row_to_json(lesson)::text as lesson,
+      coalesce((select jsonb_agg(to_jsonb(snapshot) order by snapshot.lesson_id)
+        from app.lesson_snapshots snapshot where snapshot.lesson_id = lesson.id),
+        '[]'::jsonb)::text as snapshots,
+      coalesce((select jsonb_agg(to_jsonb(reservation) order by reservation.id)
+        from app.lesson_reservations reservation
+        where reservation.lesson_id = lesson.id), '[]'::jsonb)::text
+        as reservations
+     from app.lessons lesson where lesson.id = $1`,
+    [lessonId],
+  );
+  return result.rows[0]!;
+}
+
 function row(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   weekday: number,
@@ -1315,8 +3102,7 @@ function row(
     durationMinutes: 60,
     financialDecision: {
       settlementTypeKey: "lesson",
-      teacherCompensationRuleKey: "none",
-    },
+    } as ConfiguredLessonFinancialDecisionDto,
   };
 }
 
@@ -1373,10 +3159,10 @@ async function createFixture(pool: Pool) {
     until60: string;
     until400: string;
     effective_from: string;
-  }>(`select current_date::text as today,
-      (current_date + 60)::text as until60,
-      (current_date + 400)::text as until400,
-      (current_date + 21)::text as effective_from`);
+  }>(`select timezone('Europe/Moscow', now())::date::text as today,
+      (timezone('Europe/Moscow', now())::date + 60)::text as until60,
+      (timezone('Europe/Moscow', now())::date + 400)::text as until400,
+      (timezone('Europe/Moscow', now())::date + 21)::text as effective_from`);
   const branch = await pool.query<{ id: string }>(
     "insert into app.branches (name, timezone_name) values ($1, 'Europe/Moscow') returning id",
     [`Plan branch ${randomUUID()}`],

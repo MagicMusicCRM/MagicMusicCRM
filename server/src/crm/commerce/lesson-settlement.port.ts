@@ -20,6 +20,7 @@ export interface LessonFinancialDecision {
     clientId: string;
     settlementTypeKey?: string;
     subscriptionId?: string;
+    payerStudentId?: string;
   }>;
   teacherCompensationRuleKey: string;
   teacherCompensationValueMinor?: string;
@@ -34,6 +35,7 @@ export interface PreparedLessonSettlementPlan {
 export interface PlannedSubscriptionAllocation {
   clientType: "lead" | "student";
   clientId: string;
+  payerStudentId?: string;
   subscriptionId: string;
   units: number;
 }

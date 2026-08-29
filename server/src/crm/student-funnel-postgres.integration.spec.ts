@@ -389,6 +389,7 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
     expect(before).toMatchObject({ active: 1, paused: 0, inactive: 0 });
     await expect(
       crm.updateStudent(director, studentId, {
+        expectedVersion: 1,
         status: "paused",
         clearResponsible: true,
       }),
@@ -398,6 +399,7 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
 
     await expect(
       crm.updateStudent(director, studentId, {
+        expectedVersion: 2,
         status: "inactive",
         clearResponsible: true,
       }),

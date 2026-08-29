@@ -72,6 +72,7 @@ export class BlacklistService {
             blacklisted_at = case when $2 then now() else null end,
             blacklisted_by = case when $2 then $3::uuid else null end,
             blacklist_reason = case when $2 then $4 else null end,
+            version = version + 1,
             updated_at = now()
         where id = $1 and deleted_at is null
         returning id, blacklisted, blacklisted_at, blacklisted_by,

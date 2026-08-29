@@ -35,7 +35,7 @@ export class LeadCardService {
     this.policy.assertCanWriteCrm(actor);
     const leadResult = await this.database.query<LeadBoardRow>(
       `
-        select l.id, l.status_id, ls.stage_key as status_key,
+        select l.id, l.version, l.status_id, ls.stage_key as status_key,
           ls.name as status_name, ls.color as status_color,
           ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
           l.email, l.source, l.source_id, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
@@ -212,7 +212,7 @@ export class LeadCardService {
   private async listStudents(leadId: string) {
     const result = await this.database.query<StudentRow>(
       `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+        select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone,
           s.created_at, '{}'::uuid[] as teacher_user_ids
         from app.students s
@@ -231,7 +231,7 @@ export class LeadCardService {
     if (!lead.phone && !lead.email) return [];
     const result = await this.database.query<LeadRow>(
       `
-        select l.id, l.status_id, ls.name as status_name, l.first_name,
+        select l.id, l.version, l.status_id, ls.name as status_name, l.first_name,
           l.last_name, l.phone, l.email, l.source, l.notes, l.assigned_to,
           l.custom_data, l.created_by, l.created_at, l.updated_at
         from app.leads l

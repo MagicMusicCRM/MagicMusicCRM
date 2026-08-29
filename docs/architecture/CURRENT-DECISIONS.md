@@ -171,8 +171,10 @@ Discipline/category/level на расписание не влияют. При в
 Lesson получает default Branch из `Student.branch_id`/`Lead.branch_id`, но Room
 всегда выбирается оператором явно.
 
-DECISION: Create Lesson требует три независимых финансовых решения:
-`settlementTypeKey`, `teacherCompensationRuleKey` и `clientChargeType`.
+DECISION: Create Lesson требует независимые `settlementTypeKey` и
+`clientChargeType`. `teacherCompensationRuleKey` явно выбирают только
+Director/system_admin; для Admin/Manager сервер игнорирует rate-поля старых
+клиентов и применяет `standard` с effective teacher rate.
 Subscription source дополнительно требует конкретный `subscriptionId`. Backend
 fail-closed валидирует весь набор до записи и в одной транзакции создаёт Lesson,
 immutable snapshot, settlement plan/revision и применимые reservations; ни UI-
@@ -246,7 +248,9 @@ authoritative facts; UI сохраняет последнюю успешную �
 DECISION (owner, 2026-08-14): Schedule Plan — единственный пользовательский
 редактор постоянного расписания. Legacy `schedule-series` и строковое поле
 `preferredSchedule` остаются совместимым read/history-контрактом до отдельной
-миграции, но больше не монтируются и не изменяются из карточки клиента. Это
+миграции, но новый standalone series через legacy POST запрещён, а Plan-owned
+series нельзя менять legacy PATCH/DELETE. Они больше не монтируются и не
+изменяются из карточки клиента. Это
 устраняет неатомарный цикл частичного создания нескольких series и оставляет
 один путь preview → atomic commit → read-after-write. Уже созданные Lesson,
 series и audit/history не удаляются и не переписываются.
@@ -283,6 +287,47 @@ DECISION: Group Lesson settlement не является отдельной фи�
 `consumed`, остальные резервы Lesson — `released`. Исключённые участники не
 возвращаются в UI и не получают новый факт.
 
+DECISION (owner, 2026-08-29): Плательщик отдельной строки Group Lesson не
+создаёт второй settlement-контур. Sparse client decision хранит фактического
+участника, optional payer и его subscription; plan/commit проверяют scope обоих,
+а immutable client fact остаётся на участнике. Subscription reservation и
+остаток принадлежат плательщику, teacher fact по-прежнему один на Lesson. UI
+ищет плательщика серверно по всему actor/Branch scope, а не в первой странице
+списка учеников; абонементы загружаются только после выбора плательщика.
+
+DECISION (owner, 2026-08-29): Закрытые и исторические периоды развивают текущий
+Schedule Plan. Для backdated create/update используется signed history impact
+preview, привязанный к client/plan/version/date-range/draft fingerprint; commit
+повторяет resource validation под существующими locks. Параллельный legacy-
+редактор, отдельная period-таблица и переписывание terminal Lesson запрещены.
+
+DECISION (owner, 2026-08-29): Backdated update расширяет тот же Plan только
+идентичным prefix `[new activeFrom, old activeFrom - 1]`; прежние series/Lesson
+не retire и не пересоздаются, а prefix указывает на текущую series как lineage.
+Изменение внутри prefix fail-closed. Перенос начала вперёд выделен в date-only
+режим только для Plan без сложного lineage: удаляются лишь scheduled Lesson до
+новой даты с release reservations, а будущие и terminal артефакты сохраняют
+identity. До проверки immutable-состояния все Lesson удаляемого префикса
+блокируются `FOR UPDATE` в стабильном порядке, поэтому completion worker не
+может terminalize строку между проверкой и soft-delete. Обычный row/business
+replace не меняет исходный `plan.active_from`.
+
+DECISION (owner, 2026-08-29): `schedule_series.subscription_id` является
+optional immutable snapshot индивидуальной Plan-series. Legacy `NULL` остаётся
+rolling-compatible; перед сменой Plan subscription только текущие active
+`NULL` series фиксируют прежний subscription, после чего continuation получает
+новый. Исторический mass backfill запрещён, потому что текущее значение Plan не
+доказывает старый источник списания. Application rollback выполняется старым
+image поверх schema 0142; destructive down после появления snapshot запрещён.
+
+DECISION (owner, 2026-08-29): Право записи любой teacher rate принадлежит только
+Director/system_admin и проверяется в общей backend policy на каждом write-path.
+Capabilities и скрытие controls в Flutter являются дополнительной проекцией,
+а не заменой этой проверки. Старые operational payload Admin/Manager с teacher
+compensation совместимы, но поля игнорируются в пользу stored/default значения;
+явные rate CRUD/bulk/correction endpoints остаются закрыты. Payroll read/payout
+не расширяют rate-write.
+
 DECISION: Lead loss reason хранит `reason_name_snapshot` и
 `reason_kind_snapshot` в каждой исторической смене статуса. Переименование не
 меняет прошлую аналитику. `lead_status_history` append-only; единственное узкое
@@ -305,6 +350,22 @@ dirty-exit; Save/Discard применяется при закрытии вкла
 
 DECISION: Скрытие forbidden UI не заменяет backend security и не должно
 инициировать запрещённый API request.
+
+DECISION (owner, 2026-08-29): Автосохранение применяется к безопасным полям
+канонической карточки Lead/Student и versioned staff note: debounce, один
+in-flight write, coalescing, row-locked expected version, flush-before-close и
+retry без потери ввода. Конфликт не выполняет silent merge: UI сохраняет draft,
+загружает актуальную версию и требует явного применения только локально
+изменённых полей. Поздний realtime response не заменяет грязный draft. Финансовые, schedule и
+другие signed preview/commit-команды остаются явными.
+
+DECISION (owner, 2026-08-29): До завершения перехода выпущенных desktop-клиентов
+на build 201 `expectedVersion` для PATCH Lead/Student опционален только на HTTP-
+границе. Любая запись всё равно сериализуется row lock и увеличивает version;
+переданный stale version отклоняется с `409`. Новый Flutter service требует
+version во всех first-party вызовах. Удалить compatibility path можно только
+после подтверждённого отсутствия трафика старых клиентов; параллельный endpoint
+для этого не создаётся.
 
 ## Release
 

@@ -34,7 +34,7 @@ export class StudentDirectoryService {
     const q = query.q?.trim();
     const result = await this.database.query<StudentRow>(
       `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+        select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from app.students s
@@ -73,7 +73,7 @@ export class StudentDirectoryService {
     const filter = buildStudentSearchFilter(actor, query);
     const result = await this.database.query<StudentSearchRow>(
       `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+        select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
           ${typedClientTableFieldsSql("student", "s.id")} as table_custom_fields,
           p.first_name, p.last_name, u.email, p.phone,
@@ -218,7 +218,7 @@ export class StudentDirectoryService {
     const limit = Math.min(query.limit ?? 100, 100);
     const result = await this.database.query<StudentRow>(
       `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
+        select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from app.group_students gs

@@ -37,6 +37,10 @@ export class ClientRefSearchQuery {
   type?: ClientRefType;
 
   @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @IsOptional()
   @Transform(({ value }) => value === true || value === "true")
   @IsBoolean()
   includeArchived?: boolean;

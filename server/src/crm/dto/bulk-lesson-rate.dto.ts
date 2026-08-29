@@ -4,6 +4,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsNumber,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -20,6 +21,11 @@ import {
  * field clears the per-lesson override so the group/history rate applies again.
  */
 export class BulkLessonRateDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  expectedVersion!: number;
+
   @IsArray()
   @ArrayNotEmpty()
   // Bounded so one request can not try to rewrite the whole schedule in a

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +8,13 @@ import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 
 import 'card_fake_api.dart';
+
+Finder _clientNameField() => find.byWidgetPredicate(
+  (widget) =>
+      widget is TextFormField &&
+      widget.key is ValueKey<String> &&
+      (widget.key! as ValueKey<String>).value.startsWith('Имя-'),
+);
 
 /// Бар ученика хранит только контекстные действия и на 360dp переносится
 /// Wrap'ом без переполнения. Общего меню «Действия» больше нет.
@@ -38,12 +47,16 @@ void main() {
 
     expect(find.text('Действия'), findsNothing);
     expect(find.text('Открыть в расписании'), findsOneWidget);
-    expect(find.text('Отмена'), findsOneWidget);
-    expect(find.text('Сохранить'), findsOneWidget);
+    expect(find.text('Закрыть'), findsOneWidget);
+    expect(find.text('Отмена'), findsNothing);
+    expect(find.text('Сохранить'), findsNothing);
+    expect(find.text('Сохранено'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('сохранение ученика шлёт PATCH без падений', (tester) async {
+  testWidgets('изменение ученика сохраняется автоматически после паузы', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(360, 690);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -51,6 +64,7 @@ void main() {
     final api = FakeCardApiClient(
       student: {
         'id': 'stu-1',
+        'version': 1,
         'firstName': 'Анна',
         'lastName': 'Смирнова',
         'status': 'Занимается',
@@ -65,11 +79,121 @@ void main() {
       statuses: const [],
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
-    await tester.pumpAndSettle();
+    final name = _clientNameField();
+    await tester.enterText(name, 'Мария');
+    await tester.pump(const Duration(milliseconds: 799));
+    expect(api.updateStudentBody, isNull);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
 
     expect(api.updateStudentBody, isNotNull);
-    expect(api.updateStudentBody!['firstName'], 'Анна');
+    expect(api.updateStudentBody!['firstName'], 'Мария');
+    expect(find.text('Сохранено'), findsWidgets);
+  });
+
+  testWidgets(
+    'автосохранение не запускает параллельные PATCH и не теряет ввод',
+    (tester) async {
+      final api = FakeCardApiClient(
+        student: {
+          'id': 'stu-1',
+          'version': 1,
+          'firstName': 'Анна',
+          'lastName': 'Смирнова',
+          'status': 'Занимается',
+          'customData': <String, dynamic>{},
+        },
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: {'id': 'stu-1', 'custom_data': {}},
+        entityType: 'student',
+        statuses: const [],
+      );
+      final name = _clientNameField();
+      api.studentPatchGate = Completer<void>();
+
+      await tester.enterText(name, 'Мария');
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump();
+      expect(api.updateStudentBodies, hasLength(1));
+
+      await tester.enterText(name, 'Мария Иванова');
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(api.updateStudentBodies, hasLength(1));
+
+      api.studentPatchGate!.complete();
+      await tester.pumpAndSettle();
+
+      expect(api.updateStudentBodies, hasLength(2));
+      expect(api.updateStudentBodies.last['firstName'], 'Мария Иванова');
+    },
+  );
+
+  testWidgets('ошибка автосохранения оставляет явный повтор', (tester) async {
+    final api = FakeCardApiClient(
+      student: {
+        'id': 'stu-1',
+        'version': 1,
+        'firstName': 'Анна',
+        'lastName': 'Смирнова',
+        'status': 'Занимается',
+        'customData': <String, dynamic>{},
+      },
+    )..studentPatchFailures = 1;
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: {'id': 'stu-1', 'custom_data': {}},
+      entityType: 'student',
+      statuses: const [],
+    );
+    final name = _clientNameField();
+    await tester.enterText(name, 'Мария');
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Повторить'), findsWidgets);
+    await tester.tap(find.text('Повторить').last);
+    await tester.pumpAndSettle();
+
+    expect(api.updateStudentBodies, hasLength(2));
+    expect(api.updateStudentBody!['firstName'], 'Мария');
+    expect(find.text('Сохранено'), findsWidgets);
+  });
+
+  testWidgets('закрытие карточки сначала сохраняет свежий ввод', (
+    tester,
+  ) async {
+    bool? closeResult;
+    final api = FakeCardApiClient(
+      student: {
+        'id': 'stu-1',
+        'version': 1,
+        'firstName': 'Анна',
+        'lastName': 'Смирнова',
+        'status': 'Занимается',
+        'customData': <String, dynamic>{},
+      },
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: {'id': 'stu-1', 'custom_data': {}},
+      entityType: 'student',
+      statuses: const [],
+      onClosed: (result) => closeResult = result,
+    );
+
+    await tester.enterText(_clientNameField(), 'Мария');
+    await tester.tap(find.text('Закрыть').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Несохранённые изменения'), findsNothing);
+    expect(api.updateStudentBody?['firstName'], 'Мария');
+    expect(closeResult, isTrue);
   });
 
   testWidgets(
@@ -133,7 +257,8 @@ void main() {
     await tester.ensureVisible(subscriptions);
     await tester.tap(subscriptions);
     await tester.pumpAndSettle();
-    expect(find.text('Выдать абонемент'), findsOneWidget);
+    expect(find.text('Продать абонемент'), findsOneWidget);
+    expect(find.text('Выдать абонемент'), findsNothing);
     expect(find.text('Создать ученика'), findsNothing);
   });
 
@@ -144,11 +269,19 @@ void main() {
     final api = FakeCardApiClient(
       lead: {
         'id': 'lead-1',
+        'version': 1,
         'firstName': 'Анна',
         'lastName': 'Смирнова',
         'phone': '+79990000000',
         'statusId': null,
         'customData': <String, dynamic>{},
+      },
+      internalNote: const {
+        'id': 'note-1',
+        'body': 'Старый контекст',
+        'version': 2,
+        'updatedByName': 'Администратор',
+        'updatedAt': '2026-08-07T10:00:00.000Z',
       },
       subscriptionPackages: const [
         {
@@ -173,11 +306,16 @@ void main() {
     await tester.tap(find.text('В работе').last);
     await tester.pumpAndSettle();
 
+    await tester.enterText(
+      find.byKey(const Key('client-internal-note-input')),
+      'Контекст перед продажей',
+    );
+
     final subscriptions = find.text('Абонементы');
     await tester.ensureVisible(subscriptions);
     await tester.tap(subscriptions);
     await tester.pumpAndSettle();
-    final issue = find.text('Выдать абонемент');
+    final issue = find.text('Продать абонемент');
     await tester.ensureVisible(issue);
     await tester.tap(issue);
     await tester.pumpAndSettle();
@@ -185,7 +323,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.updateLeadBody?['statusId'], statusId);
+    expect(api.updateInternalNoteBody, {
+      'body': 'Контекст перед продажей',
+      'expectedVersion': 2,
+    });
     expect(api.requests, [
+      'PUT /crm/clients/lead/lead-1/internal-note',
       'PATCH /crm/leads/lead-1',
       'POST /crm/leads/lead-1/subscriptions/issue',
     ]);

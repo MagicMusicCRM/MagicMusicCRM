@@ -266,6 +266,7 @@ describe("StudentCommandService", () => {
         "student-a",
         {
           firstName: " Анна ",
+          expectedVersion: 7,
           lastName: " Иванова ",
           phone: " +79990000000 ",
           email: " STUDENT@example.com ",
@@ -282,6 +283,7 @@ describe("StudentCommandService", () => {
 
     expect(mutations.update).toHaveBeenCalledWith({
       studentId: "student-a",
+      expectedVersion: 7,
       firstName: "Анна",
       lastName: "Иванова",
       phone: "+79990000000",
@@ -302,7 +304,10 @@ describe("StudentCommandService", () => {
     mutations.update.mockRejectedValueOnce(new Error("transaction failed"));
 
     await expect(
-      service.updateStudent(actor, "student-a", { firstName: "Анна" }),
+      service.updateStudent(actor, "student-a", {
+        expectedVersion: 1,
+        firstName: "Анна",
+      }),
     ).rejects.toThrow("transaction failed");
 
     expect(database.query).not.toHaveBeenCalled();

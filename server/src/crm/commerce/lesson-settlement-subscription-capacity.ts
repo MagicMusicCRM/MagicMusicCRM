@@ -52,13 +52,34 @@ async function reserveLessonSubscription(
         (
           subscription.status = 'active'
           and (
-            subscription.expires_at is null
-            or subscription.expires_at >= current_date
+            subscription.starts_at is null
+            or subscription.starts_at <= timezone(
+              coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+              lesson.scheduled_at
+            )::date
           )
+          and (
+            subscription.expires_at is null
+            or subscription.expires_at >= timezone(
+              coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+              lesson.scheduled_at
+            )::date
+          )
+          and owner.deleted_at is null
+          and owner.branch_id = lesson.branch_id
+          and recipient.deleted_at is null
+          and recipient.branch_id = lesson.branch_id
+          and (package.branch_id is null or package.branch_id = lesson.branch_id)
         ) as is_usable,
         capacity.available_units::text,
         capacity.available_units >= $3::numeric as has_capacity
       from app.subscriptions subscription
+      join app.students owner on owner.id = subscription.student_id
+      join app.lessons lesson on lesson.id = $2 and lesson.deleted_at is null
+      join app.students recipient on recipient.id = $4
+      left join app.schedule_series series on series.id = lesson.series_id
+      left join app.branches branch on branch.id = lesson.branch_id
+      left join app.subscription_packages package on package.id = subscription.package_id
       cross join lateral (
         select (
           subscription.lessons_total - subscription.lessons_used
@@ -78,9 +99,14 @@ async function reserveLessonSubscription(
         ) as available_units
       ) capacity
       where subscription.id = $1
-      for update
+      for update of subscription
     `,
-    [subscriptionId, lessonId, fact.calculation.units],
+    [
+      subscriptionId,
+      lessonId,
+      fact.calculation.units,
+      fact.charge.client_id,
+    ],
   );
   const subscription = locked.rows[0];
   const consumesUnits = fact.calculation.units !== "0.00";
@@ -124,7 +150,8 @@ function assertSubscriptionCanCover(
 ): void {
   const matchesStudent =
     fact.charge.client_type === "student" &&
-    subscription?.student_id === fact.charge.client_id;
+    subscription?.student_id ===
+      (fact.payerStudentId ?? fact.charge.client_id);
   const hasCapacity =
     !consumesUnits ||
     (subscription?.is_usable === true && subscription.has_capacity === true);
@@ -133,6 +160,7 @@ function assertSubscriptionCanCover(
     code: "SUBSCRIPTION_CAPACITY",
     subscriptionId,
     clientId: fact.charge.client_id,
+    payerStudentId: fact.payerStudentId,
     requestedUnits: fact.calculation.units,
     availableUnits: subscription?.available_units ?? "0",
   });
@@ -170,13 +198,31 @@ async function assertCorrectionSubscription(
     lessons_total: string;
     lessons_used: string;
   }>(
-    `select student_id, status,
-       (starts_at is null or starts_at <= current_date)
-         and (expires_at is null or expires_at >= current_date)
+    `select subscription.student_id, subscription.status,
+       (subscription.starts_at is null or subscription.starts_at <= timezone(
+          coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+          lesson.scheduled_at
+        )::date)
+         and (subscription.expires_at is null or subscription.expires_at >= timezone(
+          coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+          lesson.scheduled_at
+        )::date)
+         and owner.deleted_at is null
+         and owner.branch_id = lesson.branch_id
+         and recipient.deleted_at is null
+         and recipient.branch_id = lesson.branch_id
+         and (package.branch_id is null or package.branch_id = lesson.branch_id)
          as is_usable,
-       lessons_total::text, lessons_used::text
-     from app.subscriptions where id = $1 for update`,
-    [subscriptionId],
+       subscription.lessons_total::text, subscription.lessons_used::text
+     from app.subscriptions subscription
+     join app.students owner on owner.id = subscription.student_id
+     join app.lessons lesson on lesson.id = $2 and lesson.deleted_at is null
+     join app.students recipient on recipient.id = $3
+     left join app.schedule_series series on series.id = lesson.series_id
+     left join app.branches branch on branch.id = lesson.branch_id
+     left join app.subscription_packages package on package.id = subscription.package_id
+     where subscription.id = $1 for update of subscription`,
+    [subscriptionId, lessonId, fact.charge.client_id],
   );
   const subscription = locked.rows[0];
   const used = await client.query<{ settled: string; reserved: string }>(
@@ -220,7 +266,8 @@ function assertCorrectionCanCover(
   available: number,
 ): void {
   const valid =
-    subscription?.student_id === fact.charge.client_id &&
+    subscription?.student_id ===
+      (fact.payerStudentId ?? fact.charge.client_id) &&
     fact.charge.client_type === "student" &&
     subscription.status === "active" &&
     subscription.is_usable &&
@@ -230,6 +277,7 @@ function assertCorrectionCanCover(
     code: "SUBSCRIPTION_CAPACITY",
     subscriptionId,
     clientId: fact.charge.client_id,
+    payerStudentId: fact.payerStudentId,
     requestedUnits: fact.calculation.units,
     availableUnits: Math.max(0, available).toFixed(2),
   });

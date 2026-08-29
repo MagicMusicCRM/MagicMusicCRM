@@ -6,7 +6,7 @@ class _LeadCard extends ConsumerWidget {
   final Lead lead;
   final Color statusColor;
   final List<StatusRecord> allStatuses;
-  final Function(String, String) onMove;
+  final Function(String, String, int) onMove;
   final VoidCallback onTap;
   final VoidCallback onRefresh;
   final bool isPending;
@@ -230,7 +230,7 @@ class _LeadCard extends ConsumerWidget {
                           } else if (v == 'subscription') {
                             onTap();
                           } else {
-                            onMove(id, v);
+                            onMove(id, v, lead.version);
                           }
                         },
                         itemBuilder: (_) {
@@ -294,7 +294,7 @@ class _LeadCard extends ConsumerWidget {
                                     ),
                                     SizedBox(width: 8),
                                     Text(
-                                      'Выдать абонемент',
+                                      'Продать абонемент',
                                       style: TextStyle(
                                         color: AppColor.success,
                                         fontWeight: FontWeight.w600,
@@ -455,8 +455,8 @@ class _LeadCard extends ConsumerWidget {
     // card — press-and-hold is a touch idiom. A motionless click still falls
     // through to onTap (same pattern as the schedule day canvas).
     if (desktop) {
-      return Draggable<String>(
-        data: id,
+      return Draggable<({String id, int version})>(
+        data: (id: id, version: lead.version),
         maxSimultaneousDrags: isPending ? 0 : null,
         onDragUpdate: (details) => onDragUpdate(details.globalPosition),
         onDragEnd: (_) => onDragEnd(),
@@ -467,8 +467,8 @@ class _LeadCard extends ConsumerWidget {
         child: cardChild,
       );
     }
-    return LongPressDraggable<String>(
-      data: id,
+    return LongPressDraggable<({String id, int version})>(
+      data: (id: id, version: lead.version),
       maxSimultaneousDrags: isPending ? 0 : null,
       // Snappier than the platform 500ms long-press, but still long enough that a
       // normal tap (tap → open) doesn't linger past the threshold and silently

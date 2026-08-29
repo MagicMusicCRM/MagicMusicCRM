@@ -58,6 +58,7 @@ describe("BlacklistService", () => {
       "Оскорблял администратора в чате",
     ]);
     expect(String(query.mock.calls[0][0])).toContain("update app.students");
+    expect(String(query.mock.calls[0][0])).toContain("version = version + 1");
   });
 
   it("records the ban in the audit as a ban, not as a card edit", async () => {

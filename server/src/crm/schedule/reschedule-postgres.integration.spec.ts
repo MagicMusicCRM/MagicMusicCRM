@@ -84,6 +84,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       );
       const preparation = new LessonTransitionPreparationService(
         database,
+        policy,
         validator,
         constraints,
         settlementPort,
@@ -123,20 +124,20 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     };
     service = buildTransitionGraph(settlement);
     failingService = buildTransitionGraph({
-        settle: async (
-          ...args: Parameters<LessonSettlementService["settle"]>
-        ) => {
-          await settlement.settle(...args);
-          throw new Error("injected commerce failure");
-        },
-        preparePlan: settlement.preparePlan.bind(settlement),
-        assignPlan: settlement.assignPlan.bind(settlement),
-        clonePlan: settlement.clonePlan.bind(settlement),
-        loadPlan: settlement.loadPlan.bind(settlement),
-        markPlanState: settlement.markPlanState.bind(settlement),
-        plannedSubscriptionAllocations:
-          settlement.plannedSubscriptionAllocations.bind(settlement),
-      } satisfies LessonSettlementPort);
+      settle: async (
+        ...args: Parameters<LessonSettlementService["settle"]>
+      ) => {
+        await settlement.settle(...args);
+        throw new Error("injected commerce failure");
+      },
+      preparePlan: settlement.preparePlan.bind(settlement),
+      assignPlan: settlement.assignPlan.bind(settlement),
+      clonePlan: settlement.clonePlan.bind(settlement),
+      loadPlan: settlement.loadPlan.bind(settlement),
+      markPlanState: settlement.markPlanState.bind(settlement),
+      plannedSubscriptionAllocations:
+        settlement.plannedSubscriptionAllocations.bind(settlement),
+    } satisfies LessonSettlementPort);
     const completionRepository = new LessonCompletionWorkerRepository(database);
     completionWorker = new LessonCompletionWorker(
       completionRepository,
@@ -525,6 +526,10 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       });
       expect(preview).toMatchObject({
         canConfirm: true,
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "standard",
+        },
         financialPreview: {
           clientFacts: [
             expect.objectContaining({
@@ -534,8 +539,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             }),
           ],
           teacherFact: expect.objectContaining({
-            compensationRuleKey: "none",
-            amountMinor: "0",
+            compensationRuleKey: "standard",
+            amountMinor: "70000",
           }),
         },
       });
@@ -1184,6 +1189,10 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(preview).toMatchObject({
         canConfirm: true,
         source: { state: "scheduled" },
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "standard",
+        },
         successor: {
           subject: { type: "group", id: fixture.groupId },
           startAt: "2026-08-03T09:00:00.000Z",
@@ -1198,8 +1207,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             }),
           ],
           teacherFact: expect.objectContaining({
-            compensationRuleKey: "none",
-            amountMinor: "0",
+            compensationRuleKey: "standard",
+            amountMinor: "70000",
           }),
         },
       });
@@ -1730,7 +1739,9 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         [[fixture.sourceId, successorId]],
       );
       expect(facts.rows).toHaveLength(2);
-      const current = facts.rows.find((row) => row.event_type === "rescheduled")!;
+      const current = facts.rows.find(
+        (row) => row.event_type === "rescheduled",
+      )!;
       const removed = facts.rows.find(
         (row) => row.event_type === "teacher_unassigned",
       )!;
@@ -1784,11 +1795,17 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
 function createNotificationsService(database: DatabaseService) {
   return new NotificationsService(
     database,
-    { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
+    {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService,
     new NotificationsPolicy(),
     {
-      dispatchPendingEmails: jest.fn().mockResolvedValue({ processed: 0, failed: 0 }),
-      dispatchPendingPush: jest.fn().mockResolvedValue({ processed: 0, failed: 0 }),
+      dispatchPendingEmails: jest
+        .fn()
+        .mockResolvedValue({ processed: 0, failed: 0 }),
+      dispatchPendingPush: jest
+        .fn()
+        .mockResolvedValue({ processed: 0, failed: 0 }),
     } as unknown as NotificationWorker,
     {
       hash: jest.fn((token: string) => `hash-${token}`),

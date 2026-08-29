@@ -114,13 +114,16 @@ class MagicAuthService {
   final MagicApiClient _api;
   final _sessionController = StreamController<MagicAuthSession?>.broadcast();
   final FutureOr<void> Function()? _onBeforeSessionChange;
+  final FutureOr<void> Function()? _onBeforeForcedSessionClear;
   final FutureOr<void> Function()? _onAfterSessionChange;
 
   MagicAuthService(
     this._api, {
     FutureOr<void> Function()? onBeforeSessionChange,
+    FutureOr<void> Function()? onBeforeForcedSessionClear,
     FutureOr<void> Function()? onAfterSessionChange,
   }) : _onBeforeSessionChange = onBeforeSessionChange,
+       _onBeforeForcedSessionClear = onBeforeForcedSessionClear,
        _onAfterSessionChange = onAfterSessionChange {
     _api.onSessionInvalidated = _handleSessionInvalidated;
   }
@@ -202,8 +205,13 @@ class MagicAuthService {
 
   Future<void> logoutAllDevices() async {
     await _api.post<Map<String, dynamic>>('/auth/logout-all');
-    await signOut();
+    await _forceSignOut();
   }
+
+  /// Used by the router when an authenticated gate proves that the server has
+  /// already revoked this session. This must not run the explicit-logout save
+  /// path because authenticated writes can no longer succeed.
+  Future<void> clearRevokedSession() => _forceSignOut();
 
   Future<void> sendEmailOtp({
     required String email,
@@ -277,7 +285,7 @@ class MagicAuthService {
     );
     // The server revokes every session after changing the login identifier.
     // Clear local tokens immediately and require a fresh login with new email.
-    await signOut();
+    await _forceSignOut();
   }
 
   Future<List<MagicAuthIdentity>> getUserIdentities() async {
@@ -406,9 +414,30 @@ class MagicAuthService {
   }
 
   Future<void> _handleSessionInvalidated() async {
-    await _beforeSessionChange();
-    _sessionController.add(null);
-    await _afterSessionChange();
+    await _forceSignOut();
+  }
+
+  /// Server-revoked credentials (401, logout-all, email change) are terminal.
+  /// A failed network autosave must never keep stale credentials alive. The
+  /// dedicated callback only persists the encrypted local recovery draft and
+  /// is deliberately best-effort.
+  Future<void> _forceSignOut() async {
+    try {
+      await _onBeforeForcedSessionClear?.call();
+    } on Object {
+      // Session revocation wins over workspace/local-storage failures.
+    }
+    try {
+      await _api.clearTokens();
+    } finally {
+      unawaited(
+        Future.sync(
+          () => Sentry.configureScope((scope) => scope.setUser(null)),
+        ),
+      );
+      _sessionController.add(null);
+      await _afterSessionChange();
+    }
   }
 
   Future<void> _beforeSessionChange() async {

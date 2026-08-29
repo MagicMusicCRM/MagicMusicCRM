@@ -71,23 +71,25 @@ const successor: TransitionSuccessor = {
 
 const settlementResult: LessonSettlementResult = {
   lessonId: source.id,
-  clientFacts: [{
-    id: "client-fact",
-    clientType: "student",
-    clientId: source.studentId!,
-    chargeType: "none",
-    snapshotValue: "0",
-    subscriptionId: null,
-    amountMinor: "0",
-    units: "0",
-    currencyCode: "RUB",
-    settlementTypeKey: "free_lesson",
-    settlementLabel: null,
-    settlementColorToken: null,
-    hourShareBasisPoints: null,
-    fixedPenaltyMinor: null,
-    configurationRevisionId: null,
-  }],
+  clientFacts: [
+    {
+      id: "client-fact",
+      clientType: "student",
+      clientId: source.studentId!,
+      chargeType: "none",
+      snapshotValue: "0",
+      subscriptionId: null,
+      amountMinor: "0",
+      units: "0",
+      currencyCode: "RUB",
+      settlementTypeKey: "free_lesson",
+      settlementLabel: null,
+      settlementColorToken: null,
+      hourShareBasisPoints: null,
+      fixedPenaltyMinor: null,
+      configurationRevisionId: null,
+    },
+  ],
   clientFact: undefined as never,
   teacherFact: {
     id: "teacher-fact",
@@ -126,7 +128,8 @@ describe("Lesson transition runtime ordering", () => {
         if (
           normalized.startsWith("update app.lessons") &&
           normalized.includes("returning version")
-        ) return { rows: [{ version: 2 }] };
+        )
+          return { rows: [{ version: 2 }] };
         return { rows: [] };
       }),
     } as unknown as PoolClient;
@@ -139,6 +142,14 @@ describe("Lesson transition runtime ordering", () => {
       assertSettlementReviewPlan: jest.fn(async () => {
         events.push("settlement-review");
       }),
+      authorizedTransitionDto: jest.fn(
+        async (
+          _client: PoolClient,
+          _actor: unknown,
+          _lessonId: string,
+          dto: unknown,
+        ) => dto,
+      ),
       successorDraft: jest.fn(() => successor),
       validateSuccessor: jest.fn(async () => {
         events.push("constraint-validation");
@@ -175,7 +186,8 @@ describe("Lesson transition runtime ordering", () => {
         return { rows: [{ id: "transition-id" }] };
       }),
     } as unknown as LessonLifecycleRepository;
-    const fingerprint = jest.spyOn(transitionRules, "transitionFingerprint")
+    const fingerprint = jest
+      .spyOn(transitionRules, "transitionFingerprint")
       .mockImplementation(() => {
         events.push("fingerprint-check");
         return "fingerprint";
@@ -203,6 +215,7 @@ describe("Lesson transition runtime ordering", () => {
       } as unknown as PlatformIntegrityService;
       const policy = {
         assertCanWriteCrm: jest.fn(),
+        assertCanSupplyTeacherCompensation: jest.fn(),
       } as unknown as CrmPolicy;
       const tokens = {
         verifyLessonTransition: jest.fn(() => ({
@@ -271,7 +284,8 @@ describe("Lesson transition runtime ordering", () => {
           normalized.startsWith("savepoint") ||
           normalized.startsWith("rollback to savepoint") ||
           normalized.startsWith("release savepoint")
-        ) previewClientQueries.push(normalized);
+        )
+          previewClientQueries.push(normalized);
         return { rows: [] };
       }),
     } as unknown as PoolClient;

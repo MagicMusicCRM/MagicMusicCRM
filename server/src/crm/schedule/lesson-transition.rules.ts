@@ -188,6 +188,7 @@ export const normalizedTransitionDecision = (dto: TransitionPreviewDto) => ({
       clientId: decision.clientId,
       settlementTypeKey: decision.settlementTypeKey ?? null,
       subscriptionId: decision.subscriptionId ?? null,
+      payerStudentId: decision.payerStudentId ?? null,
     })),
   teacherCompensationRuleKey:
     dto.financialDecision.teacherCompensationRuleKey,

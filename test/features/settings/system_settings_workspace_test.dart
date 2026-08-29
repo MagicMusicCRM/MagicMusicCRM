@@ -460,7 +460,11 @@ void main() {
   ) async {
     final api = SettingsTestApi(
       role: 'director',
-      capabilities: const ['system.settings.manage', 'crm.client.write'],
+      capabilities: const [
+        'system.settings.manage',
+        'crm.client.write',
+        'commerce.teacher_payroll.write',
+      ],
       branches: const [
         {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
         {'id': '20000000-0000-4000-8000-000000000002', 'name': 'Спортивная'},
@@ -532,6 +536,59 @@ void main() {
     expect(payload['rate'], 750);
   });
 
+  testWidgets(
+    'manager creates a teacher with salary but without a base-rate request',
+    (tester) async {
+      final api = SettingsTestApi(
+        role: 'manager',
+        capabilities: const [
+          'system.settings.manage',
+          'crm.client.write',
+          'commerce.teacher_payroll.write',
+        ],
+        branches: const [
+          {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+        ],
+      );
+      await _pump(tester, api, initialArea: 'users');
+
+      await tester.tap(find.text('Преподаватели').first);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Новый преподаватель'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Базовая ставка'), findsNothing);
+      expect(
+        find.widgetWithText(TextFormField, 'Оклад, ₽/мес'),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Имя *'),
+        'Мария',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Оклад, ₽/мес'),
+        '20000',
+      );
+      final branchChip = find.widgetWithText(FilterChip, 'Сокол');
+      await tester.ensureVisible(branchChip);
+      await tester.tap(branchChip);
+      await tester.pumpAndSettle();
+      final createButton = find.widgetWithText(FilledButton, 'Создать');
+      await tester.ensureVisible(createButton);
+      await tester.tap(createButton);
+      await tester.pumpAndSettle();
+
+      final payload = Map<String, dynamic>.from(
+        api.mutations['/crm/teachers']! as Map,
+      );
+      expect(payload['salary'], 20000);
+      expect(payload, isNot(contains('rate')));
+    },
+  );
+
   testWidgets('director can change access role from the teacher card', (
     tester,
   ) async {
@@ -581,6 +638,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Новая группа'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('create-group-form')), findsOneWidget);
+    expect(find.text('Ставка педагога по группе'), findsNothing);
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Название группы *'),
       'Вокал 1',
@@ -603,6 +661,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.mutations, contains('/crm/groups'));
+    final payload = Map<String, dynamic>.from(
+      api.mutations['/crm/groups']! as Map,
+    );
+    expect(payload, isNot(contains('teacherRate')));
+  });
+
+  testWidgets('director sees the group-rate control', (tester) async {
+    final api = SettingsTestApi(
+      role: 'director',
+      capabilities: const [
+        'system.settings.manage',
+        'schedule.lesson.write',
+        'commerce.teacher_payroll.write',
+      ],
+    );
+    await _pump(tester, api, initialArea: 'schedule');
+
+    await tester.tap(find.text('Группы').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Новая группа'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ставка педагога по группе'), findsOneWidget);
   });
 
   testWidgets('settings lists localized staff status and group size', (
@@ -864,4 +945,52 @@ void main() {
       );
     },
   );
+
+  testWidgets('manager edits a teacher profile without a base-rate request', (
+    tester,
+  ) async {
+    final api = SettingsTestApi(
+      role: 'manager',
+      capabilities: const [
+        'system.settings.manage',
+        'crm.client.write',
+        'commerce.teacher_payroll.read',
+        'commerce.teacher_payroll.write',
+      ],
+      teachers: const [
+        {
+          'id': 'teacher-manager-edit',
+          'status': 'active',
+          'firstName': 'Мария',
+          'lastName': 'Петрова',
+          'currentRate': 900,
+          'assignedBranches': [
+            {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+          ],
+        },
+      ],
+    );
+    await _pump(tester, api, initialArea: 'users');
+    await tester.tap(find.text('Преподаватели').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мария Петрова'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Базовая ставка'), findsNothing);
+    expect(find.widgetWithText(TextFormField, 'Оклад, ₽/мес'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Имя Фамилия'),
+      'Марина Петрова',
+    );
+    final save = find.widgetWithText(FilledButton, 'Сохранить').last;
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    final payload = Map<String, dynamic>.from(
+      api.mutations['/crm/teachers/teacher-manager-edit']! as Map,
+    );
+    expect(payload['firstName'], 'Марина');
+    expect(payload, isNot(contains('rate')));
+  });
 }

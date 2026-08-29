@@ -18,6 +18,11 @@ typedef SchedulePlanDraftEditor =
 
 typedef SchedulePlanDraftSummary = String Function(PreferredScheduleDraft row);
 
+typedef SchedulePlanRowsReviewResult = ({
+  List<PreferredScheduleDraft> rows,
+  String? historyPreviewToken,
+});
+
 class SchedulePlanRowsReview extends ConsumerStatefulWidget {
   const SchedulePlanRowsReview({
     required this.initialRows,
@@ -51,6 +56,16 @@ class _SchedulePlanRowsReviewState
   String? _error;
   bool _loading = false;
 
+  Map<String, dynamic>? get _historical {
+    final value = _preview?['historical'];
+    return value is Map ? Map<String, dynamic>.from(value) : null;
+  }
+
+  bool get _awaitingHistoryConfirmation =>
+      _preview?['valid'] == true &&
+      _historical?['confirmRequired'] == true &&
+      _historical?['previewToken']?.toString().isNotEmpty == true;
+
   Future<void> _edit([int? index]) async {
     final seed = index == null ? _rows.last : _rows[index];
     final result = await widget.onEditDraft(context, seed, index == null);
@@ -67,6 +82,13 @@ class _SchedulePlanRowsReviewState
   }
 
   Future<void> _submit() async {
+    if (_awaitingHistoryConfirmation) {
+      Navigator.pop(context, (
+        rows: List<PreferredScheduleDraft>.from(_rows),
+        historyPreviewToken: _historical!['previewToken'].toString(),
+      ));
+      return;
+    }
     setState(() {
       _loading = true;
       _preview = null;
@@ -76,7 +98,15 @@ class _SchedulePlanRowsReviewState
       final preview = await widget.onValidate(List.unmodifiable(_rows));
       if (!mounted) return;
       if (preview['valid'] == true) {
-        Navigator.pop(context, List<PreferredScheduleDraft>.from(_rows));
+        final historical = preview['historical'];
+        if (historical is Map && historical['confirmRequired'] == true) {
+          setState(() => _preview = preview);
+          return;
+        }
+        Navigator.pop(context, (
+          rows: List<PreferredScheduleDraft>.from(_rows),
+          historyPreviewToken: null,
+        ));
         return;
       }
       setState(() => _preview = preview);
@@ -119,6 +149,10 @@ class _SchedulePlanRowsReviewState
           const SizedBox(height: AppSpace.md),
           _constraintPanel(issues, suggestions),
         ],
+        if (_awaitingHistoryConfirmation) ...[
+          const SizedBox(height: AppSpace.md),
+          _historyReview(),
+        ],
         if (_error != null) ...[
           const SizedBox(height: AppSpace.md),
           Text(
@@ -140,7 +174,15 @@ class _SchedulePlanRowsReviewState
               child: FilledButton(
                 key: const Key('schedule-plan-preview-and-create'),
                 onPressed: _loading ? null : _submit,
-                child: Text(_loading ? 'Проверяем…' : widget.submitLabel),
+                child: Text(
+                  _loading
+                      ? 'Проверяем…'
+                      : _awaitingHistoryConfirmation
+                      ? (widget.submitLabel.contains('создать')
+                            ? 'Подтвердить и создать'
+                            : 'Подтвердить и сохранить')
+                      : widget.submitLabel,
+                ),
               ),
             ),
           ],
@@ -192,6 +234,36 @@ class _SchedulePlanRowsReviewState
               tooltip: 'Удалить строку ${index + 1}',
               icon: const Icon(Icons.delete_outline_rounded),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _historyReview() {
+    final historical = _historical!;
+    final count = historical['count'] is num
+        ? (historical['count'] as num).toInt()
+        : int.tryParse('${historical['count']}') ?? 0;
+    return Container(
+      key: const Key('schedule-plan-history-review'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppColor.warningSoft,
+        border: Border.all(color: AppColor.warning.withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Исторические занятия: $count',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            '${historical['from']} — ${historical['until']}. '
+            'Подтвердите изменение этого периода расписания.',
+          ),
         ],
       ),
     );

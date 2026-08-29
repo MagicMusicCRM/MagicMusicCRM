@@ -3,11 +3,13 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsInt,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
@@ -91,4 +93,12 @@ export class UpsertLeadDto {
   @IsString()
   @MaxLength(2000)
   statusComment?: string;
+}
+
+/** PATCH optimistic concurrency contract. Optional only for released legacy clients. */
+export class UpdateLeadDto extends UpsertLeadDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
 }
