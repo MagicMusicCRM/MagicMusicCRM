@@ -110,7 +110,11 @@ const FIELD_UPDATE_VERBS: Record<string, string> = {
 @Injectable()
 export class AuditPresentationService {
   present(input: AuditPresentationInput): AuditPresentationEvent {
-    const changes = this.extractChanges(input.beforeRef, input.afterRef);
+    const changes = this.extractChanges(
+      input.metadata,
+      input.beforeRef,
+      input.afterRef,
+    );
 
     return {
       id: input.id,
@@ -140,14 +144,20 @@ export class AuditPresentationService {
   }
 
   private extractChanges(
+    metadata: Record<string, unknown> | null,
     beforeRef: Record<string, unknown> | null,
     afterRef: Record<string, unknown> | null,
   ): AuditPresentationChange[] {
+    const metadataChanges = this.extractMetadataChanges(metadata);
+    const metadataKeys = new Set(metadataChanges.map((change) => change.key));
     const before = beforeRef ?? {};
     const after = afterRef ?? {};
     const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
 
-    return [...keys].flatMap((key) => {
+    return [...metadataChanges, ...[...keys].flatMap((key) => {
+      if (metadataKeys.has(key)) {
+        return [];
+      }
       if (this.isTechnicalOrSensitiveKey(key)) {
         return [];
       }
@@ -164,7 +174,49 @@ export class AuditPresentationService {
         before: beforeValue,
         after: afterValue,
       }];
+    })];
+  }
+
+  private extractMetadataChanges(
+    metadata: Record<string, unknown> | null,
+  ): AuditPresentationChange[] {
+    const rawChanges = metadata?.changes;
+    if (!Array.isArray(rawChanges)) {
+      return [];
+    }
+
+    return rawChanges.flatMap((rawChange) => {
+      if (!this.isRecord(rawChange)) {
+        return [];
+      }
+
+      const key = this.metadataChangeKey(rawChange);
+      if (!key || this.isTechnicalOrSensitiveKey(key)) {
+        return [];
+      }
+
+      const beforeKey = "from" in rawChange ? "from" : "before";
+      const afterKey = "to" in rawChange ? "to" : "after";
+      if (!(beforeKey in rawChange) || !(afterKey in rawChange)) {
+        return [];
+      }
+
+      return [{
+        key,
+        label: FIELD_LABELS[key] ?? this.humanizeIdentifier(key),
+        before: this.safeValue(rawChange[beforeKey]),
+        after: this.safeValue(rawChange[afterKey]),
+      }];
     });
+  }
+
+  private metadataChangeKey(change: Record<string, unknown>): string | null {
+    const key = typeof change.field === "string" ? change.field : change.key;
+    return typeof key === "string" && key.trim() ? key : null;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
   private titleFor(actionKey: string, changes: AuditPresentationChange[]): string {

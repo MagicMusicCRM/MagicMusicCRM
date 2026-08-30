@@ -95,8 +95,11 @@ describe("ClientInternalContextService operational history", () => {
     const rows = [
       historyRow({
         id: "direction",
-        before_ref: { direction: "Вокал" },
-        after_ref: { direction: "Фортепиано" },
+        metadata: {
+          changes: [
+            { field: "direction", from: "Вокал", to: "Фортепиано" },
+          ],
+        },
       }),
       historyRow({
         id: "lead-status",

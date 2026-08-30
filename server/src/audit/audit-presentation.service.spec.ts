@@ -47,8 +47,11 @@ describe('AuditPresentationService', () => {
     expect(
       service.present({
         ...emailChange,
-        beforeRef: { direction: 'Вокал' },
-        afterRef: { direction: 'Фортепиано' },
+        metadata: {
+          changes: [{ field: 'direction', from: 'Вокал', to: 'Фортепиано' }],
+        },
+        beforeRef: null,
+        afterRef: null,
       }),
     ).toMatchObject({
       title: 'Направление изменено',
@@ -59,6 +62,48 @@ describe('AuditPresentationService', () => {
           before: 'Вокал',
           after: 'Фортепиано',
         },
+      ],
+    });
+  });
+
+  it('uses safe metadata changes before refs, deduplicates fields, and keeps valueless facts', () => {
+    const presented = service.present({
+      ...emailChange,
+      metadata: {
+        changes: [
+          { field: 'direction', from: 'Вокал', to: 'Фортепиано' },
+          { field: 'email', from: null, to: null },
+          { key: 'phone', before: '+79990000000', after: '+79991111111' },
+          { field: 'refreshToken', from: 'old-token', to: 'new-token' },
+          { field: 'status', from: 'Новый', to: '[REDACTED]' },
+        ],
+      },
+      beforeRef: { direction: 'Референс до', name: 'Мария', email: 'old@example.com' },
+      afterRef: { direction: 'Референс после', name: 'Марина', email: 'new@example.com' },
+    });
+
+    expect(presented.changes).toEqual([
+      { key: 'direction', label: 'Направление', before: 'Вокал', after: 'Фортепиано' },
+      { key: 'email', label: 'Электронная почта', before: null, after: null },
+      { key: 'phone', label: 'Телефон', before: '+79990000000', after: '+79991111111' },
+      { key: 'status', label: 'Статус', before: 'Новый', after: null },
+      { key: 'name', label: 'Имя', before: 'Мария', after: 'Марина' },
+    ]);
+    expect(JSON.stringify(presented)).not.toMatch(/refreshToken|old-token|new-token|\[REDACTED\]/);
+  });
+
+  it('uses a valueless metadata email fact to retain the specific title', () => {
+    expect(
+      service.present({
+        ...emailChange,
+        metadata: { changes: [{ field: 'email', from: null, to: null }] },
+        beforeRef: null,
+        afterRef: null,
+      }),
+    ).toMatchObject({
+      title: 'Электронная почта изменена',
+      changes: [
+        { key: 'email', label: 'Электронная почта', before: null, after: null },
       ],
     });
   });

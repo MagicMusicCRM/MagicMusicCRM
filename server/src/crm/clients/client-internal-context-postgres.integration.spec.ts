@@ -92,8 +92,9 @@ describe("ClientInternalContextService PostgreSQL history union", () => {
         insert into app.audit_events (
           id, actor_user_id, action, entity_type, entity_id, metadata, created_at
         ) values (
-          '${ids.auditEvent}', '${ids.actor}', 'crm.client_blacklisted',
-          'lead', '${ids.lead}', '{"reason":"Дубликат"}',
+          '${ids.auditEvent}', '${ids.actor}', 'crm.student_updated',
+          'student', '${ids.student}',
+          '{"changes":[{"field":"direction","from":"Вокал","to":"Фортепиано"}]}',
           '2026-08-30T11:00:00Z'
         );
       `);
@@ -153,8 +154,8 @@ describe("ClientInternalContextService PostgreSQL history union", () => {
         items: [
           {
             id: ids.auditEvent,
-            actionKey: "crm.client_blacklisted",
-            title: "Действие выполнено",
+            actionKey: "crm.student_updated",
+            title: "Направление изменено",
             summary: null,
             reason: null,
             actor: {
@@ -163,19 +164,25 @@ describe("ClientInternalContextService PostgreSQL history union", () => {
               role: "director",
             },
             target: {
-              type: "lead",
-              id: ids.lead,
-              label: "Лид",
+              type: "student",
+              id: ids.student,
+              label: "Ученик",
               displayName: null,
-              routeType: "lead",
+              routeType: "student",
             },
-            changes: [],
+            changes: [
+              {
+                key: "direction",
+                label: "Направление",
+                before: "Вокал",
+                after: "Фортепиано",
+              },
+            ],
             occurredAt: new Date("2026-08-30T11:00:00.000Z"),
           },
         ],
         nextCursor: null,
       });
-      expect(JSON.stringify(second.items)).not.toContain("Дубликат");
 
       await db.exec(
         `update app.users set role = 'teacher' where id = '${ids.actor}'`,
