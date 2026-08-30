@@ -1,11 +1,26 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-30
-> Production: client `1.5.23+203`, server `4804da07`,
-> image `sha256:3146ffe0…`, migration `0144`
+> Production: client `1.5.24+204`, server `43a0651f`,
+> image `sha256:583a2a23…`, migration `0145`
 > Рабочая ветка: `codex/customer-corrections`
-> Статус: client-card/payment/invitation production rollout PASS;
-> owner card UAT запущен в локальном Release
+> Статус: contact email/direction/invitation production rollout PASS;
+> общий update build `204` опубликован, локальный Release запущен
+
+Release `1.5.24+204` отделил контактную почту ученика от глобально уникального
+login identity и устранил оставшиеся ошибки сохранения email/направления в
+карточке. Legacy discipline definitions больше не участвуют в проверке
+канонического направления. Сохранение контакта не создаёт доступ в приложение;
+явное приглашение привязано к текущему student и точному hash актуального
+адреса, поэтому старое письмо после A→B не выдаёт доступ. Flutter `1456/1456`,
+backend `269/269` suites / `3387/3387` tests, analyze/typecheck/build,
+Windows/Setup/APK/AAB и Android signing PASS. Двухэтапный production rollout
+прошёл через contact-aware bridge `40015290`; допустимый rollback теперь только
+на этот bridge. Final image `43a0651f` healthy/restart `0`, migration `0145`,
+reconciliation дважды `issues=[]`, API/Caddy 5xx `0`. Fresh encrypted post
+backup скопирован off-host и прошёл isolated final/bridge restore. Оба manifest,
+четыре public artifacts и GitHub Release `v1.5.24` опубликованы. Evidence:
+`docs/audits/v7-production-client-card-fixes-204.md`.
 
 Release `1.5.23+203` устранил ошибки ключевого контура карточки: duplicate
 email больше не даёт 500, направление сохраняется как system field, legacy и
