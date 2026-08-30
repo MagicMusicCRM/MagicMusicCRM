@@ -1,216 +1,28 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import * as ts from 'typescript';
 import { AuditPresentationInput } from './audit-presentation.types';
 import { AuditPresentationService } from './audit-presentation.service';
 
-const PRODUCT_ACTION_TITLES: Record<string, string> = {
-  'crm.account_transfer_created': 'Перевод между счетами создан',
-  'crm.branch_archived': 'Филиал архивирован',
-  'crm.branch_created': 'Филиал создан',
-  'crm.branch_hours_replaced': 'Часы работы филиала изменены',
-  'crm.branch_restored': 'Филиал восстановлен',
-  'crm.branch_updated': 'Филиал изменён',
-  'crm.client_archived': 'Клиент архивирован',
-  'crm.client_blacklisted': 'Клиент добавлен в чёрный список',
-  'crm.client_custom_field_archived': 'Дополнительное поле клиента архивировано',
-  'crm.client_custom_field_created': 'Дополнительное поле клиента создано',
-  'crm.client_custom_field_updated': 'Дополнительное поле клиента изменено',
-  'crm.client_internal_note_changed': 'Общая заметка изменена',
-  'crm.client_pipeline_published': 'Воронка клиентов опубликована',
-  'crm.client_unblacklisted': 'Клиент убран из чёрного списка',
-  'crm.client_user_linked': 'Пользователь привязан к клиенту',
-  'crm.comment_created': 'Комментарий добавлен',
-  'crm.comment_teacher_sharing_changed': 'Видимость комментария изменена',
-  'crm.configuration_published': 'Настройки CRM опубликованы',
-  'crm.duplicate_candidate_decided': 'Дубликат клиента обработан',
-  'crm.expense_created': 'Расход создан',
-  'crm.expense_deleted': 'Расход удалён',
-  'crm.expense_updated': 'Расход изменён',
-  'crm.family_member_added': 'Член семьи добавлен',
-  'crm.family_member_removed': 'Член семьи удалён',
-  'crm.family_primary_payer_set': 'Основной плательщик семьи назначен',
-  'crm.group_archived': 'Группа архивирована',
-  'crm.group_created': 'Группа создана',
-  'crm.group_restored': 'Группа восстановлена',
-  'crm.group_student_added': 'Ученик добавлен в группу',
-  'crm.group_student_removed': 'Ученик удалён из группы',
-  'crm.group_updated': 'Группа изменена',
-  'crm.homework_assigned': 'Домашнее задание назначено',
-  'crm.homework_attachment_added': 'Вложение к домашнему заданию добавлено',
-  'crm.homework_submitted': 'Домашнее задание сдано',
-  'crm.homework_updated': 'Домашнее задание изменено',
-  'crm.inbound_lead_ingested': 'Входящий лид принят',
-  'crm.installment_payment_due': 'Наступил срок платежа',
-  'crm.lead_converted': 'Лид конвертирован в ученика',
-  'crm.lead_created': 'Лид создан',
-  'crm.lead_owner_changed': 'Ответственный по лиду изменён',
-  'crm.lead_source_archived': 'Источник лида архивирован',
-  'crm.lead_source_created': 'Источник лида создан',
-  'crm.lead_source_updated': 'Источник лида изменён',
-  'crm.lead_status_and_owner_changed': 'Статус и ответственный по лиду изменены',
-  'crm.lead_status_changed': 'Статус лида изменён',
-  'crm.lead_student_linked': 'Лид связан с учеником',
-  'crm.lead_updated': 'Лид изменён',
-  'crm.lesson_cancelled': 'Занятие отменено',
-  'crm.lesson_completed': 'Занятие завершено',
-  'crm.lesson_created': 'Занятие создано',
-  'crm.lesson_deleted': 'Занятие удалено',
-  'crm.lesson_rescheduled': 'Занятие перенесено',
-  'crm.lesson_settled': 'Занятие проведено',
-  'crm.lesson_settlement_completed': 'Занятие проведено',
-  'crm.lesson_settlement_corrected': 'Проведение занятия скорректировано',
-  'crm.lesson_settlement_plan_updated': 'План проведения занятия изменён',
-  'crm.lesson_settlement_review_required': 'Занятие отправлено на проверку',
-  'crm.lesson_updated': 'Занятие изменено',
-  'crm.lessons_bulk_transitioned': 'Статус занятий изменён',
-  'crm.lessons_teacher_rate_bulk_set': 'Ставки преподавателя для занятий изменены',
-  'crm.payment_adjustment_recorded': 'Корректировка платежа внесена',
-  'crm.payment_adjustment_reversed': 'Корректировка платежа отменена',
-  'crm.payment_corrected': 'Платёж скорректирован',
-  'crm.payment_created': 'Платёж создан',
-  'crm.payment_record_created': 'Платёж создан',
-  'crm.payment_record_transitioned': 'Статус платежа изменён',
-  'crm.payment_reversed': 'Платёж отменён',
-  'crm.phone_review_resolved': 'Проверка телефона завершена',
-  'crm.room_archived': 'Кабинет архивирован',
-  'crm.room_created': 'Кабинет создан',
-  'crm.room_restored': 'Кабинет восстановлен',
-  'crm.room_updated': 'Кабинет изменён',
-  'crm.schedule_plan_created': 'План занятий создан',
-  'crm.schedule_plan_ended': 'План занятий завершён',
-  'crm.schedule_plan_updated': 'План занятий изменён',
-  'crm.schedule_series_created': 'Серия расписания создана',
-  'crm.schedule_series_stopped': 'Серия расписания завершена',
-  'crm.schedule_series_updated': 'Серия расписания изменена',
-  'crm.staff_access_managed': 'Доступ сотрудника изменён',
-  'crm.staff_created': 'Сотрудник создан',
-  'crm.staff_credentials_viewed': 'Данные для входа сотрудника просмотрены',
-  'crm.staff_offboarded': 'Сотрудник архивирован',
-  'crm.staff_restored': 'Сотрудник восстановлен',
-  'crm.staff_updated': 'Сотрудник изменён',
-  'crm.student_archived': 'Ученик архивирован',
-  'crm.student_created': 'Ученик создан',
-  'crm.student_invite_sent': 'Приглашение ученику отправлено',
-  'crm.student_restored': 'Ученик восстановлен',
-  'crm.student_updated': 'Данные ученика изменены',
-  'crm.subscription_cancelled': 'Абонемент отменён',
-  'crm.subscription_issued': 'Абонемент выдан',
-  'crm.subscription_package_archived': 'Тариф абонемента архивирован',
-  'crm.subscription_package_created': 'Тариф абонемента создан',
-  'crm.subscription_package_restored': 'Тариф абонемента восстановлен',
-  'crm.subscription_package_updated': 'Тариф абонемента изменён',
-  'crm.subscription_purchased': 'Абонемент приобретён',
-  'crm.subscription_replaced': 'Абонемент заменён',
-  'crm.teacher_access_managed': 'Доступ преподавателя изменён',
-  'crm.teacher_availability_replaced': 'Доступность преподавателя изменена',
-  'crm.teacher_branches_replaced': 'Филиалы преподавателя изменены',
-  'crm.teacher_created': 'Преподаватель создан',
-  'crm.teacher_credentials_viewed': 'Данные для входа преподавателя просмотрены',
-  'crm.teacher_offboarded': 'Преподаватель архивирован',
-  'crm.teacher_payout_created': 'Выплата преподавателю создана',
-  'crm.teacher_payout_deleted': 'Выплата преподавателю удалена',
-  'crm.teacher_payout_updated': 'Выплата преподавателю изменена',
-  'crm.teacher_rate_deleted': 'Ставка преподавателя удалена',
-  'crm.teacher_rate_set': 'Ставка преподавателя назначена',
-  'crm.teacher_rate_updated': 'Ставка преподавателя изменена',
-  'crm.teacher_restored': 'Преподаватель восстановлен',
-  'crm.teacher_updated': 'Преподаватель изменён',
-  'workflow.shared_task_closed': 'Задача закрыта',
-  'workflow.shared_task_created': 'Задача создана',
-  'workflow.shared_task_legacy_status': 'Статус задачи перенесён',
-  'workflow.shared_task_updated': 'Задача изменена',
-};
+interface AuditContractInventory {
+  actions: Set<string>;
+  entityTypes: Set<string>;
+  unresolvedActions: string[];
+}
 
-const REFERENCE_ACTION_TITLES: Record<string, string> = {
-  'crm.reference_discipline_archived': 'Направление архивировано',
-  'crm.reference_discipline_renamed': 'Направление переименовано',
-  'crm.reference_discipline_restored': 'Направление восстановлено',
-  'crm.reference_loss_reason_archived': 'Причина отказа архивирована',
-  'crm.reference_loss_reason_renamed': 'Причина отказа переименована',
-  'crm.reference_loss_reason_restored': 'Причина отказа восстановлена',
-  'crm.reference_branch_discipline_renamed': 'Направление филиала переименовано',
-  'crm.reference_branch_discipline_restored': 'Направление филиала восстановлено',
-  'crm.reference_branch_discipline_unassigned': 'Направление отвязано от филиала',
-};
+type LiteralBindings = Map<ts.Symbol, string[]>;
 
-const PRODUCT_ENTITY_LABELS: Record<string, string> = {
-  account_adjustment: 'Корректировка счёта',
-  'access:user': 'Доступ пользователя',
-  account_deletion_request: 'Запрос на удаление аккаунта',
-  branch: 'Филиал',
-  branch_discipline: 'Направление филиала',
-  client: 'Клиент',
-  client_custom_field: 'Дополнительное поле клиента',
-  client_internal_note: 'Общая заметка клиента',
-  client_payment_record: 'Платёж клиента',
-  client_pipeline_revision: 'Версия воронки клиентов',
-  client_status_list: 'Список статусов клиентов',
-  comment: 'Комментарий',
-  'crm:comment': 'Комментарий',
-  'crm:lead': 'Лид',
-  'crm:student': 'Ученик',
-  crm_configuration_revision: 'Версия настроек CRM',
-  discipline: 'Направление',
-  expense: 'Расход',
-  email_outbox: 'Исходящее письмо',
-  file: 'Файл',
-  family: 'Семья',
-  family_member: 'Член семьи',
-  group: 'Группа',
-  homework: 'Домашнее задание',
-  inbound_lead_ingestion: 'Импорт входящего лида',
-  lead: 'Лид',
-  lead_source: 'Источник лида',
-  lesson: 'Занятие',
-  lesson_batch: 'Серия занятий',
-  lesson_list: 'Список занятий',
-  legal_consent: 'Юридическое согласие',
-  loss_reason: 'Причина отказа',
-  payment: 'Платёж',
-  message: 'Сообщение',
-  chat: 'Чат',
-  channel: 'Канал',
-  notification: 'Уведомление',
-  notification_delivery: 'Доставка уведомления',
-  notification_device: 'Устройство уведомлений',
-  notification_preference: 'Настройка уведомлений',
-  phone_review_queue: 'Проверка телефона',
-  profile: 'Профиль',
-  refresh_session: 'Сеанс обновления',
-  report: 'Отчёт',
-  room: 'Кабинет',
-  schedule_plan: 'План занятий',
-  schedule_series: 'Серия расписания',
-  school_finance_month: 'Финансы школы за месяц',
-  setting: 'Настройка',
-  shared_task: 'Задача',
-  staff: 'Сотрудник',
-  student: 'Ученик',
-  subscription: 'Абонемент',
-  subscription_package: 'Тариф абонемента',
-  task: 'Задача',
-  teacher: 'Преподаватель',
-  user: 'Пользователь',
-};
-
-const DYNAMIC_PRODUCT_ACTIONS = Object.keys(REFERENCE_ACTION_TITLES).concat([
-  'crm.staff_access_managed',
-  'crm.staff_credentials_viewed',
-  'crm.staff_offboarded',
-  'crm.staff_restored',
-  'crm.teacher_access_managed',
-  'crm.teacher_credentials_viewed',
-  'crm.teacher_offboarded',
-  'crm.teacher_payout_deleted',
-  'crm.teacher_rate_deleted',
-  'crm.teacher_restored',
-]);
+interface ResolvedAuditObject {
+  node: ts.ObjectLiteralExpression;
+  bindings: LiteralBindings;
+}
 
 function productionTypescriptFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) return productionTypescriptFiles(path);
+    if (entry.isDirectory()) {
+      return entry.name === 'migration' ? [] : productionTypescriptFiles(path);
+    }
     return entry.name.endsWith('.ts')
       && !entry.name.endsWith('.spec.ts')
       && !entry.name.endsWith('.test.ts')
@@ -219,44 +31,236 @@ function productionTypescriptFiles(directory: string): string[] {
   });
 }
 
-function literalsInside(node: ts.Node): string[] {
-  const values: string[] = [];
-  const visit = (child: ts.Node) => {
-    if (ts.isStringLiteralLike(child)) values.push(child.text);
-    ts.forEachChild(child, visit);
-  };
-  visit(node);
-  return values;
+function propertyName(node: ts.PropertyName, source: ts.SourceFile): string {
+  return ts.isIdentifier(node) || ts.isStringLiteralLike(node)
+    ? node.text
+    : node.getText(source);
 }
 
-function productionAuditContract() {
+function registryKeys(sourcePath: string, registryName: string): Set<string> {
+  const source = ts.createSourceFile(
+    sourcePath,
+    readFileSync(sourcePath, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const keys = new Set<string>();
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.name.text === registryName
+      && node.initializer
+      && ts.isObjectLiteralExpression(node.initializer)
+    ) {
+      for (const property of node.initializer.properties) {
+        if (ts.isPropertyAssignment(property)) {
+          keys.add(propertyName(property.name, source));
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return keys;
+}
+
+function symbolName(checker: ts.TypeChecker, node: ts.Expression): string | null {
+  const type = checker.getTypeAtLocation(node);
+  return type.getSymbol()?.getName() ?? type.aliasSymbol?.getName() ?? null;
+}
+
+function objectPropertyExpression(
+  object: ts.ObjectLiteralExpression,
+  name: string,
+  checker: ts.TypeChecker,
+): ts.Expression | null {
+  for (const property of object.properties) {
+    if (ts.isPropertyAssignment(property) && propertyName(property.name, object.getSourceFile()) === name) {
+      return property.initializer;
+    }
+    if (ts.isShorthandPropertyAssignment(property) && property.name.text === name) {
+      const symbol = checker.getShorthandAssignmentValueSymbol(property);
+      const declaration = symbol?.valueDeclaration;
+      if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer) {
+        return declaration.initializer;
+      }
+    }
+  }
+  return null;
+}
+
+function returnedExpressions(
+  declaration: ts.SignatureDeclaration | ts.JSDocSignature,
+): ts.Expression[] {
+  const body = (declaration as ts.FunctionLikeDeclaration).body;
+  if (!body || !ts.isBlock(body)) {
+    return [];
+  }
+  const expressions: ts.Expression[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isReturnStatement(node) && node.expression) expressions.push(node.expression);
+    ts.forEachChild(node, visit);
+  };
+  visit(body);
+  return expressions;
+}
+
+function resolveAuditObjects(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  seen = new Set<ts.Node>(),
+  bindings: LiteralBindings = new Map(),
+): ResolvedAuditObject[] {
+  if (seen.has(expression)) return [];
+  seen.add(expression);
+  if (ts.isParenthesizedExpression(expression)) {
+    return resolveAuditObjects(expression.expression, checker, seen, bindings);
+  }
+  if (ts.isObjectLiteralExpression(expression)) return [{ node: expression, bindings }];
+  if (ts.isIdentifier(expression)) {
+    const symbol = checker.getSymbolAtLocation(expression);
+    return (symbol?.declarations ?? []).flatMap((declaration) =>
+      ts.isVariableDeclaration(declaration) && declaration.initializer
+        ? resolveAuditObjects(declaration.initializer, checker, seen, bindings)
+        : [],
+    );
+  }
+  if (ts.isCallExpression(expression)) {
+    const declaration = checker.getResolvedSignature(expression)?.declaration;
+    if (!declaration) return [];
+    const callBindings = new Map(bindings);
+    declaration.parameters.forEach((parameter, index) => {
+      const argument = expression.arguments[index];
+      if (!argument || !ts.isIdentifier(parameter.name)) return;
+      const symbol = checker.getSymbolAtLocation(parameter.name);
+      const values = expandStringExpression(argument, checker, bindings);
+      if (symbol && values) callBindings.set(symbol, values);
+    });
+    return returnedExpressions(declaration).flatMap((returned) =>
+      resolveAuditObjects(returned, checker, seen, callBindings),
+    );
+  }
+  return [];
+}
+
+function stringLiteralUnion(
+  checker: ts.TypeChecker,
+  expression: ts.Expression,
+  bindings: LiteralBindings,
+): string[] | null {
+  const symbol = checker.getSymbolAtLocation(expression);
+  const bound = symbol ? bindings.get(symbol) : null;
+  if (bound) return bound;
+  const type = checker.getTypeAtLocation(expression);
+  const members = type.isUnion() ? type.types : [type];
+  const values = members.flatMap((member) =>
+    member.flags & ts.TypeFlags.StringLiteral
+      ? [(member as ts.StringLiteralType).value]
+      : [],
+  );
+  return values.length === members.length && values.length > 0 ? values : null;
+}
+
+function expandStringExpression(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  bindings: LiteralBindings = new Map(),
+): string[] | null {
+  if (ts.isStringLiteralLike(expression)) return [expression.text];
+  if (ts.isParenthesizedExpression(expression)) {
+    return expandStringExpression(expression.expression, checker, bindings);
+  }
+  if (ts.isConditionalExpression(expression)) {
+    const whenTrue = expandStringExpression(expression.whenTrue, checker, bindings);
+    const whenFalse = expandStringExpression(expression.whenFalse, checker, bindings);
+    return whenTrue && whenFalse ? [...whenTrue, ...whenFalse] : null;
+  }
+  if (ts.isTemplateExpression(expression)) {
+    let expanded = [expression.head.text];
+    for (const span of expression.templateSpans) {
+      const values = stringLiteralUnion(checker, span.expression, bindings);
+      if (!values) return null;
+      expanded = expanded.flatMap((prefix) =>
+        values.map((value) => `${prefix}${value}${span.literal.text}`),
+      );
+    }
+    return expanded;
+  }
+  return stringLiteralUnion(checker, expression, bindings);
+}
+
+function auditObjectsForCall(
+  call: ts.CallExpression,
+  checker: ts.TypeChecker,
+): ResolvedAuditObject[] {
+  if (!ts.isPropertyAccessExpression(call.expression)) return [];
+  const receiver = call.expression.expression;
+  const method = call.expression.name.text;
+  const receiverSymbol = symbolName(checker, receiver);
+  if (receiverSymbol === 'AuditService' && method === 'record' && call.arguments[0]) {
+    return resolveAuditObjects(call.arguments[0], checker);
+  }
+  if (
+    receiverSymbol === 'PlatformIntegrityService'
+    && method === 'executeVersionedMutation'
+    && call.arguments[0]
+  ) {
+    return resolveAuditObjects(call.arguments[0], checker).flatMap((mutation) => {
+      const audit = objectPropertyExpression(mutation.node, 'audit', checker);
+      return audit ? resolveAuditObjects(audit, checker, new Set(), mutation.bindings) : [];
+    });
+  }
+  return [];
+}
+
+function productionAuditContract(sourceRoot: string): AuditContractInventory {
+  const files = productionTypescriptFiles(sourceRoot);
+  const productionPaths = new Set(
+    files.map((path) => resolve(path).replaceAll('\\', '/').toLowerCase()),
+  );
+  const program = ts.createProgram(files, {
+    target: ts.ScriptTarget.ES2023,
+    module: ts.ModuleKind.CommonJS,
+    moduleResolution: ts.ModuleResolutionKind.Node10,
+    experimentalDecorators: true,
+    skipLibCheck: true,
+    strict: true,
+  });
+  const checker = program.getTypeChecker();
   const actions = new Set<string>();
   const entityTypes = new Set<string>();
-  const dynamicActionTemplates = new Set<string>();
-  const sourceRoot = join(__dirname, '..');
+  const unresolvedActions: string[] = [];
 
-  for (const path of productionTypescriptFiles(sourceRoot)) {
-    const source = ts.createSourceFile(
-      path,
-      readFileSync(path, 'utf8'),
-      ts.ScriptTarget.Latest,
-      true,
-    );
+  for (const source of program.getSourceFiles()) {
+    const sourcePath = resolve(source.fileName).replaceAll('\\', '/').toLowerCase();
+    if (!productionPaths.has(sourcePath)) continue;
     const visit = (node: ts.Node) => {
-      if (ts.isPropertyAssignment(node)) {
-        const name = node.name.getText(source).replace(/['"]/g, '');
-        if (name === 'action') {
-          for (const value of literalsInside(node.initializer)) {
-            if (/^(crm|workflow)\.[a-z0-9_]+$/.test(value)) actions.add(value);
+      if (ts.isCallExpression(node)) {
+        for (const audit of auditObjectsForCall(node, checker)) {
+          const actionExpression = objectPropertyExpression(audit.node, 'action', checker);
+          const entityExpression = objectPropertyExpression(audit.node, 'entityType', checker);
+          const expandedActions = actionExpression
+            ? expandStringExpression(actionExpression, checker, audit.bindings)
+            : null;
+          const actionSource = actionExpression
+            ?.getText(actionExpression.getSourceFile())
+            .replace(/\s+/g, '');
+          if (
+            actionExpression
+            && !expandedActions
+            && actionSource
+            && /^(?:`|['"])?(?:crm|workflow)\./.test(actionSource)
+          ) {
+            unresolvedActions.push(actionSource);
           }
-          const sourceText = node.initializer.getText(source);
-          if (/`(?:crm|workflow)\.[^`]*\$\{/.test(sourceText)) {
-            dynamicActionTemplates.add(sourceText.replace(/\s+/g, ''));
+          for (const action of expandedActions ?? []) {
+            if (/^(crm|workflow)\./.test(action)) actions.add(action);
           }
-        }
-        if (name === 'entityType') {
-          for (const value of literalsInside(node.initializer)) {
-            if (/^[a-z][a-z0-9_:]*$/.test(value)) entityTypes.add(value);
+          for (const entityType of entityExpression
+            ? expandStringExpression(entityExpression, checker, audit.bindings) ?? []
+            : []) {
+            entityTypes.add(entityType);
           }
         }
       }
@@ -264,8 +268,7 @@ function productionAuditContract() {
     };
     visit(source);
   }
-
-  return { actions, entityTypes, dynamicActionTemplates };
+  return { actions, entityTypes, unresolvedActions };
 }
 
 describe('Audit presentation production coverage', () => {
@@ -282,41 +285,26 @@ describe('Audit presentation production coverage', () => {
     reasonText: null,
     occurredAt: new Date('2026-08-31T00:00:00.000Z'),
   };
+  const sourceRoot = join(__dirname, '..');
+  const presenterSource = join(__dirname, 'audit-presentation.service.ts');
 
-  it('gives every literal CRM/workflow producer action a concrete central Russian title', () => {
-    const { actions, dynamicActionTemplates } = productionAuditContract();
-    expect([...actions].filter((action) => !(action in PRODUCT_ACTION_TITLES))).toEqual([]);
-    expect([...dynamicActionTemplates].sort()).toEqual([
-      '`crm.${personType}_access_managed`',
-      '`crm.${personType}_credentials_viewed`',
-      '`crm.${personType}_offboarded`',
-      '`crm.${personType}_restored`',
-      '`crm.reference_${entityType}_${action}`',
-      '`crm.teacher_${kind}_deleted`',
-    ]);
+  it('requires every real CRM/workflow audit producer action to have an explicit shared title', () => {
+    const inventory = productionAuditContract(sourceRoot);
+    const actionTitles = registryKeys(presenterSource, 'ACTION_TITLES');
 
-    for (const [actionKey, title] of Object.entries({
-      ...PRODUCT_ACTION_TITLES,
-      ...REFERENCE_ACTION_TITLES,
-    })) {
-      expect(service.present({ ...input, actionKey }).title).toBe(title);
+    expect(inventory.actions).toContain('crm.student_updated');
+    expect(inventory.unresolvedActions).toEqual([]);
+    expect([...inventory.actions].filter((action) => !actionTitles.has(action))).toEqual([]);
+    for (const actionKey of inventory.actions) {
+      expect(service.present({ ...input, actionKey }).title).not.toBe('Действие выполнено');
     }
-    expect(DYNAMIC_PRODUCT_ACTIONS.every((action) =>
-      action in PRODUCT_ACTION_TITLES || action in REFERENCE_ACTION_TITLES,
-    )).toBe(true);
   });
 
-  it('gives every known product target type a central Russian label', () => {
-    const { entityTypes } = productionAuditContract();
-    expect([...entityTypes].filter((type) => !(type in PRODUCT_ENTITY_LABELS))).toEqual([]);
+  it('requires every statically known journal target to have a central Russian label', () => {
+    const inventory = productionAuditContract(sourceRoot);
+    const entityLabels = registryKeys(presenterSource, 'ENTITY_LABELS');
 
-    for (const [type, label] of Object.entries(PRODUCT_ENTITY_LABELS)) {
-      const target = service.present({
-        ...input,
-        target: { type, id: 'target-1', displayName: null },
-      }).target;
-      expect(target.label).toBe(label);
-      expect(target.label).not.toMatch(/[_:]/);
-    }
+    expect(inventory.entityTypes).toContain('access:role-package');
+    expect([...inventory.entityTypes].filter((type) => !entityLabels.has(type))).toEqual([]);
   });
 });

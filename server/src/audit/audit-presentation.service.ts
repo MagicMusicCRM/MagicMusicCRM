@@ -11,6 +11,7 @@ const REDACTION_MARKERS = new Set(['[REDACTED]', '[PRIVATE]', '[PII]', '[EMAIL]'
 
 const ENTITY_LABELS: Record<string, string> = {
   'access:user': 'Доступ пользователя',
+  'access:role-package': 'Пакет прав роли',
   account_deletion_request: 'Запрос на удаление аккаунта',
   student: 'Ученик',
   'crm:student': 'Ученик',
@@ -124,6 +125,7 @@ const ACTION_TITLES: Record<string, string> = {
   'crm.student_archived': 'Ученик архивирован',
   'crm.student_restored': 'Ученик восстановлен',
   'crm.student_invite_sent': 'Приглашение ученику отправлено',
+  'crm.student_updated': 'Данные ученика изменены',
   'crm.staff_access_managed': 'Доступ сотрудника изменён',
   'crm.staff_created': 'Сотрудник создан',
   'crm.staff_credentials_viewed': 'Данные для входа сотрудника просмотрены',
@@ -343,7 +345,6 @@ export class AuditPresentationService {
     if (
       !trimmed
       || /^[a-z0-9]+(?:[_:./-][a-z0-9]+)*$/i.test(trimmed)
-      || /^(?:manual|automatic|system|migration|import|unknown|default)\b/i.test(trimmed)
       || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)
     ) {
       return null;

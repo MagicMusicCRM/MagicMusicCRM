@@ -288,13 +288,21 @@ export class ReferenceCatalogLifecycleService {
     await this.ensureAggregateVersion(entityType, entityId, initial.version);
 
     const action = entityType === "branch_discipline" ? "unassigned" : "archived";
-    const audit = this.auditInput(
-      actor,
-      entityType,
-      initial,
-      action,
-      dto.reasonText,
-    );
+    const audit = entityType === "branch_discipline"
+      ? this.auditInput(
+        actor,
+        entityType,
+        initial,
+        "unassigned",
+        dto.reasonText,
+      )
+      : this.auditInput(
+        actor,
+        entityType,
+        initial,
+        "archived",
+        dto.reasonText,
+      );
     const result = await this.integrity.executeVersionedMutation<MutationResultRef>({
       actorKey: actor.userId,
       actorUserId: actor.userId,
@@ -925,7 +933,7 @@ export class ReferenceCatalogLifecycleService {
     actor: ActorContext,
     entityType: ReferenceCatalogEntityType,
     snapshot: ReferenceSnapshot,
-    action: string,
+    action: "renamed" | "archived" | "unassigned" | "restored",
     reasonText: string,
   ): PlatformAuditInput {
     return {

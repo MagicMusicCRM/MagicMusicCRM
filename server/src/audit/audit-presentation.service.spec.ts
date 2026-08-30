@@ -237,8 +237,31 @@ describe('AuditPresentationService', () => {
     'Клиент попросил перенести занятие',
     'Ошибка в платеже',
     'Customer requested a refund',
+    'Manual correction requested by client',
+    'Import failed because the client requested a retry',
+    'System changed after owner approval',
   ])('keeps safe human business reason %s', (reason) => {
     expect(service.present({ ...emailChange, reason }).reason).toBe(reason);
+  });
+
+  it('uses the generic student title only when no single field specialization applies', () => {
+    expect(service.present({
+      ...emailChange,
+      beforeRef: null,
+      afterRef: null,
+    }).title).toBe('Данные ученика изменены');
+    expect(service.present({
+      ...emailChange,
+      beforeRef: { email: 'old@example.com', phone: '+79990000000' },
+      afterRef: { email: 'new@example.com', phone: '+79991111111' },
+    }).title).toBe('Данные ученика изменены');
+  });
+
+  it('labels the role package target in Russian', () => {
+    expect(service.present({
+      ...emailChange,
+      target: { type: 'access:role-package', id: 'director', displayName: null },
+    }).target.label).toBe('Пакет прав роли');
   });
 
   it('extracts only labeled safe changes and omits secret metadata', () => {
