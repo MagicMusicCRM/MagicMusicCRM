@@ -693,6 +693,7 @@ describe("CrmService", () => {
       null, // branch_id: no branchId UUID in customDataPatch
       false,
       null, // source_id unchanged
+      false, // clear_email: omission preserves the current contact email
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
