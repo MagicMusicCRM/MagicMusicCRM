@@ -367,7 +367,7 @@ describe("DashboardService", () => {
           after: "new@example.com",
         },
       ],
-      reason: "contact.update",
+      reason: null,
       summary: "Адрес изменён по просьбе ученика",
     });
     expect(result.items[0]).not.toHaveProperty("metadata");
@@ -381,7 +381,7 @@ describe("DashboardService", () => {
     expect(result.items[2].target).toMatchObject({
       type: "comment",
       id: "comment-1",
-      label: "Comment",
+      label: "Комментарий",
       displayName: "Перезвонить после занятия",
       routeType: "comment",
     });
@@ -418,6 +418,8 @@ describe("DashboardService", () => {
     expect(activitySql).toContain("when 'crm:lead' then 'lead'");
     expect(activitySql).toContain("when 'crm:comment' then 'comment'");
     expect(activitySql).toContain("when 'shared_task' then 'task'");
+    expect(activitySql).toContain("left join app.shared_tasks shared_task");
+    expect(activitySql).not.toContain("app.tasks");
     expect(activitySql).toContain("target_student.deleted_at is null");
   });
 });

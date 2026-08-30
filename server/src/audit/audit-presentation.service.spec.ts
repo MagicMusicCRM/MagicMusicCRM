@@ -125,6 +125,103 @@ describe('AuditPresentationService', () => {
     ).toBe(title);
   });
 
+  it.each([
+    ['crm.lead_converted', 'Лид конвертирован в ученика'],
+    ['crm.subscription_purchased', 'Абонемент приобретён'],
+    ['crm.subscription_issued', 'Абонемент выдан'],
+    ['crm.subscription_replaced', 'Абонемент заменён'],
+    ['crm.subscription_cancelled', 'Абонемент отменён'],
+    ['crm.payment_created', 'Платёж создан'],
+    ['crm.payment_record_transitioned', 'Статус платежа изменён'],
+    ['crm.installment_payment_due', 'Наступил срок платежа'],
+    ['crm.payment_reversed', 'Платёж отменён'],
+    ['crm.payment_adjustment_recorded', 'Корректировка платежа внесена'],
+    ['crm.payment_adjustment_reversed', 'Корректировка платежа отменена'],
+    ['crm.lesson_rescheduled', 'Занятие перенесено'],
+    ['crm.lesson_cancelled', 'Занятие отменено'],
+    ['crm.lesson_settled', 'Занятие проведено'],
+    ['crm.lessons_bulk_transitioned', 'Статус занятий изменён'],
+    ['crm.schedule_plan_ended', 'План занятий завершён'],
+    ['crm.client_internal_note_changed', 'Общая заметка изменена'],
+    ['crm.comment_created', 'Комментарий добавлен'],
+    ['crm.comment_teacher_sharing_changed', 'Видимость комментария изменена'],
+    ['workflow.shared_task_created', 'Задача создана'],
+    ['workflow.shared_task_updated', 'Задача изменена'],
+    ['workflow.shared_task_closed', 'Задача закрыта'],
+    ['crm.client_blacklisted', 'Клиент добавлен в чёрный список'],
+    ['crm.client_unblacklisted', 'Клиент убран из чёрного списка'],
+    ['crm.lead_status_changed', 'Статус лида изменён'],
+    ['crm.lead_owner_changed', 'Ответственный по лиду изменён'],
+    ['crm.lead_status_and_owner_changed', 'Статус и ответственный по лиду изменены'],
+  ])('presents common operational action %s as %s', (actionKey, title) => {
+    expect(
+      service.present({
+        ...emailChange,
+        actionKey,
+        beforeRef: null,
+        afterRef: null,
+      }).title,
+    ).toBe(title);
+  });
+
+  it.each([
+    ['comment', 'Комментарий', 'comment'],
+    ['client_internal_note', 'Общая заметка клиента', null],
+    ['shared_task', 'Задача', 'task'],
+    ['task', 'Задача', 'task'],
+    ['client_payment_record', 'Платёж клиента', null],
+    ['account_adjustment', 'Корректировка счёта', null],
+    ['lesson_batch', 'Серия занятий', null],
+    ['schedule_plan', 'План занятий', null],
+    ['homework', 'Домашнее задание', null],
+    ['unrecognized_target', 'Unrecognized target', null],
+  ])('labels target type %s without exposing unsupported navigation', (type, label, routeType) => {
+    expect(
+      service.present({
+        ...emailChange,
+        target: { type, id: 'target-1', displayName: null },
+      }).target,
+    ).toMatchObject({ type, id: 'target-1', label, routeType });
+  });
+
+  it('uses a safe metadata reason and derives comment-sharing text from the safe after ref', () => {
+    expect(
+      service.present({
+        ...emailChange,
+        actionKey: 'crm.client_blacklisted',
+        metadata: { reason: 'Повторяющийся спам' },
+        reason: null,
+        reasonText: null,
+        beforeRef: null,
+        afterRef: null,
+      }),
+    ).toMatchObject({ reason: 'Повторяющийся спам', summary: null });
+
+    expect(
+      service.present({
+        ...emailChange,
+        actionKey: 'crm.comment_teacher_sharing_changed',
+        target: { type: 'comment', id: 'comment-1', displayName: null },
+        metadata: { reason: '[REDACTED]' },
+        reason: 'crm.comment.teacher-sharing',
+        reasonText: null,
+        beforeRef: { sharedWithTeacher: false },
+        afterRef: { sharedWithTeacher: true },
+      }),
+    ).toMatchObject({
+      reason: 'Комментарий опубликован преподавателю',
+      summary: 'Опубликован преподавателю',
+      changes: [
+        {
+          key: 'sharedWithTeacher',
+          label: 'Доступ преподавателя',
+          before: 'false',
+          after: 'true',
+        },
+      ],
+    });
+  });
+
   it('extracts only labeled safe changes and omits secret metadata', () => {
     const presented = service.present({
       ...emailChange,

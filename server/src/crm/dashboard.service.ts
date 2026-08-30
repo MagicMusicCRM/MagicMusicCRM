@@ -539,7 +539,7 @@ export class DashboardService {
             when 'teacher' then nullif(btrim(concat_ws(' ', teacher_profile.first_name, teacher_profile.last_name)), '')
             when 'profile' then nullif(btrim(concat_ws(' ', target_profile.first_name, target_profile.last_name)), '')
             when 'group' then target_group.name
-            when 'task' then coalesce(shared_task.title, legacy_task.title)
+            when 'task' then shared_task.title
             when 'payment' then concat_ws(' ', target_payment.amount::text, target_payment.currency)
             when 'subscription' then concat('Абонемент на ', target_subscription.lessons_total, ' занятий')
             when 'homework' then target_homework.title
@@ -581,8 +581,6 @@ export class DashboardService {
           on ae.presentation_entity_type = 'group' and target_group.id::text = ae.entity_id and target_group.deleted_at is null
         left join app.shared_tasks shared_task
           on ae.presentation_entity_type = 'task' and shared_task.id::text = ae.entity_id and shared_task.deleted_at is null
-        left join app.tasks legacy_task
-          on ae.presentation_entity_type = 'task' and legacy_task.id::text = ae.entity_id and legacy_task.deleted_at is null
         left join app.payments target_payment
           on ae.presentation_entity_type = 'payment' and target_payment.id::text = ae.entity_id and target_payment.deleted_at is null
         left join app.subscriptions target_subscription

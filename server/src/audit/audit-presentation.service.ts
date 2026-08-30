@@ -20,6 +20,14 @@ const ENTITY_LABELS: Record<string, string> = {
   payment: 'Платёж',
   subscription: 'Абонемент',
   task: 'Задача',
+  shared_task: 'Задача',
+  comment: 'Комментарий',
+  client_internal_note: 'Общая заметка клиента',
+  client_payment_record: 'Платёж клиента',
+  account_adjustment: 'Корректировка счёта',
+  lesson_batch: 'Серия занятий',
+  schedule_plan: 'План занятий',
+  homework: 'Домашнее задание',
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -32,6 +40,7 @@ const FIELD_LABELS: Record<string, string> = {
   lastName: 'Фамилия',
   displayName: 'Отображаемое имя',
   marketingConsent: 'Маркетинговое согласие',
+  sharedWithTeacher: 'Доступ преподавателя',
 };
 
 const ACTION_TITLES: Record<string, string> = {
@@ -41,6 +50,34 @@ const ACTION_TITLES: Record<string, string> = {
   'crm.lesson_rescheduled': 'Занятие перенесено',
   'crm.lesson_cancelled': 'Занятие отменено',
   'crm.lesson_completed': 'Занятие завершено',
+  'crm.lead_converted': 'Лид конвертирован в ученика',
+  'crm.subscription_purchased': 'Абонемент приобретён',
+  'crm.subscription_issued': 'Абонемент выдан',
+  'crm.subscription_replaced': 'Абонемент заменён',
+  'crm.subscription_cancelled': 'Абонемент отменён',
+  'crm.payment_created': 'Платёж создан',
+  'crm.payment_record_created': 'Платёж создан',
+  'crm.payment_record_transitioned': 'Статус платежа изменён',
+  'crm.installment_payment_due': 'Наступил срок платежа',
+  'crm.payment_reversed': 'Платёж отменён',
+  'crm.payment_adjustment_recorded': 'Корректировка платежа внесена',
+  'crm.payment_adjustment_reversed': 'Корректировка платежа отменена',
+  'crm.payment_corrected': 'Платёж скорректирован',
+  'crm.lesson_settled': 'Занятие проведено',
+  'crm.lesson_settlement_completed': 'Занятие проведено',
+  'crm.lessons_bulk_transitioned': 'Статус занятий изменён',
+  'crm.schedule_plan_ended': 'План занятий завершён',
+  'crm.client_internal_note_changed': 'Общая заметка изменена',
+  'crm.comment_created': 'Комментарий добавлен',
+  'crm.comment_teacher_sharing_changed': 'Видимость комментария изменена',
+  'workflow.shared_task_created': 'Задача создана',
+  'workflow.shared_task_updated': 'Задача изменена',
+  'workflow.shared_task_closed': 'Задача закрыта',
+  'crm.client_blacklisted': 'Клиент добавлен в чёрный список',
+  'crm.client_unblacklisted': 'Клиент убран из чёрного списка',
+  'crm.lead_status_changed': 'Статус лида изменён',
+  'crm.lead_owner_changed': 'Ответственный по лиду изменён',
+  'crm.lead_status_and_owner_changed': 'Статус и ответственный по лиду изменены',
 };
 
 const ROUTE_TYPES: Record<string, string> = {
@@ -54,6 +91,8 @@ const ROUTE_TYPES: Record<string, string> = {
   payment: 'payment',
   subscription: 'subscription',
   task: 'task',
+  shared_task: 'task',
+  comment: 'comment',
 };
 
 const ACTION_SUFFIXES: Record<string, string> = {
@@ -120,8 +159,8 @@ export class AuditPresentationService {
       id: input.id,
       actionKey: input.actionKey,
       title: this.titleFor(input.actionKey, changes),
-      summary: this.safeValue(input.reasonText),
-      reason: this.safeValue(input.reason),
+      summary: this.summaryFor(input),
+      reason: this.reasonFor(input),
       actor: {
         id: input.actor.id,
         name: this.safeValue(input.actor.name) ?? 'Неизвестный пользователь',
@@ -132,7 +171,7 @@ export class AuditPresentationService {
         id: input.target.id,
         label: ENTITY_LABELS[input.target.type] ?? this.humanizeIdentifier(input.target.type),
         displayName: this.safeValue(input.target.displayName),
-        routeType: ROUTE_TYPES[input.target.type] ?? (input.target.type || null),
+        routeType: ROUTE_TYPES[input.target.type] ?? null,
       },
       changes,
       occurredAt: input.occurredAt,
@@ -141,6 +180,62 @@ export class AuditPresentationService {
 
   isBusinessAction(actionKey: string): boolean {
     return !/^(auth|session|security|system|health)\./i.test(actionKey);
+  }
+
+  private summaryFor(input: AuditPresentationInput): string | null {
+    return this.safeValue(input.reasonText) ?? this.commentSharingSummary(input);
+  }
+
+  private reasonFor(input: AuditPresentationInput): string | null {
+    const metadataReason = this.metadataReason(input.metadata);
+    const directReason = this.safeBusinessReason(input.reason);
+
+    if (input.actionKey === 'crm.comment_teacher_sharing_changed') {
+      return metadataReason
+        ?? directReason
+        ?? this.commentSharingReason(input);
+    }
+
+    return directReason ?? metadataReason;
+  }
+
+  private metadataReason(metadata: Record<string, unknown> | null): string | null {
+    return metadata && this.isRecord(metadata)
+      ? this.safeBusinessReason(metadata.reason)
+      : null;
+  }
+
+  private safeBusinessReason(value: unknown): string | null {
+    const safe = this.safeValue(value);
+    return safe && !/^[a-z][a-z0-9_-]*(?:[.:][a-z0-9_-]+)+$/i.test(safe)
+      ? safe
+      : null;
+  }
+
+  private commentSharingSummary(input: AuditPresentationInput): string | null {
+    if (input.actionKey !== 'crm.comment_teacher_sharing_changed') {
+      return null;
+    }
+
+    const sharedWithTeacher = input.afterRef?.sharedWithTeacher;
+    if (sharedWithTeacher === true || sharedWithTeacher === 'true') {
+      return 'Опубликован преподавателю';
+    }
+    if (sharedWithTeacher === false || sharedWithTeacher === 'false') {
+      return 'Скрыт от преподавателя';
+    }
+    return null;
+  }
+
+  private commentSharingReason(input: AuditPresentationInput): string | null {
+    const summary = this.commentSharingSummary(input);
+    if (summary === 'Опубликован преподавателю') {
+      return 'Комментарий опубликован преподавателю';
+    }
+    if (summary === 'Скрыт от преподавателя') {
+      return 'Комментарий скрыт от преподавателя';
+    }
+    return null;
   }
 
   private extractChanges(

@@ -117,7 +117,7 @@ describe("ClientInternalContextService PostgreSQL history union", () => {
           {
             id: ids.statusEvent,
             actionKey: "crm.lead_status_changed",
-            title: "Действие выполнено",
+            title: "Статус лида изменён",
             summary: "Клиент подтвердил обучение",
             reason: null,
             actor: {
