@@ -14,7 +14,10 @@ extension _ScheduleFocus on _ScheduleWidgetState {
         _filterClientType = focus.clientType;
         _filterClientId = focus.clientId;
         _filterClientName = focus.clientName;
-        _selectedBranchId = focus.branchId ?? _selectedBranchId;
+        if (focus.branchId != null) {
+          _selectedBranchId = focus.branchId;
+          _allBranchesSelected = false;
+        }
         _hideOtherClientLessons = false;
       });
       ref.read(scheduleNavigationProvider.notifier).clear();

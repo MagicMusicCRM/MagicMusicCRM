@@ -1,16 +1,15 @@
 import { Injectable } from "@nestjs/common";
-import {
-  ActorContext,
-  isManagerOrAdminRole,
-} from "../../common/security/actor-context";
+import { ActorContext } from "../../common/security/actor-context";
 import { managerAdminRolesSql } from "../../common/security/role-sql";
 import { DatabaseService } from "../../db/database.service";
 import { CrmPolicy } from "../crm.policy";
 import { LessonQuery } from "../dto/lesson.query";
 import { ScheduleMatrixQuery } from "../dto/schedule-matrix.query";
 import { LessonRow, toLessonDto } from "../crm-mappers";
+import { currentActorRoleSql, managerBranchScopeSql } from "../branch-scope";
 
 interface ScheduleLessonRow extends LessonRow {
+  scheduled_utc_offset_minutes?: number | string | null;
   conflict_types: string[] | null;
   group_participants?: Array<{
     clientId: string;
@@ -40,17 +39,21 @@ export class ScheduleReadService {
           select l.id, l.version, l.lifecycle_state, l.student_id, l.group_id, l.lead_id, l.teacher_id,
             l.branch_id, l.room_id, l.scheduled_at, l.duration_minutes,
             l.status, l.is_trial, l.notes,
-            case when ${managerAdminRolesSql("$10")}
+            case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
               then plan.failure_code else null end as settlement_failure_code,
-            case when ${managerAdminRolesSql("$10")}
+            case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
               then plan.decision ->> 'settlementTypeKey' else null end
               as settlement_type_key,
-            case when ${managerAdminRolesSql("$10")}
+            case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
               then plan.decision ->> 'teacherCompensationRuleKey' else null end
               as teacher_compensation_rule_key,
-            case when ${managerAdminRolesSql("$10")}
+            case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
               then plan.decision ->> 'teacherCompensationValueMinor' else null end
               as teacher_compensation_value_minor,
+            extract(epoch from (
+              timezone(coalesce(b.timezone_name, 'Europe/Moscow'), l.scheduled_at)
+              - timezone('UTC', l.scheduled_at)
+            )) / 60 as scheduled_utc_offset_minutes,
             sp.user_id as student_user_id, tp.user_id as teacher_user_id,
             trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
             trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
@@ -67,9 +70,11 @@ export class ScheduleReadService {
           left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
           left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
           left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-          left join app.branches b on b.id = l.branch_id and b.deleted_at is null
           left join app.rooms r on r.id = l.room_id and r.deleted_at is null
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
+          left join app.branches b
+            on b.id = coalesce(l.branch_id, g.branch_id, r.branch_id)
+           and b.deleted_at is null
           left join app.lesson_settlement_plans plan on plan.lesson_id = l.id
           where l.deleted_at is null
             and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
@@ -81,14 +86,28 @@ export class ScheduleReadService {
             and ($6::uuid is null or l.student_id = $6)
             and ($7::uuid is null or l.lead_id = $7)
             and ($8::boolean is null or l.is_trial = $8)
-            and ($10::text <> 'teacher' or tp.user_id = $11::uuid)
+            and (
+              $9::date is null
+              or timezone(coalesce(b.timezone_name, 'Europe/Moscow'), l.scheduled_at)::date = $9::date
+            )
+            and (
+              ${managerAdminRolesSql(currentActorRoleSql("$11"))}
+              or (${currentActorRoleSql("$11")} = 'teacher' and tp.user_id = $11::uuid)
+            )
+            and ${managerBranchScopeSql({
+              roleExpression: currentActorRoleSql("$11"),
+              userIdExpression: "$11",
+              branchExpression:
+                "coalesce(l.branch_id::text, g.branch_id::text, r.branch_id::text)",
+            })}
           order by l.scheduled_at asc, l.id asc
-          limit $9
+          limit $10
         )
         select scoped.id, scoped.version, scoped.lifecycle_state, scoped.settlement_failure_code,
           scoped.student_id, scoped.group_id, scoped.lead_id,
           scoped.teacher_id, scoped.branch_id, scoped.room_id,
-          scoped.scheduled_at, scoped.duration_minutes, scoped.status,
+          scoped.scheduled_at, scoped.scheduled_utc_offset_minutes,
+          scoped.duration_minutes, scoped.status,
           scoped.is_trial, scoped.notes, scoped.student_user_id,
           scoped.teacher_user_id, scoped.student_name, scoped.lead_name,
           scoped.teacher_name,
@@ -204,13 +223,17 @@ export class ScheduleReadService {
         query.studentId ?? null,
         query.leadId ?? null,
         query.isTrial ?? null,
+        query.localDate ?? null,
         limit,
-        actor.role,
         actor.userId,
       ],
     );
     const items = result.rows.map((row) => ({
       ...toLessonDto(row),
+      scheduledUtcOffsetMinutes:
+        row.scheduled_utc_offset_minutes == null
+          ? null
+          : Number(row.scheduled_utc_offset_minutes),
       groupParticipants: row.group_participants ?? [],
       conflictTypes: row.conflict_types ?? [],
     }));
@@ -231,6 +254,7 @@ export class ScheduleReadService {
       type: string;
       lessonId: string;
       scheduledAt: Date | string;
+      scheduledUtcOffsetMinutes: number | null;
       roomId: string | null;
       teacherId: string | null;
     }> = [];
@@ -254,6 +278,7 @@ export class ScheduleReadService {
             type,
             lessonId: item.id,
             scheduledAt: item.scheduledAt,
+            scheduledUtcOffsetMinutes: item.scheduledUtcOffsetMinutes,
             roomId: item.roomId,
             teacherId: item.teacherId,
           });
@@ -268,6 +293,7 @@ export class ScheduleReadService {
             type,
             lessonId: item.id,
             scheduledAt: item.scheduledAt,
+            scheduledUtcOffsetMinutes: item.scheduledUtcOffsetMinutes,
             roomId: item.roomId,
             teacherId: item.teacherId,
           });
@@ -302,29 +328,39 @@ export class ScheduleReadService {
     }>(
       `
         select
-          to_char((l.scheduled_at at time zone 'Europe/Moscow')::date, 'YYYY-MM-DD') as day,
+          to_char(
+            timezone(coalesce(b.timezone_name, 'Europe/Moscow'), l.scheduled_at)::date,
+            'YYYY-MM-DD'
+          ) as day,
           count(*)::text as count,
           array_remove(array_agg(distinct l.room_id), null) as room_ids
         from app.lessons l
         left join app.rooms r on r.id = l.room_id and r.deleted_at is null
+        left join app.groups g on g.id = l.group_id and g.deleted_at is null
+        left join app.branches b
+          on b.id = coalesce(l.branch_id, g.branch_id, r.branch_id)
+         and b.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         where l.deleted_at is null
           and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           and l.scheduled_at >= $1::timestamptz
           and l.scheduled_at <  $2::timestamptz
-          and ($3::uuid is null or l.branch_id = $3 or r.branch_id = $3)
-          and ($4::text <> 'teacher' or tp.user_id = $5::uuid)
+          and ($3::uuid is null or coalesce(l.branch_id, g.branch_id, r.branch_id) = $3)
+          and (
+            ${managerAdminRolesSql(currentActorRoleSql("$4"))}
+            or (${currentActorRoleSql("$4")} = 'teacher' and tp.user_id = $4::uuid)
+          )
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$4"),
+            userIdExpression: "$4",
+            branchExpression:
+              "coalesce(l.branch_id::text, g.branch_id::text, r.branch_id::text)",
+          })}
         group by 1
         order by 1
       `,
-      [
-        bounds.from,
-        bounds.to,
-        query.branchId ?? null,
-        actor.role,
-        actor.userId,
-      ],
+      [bounds.from, bounds.to, query.branchId ?? null, actor.userId],
     );
     return {
       from: bounds.from,
@@ -354,9 +390,15 @@ export class ScheduleReadService {
     // else gets null rather than a leak. Per the owner's 16.07 decision a
     // per-lesson rate is NOT school-wide finance, so admin/manager see it;
     // the aggregate revenue view stays director-only (canReadSchoolFinance).
-    const canSeeRates = this.policy.canReadTeacherRates(actor);
-    const appliedRateSql = canSeeRates
-      ? `coalesce(
+    // Projection authorization must use the role currently stored in the
+    // database. JWTs can outlive a role downgrade; using actor.role here would
+    // keep financial columns visible until the stale token expires even though
+    // the row predicate below already applies the current role.
+    const currentRoleExpression = currentActorRoleSql("$1");
+    const canSeeRatesSql = managerAdminRolesSql(currentRoleExpression);
+    const canSeePaymentsSql = `(${managerAdminRolesSql(currentRoleExpression)}
+      or ${currentRoleExpression} = 'client')`;
+    const appliedRateSql = `case when ${canSeeRatesSql} then coalesce(
             l.teacher_rate,
             g.teacher_rate,
             (
@@ -369,8 +411,7 @@ export class ScheduleReadService {
               limit 1
             ),
             0
-          )`
-      : `null::numeric`;
+          ) else null::numeric end`;
     // «Оплаты по дням» (✔ владелец 17.07): сколько пришло за ЭТОТ день.
     //
     // Намеренно без coalesce(…, 0): пустая сумма — это «за этот день платежа
@@ -381,51 +422,40 @@ export class ScheduleReadService {
     //
     // Гейт: педагогу деньги клиента не показываем. Клиент видит свои — выборка
     // выше и так отдаёт ему только его занятия.
-    const canSeePayments =
-      this.policy.canReadStudentFinance(actor) || actor.role === "client";
-    const clientChargeSnapshotSql = canSeePayments
-      ? "snapshot.client_charge_type"
-      : "null::text";
-    const clientChargeValueSnapshotSql = canSeePayments
-      ? "snapshot.client_charge_value"
-      : "null::numeric";
-    const subscriptionSnapshotSql = canSeePayments
-      ? "snapshot.subscription_id"
-      : "null::uuid";
-    const teacherCompensationSnapshotSql = canSeeRates
-      ? "snapshot.teacher_compensation_type"
-      : "null::text";
-    const teacherCompensationValueSnapshotSql = canSeeRates
-      ? "snapshot.teacher_compensation_value"
-      : "null::numeric";
+    const clientChargeSnapshotSql = `case when ${canSeePaymentsSql}
+      then snapshot.client_charge_type else null::text end`;
+    const clientChargeValueSnapshotSql = `case when ${canSeePaymentsSql}
+      then snapshot.client_charge_value else null::numeric end`;
+    const subscriptionSnapshotSql = `case when ${canSeePaymentsSql}
+      then snapshot.subscription_id else null::uuid end`;
+    const teacherCompensationSnapshotSql = `case when ${canSeeRatesSql}
+      then snapshot.teacher_compensation_type else null::text end`;
+    const teacherCompensationValueSnapshotSql = `case when ${canSeeRatesSql}
+      then snapshot.teacher_compensation_value else null::numeric end`;
     // Closed enum from the DTO (@IsIn) — never raw user input. desc serves the
     // client «История»: with limit 50 the OLD asc order returned the 50 oldest
     // imported lessons and hid everything recent.
     const sortDir = query.order === "desc" ? "desc" : "asc";
-    const paidSql = canSeePayments
-      ? `(
+    const paidSql = `case when ${canSeePaymentsSql} then (
             select sum(pay.amount)
             from app.commerce_ordinary_payments pay
             where pay.lesson_id = l.id and pay.deleted_at is null
-          )`
-      : `null::numeric`;
-    const settlementFailureSql = isManagerOrAdminRole(actor.role)
-      ? "plan.failure_code"
-      : "null::text";
-    const settlementTypeKeySql = canSeePayments
-      ? "plan.decision ->> 'settlementTypeKey'"
-      : "null::text";
-    const compensationRuleKeySql = canSeeRates
-      ? "plan.decision ->> 'teacherCompensationRuleKey'"
-      : "null::text";
-    const compensationValueMinorSql = canSeeRates
-      ? "plan.decision ->> 'teacherCompensationValueMinor'"
-      : "null::text";
+          ) else null::numeric end`;
+    const settlementFailureSql = `case when ${canSeeRatesSql}
+      then plan.failure_code else null::text end`;
+    const settlementTypeKeySql = `case when ${canSeePaymentsSql}
+      then plan.decision ->> 'settlementTypeKey' else null::text end`;
+    const compensationRuleKeySql = `case when ${canSeeRatesSql}
+      then plan.decision ->> 'teacherCompensationRuleKey' else null::text end`;
+    const compensationValueMinorSql = `case when ${canSeeRatesSql}
+      then plan.decision ->> 'teacherCompensationValueMinor' else null::text end`;
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.version, l.lifecycle_state,
           l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
-          l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
+          l.duration_minutes, l.status, l.is_trial, l.notes,
+          case when ${canSeeRatesSql} then l.teacher_rate
+            else null::numeric end as teacher_rate,
           snapshot.completion_type,
           ${clientChargeSnapshotSql} as client_charge_type,
           ${clientChargeValueSnapshotSql} as client_charge_value,
@@ -469,35 +499,40 @@ export class ScheduleReadService {
         ) reservation on true
         where l.deleted_at is null
           and (
-            $3::uuid is not null
+            $2::uuid is not null
             or l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           )
-          and ($3::uuid is null or l.id = $3)
+          and ($2::uuid is null or l.id = $2)
           and (
-            $4::uuid is null
-            or l.student_id = $4
+            $3::uuid is null
+            or l.student_id = $3
             or exists (
               select 1
               from app.group_students filter_gs
               where filter_gs.group_id = l.group_id
-                and filter_gs.student_id = $4
+                and filter_gs.student_id = $3
                 and filter_gs.left_at is null
             )
           )
-          and ($5::uuid is null or l.teacher_id = $5)
-          and ($6::timestamptz is null or l.scheduled_at >= $6)
-          and ($7::timestamptz is null or l.scheduled_at <= $7)
-          and ($8::boolean is null or l.is_trial = $8)
+          and ($4::uuid is null or l.teacher_id = $4)
+          and ($5::timestamptz is null or l.scheduled_at >= $5)
+          and ($6::timestamptz is null or l.scheduled_at <= $6)
+          and ($7::boolean is null or l.is_trial = $7)
           and (
-            ${managerAdminRolesSql("$1")}
-            or ($1::text = 'teacher' and tp.user_id = $2)
-            or ($1::text = 'client' and ${this.clientLessonAccessSql("$2")})
+            ${managerAdminRolesSql(currentActorRoleSql("$1"))}
+            or (${currentActorRoleSql("$1")} = 'teacher' and tp.user_id = $1)
+            or (${currentActorRoleSql("$1")} = 'client' and ${this.clientLessonAccessSql("$1")})
           )
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$1"),
+            userIdExpression: "$1",
+            branchExpression:
+              "coalesce(l.branch_id::text, g.branch_id::text, r.branch_id::text)",
+          })}
         order by l.scheduled_at ${sortDir}, l.id ${sortDir}
-        limit $9
+        limit $8
       `,
       [
-        actor.role,
         actor.userId,
         query.lessonId ?? null,
         query.studentId ?? null,
@@ -660,6 +695,18 @@ export class ScheduleReadService {
   }
 
   private scheduleMatrixBounds(query: ScheduleMatrixQuery) {
+    if (query.localDate) {
+      const localDay = new Date(`${query.localDate}T00:00:00.000Z`);
+      return {
+        // IANA zones range from UTC-12 through UTC+14. The SQL local-date
+        // predicate below performs the exact branch-zone clipping; this guard
+        // only keeps the indexed timestamptz scan bounded.
+        from: new Date(localDay.getTime() - 14 * 60 * 60 * 1000).toISOString(),
+        to: new Date(
+          localDay.getTime() + (24 + 14) * 60 * 60 * 1000,
+        ).toISOString(),
+      };
+    }
     const from = query.from
       ? new Date(query.from)
       : this.utcDayStart(new Date());

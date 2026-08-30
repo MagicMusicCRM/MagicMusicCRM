@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsIn,
   IsInt,
+  Matches,
   IsOptional,
   IsUUID,
   Max,
@@ -18,6 +19,11 @@ export class ScheduleMatrixQuery {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @IsOptional()
+  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  localDate?: string;
 
   @IsOptional()
   @IsUUID()

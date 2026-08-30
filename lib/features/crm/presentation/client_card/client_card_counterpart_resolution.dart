@@ -1,7 +1,7 @@
 part of 'client_card.dart';
 
 extension _ClientCardCounterpartResolution on _ClientCardState {
-  /// lead half (lead card, status history, statuses, metadata) and flip to
+  /// lead half (lead card, statuses, metadata) and flip to
   /// `converted`. Failures degrade silently back to studentOnly.
   void _resolveLeadCounterpart() {
     if (!mounted) return;
@@ -12,7 +12,6 @@ extension _ClientCardCounterpartResolution on _ClientCardState {
       _resolvedLeadId = leadId;
       // Lead-side sections start loading now.
       _loadingCard = true;
-      _loadingHistory = true;
     });
     // Parallel, isolated lead-half fetches against the resolved lead id. Lead
     // statuses are needed for the header label and the originating-lead card;
@@ -21,7 +20,6 @@ extension _ClientCardCounterpartResolution on _ClientCardState {
     _statuses = widget.allStatuses ?? _statuses;
     if (_statuses.isEmpty) _fetchStatuses();
     _fetchCard(leadId: leadId);
-    _fetchStatusHistory(leadId: leadId);
   }
 
   /// Lead-opened path: if the lead card lists linked students, pick the primary

@@ -398,34 +398,11 @@ extension _ClientCardStudent on _ClientCardState {
   }
 
   // ── Student tab: История ─────────────────────────────────────────────────
-  // For a converted client this folds lead status history into the student
-  // timeline (merged, de-duped by id, origin-badged). A plain student keeps the
-  // Phase 2 view (its own tasks + comments).
+  // Staff actions, lead transitions and conversion lineage are combined by the
+  // server into one readable, cursor-paginated history.
   Widget _buildStudentHistoryTab(ColorScheme cs, {bool embedded = false}) {
     return _studentGuard(cs, () {
-      final content = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_internalContextAllowed) ...[
-            _buildOperationalHistory(),
-            const SizedBox(height: AppSpace.lg),
-          ],
-          if (_isConverted)
-            _mergedHistoryView(
-              cs,
-              loading: _loadingHistory,
-              items: _mergedHistory,
-              embedded: true,
-            )
-          else
-            _studentTimelineView(
-              cs,
-              tasks: _studentTasks,
-              comments: _studentComments,
-              embedded: true,
-            ),
-        ],
-      );
+      final content = _buildOperationalHistory();
       if (embedded) {
         return Padding(
           padding: const EdgeInsets.all(AppSpace.xl),

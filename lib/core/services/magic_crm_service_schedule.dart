@@ -276,6 +276,7 @@ extension MagicCrmSchedule on MagicCrmService {
   Future<Map<String, dynamic>> getScheduleMatrix({
     String? from,
     String? to,
+    String? localDate,
     String? branchId,
     String? roomId,
     String? teacherId,
@@ -295,6 +296,7 @@ extension MagicCrmSchedule on MagicCrmService {
 
     addString('from', from);
     addString('to', to);
+    addString('localDate', localDate);
     addString('branchId', branchId);
     addString('roomId', roomId);
     addString('teacherId', teacherId);

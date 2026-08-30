@@ -8,10 +8,12 @@ import { AuditService } from "../audit/audit.service";
 import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
+import { managerAdminRolesSql } from "../common/security/role-sql";
 import { CreateBranchDto } from "./dto/create-branch.dto";
 import { BranchListQuery } from "./dto/branch-lifecycle.dto";
 import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { CrmPolicy } from "./crm.policy";
+import { currentActorRoleSql, managerBranchScopeSql } from "./branch-scope";
 import { assertBranchHours } from "./schedule/availability.rules";
 import { assertSettingsBranchScope } from "./settings-branch-scope";
 
@@ -70,16 +72,10 @@ export class BranchesService {
       actor.role !== "director" &&
       actor.role !== "system_admin"
     ) {
-      throw new ForbiddenException(
-        "Архив филиалов доступен только директору.",
-      );
+      throw new ForbiddenException("Архив филиалов доступен только директору.");
     }
     if (includeArchived) {
-      await authorizeCurrentCapability(
-        this.database,
-        actor,
-        "config.crm.edit",
-      );
+      await authorizeCurrentCapability(this.database, actor, "config.crm.edit");
     }
     const limit = Math.min(query.limit ?? 100, 100);
     const q = query.q?.trim();
@@ -89,21 +85,16 @@ export class BranchesService {
           schedule_reference_version, lifecycle_state, version, archived_at,
           archive_reason, archive_effective_date, created_at
         from app.branches
-        where ($5::boolean or deleted_at is null)
+        where ($4::boolean or deleted_at is null)
           and (
-            $3::text <> 'manager'
-            or exists (
-              select 1
-              from app.user_crm_links link
-              join app.staff_members staff on staff.id = link.entity_id
-                and link.entity_type = 'staff' and link.deleted_at is null
-                and staff.deleted_at is null
-              join app.staff_branch_assignments assignment
-                on assignment.staff_member_id = staff.id
-                and assignment.deleted_at is null
-              where link.user_id = $4 and assignment.branch_id = branches.id
-            )
+            ${managerAdminRolesSql(currentActorRoleSql("$3"))}
+            or ${currentActorRoleSql("$3")} = 'teacher'
           )
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$3"),
+            userIdExpression: "$3",
+            branchExpression: "branches.id::text",
+          })}
           and (
             $1::text is null
             or lower(coalesce(name, '') || ' ' || coalesce(address, '')) like lower('%' || $1 || '%')
@@ -111,7 +102,7 @@ export class BranchesService {
         order by name asc, id asc
         limit $2
       `,
-      [q || null, limit, actor.role, actor.userId, includeArchived],
+      [q || null, limit, actor.userId, includeArchived],
     );
 
     return { items: result.rows.map((row) => this.toBranchDto(row)) };
@@ -128,7 +119,9 @@ export class BranchesService {
     }
     this.assertTimezone(dto.timezone);
     if (!dto.weeklyHours?.length) {
-      throw new BadRequestException("Укажите рабочие часы хотя бы для одного дня.");
+      throw new BadRequestException(
+        "Укажите рабочие часы хотя бы для одного дня.",
+      );
     }
     assertBranchHours(dto.weeklyHours, []);
     // Default to Moscow (UTC+3 / 180 minutes) when no offset is provided.

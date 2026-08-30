@@ -17,6 +17,19 @@ const _student = <String, dynamic>{
   'branchName': 'Сокол',
 };
 
+List<Map<String, dynamic>> _operationalHistoryFixture() => List.generate(
+  12,
+  (index) => {
+    'id': '00000000-0000-4000-8000-${(index + 1).toString().padLeft(12, '0')}',
+    'actionKey': 'crm.test_${index + 1}',
+    'action': 'Понятное действие ${index + 1}',
+    'reason': 'Причина ${index + 1}',
+    'summary': 'Результат ${index + 1}',
+    'actorName': 'Анна Администратор',
+    'occurredAt': DateTime.utc(2026, 8, 30 - index, 12).toIso8601String(),
+  },
+);
+
 void main() {
   testWidgets('staff edits the versioned note and sees exact audit context', (
     tester,
@@ -131,6 +144,7 @@ void main() {
     );
 
     expect(find.byKey(const Key('client-internal-note')), findsNothing);
+    expect(find.text('История'), findsNothing);
     expect(
       api.getRequests.where(
         (path) =>
@@ -140,6 +154,71 @@ void main() {
       isEmpty,
     );
   });
+
+  testWidgets(
+    'staff history renders one readable page and reveals the next page without legacy duplicates',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = FakeCardApiClient(
+        role: 'system_admin',
+        student: _student,
+        operationalHistory: _operationalHistoryFixture(),
+        studentTimeline: const [
+          {
+            'id': 'legacy-lesson',
+            'type': 'lesson',
+            'title': 'Занятие из legacy-ленты',
+            'body': '',
+            'occurred_at': '2026-08-30T10:00:00.000Z',
+          },
+        ],
+      );
+
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: _student,
+        entityType: 'student',
+        routed: true,
+      );
+
+      expect(
+        find.byKey(const Key('client-operational-history')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Причина: Причина '), findsNWidgets(10));
+      expect(find.text('Понятное действие 10'), findsOneWidget);
+      expect(find.text('Понятное действие 11'), findsNothing);
+      expect(find.text('Занятие из legacy-ленты'), findsNothing);
+      final more = find.byKey(const Key('client-operational-history-more'));
+      expect(more, findsOneWidget);
+      final firstHistoryRequest = api.getCalls.firstWhere(
+        (call) => call.path.endsWith('/operational-history'),
+      );
+      expect(firstHistoryRequest.query['limit'], 10);
+      expect(firstHistoryRequest.query['cursor'], isNull);
+
+      await tester.ensureVisible(more);
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Причина: Причина '), findsNWidgets(12));
+      expect(find.text('Понятное действие 11'), findsOneWidget);
+      expect(find.text('Понятное действие 12'), findsOneWidget);
+      expect(more, findsNothing);
+      final historyRequests = api.getCalls
+          .where((call) => call.path.endsWith('/operational-history'))
+          .toList(growable: false);
+      expect(historyRequests, hasLength(2));
+      expect(historyRequests.last.query, {
+        'limit': 10,
+        'cursor': '00000000-0000-4000-8000-000000000010',
+      });
+    },
+  );
 
   testWidgets('closing the card flushes a pending internal note', (
     tester,

@@ -27,11 +27,33 @@ export class RoomAvailabilityQuery {
 
   @IsOptional()
   @IsDateString()
+  dayFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dayTo?: string;
+
+  @IsOptional()
+  @IsDateString()
   from?: string;
 
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  slotFromMinutes?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  slotToMinutes?: number;
 
   @IsOptional()
   @Type(() => Number)

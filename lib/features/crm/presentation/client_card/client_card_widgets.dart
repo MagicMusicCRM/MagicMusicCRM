@@ -743,10 +743,14 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
         }
         final items = snap.data ?? const <Map<String, dynamic>>[];
         if (items.isEmpty) {
-          return Center(
-            child: Text(
-              'Домашних заданий пока нет',
-              style: TextStyle(color: cs.onSurfaceVariant),
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              vertical: widget.embedded ? AppSpace.xl : 0,
+            ),
+            child: const MagicPageState(
+              key: Key('homework-empty-state'),
+              kind: MagicPageStateKind.empty,
+              title: 'Домашних заданий пока нет',
             ),
           );
         }

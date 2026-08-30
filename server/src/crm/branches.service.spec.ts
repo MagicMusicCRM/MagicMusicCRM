@@ -61,13 +61,13 @@ describe("BranchesService", () => {
     });
 
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual([
-      "центр",
-      10,
-      "manager",
-      "manager-a",
-      false,
-    ]);
+    expect(query.mock.calls[0][1]).toEqual(["центр", 10, "manager-a", false]);
+    expect(String(query.mock.calls[0][0])).toContain(
+      "from app.users scope_actor",
+    );
+    expect(String(query.mock.calls[0][0])).toContain(
+      "scope_assignment.branch_id::text = branches.id::text",
+    );
   });
 
   it("updates a branch's utc offset and returns the dto", async () => {

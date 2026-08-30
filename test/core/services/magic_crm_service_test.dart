@@ -408,6 +408,7 @@ void main() {
                 'branchId': 'branch-a',
                 'roomId': 'room-a',
                 'scheduledAt': '2026-06-15T09:00:00.000Z',
+                'scheduledUtcOffsetMinutes': -240,
                 'durationMinutes': 60,
                 'status': 'scheduled',
                 'lifecycleState': 'settlement_pending',
@@ -436,6 +437,7 @@ void main() {
                     'roomId': 'room-a',
                     'roomName': '101',
                     'scheduledAt': '2026-06-15T09:00:00.000Z',
+                    'scheduledUtcOffsetMinutes': -240,
                     'durationMinutes': 60,
                     'status': 'scheduled',
                     'isTrial': true,
@@ -449,6 +451,7 @@ void main() {
                 'type': 'room_overlap',
                 'lessonId': 'lesson-a',
                 'scheduledAt': '2026-06-15T09:00:00.000Z',
+                'scheduledUtcOffsetMinutes': -240,
                 'roomId': 'room-a',
                 'teacherId': 'teacher-a',
               },
@@ -458,31 +461,35 @@ void main() {
       ]);
       final service = MagicCrmService(_client(adapter));
 
-      final availability = await service.listRoomAvailability(
-        branchId: 'branch-a',
-        roomId: 'room-a',
-        teacherId: 'teacher-a',
-        date: '2026-06-15',
-        from: '2026-06-15T09:00:00.000Z',
-        to: '2026-06-15T10:00:00.000Z',
-        durationMinutes: 60,
-        limit: 20,
-      );
-      final matrix = await service.getScheduleMatrix(
-        from: '2026-06-15T00:00:00.000Z',
-        to: '2026-06-16T00:00:00.000Z',
-        branchId: 'branch-a',
-        roomId: 'room-a',
-        teacherId: 'teacher-a',
-        isTrial: true,
-        groupBy: 'room',
-        limit: 30,
-      );
+      final availability =
+          await Function.apply(service.listRoomAvailability, const [], {
+                #branchId: 'branch-a',
+                #roomId: 'room-a',
+                #teacherId: 'teacher-a',
+                #date: '2026-06-15',
+                #slotFromMinutes: 360,
+                #slotToMinutes: 1380,
+                #durationMinutes: 60,
+                #limit: 20,
+              })
+              as Map<String, dynamic>;
+      final matrix =
+          await Function.apply(service.getScheduleMatrix, const [], {
+                #localDate: '2026-06-15',
+                #branchId: 'branch-a',
+                #roomId: 'room-a',
+                #teacherId: 'teacher-a',
+                #isTrial: true,
+                #groupBy: 'room',
+                #limit: 30,
+              })
+              as Map<String, dynamic>;
 
       expect(availability['items'].single['is_available'], false);
       expect(availability['items'].single['conflict_types'], ['room_overlap']);
       expect(matrix['items'].single['conflict_types'], ['room_overlap']);
       expect(matrix['items'].single['version'], 7);
+      expect(matrix['items'].single['scheduled_utc_offset_minutes'], -240);
       expect(matrix['items'].single['group_participants'], [
         {'clientId': 'student-a', 'clientName': 'Анна Иванова'},
       ]);
@@ -492,9 +499,14 @@ void main() {
       );
       expect(matrix['groups'].single['label'], '101');
       expect(matrix['conflicts'].single['type'], 'room_overlap');
+      expect(matrix['conflicts'].single['scheduled_utc_offset_minutes'], -240);
       expect(adapter.requests[0].queryParameters['durationMinutes'], 60);
+      expect(adapter.requests[0].queryParameters['slotFromMinutes'], 360);
+      expect(adapter.requests[0].queryParameters['slotToMinutes'], 1380);
+      expect(adapter.requests[0].queryParameters.containsKey('dayFrom'), false);
       expect(adapter.requests[1].queryParameters['groupBy'], 'room');
       expect(adapter.requests[1].queryParameters['isTrial'], true);
+      expect(adapter.requests[1].queryParameters['localDate'], '2026-06-15');
     });
 
     test(

@@ -20,7 +20,8 @@ const actionLabels = {
   "crm.subscription_cancelled": "Абонемент отменён",
   "crm.payment_record_created": "Оплата добавлена",
   "crm.payment_record_transitioned": "Статус оплаты изменён",
-  "crm.installment_payment_due": "Срок платежа рассрочки наступил — требуется проверка",
+  "crm.installment_payment_due":
+    "Срок платежа рассрочки наступил — требуется проверка",
   "crm.payment_reversed": "Оплата удалена из обычного учёта",
   "crm.payment_adjustment_recorded": "Возврат или корректировка",
   "crm.lesson_rescheduled": "Занятие перенесено",
@@ -36,6 +37,12 @@ const actionLabels = {
   "workflow.shared_task_closed": "Задача закрыта",
   "crm.client_blacklisted": "Клиент добавлен в чёрный список",
   "crm.client_unblacklisted": "Клиент убран из чёрного списка",
+} as const;
+
+const statusActionLabels = {
+  "crm.lead_status_changed": "Статус клиента изменён",
+  "crm.lead_owner_changed": "Ответственный изменён",
+  "crm.lead_status_and_owner_changed": "Статус и ответственный изменены",
 } as const;
 
 const historyActions = Object.keys(actionLabels);
@@ -54,10 +61,18 @@ const historyRow = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const createService = (rows: Record<string, unknown>[] = []) => {
-  const query = jest.fn().mockResolvedValue({ rows });
+  const query = jest.fn().mockImplementation((sql: string) =>
+    Promise.resolve({
+      rows: sql.includes("as allowed") ? [{ allowed: true }] : rows,
+    }),
+  );
   const resolve = jest.fn().mockResolvedValue(ref);
-  const dependencies = [{ query }, { resolve }, {}, {}] as unknown as
-    ConstructorParameters<typeof ClientInternalContextService>;
+  const dependencies = [
+    { query },
+    { resolve },
+    {},
+    {},
+  ] as unknown as ConstructorParameters<typeof ClientInternalContextService>;
   const service = new ClientInternalContextService(...dependencies);
   return { service, query, resolve };
 };
@@ -74,8 +89,11 @@ describe("ClientInternalContextService operational history", () => {
         name: "ForbiddenException",
         message: "Внутренняя информация клиента недоступна.",
         status: 403,
-        response: { message: "Внутренняя информация клиента недоступна.",
-          error: "Forbidden", statusCode: 403 },
+        response: {
+          message: "Внутренняя информация клиента недоступна.",
+          error: "Forbidden",
+          statusCode: 403,
+        },
       });
       expect(resolve).not.toHaveBeenCalled();
       expect(query).not.toHaveBeenCalled();
@@ -91,11 +109,27 @@ describe("ClientInternalContextService operational history", () => {
         service.listOperationalHistory(actor(role), ref, {}),
       ).resolves.toEqual({ items: [], nextCursor: null });
       expect(resolve).toHaveBeenCalledWith(actor(role), ref);
-      expect(resolve.mock.invocationCallOrder[0]).toBeLessThan(
-        query.mock.invocationCallOrder[0]!,
+      expect(query.mock.invocationCallOrder[0]).toBeLessThan(
+        resolve.mock.invocationCallOrder[0]!,
       );
+      expect(query.mock.calls[0]![1]).toEqual([`${role}-user`]);
+      expect(String(query.mock.calls[0]![0])).toContain("from app.users");
     },
   );
+
+  it("rejects a stale management token after the database role is downgraded", async () => {
+    const { service, query, resolve } = createService();
+    query.mockResolvedValueOnce({ rows: [{ allowed: false }] });
+
+    await expect(
+      service.listOperationalHistory(actor("manager"), ref, {}),
+    ).rejects.toMatchObject({
+      name: "ForbiddenException",
+      message: "Внутренняя информация клиента недоступна.",
+    });
+    expect(resolve).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledTimes(1);
+  });
 
   it("preserves query parameters, over-fetch pagination and row order", async () => {
     const rows = [
@@ -105,52 +139,54 @@ describe("ClientInternalContextService operational history", () => {
     ];
     const { service, query } = createService(rows);
 
-    const result = await service.listOperationalHistory(
-      actor("manager"),
-      ref,
-      { cursor: "11111111-1111-4111-8111-111111111111", limit: 2 },
-    );
+    const result = await service.listOperationalHistory(actor("manager"), ref, {
+      cursor: "11111111-1111-4111-8111-111111111111",
+      limit: 2,
+    });
 
-    expect(result.items.map((item) => item.id)).toEqual([
-      "event-c",
-      "event-b",
-    ]);
+    expect(result.items.map((item) => item.id)).toEqual(["event-c", "event-b"]);
     expect(result.nextCursor).toBe("event-b");
-    expect(query).toHaveBeenCalledTimes(1);
-    expect(query.mock.calls[0]![1]).toEqual([
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1]![1]).toEqual([
       "student",
       "student-a",
       historyActions,
       "11111111-1111-4111-8111-111111111111",
       3,
     ]);
-    const sql = String(query.mock.calls[0]![0]);
-    expect(sql).toContain("order by audit.created_at desc, audit.id desc");
+    const sql = String(query.mock.calls[1]![0]);
+    expect(sql).toContain("app.lead_status_history");
+    expect(sql).toContain("history_event as");
+    expect(sql).toContain("from history_event where id = $4::uuid");
+    expect(sql).toContain("order by history.created_at desc, history.id desc");
     expect(sql).toContain("limit $5");
-    expect(sql).toContain("(audit.created_at, audit.id) <");
+    expect(sql).toContain("(history.created_at, history.id) <");
 
     const exact = createService(rows.slice(0, 2));
     const exactResult = await exact.service.listOperationalHistory(
-      actor("manager"), ref, { limit: 2 });
+      actor("manager"),
+      ref,
+      { limit: 2 },
+    );
     expect(exactResult.nextCursor).toBeNull();
   });
 
   it("keeps the default and capped query limits exact", async () => {
     const first = createService();
     await first.service.listOperationalHistory(actor("admin"), ref, {});
-    expect(first.query.mock.calls[0]![1]).toEqual([
+    expect(first.query.mock.calls[1]![1]).toEqual([
       "student",
       "student-a",
       historyActions,
       null,
-      31,
+      11,
     ]);
 
     const second = createService();
     await second.service.listOperationalHistory(actor("admin"), ref, {
       limit: 150,
     });
-    expect(second.query.mock.calls[0]![1]).toEqual([
+    expect(second.query.mock.calls[1]![1]).toEqual([
       "student",
       "student-a",
       historyActions,
@@ -162,6 +198,7 @@ describe("ClientInternalContextService operational history", () => {
   it("preserves every action label and the unknown-action fallback", async () => {
     const entries = [
       ...Object.entries(actionLabels),
+      ...Object.entries(statusActionLabels),
       ["unknown.action", "Действие с клиентом"],
     ];
     const rows = entries.map(([actionKey], index) =>
@@ -180,6 +217,56 @@ describe("ClientInternalContextService operational history", () => {
         result.items.map((item) => [item.actionKey, item.action]),
       ),
     ).toEqual(Object.fromEntries(entries));
+  });
+
+  it("maps lead status and owner history into the readable canonical shape", async () => {
+    const rows = [
+      historyRow({
+        id: "status",
+        action: "crm.lead_status_changed",
+        reason_text: "Клиент подтвердил обучение",
+        before_ref: { status: "Новый", ownerName: "Анна" },
+        after_ref: { status: "Занимается", ownerName: "Анна" },
+      }),
+      historyRow({
+        id: "owner",
+        action: "crm.lead_owner_changed",
+        before_ref: { status: "Новый", ownerName: "Анна" },
+        after_ref: { status: "Новый", ownerName: "Мария" },
+      }),
+      historyRow({
+        id: "both",
+        action: "crm.lead_status_and_owner_changed",
+        before_ref: { status: "Новый", ownerName: "Анна" },
+        after_ref: { status: "Пробное", ownerName: "Мария" },
+      }),
+    ];
+    const { service } = createService(rows);
+
+    const result = await service.listOperationalHistory(
+      actor("director"),
+      { type: "lead", id: "lead-a" },
+      { limit: 10 },
+    );
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: "status",
+        action: "Статус клиента изменён",
+        reason: "Клиент подтвердил обучение",
+        summary: "Статус: Новый → Занимается",
+      }),
+      expect.objectContaining({
+        id: "owner",
+        action: "Ответственный изменён",
+        summary: "Ответственный: Анна → Мария",
+      }),
+      expect.objectContaining({
+        id: "both",
+        action: "Статус и ответственный изменены",
+        summary: "Статус: Новый → Пробное\nОтветственный: Анна → Мария",
+      }),
+    ]);
   });
 
   it("preserves reason precedence and exact sentinel redaction", async () => {
@@ -205,13 +292,12 @@ describe("ClientInternalContextService operational history", () => {
       }),
       historyRow({ id: "database", reason: "  Без trim  " }),
       historyRow({ id: "fallback" }),
-      ...["[PRIVATE]", " [PII] ", "\t[REDACTED]\n"].map(
-        (reason, index) =>
-          historyRow({
-            id: `sentinel-${index}`,
-            metadata: { reason },
-            reason: "Безопасная причина",
-          }),
+      ...["[PRIVATE]", " [PII] ", "\t[REDACTED]\n"].map((reason, index) =>
+        historyRow({
+          id: `sentinel-${index}`,
+          metadata: { reason },
+          reason: "Безопасная причина",
+        }),
       ),
       historyRow({
         id: "lookalike",
@@ -258,17 +344,24 @@ describe("ClientInternalContextService operational history", () => {
       historyRow({ id: "unpaid", metadata: { targetStatus: "unpaid" } }),
       historyRow({ id: "custom", metadata: { targetStatus: "review" } }),
       historyRow({
-        id: "status-wins", action: "crm.client_internal_note_changed",
+        id: "status-wins",
+        action: "crm.client_internal_note_changed",
         metadata: { targetStatus: "paid" },
-        before_ref: { version: 3 }, after_ref: { version: 4 },
+        before_ref: { version: 3 },
+        after_ref: { version: 4 },
       }),
       historyRow({
-        id: "note", action: "crm.client_internal_note_changed",
-        before_ref: { version: 3 }, after_ref: { version: 4 },
+        id: "note",
+        action: "crm.client_internal_note_changed",
+        before_ref: { version: 3 },
+        after_ref: { version: 4 },
       }),
       historyRow({
-        id: "note-missing", action: "crm.client_internal_note_changed",
-        metadata: { targetStatus: 0 }, before_ref: {}, after_ref: {},
+        id: "note-missing",
+        action: "crm.client_internal_note_changed",
+        metadata: { targetStatus: 0 },
+        before_ref: {},
+        after_ref: {},
       }),
       historyRow({
         id: "shared",
@@ -294,11 +387,9 @@ describe("ClientInternalContextService operational history", () => {
     ];
     const { service } = createService(rows);
 
-    const result = await service.listOperationalHistory(
-      actor("manager"),
-      ref,
-      { limit: 100 },
-    );
+    const result = await service.listOperationalHistory(actor("manager"), ref, {
+      limit: 100,
+    });
 
     expect(
       Object.fromEntries(result.items.map((item) => [item.id, item.summary])),

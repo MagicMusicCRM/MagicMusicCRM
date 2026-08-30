@@ -7,6 +7,7 @@ import {
   ActorContext,
   isManagerOrAdminRole,
 } from "../../common/security/actor-context";
+import { managerAdminRolesSql } from "../../common/security/role-sql";
 import { DatabaseService } from "../../db/database.service";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { RealtimeBus } from "../../realtime/realtime-bus";
@@ -15,6 +16,7 @@ import {
   UpdateClientInternalNoteDto,
 } from "../dto/client-internal-context.dto";
 import { ClientRefType } from "../dto/client-ref.dto";
+import { currentActorRoleSql } from "../branch-scope";
 import { ClientReferenceService } from "./client-reference.service";
 
 type ClientRef = { type: ClientRefType; id: string };
@@ -96,6 +98,9 @@ const ACTION_LABELS: Record<string, string> = {
   "workflow.shared_task_closed": "Задача закрыта",
   "crm.client_blacklisted": "Клиент добавлен в чёрный список",
   "crm.client_unblacklisted": "Клиент убран из чёрного списка",
+  "crm.lead_status_changed": "Статус клиента изменён",
+  "crm.lead_owner_changed": "Ответственный изменён",
+  "crm.lead_status_and_owner_changed": "Статус и ответственный изменены",
 };
 
 @Injectable()
@@ -227,114 +232,183 @@ export class ClientInternalContextService {
     query: ClientOperationalHistoryQueryDto,
   ) {
     await this.assertStaffScoped(actor, ref);
-    const limit = Math.min(query.limit ?? 30, 100);
+    const limit = Math.min(query.limit ?? 10, 100);
     const result = await this.database.query<HistoryRow>(
       `${this.lineageCte()},
+       audit_history as (
+         select audit.id, audit.action, audit.reason, audit.reason_text,
+           audit.metadata, audit.before_ref, audit.after_ref,
+           coalesce(
+             nullif(btrim(coalesce(profile.first_name, '') || ' ' ||
+               coalesce(profile.last_name, '')), ''),
+             nullif(actor_user.full_name, ''),
+             'Системный процесс'
+           ) as actor_name,
+           audit.created_at
+         from app.audit_events audit
+         cross join lineage
+         left join app.users actor_user
+           on actor_user.id = audit.actor_user_id and actor_user.deleted_at is null
+         left join app.profiles profile
+           on profile.user_id = actor_user.id and profile.deleted_at is null
+         where audit.action = any($3::text[])
+           and (
+             audit.entity_type = 'client_internal_note' and exists (
+               select 1 from app.client_internal_notes note
+               where note.id::text = audit.entity_id
+                 and ((lineage.lead_id is not null and note.lead_id = lineage.lead_id)
+                   or (lineage.student_id is not null and note.student_id = lineage.student_id))
+             )
+             or audit.entity_type = 'crm:comment' and exists (
+               select 1 from app.entity_comments comment
+               where comment.id::text = audit.entity_id
+                 and comment.deleted_at is null
+                 and ((lineage.lead_id is not null
+                       and comment.entity_type::text = 'lead'
+                       and comment.entity_id = lineage.lead_id)
+                   or (lineage.student_id is not null
+                       and comment.entity_type::text = 'student'
+                       and comment.entity_id = lineage.student_id))
+             )
+             or audit.entity_type = 'shared_task' and exists (
+               select 1 from app.shared_tasks task
+               where task.id::text = audit.entity_id
+                 and task.deleted_at is null
+                 and ((lineage.lead_id is not null
+                       and task.linked_entity_type = 'lead'
+                       and task.linked_entity_id = lineage.lead_id)
+                   or (lineage.student_id is not null
+                       and task.linked_entity_type = 'student'
+                       and task.linked_entity_id = lineage.student_id))
+             )
+             or audit.entity_type = 'subscription' and exists (
+               select 1 from app.subscriptions subscription
+               where subscription.id::text = audit.entity_id
+                 and lineage.student_id is not null
+                 and (subscription.student_id = lineage.student_id
+                   or subscription.payer_student_id = lineage.student_id)
+             )
+             or audit.entity_type = 'client_payment_record' and exists (
+               select 1 from app.client_payment_records payment_record
+               left join app.subscriptions subscription
+                 on subscription.id = payment_record.issued_subscription_id
+               where payment_record.id::text = audit.entity_id
+                 and lineage.student_id is not null
+                 and (payment_record.student_id = lineage.student_id
+                   or subscription.student_id = lineage.student_id
+                   or subscription.payer_student_id = lineage.student_id)
+             )
+             or audit.entity_type = 'account_adjustment'
+               and lineage.student_id is not null
+               and audit.metadata ->> 'studentId' = lineage.student_id::text
+             or audit.entity_type = 'lesson' and exists (
+               select 1 from app.lessons lesson
+               where lesson.id::text = audit.entity_id
+                 and ((lineage.lead_id is not null and lesson.lead_id = lineage.lead_id)
+                   or (lineage.student_id is not null and lesson.student_id = lineage.student_id))
+             )
+             or audit.entity_type = 'lesson_batch' and exists (
+               select 1
+               from jsonb_array_elements(coalesce(audit.before_ref -> 'items', '[]'::jsonb)) item
+               join app.lessons lesson on lesson.id::text = item ->> 'lessonId'
+               where (lineage.lead_id is not null and lesson.lead_id = lineage.lead_id)
+                  or (lineage.student_id is not null and lesson.student_id = lineage.student_id)
+             )
+             or audit.entity_type = 'schedule_plan' and exists (
+               select 1 from app.schedule_plans plan
+               where plan.id::text = audit.entity_id
+                 and lineage.student_id is not null
+                 and (plan.student_id = lineage.student_id or exists (
+                   select 1 from app.schedule_plan_participants participant
+                   where participant.plan_id = plan.id
+                     and participant.student_id = lineage.student_id
+                 ))
+             )
+             or audit.entity_type = 'lead'
+               and lineage.lead_id is not null
+               and audit.entity_id = lineage.lead_id::text
+             or audit.entity_type = 'student'
+               and lineage.student_id is not null
+               and audit.entity_id = lineage.student_id::text
+           )
+       ),
+       status_history as (
+         select status_history.id,
+           case
+             when status_history.old_status_id is distinct from status_history.new_status_id
+               and status_history.old_owner_id is distinct from status_history.new_owner_id
+               then 'crm.lead_status_and_owner_changed'
+             when status_history.old_status_id is distinct from status_history.new_status_id
+               then 'crm.lead_status_changed'
+             else 'crm.lead_owner_changed'
+           end as action,
+           null::text as reason,
+           coalesce(
+             nullif(btrim(status_history.comment), ''),
+             nullif(btrim(status_history.reason_name_snapshot), '')
+           ) as reason_text,
+           '{}'::jsonb as metadata,
+           jsonb_build_object(
+             'status', old_status.name,
+             'ownerName', coalesce(
+               nullif(btrim(coalesce(old_owner_profile.first_name, '') || ' ' ||
+                 coalesce(old_owner_profile.last_name, '')), ''),
+               nullif(old_owner.full_name, '')
+             )
+           ) as before_ref,
+           jsonb_build_object(
+             'status', new_status.name,
+             'ownerName', coalesce(
+               nullif(btrim(coalesce(new_owner_profile.first_name, '') || ' ' ||
+                 coalesce(new_owner_profile.last_name, '')), ''),
+               nullif(new_owner.full_name, '')
+             )
+           ) as after_ref,
+           coalesce(
+             nullif(btrim(coalesce(actor_profile.first_name, '') || ' ' ||
+               coalesce(actor_profile.last_name, '')), ''),
+             nullif(actor_user.full_name, ''),
+             'Системный процесс'
+           ) as actor_name,
+           status_history.changed_at as created_at
+         from app.lead_status_history status_history
+         cross join lineage
+         left join app.lead_statuses old_status
+           on old_status.id = status_history.old_status_id
+         left join app.lead_statuses new_status
+           on new_status.id = status_history.new_status_id
+         left join app.users old_owner
+           on old_owner.id = status_history.old_owner_id and old_owner.deleted_at is null
+         left join app.profiles old_owner_profile
+           on old_owner_profile.user_id = old_owner.id and old_owner_profile.deleted_at is null
+         left join app.users new_owner
+           on new_owner.id = status_history.new_owner_id and new_owner.deleted_at is null
+         left join app.profiles new_owner_profile
+           on new_owner_profile.user_id = new_owner.id and new_owner_profile.deleted_at is null
+         left join app.users actor_user
+           on actor_user.id = status_history.changed_by and actor_user.deleted_at is null
+         left join app.profiles actor_profile
+           on actor_profile.user_id = actor_user.id and actor_profile.deleted_at is null
+         where lineage.lead_id is not null
+           and status_history.lead_id = lineage.lead_id
+       ),
+       history_event as (
+         select * from audit_history
+         union all
+         select * from status_history
+       ),
        cursor_event as (
-         select created_at, id from app.audit_events where id = $4::uuid
+         select created_at, id from history_event where id = $4::uuid
        )
-       select audit.id, audit.action, audit.reason, audit.reason_text,
-         audit.metadata, audit.before_ref, audit.after_ref,
-         coalesce(
-           nullif(btrim(coalesce(profile.first_name, '') || ' ' ||
-             coalesce(profile.last_name, '')), ''),
-           nullif(actor_user.full_name, ''),
-           'Системный процесс'
-         ) as actor_name,
-         audit.created_at
-       from app.audit_events audit
-       cross join lineage
-       left join app.users actor_user
-         on actor_user.id = audit.actor_user_id and actor_user.deleted_at is null
-       left join app.profiles profile
-         on profile.user_id = actor_user.id and profile.deleted_at is null
-       where audit.action = any($3::text[])
-         and (
-           audit.entity_type = 'client_internal_note' and exists (
-             select 1 from app.client_internal_notes note
-             where note.id::text = audit.entity_id
-               and ((lineage.lead_id is not null and note.lead_id = lineage.lead_id)
-                 or (lineage.student_id is not null and note.student_id = lineage.student_id))
-           )
-           or audit.entity_type = 'crm:comment' and exists (
-             select 1 from app.entity_comments comment
-             where comment.id::text = audit.entity_id
-               and comment.deleted_at is null
-               and ((lineage.lead_id is not null
-                     and comment.entity_type::text = 'lead'
-                     and comment.entity_id = lineage.lead_id)
-                 or (lineage.student_id is not null
-                     and comment.entity_type::text = 'student'
-                     and comment.entity_id = lineage.student_id))
-           )
-           or audit.entity_type = 'shared_task' and exists (
-             select 1 from app.shared_tasks task
-             where task.id::text = audit.entity_id
-               and task.deleted_at is null
-               and ((lineage.lead_id is not null
-                     and task.linked_entity_type = 'lead'
-                     and task.linked_entity_id = lineage.lead_id)
-                 or (lineage.student_id is not null
-                     and task.linked_entity_type = 'student'
-                     and task.linked_entity_id = lineage.student_id))
-           )
-           or audit.entity_type = 'subscription' and exists (
-             select 1 from app.subscriptions subscription
-             where subscription.id::text = audit.entity_id
-               and lineage.student_id is not null
-               and (subscription.student_id = lineage.student_id
-                 or subscription.payer_student_id = lineage.student_id)
-           )
-           or audit.entity_type = 'client_payment_record' and exists (
-             select 1 from app.client_payment_records payment_record
-             left join app.subscriptions subscription
-               on subscription.id = payment_record.issued_subscription_id
-             where payment_record.id::text = audit.entity_id
-               and lineage.student_id is not null
-               and (payment_record.student_id = lineage.student_id
-                 or subscription.student_id = lineage.student_id
-                 or subscription.payer_student_id = lineage.student_id)
-           )
-           or audit.entity_type = 'account_adjustment'
-             and lineage.student_id is not null
-             and audit.metadata ->> 'studentId' = lineage.student_id::text
-           or audit.entity_type = 'lesson' and exists (
-             select 1 from app.lessons lesson
-             where lesson.id::text = audit.entity_id
-               and ((lineage.lead_id is not null and lesson.lead_id = lineage.lead_id)
-                 or (lineage.student_id is not null and lesson.student_id = lineage.student_id))
-           )
-           or audit.entity_type = 'lesson_batch' and exists (
-             select 1
-             from jsonb_array_elements(coalesce(audit.before_ref -> 'items', '[]'::jsonb)) item
-             join app.lessons lesson on lesson.id::text = item ->> 'lessonId'
-             where (lineage.lead_id is not null and lesson.lead_id = lineage.lead_id)
-                or (lineage.student_id is not null and lesson.student_id = lineage.student_id)
-           )
-           or audit.entity_type = 'schedule_plan' and exists (
-             select 1 from app.schedule_plans plan
-             where plan.id::text = audit.entity_id
-               and lineage.student_id is not null
-               and (plan.student_id = lineage.student_id or exists (
-                 select 1 from app.schedule_plan_participants participant
-                 where participant.plan_id = plan.id
-                   and participant.student_id = lineage.student_id
-               ))
-           )
-           or audit.entity_type = 'lead'
-             and lineage.lead_id is not null
-             and audit.entity_id = lineage.lead_id::text
-           or audit.entity_type = 'student'
-             and lineage.student_id is not null
-             and audit.entity_id = lineage.student_id::text
+       select history.id, history.action, history.reason, history.reason_text,
+         history.metadata, history.before_ref, history.after_ref,
+         history.actor_name, history.created_at
+       from history_event history
+       where $4::uuid is null
+         or (history.created_at, history.id) < (
+           select created_at, id from cursor_event
          )
-         and (
-           $4::uuid is null
-           or (audit.created_at, audit.id) < (
-             select created_at, id from cursor_event
-           )
-         )
-       order by audit.created_at desc, audit.id desc
+       order by history.created_at desc, history.id desc
        limit $5`,
       [ref.type, ref.id, HISTORY_ACTIONS, query.cursor ?? null, limit + 1],
     );
@@ -348,6 +422,16 @@ export class ClientInternalContextService {
 
   private async assertStaffScoped(actor: ActorContext, ref: ClientRef) {
     if (!isManagerOrAdminRole(actor.role)) {
+      throw new ForbiddenException("Внутренняя информация клиента недоступна.");
+    }
+    const currentAccess = await this.database.query<{ allowed: boolean }>(
+      `select coalesce(
+         ${managerAdminRolesSql(currentActorRoleSql("$1"))},
+         false
+       ) as allowed`,
+      [actor.userId],
+    );
+    if (currentAccess.rows[0]?.allowed !== true) {
       throw new ForbiddenException("Внутренняя информация клиента недоступна.");
     }
     await this.references.resolve(actor, ref);
@@ -430,6 +514,24 @@ export class ClientInternalContextService {
         Number(after["sharedWithTeacher"] === true)
       ];
     }
+    if (
+      action === "crm.lead_status_changed" ||
+      action === "crm.lead_owner_changed" ||
+      action === "crm.lead_status_and_owner_changed"
+    ) {
+      const changes: string[] = [];
+      if (before["status"] !== after["status"]) {
+        changes.push(
+          `Статус: ${before["status"] ?? "Не указано"} → ${after["status"] ?? "Не указано"}`,
+        );
+      }
+      if (before["ownerName"] !== after["ownerName"]) {
+        changes.push(
+          `Ответственный: ${before["ownerName"] ?? "Не назначен"} → ${after["ownerName"] ?? "Не назначен"}`,
+        );
+      }
+      return changes.join("\n") || null;
+    }
     if (action !== "crm.lessons_bulk_transitioned") return null;
     const items = before["items"];
     const count = Array.isArray(items) ? items.length : 0;
@@ -464,6 +566,13 @@ export class ClientInternalContextService {
     if (action === "workflow.shared_task_created") return "Задача создана";
     if (action === "workflow.shared_task_updated") return "Задача изменена";
     if (action === "workflow.shared_task_closed") return "Задача закрыта";
+    if (
+      action === "crm.lead_status_changed" ||
+      action === "crm.lead_owner_changed" ||
+      action === "crm.lead_status_and_owner_changed"
+    ) {
+      return "Изменение зафиксировано в истории клиента";
+    }
     return null;
   }
 

@@ -21,10 +21,9 @@ describe("schedule read contract", () => {
   };
 
   it("depends only on database and CRM policy", () => {
-    expect(Reflect.getMetadata("design:paramtypes", ScheduleReadService)).toEqual([
-      DatabaseService,
-      CrmPolicy,
-    ]);
+    expect(
+      Reflect.getMetadata("design:paramtypes", ScheduleReadService),
+    ).toEqual([DatabaseService, CrmPolicy]);
   });
 
   describe("«оплаты по дням» (✔ владелец 17.07)", () => {
@@ -55,9 +54,8 @@ describe("schedule read contract", () => {
       expect(sql).not.toMatch(/coalesce\(sum\(pay\.amount\)/);
     });
 
-    it("never lets a teacher see the client's money", async () => {
-      const { service, query, policy } = createService([]);
-      policy.canReadStudentFinance.mockReturnValue(false);
+    it("gates client money with the current database role", async () => {
+      const { service, query } = createService([]);
 
       await service.listLessons(
         { userId: "teacher-1", role: "teacher" as const },
@@ -65,9 +63,11 @@ describe("schedule read contract", () => {
       );
 
       const sql = String(query.mock.calls[0][0]);
-      // Не «скрыто в UI», а не выбрано из базы вовсе.
-      expect(sql).toContain("null::numeric as paid_amount");
-      expect(sql).not.toContain("app.payments");
+      // Не «скрыто в UI»: PostgreSQL возвращает null, опираясь на актуальную
+      // роль из app.users, даже если JWT с прежней ролью ещё не истёк.
+      expect(sql).toContain("from app.users scope_actor");
+      expect(sql).toContain("else null::numeric end as paid_amount");
+      expect(sql).toContain("= 'client'");
     });
 
     it("shows a client the payments for their own lesson", async () => {
@@ -88,19 +88,22 @@ describe("schedule read contract", () => {
   describe("applied teacher rate", () => {
     const clientActor = { userId: "client-1", role: "client" as const };
 
-    it("never selects pay rates for an actor who may not see them", async () => {
-      const { service, query, policy } = createService([]);
-      policy.canReadTeacherRates.mockReturnValue(false);
+    it("gates pay rates with the current database role", async () => {
+      const { service, query } = createService([]);
 
       await service.listLessons(clientActor, { limit: 10 });
 
       const sql = String(query.mock.calls[0][0]);
-      // listLessons serves clients too, so the rate must not merely be hidden
-      // in the UI — it must never leave the database.
-      expect(sql).toContain("null::numeric as applied_teacher_rate");
-      expect(sql).toContain("null::text as teacher_compensation_rule_key");
-      expect(sql).toContain("null::text as teacher_compensation_value_minor");
-      expect(sql).not.toContain("app.teacher_rates");
+      // listLessons serves clients too, so SQL itself must null the projection
+      // according to app.users.role rather than trusting the JWT claim.
+      expect(sql).toContain("from app.users scope_actor");
+      expect(sql).toContain("else null::numeric end as applied_teacher_rate");
+      expect(sql).toContain(
+        "else null::text end as teacher_compensation_rule_key",
+      );
+      expect(sql).toContain(
+        "else null::text end as teacher_compensation_value_minor",
+      );
     });
 
     it("resolves lesson → group → history → 0 for finance roles", async () => {
@@ -115,18 +118,18 @@ describe("schedule read contract", () => {
       const sql = String(query.mock.calls[0][0]);
       // Same precedence as computeLessonAccrual in payroll.service.ts.
       expect(sql).toMatch(
-        /coalesce\(\s*l\.teacher_rate,\s*g\.teacher_rate,[\s\S]*app\.teacher_rates[\s\S]*0\s*\)\s*as applied_teacher_rate/,
+        /coalesce\(\s*l\.teacher_rate,\s*g\.teacher_rate,[\s\S]*app\.teacher_rates[\s\S]*0\s*\)\s*else null::numeric end as applied_teacher_rate/,
       );
       expect(sql).toContain(
-        "plan.decision ->> 'teacherCompensationRuleKey' as teacher_compensation_rule_key",
+        "plan.decision ->> 'teacherCompensationRuleKey' else null::text end as teacher_compensation_rule_key",
       );
       expect(sql).toContain(
-        "plan.decision ->> 'teacherCompensationValueMinor' as teacher_compensation_value_minor",
+        "plan.decision ->> 'teacherCompensationValueMinor' else null::text end as teacher_compensation_value_minor",
       );
     });
 
-    it("asks the per-lesson gate, not the aggregate-finance one", async () => {
-      const { service, policy } = createService([]);
+    it("uses the current-role per-lesson gate, not the aggregate-finance gate", async () => {
+      const { service, query, policy } = createService([]);
       const managerActor = { userId: "mgr-1", role: "manager" as const };
 
       await service.listLessons(managerActor, { limit: 10 });
@@ -134,7 +137,10 @@ describe("schedule read contract", () => {
       // The owner's 16.07 decision: a per-lesson rate is not a school-wide
       // total, so admin/manager see it. Gating this on canReadSchoolFinance
       // would hide it from exactly the people who set it.
-      expect(policy.canReadTeacherRates).toHaveBeenCalledWith(managerActor);
+      expect(String(query.mock.calls[0][0])).toContain(
+        "scope_actor.role::text",
+      );
+      expect(policy.canReadTeacherRates).not.toHaveBeenCalled();
       expect(policy.canReadSchoolFinance).not.toHaveBeenCalled();
     });
   });
@@ -146,13 +152,15 @@ describe("schedule read contract", () => {
       { limit: 10 },
     );
     const clientSql = String(client.query.mock.calls[0][0]);
-    expect(clientSql).toContain("null::text as settlement_failure_code");
+    expect(clientSql).toContain(
+      "then plan.failure_code else null::text end as settlement_failure_code",
+    );
     expect(clientSql).toContain("app.lesson_settlement_plans plan");
 
     const manager = createService([]);
     await manager.service.listLessons(actor, { limit: 10 });
     expect(String(manager.query.mock.calls[0][0])).toContain(
-      "plan.failure_code as settlement_failure_code",
+      "then plan.failure_code else null::text end as settlement_failure_code",
     );
   });
 
@@ -198,9 +206,14 @@ describe("schedule read contract", () => {
     expect(String(query.mock.calls[0][0])).toContain(
       "l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
     );
+    expect(String(query.mock.calls[0][0])).toContain(
+      "from app.users scope_actor",
+    );
+    expect(String(query.mock.calls[0][0])).toContain(
+      "scope_assignment.branch_id::text = coalesce(l.branch_id::text, g.branch_id::text, r.branch_id::text)",
+    );
 
     expect(query.mock.calls[0][1]).toEqual([
-      "manager",
       "manager-a",
       null,
       null,
@@ -212,43 +225,22 @@ describe("schedule read contract", () => {
     ]);
   });
 
-  it("fails closed for an unknown role bound through $1", async () => {
+  it("fails closed when the current database role is unknown", async () => {
     const { service, query } = createService([]);
     const unknownActor = {
       userId: "00000000-0000-4000-8000-000000000099",
       role: "unknown-role" as never,
     };
 
-    await expect(service.listLessons(unknownActor, { limit: 10 })).resolves.toEqual({
+    await expect(
+      service.listLessons(unknownActor, { limit: 10 }),
+    ).resolves.toEqual({
       items: [],
     });
 
     const [rawSql, params] = query.mock.calls[0];
     const sql = String(rawSql);
-    const predicateStart = sql.indexOf("$1::text in (");
-    const predicateEnd = sql.indexOf(
-      "\n        order by l.scheduled_at",
-      predicateStart,
-    );
-    const rolePredicate = sql.slice(predicateStart, predicateEnd).trim();
-    const branches: string[] = [];
-    let depth = 0;
-    let branchStart = 0;
-
-    for (let index = 0; index < rolePredicate.length; index += 1) {
-      if (rolePredicate[index] === "(") depth += 1;
-      if (rolePredicate[index] === ")") depth -= 1;
-      const separator = rolePredicate.slice(index).match(/^\s+or\s+/);
-      if (depth === 0 && separator) {
-        branches.push(rolePredicate.slice(branchStart, index).trim());
-        index += separator[0].length - 1;
-        branchStart = index + 1;
-      }
-    }
-    branches.push(rolePredicate.slice(branchStart, -1).trim());
-
     expect(params).toEqual([
-      "unknown-role",
       "00000000-0000-4000-8000-000000000099",
       null,
       null,
@@ -258,11 +250,11 @@ describe("schedule read contract", () => {
       null,
       10,
     ]);
-    expect(branches).toEqual([
-      "$1::text in ('manager', 'director', 'admin', 'system_admin')",
-      "($1::text = 'teacher' and tp.user_id = $2)",
-      expect.stringMatching(/^\(\$1::text = 'client' and \([\s\S]+\)\)$/),
-    ]);
+    expect(sql).toContain("from app.users scope_actor");
+    expect(sql).toContain("scope_actor.role::text");
+    expect(sql).toContain("= 'teacher' and tp.user_id = $1");
+    expect(sql).toContain("= 'client' and (");
+    expect(sql).not.toContain("$1::text in ('manager'");
   });
 
   it("loads one exact terminal lesson without weakening actor scope", async () => {
@@ -275,11 +267,11 @@ describe("schedule read contract", () => {
     );
 
     const sql = String(query.mock.calls[0][0]);
-    expect(sql).toContain("$3::uuid is not null");
-    expect(sql).toContain("$3::uuid is null or l.id = $3");
-    expect(sql).toContain("$1::text = 'teacher' and tp.user_id = $2");
+    expect(sql).toContain("$2::uuid is not null");
+    expect(sql).toContain("$2::uuid is null or l.id = $2");
+    expect(sql).toContain("= 'teacher' and tp.user_id = $1");
+    expect(sql).toContain("from app.users scope_actor");
     expect(query.mock.calls[0][1]).toEqual([
-      "teacher",
       "teacher-1",
       lessonId,
       null,
@@ -311,16 +303,19 @@ describe("schedule read contract", () => {
       "l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
     );
     expect(sql).toContain(
-      "to_char((l.scheduled_at at time zone 'Europe/Moscow')::date, 'YYYY-MM-DD') as day",
+      "timezone(coalesce(b.timezone_name, 'Europe/Moscow'), l.scheduled_at)::date",
     );
     expect(params).toEqual([
       "2026-05-31T21:00:00.000Z",
       "2026-06-30T21:00:00.000Z",
       null,
-      "manager",
       "manager-a",
     ]);
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(sql).toContain("from app.users scope_actor");
+    expect(sql).toContain(
+      "scope_assignment.branch_id::text = coalesce(l.branch_id::text, g.branch_id::text, r.branch_id::text)",
+    );
   });
 
   it("keeps post-conversion lessons visible to manual-link and family clients", async () => {
@@ -337,7 +332,6 @@ describe("schedule read contract", () => {
     expect(sql).toContain("account_member.role in ('parent', 'payer')");
     expect(sql).toContain("app.user_crm_links group_student_link");
     expect(query.mock.calls[0][1]).toEqual([
-      "client",
       "client-parent",
       null,
       "student-a",
@@ -455,12 +449,14 @@ describe("schedule read contract", () => {
       "student-a",
       "lead-a",
       true,
+      null,
       30,
-      "manager",
       "manager-a",
     ]);
-    expect(String(query.mock.calls[0][0])).toContain(
-      "$10::text <> 'teacher' or tp.user_id = $11::uuid",
+    expect(String(query.mock.calls[0][0])).toContain("scope_actor.role::text");
+    expect(sql).toContain("from app.users scope_actor");
+    expect(sql).toContain(
+      "scope_assignment.branch_id::text = coalesce(l.branch_id::text, g.branch_id::text, r.branch_id::text)",
     );
   });
 

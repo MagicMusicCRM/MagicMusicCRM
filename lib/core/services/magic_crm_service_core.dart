@@ -29,7 +29,7 @@ extension MagicCrmCore on MagicCrmService {
     required String clientType,
     required String clientId,
     String? cursor,
-    int limit = 30,
+    int limit = 10,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/clients/$clientType/$clientId/operational-history',

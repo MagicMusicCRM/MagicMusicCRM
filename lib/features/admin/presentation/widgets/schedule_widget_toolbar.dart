@@ -321,7 +321,9 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
     final selectedExists = _branches.any(
       (branch) => branch['id']?.toString() == _selectedBranchId,
     );
-    final value = selectedExists
+    final value = _allBranchesSelected
+        ? _allBranchesScopeValue
+        : selectedExists
         ? _selectedBranchId
         : _branches.first['id']?.toString();
 
@@ -343,6 +345,10 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
                 contentPadding: EdgeInsets.symmetric(horizontal: 12),
               ),
               items: [
+                const DropdownMenuItem(
+                  value: _allBranchesScopeValue,
+                  child: Text('Все филиалы'),
+                ),
                 for (final branch in _branches)
                   DropdownMenuItem(
                     value: branch['id']?.toString(),
@@ -354,10 +360,16 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
                   ),
               ],
               onChanged: (id) {
-                if (id == null || id == _selectedBranchId) return;
+                if (id == null) return;
+                final allBranches = id == _allBranchesScopeValue;
+                if (allBranches == _allBranchesSelected &&
+                    (allBranches || id == _selectedBranchId)) {
+                  return;
+                }
                 _emitState(() {
                   _clearHighlight();
-                  _selectedBranchId = id;
+                  _allBranchesSelected = allBranches;
+                  _selectedBranchId = allBranches ? null : id;
                 });
                 _fetchAll();
               },

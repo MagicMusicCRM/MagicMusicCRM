@@ -275,8 +275,12 @@ extension MagicCrmOrg on MagicCrmService {
     String? roomId,
     String? teacherId,
     String? date,
+    String? dayFrom,
+    String? dayTo,
     String? from,
     String? to,
+    int? slotFromMinutes,
+    int? slotToMinutes,
     int? durationMinutes,
     int limit = 100,
   }) async {
@@ -292,8 +296,16 @@ extension MagicCrmOrg on MagicCrmService {
     addString('roomId', roomId);
     addString('teacherId', teacherId);
     addString('date', date);
+    addString('dayFrom', dayFrom);
+    addString('dayTo', dayTo);
     addString('from', from);
     addString('to', to);
+    if (slotFromMinutes != null) {
+      queryParameters['slotFromMinutes'] = slotFromMinutes;
+    }
+    if (slotToMinutes != null) {
+      queryParameters['slotToMinutes'] = slotToMinutes;
+    }
     if (durationMinutes != null) {
       queryParameters['durationMinutes'] = durationMinutes;
     }

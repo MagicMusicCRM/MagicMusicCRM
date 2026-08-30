@@ -8,11 +8,13 @@ import {
 import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
+import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
 import { RoomAvailabilityQuery } from "./dto/room-availability.query";
 import { RoomListQuery } from "./dto/room-lifecycle.dto";
 import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { CrmPolicy } from "./crm.policy";
+import { currentActorRoleSql, managerBranchScopeSql } from "./branch-scope";
 import { assertSettingsBranchScope } from "./settings-branch-scope";
 
 interface RoomRow {
@@ -91,22 +93,112 @@ export class RoomsService {
     );
   }
 
-  private roomAvailabilityBounds(query: RoomAvailabilityQuery) {
+  private async roomAvailabilityBounds(
+    actor: ActorContext,
+    query: RoomAvailabilityQuery,
+  ) {
+    if ((query.dayFrom == null) !== (query.dayTo == null)) {
+      throw new BadRequestException(
+        "Границы локального дня должны быть переданы вместе.",
+      );
+    }
+    if ((query.slotFromMinutes == null) !== (query.slotToMinutes == null)) {
+      throw new BadRequestException(
+        "Локальные границы слота должны быть переданы вместе.",
+      );
+    }
+    if (
+      query.slotFromMinutes != null &&
+      query.slotToMinutes != null &&
+      query.slotToMinutes <= query.slotFromMinutes
+    ) {
+      throw new BadRequestException(
+        "Окончание локального слота должно быть позже начала.",
+      );
+    }
+
+    if (query.dayFrom == null && query.branchId && query.date) {
+      const zoned = await this.database.query<{
+        day_from: Date | string;
+        day_to: Date | string;
+        slot_from: Date | string;
+        slot_to: Date | string;
+      }>(
+        `
+          select
+            ($2::date::timestamp at time zone coalesce(branch.timezone_name, 'Europe/Moscow')) as day_from,
+            (($2::date + 1)::timestamp at time zone coalesce(branch.timezone_name, 'Europe/Moscow')) as day_to,
+            (($2::date::timestamp + make_interval(mins => $3::int))
+              at time zone coalesce(branch.timezone_name, 'Europe/Moscow')) as slot_from,
+            (($2::date::timestamp + make_interval(mins => $4::int))
+              at time zone coalesce(branch.timezone_name, 'Europe/Moscow')) as slot_to
+          from app.branches branch
+          where branch.id = $1::uuid
+            and branch.deleted_at is null
+            and ${managerAdminRolesSql(currentActorRoleSql("$5"))}
+            and ${managerBranchScopeSql({
+              roleExpression: currentActorRoleSql("$5"),
+              userIdExpression: "$5",
+              branchExpression: "branch.id::text",
+            })}
+        `,
+        [
+          query.branchId,
+          query.date,
+          query.slotFromMinutes ?? 0,
+          query.slotToMinutes ?? 1440,
+          actor.userId,
+        ],
+      );
+      const row = zoned.rows[0];
+      if (row) {
+        const iso = (value: Date | string) => new Date(value).toISOString();
+        return {
+          dayFrom: iso(row.day_from),
+          dayTo: iso(row.day_to),
+          slotFrom:
+            query.slotFromMinutes == null && query.from
+              ? new Date(query.from).toISOString()
+              : iso(row.slot_from),
+          slotTo:
+            query.slotToMinutes == null && query.to
+              ? new Date(query.to).toISOString()
+              : iso(row.slot_to),
+        };
+      }
+    }
     const reference = query.date
       ? new Date(query.date)
       : query.from
         ? new Date(query.from)
         : new Date();
-    const dayStart = this.utcDayStart(reference);
-    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-    const slotFrom = query.from ? new Date(query.from) : dayStart;
-    const slotTo = query.to
-      ? new Date(query.to)
-      : query.from
-        ? new Date(
-            slotFrom.getTime() + (query.durationMinutes ?? 60) * 60 * 1000,
-          )
-        : dayEnd;
+    const dayStart = query.dayFrom
+      ? new Date(query.dayFrom)
+      : this.utcDayStart(reference);
+    const dayEnd = query.dayTo
+      ? new Date(query.dayTo)
+      : new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    if (dayEnd <= dayStart) {
+      throw new BadRequestException(
+        "Окончание локального дня должно быть позже начала.",
+      );
+    }
+    const slotFrom =
+      query.slotFromMinutes != null
+        ? new Date(dayStart.getTime() + query.slotFromMinutes * 60 * 1000)
+        : query.from
+          ? new Date(query.from)
+          : dayStart;
+    const slotTo =
+      query.slotToMinutes != null
+        ? new Date(dayStart.getTime() + query.slotToMinutes * 60 * 1000)
+        : query.to
+          ? new Date(query.to)
+          : query.from
+            ? new Date(
+                slotFrom.getTime() + (query.durationMinutes ?? 60) * 60 * 1000,
+              )
+            : dayEnd;
 
     return {
       dayFrom: dayStart.toISOString(),
@@ -140,21 +232,16 @@ export class RoomsService {
           r.archive_effective_date, r.created_at
         from app.rooms r
         left join app.branches b on b.id = r.branch_id
-        where ($6::boolean or r.deleted_at is null)
+        where ($5::boolean or r.deleted_at is null)
           and (
-            $4::text <> 'manager'
-            or exists (
-              select 1
-              from app.user_crm_links link
-              join app.staff_members staff on staff.id = link.entity_id
-                and link.entity_type = 'staff' and link.deleted_at is null
-                and staff.deleted_at is null
-              join app.staff_branch_assignments assignment
-                on assignment.staff_member_id = staff.id
-                and assignment.deleted_at is null
-              where link.user_id = $5 and assignment.branch_id = r.branch_id
-            )
+            ${managerAdminRolesSql(currentActorRoleSql("$4"))}
+            or ${currentActorRoleSql("$4")} = 'teacher'
           )
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$4"),
+            userIdExpression: "$4",
+            branchExpression: "r.branch_id::text",
+          })}
           and ($1::uuid is null or r.branch_id = $1)
           and (
             $2::text is null
@@ -163,14 +250,7 @@ export class RoomsService {
         order by b.name nulls last, r.name asc, r.id asc
         limit $3
       `,
-      [
-        query.branchId ?? null,
-        q || null,
-        limit,
-        actor.role,
-        actor.userId,
-        includeArchived,
-      ],
+      [query.branchId ?? null, q || null, limit, actor.userId, includeArchived],
     );
 
     return { items: result.rows.map((row) => this.toRoomDto(row)) };
@@ -180,9 +260,9 @@ export class RoomsService {
     actor: ActorContext,
     query: RoomAvailabilityQuery,
   ) {
-    this.policy.assertCanReadOperationalData(actor);
+    this.policy.assertManagerOnly(actor);
     const limit = Math.min(query.limit ?? 100, 200);
-    const bounds = this.roomAvailabilityBounds(query);
+    const bounds = await this.roomAvailabilityBounds(actor, query);
     const result = await this.database.query<RoomAvailabilityRow>(
       `
         with room_rows as (
@@ -190,9 +270,15 @@ export class RoomsService {
             r.name as room_name, r.capacity
           from app.rooms r
           left join app.branches b on b.id = r.branch_id and b.deleted_at is null
-          where r.deleted_at is null
-            and ($1::uuid is null or r.branch_id = $1)
-            and ($2::uuid is null or r.id = $2)
+           where r.deleted_at is null
+             and ${managerAdminRolesSql(currentActorRoleSql("$9"))}
+             and ($1::uuid is null or r.branch_id = $1)
+             and ($2::uuid is null or r.id = $2)
+             and ${managerBranchScopeSql({
+               roleExpression: currentActorRoleSql("$9"),
+               userIdExpression: "$9",
+               branchExpression: "r.branch_id::text",
+             })}
           order by b.name nulls last, r.name asc, r.id asc
           limit $8
         ),
@@ -285,6 +371,7 @@ export class RoomsService {
         bounds.slotTo,
         query.teacherId ?? null,
         limit,
+        actor.userId,
       ],
     );
 

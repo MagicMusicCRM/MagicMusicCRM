@@ -192,7 +192,10 @@ extension _ScheduleContextBanners on _ScheduleWidgetState {
 
   List<Map<String, dynamic>> _conflictsForSelectedDay() {
     return _scheduleConflicts.where((conflict) {
-      final dt = _parseServerTime(conflict['scheduled_at']);
+      final dt = _parseServerTime(
+        conflict['scheduled_at'],
+        conflict['scheduled_utc_offset_minutes'],
+      );
       return dt != null &&
           dt.year == _selectedDate.year &&
           dt.month == _selectedDate.month &&

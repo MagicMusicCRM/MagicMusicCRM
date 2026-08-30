@@ -82,7 +82,6 @@ extension _ClientCardRealtime on _ClientCardState {
         // editor epoch stay local, so focus/caret/drafts survive late echoes.
         if (_mode.hasLeadHalf && _leadId.isNotEmpty) {
           _fetchCard(preserveVisibleContent: true);
-          _fetchStatusHistory();
         }
         if (_mode.hasStudentHalf && _studentId.isNotEmpty) {
           _fetchStudentData(preserveVisibleContent: true);

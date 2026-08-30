@@ -55,6 +55,8 @@ const List<Color> _roomColors = [
   AppColor.danger, // красный (статус)
 ];
 
+const _allBranchesScopeValue = '__all_branches_scope__';
+
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 // ── Russian month names ─────────────────────────────────────────────────────
@@ -129,6 +131,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // UI state
   String? _selectedBranchId;
+  // `null` branch id is also used before the first automatic branch choice.
+  // Keep the user's explicit «Все филиалы» choice separate so later reloads
+  // never collapse it back to the home/first branch.
+  bool _allBranchesSelected = false;
   ScheduleView _currentView = ScheduleView.month;
   DayViewMode _dayViewMode = DayViewMode.byRoom;
   // Extra schedule filters (applied client-side over already-loaded lessons —
@@ -220,7 +226,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     _filterClientType = focus.clientType;
     _filterClientId = focus.clientId;
     _filterClientName = focus.clientName;
-    _selectedBranchId = focus.branchId ?? _selectedBranchId;
+    if (focus.branchId != null) {
+      _selectedBranchId = focus.branchId;
+      _allBranchesSelected = false;
+    }
     _hideOtherClientLessons = false;
     _restoredPendingClientFocus = true;
   }
@@ -241,6 +250,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
         filters['branchId']?.toString() ??
         filters['clientCalendarBranchId']?.toString() ??
         widget.initialBranchId;
+    _allBranchesSelected =
+        _selectedBranchId == null && filters['branchScope'] == 'all';
+    if (_allBranchesSelected) _selectedBranchId = null;
     _filterTeacherId =
         widget.fixedTeacherId ?? filters['teacherId']?.toString();
     _filterRoomId = filters['roomId']?.toString();
@@ -289,6 +301,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (widget.clientId != null) 'section': 'lessons',
       if (widget.clientId != null) 'clientCalendarMode': _currentView.name,
       if (_selectedBranchId != null) 'branchId': _selectedBranchId,
+      if (_allBranchesSelected) 'branchScope': 'all',
       if (widget.clientId != null && _selectedBranchId != null)
         'clientCalendarBranchId': _selectedBranchId,
       if (_filterTeacherId != null) 'teacherId': _filterTeacherId,

@@ -219,4 +219,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Назначить ДЗ'), findsOneWidget);
   });
+
+  testWidgets('progress shows the shared empty state when homework is empty', (
+    tester,
+  ) async {
+    final api = FakeCardApiClient(
+      role: 'admin',
+      lead: const {
+        'id': 'lead-1',
+        'firstName': 'Анна',
+        'lastName': 'Смирнова',
+        'statusId': null,
+        'customData': <String, dynamic>{},
+      },
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'lead-1', 'name': 'Анна', 'custom_data': {}},
+    );
+
+    final progress = find.text('Прогресс');
+    await tester.ensureVisible(progress);
+    await tester.tap(progress);
+    await tester.pumpAndSettle();
+
+    final emptyState = find.byKey(const Key('homework-empty-state'));
+    expect(emptyState, findsOneWidget);
+    expect(
+      find.descendant(
+        of: emptyState,
+        matching: find.text('Домашних заданий пока нет'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: emptyState,
+        matching: find.byIcon(Icons.inbox_outlined),
+      ),
+      findsOneWidget,
+    );
+  });
 }

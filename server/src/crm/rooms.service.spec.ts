@@ -12,6 +12,7 @@ describe("RoomsService", () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
+      assertManagerOnly: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertCanManageSystemSettings: jest.fn(),
     };
@@ -70,10 +71,15 @@ describe("RoomsService", () => {
       "branch-a",
       null,
       5,
-      "manager",
       "manager-a",
       false,
     ]);
+    expect(String(query.mock.calls[0][0])).toContain(
+      "from app.users scope_actor",
+    );
+    expect(String(query.mock.calls[0][0])).toContain(
+      "scope_assignment.branch_id::text = r.branch_id::text",
+    );
   });
 
   it("returns room availability with slot conflicts", async () => {
@@ -106,14 +112,16 @@ describe("RoomsService", () => {
         roomId: "room-a",
         teacherId: "teacher-a",
         date: "2026-06-15",
+        dayFrom: "2026-06-14T21:00:00.000Z",
+        dayTo: "2026-06-15T21:00:00.000Z",
         from: "2026-06-15T09:00:00.000Z",
         to: "2026-06-15T10:00:00.000Z",
         durationMinutes: 60,
         limit: 20,
       }),
     ).resolves.toEqual({
-      dateFrom: "2026-06-15T00:00:00.000Z",
-      dateTo: "2026-06-16T00:00:00.000Z",
+      dateFrom: "2026-06-14T21:00:00.000Z",
+      dateTo: "2026-06-15T21:00:00.000Z",
       slotFrom: "2026-06-15T09:00:00.000Z",
       slotTo: "2026-06-15T10:00:00.000Z",
       items: [
@@ -140,17 +148,39 @@ describe("RoomsService", () => {
       ],
     });
 
-    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
+    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    expect(String(query.mock.calls[0][0])).toContain(
+      "from app.users scope_actor",
+    );
+    expect(String(query.mock.calls[0][0])).toContain(
+      "scope_assignment.branch_id::text = r.branch_id::text",
+    );
     expect(query.mock.calls[0][1]).toEqual([
       "branch-a",
       "room-a",
-      "2026-06-15T00:00:00.000Z",
-      "2026-06-16T00:00:00.000Z",
+      "2026-06-14T21:00:00.000Z",
+      "2026-06-15T21:00:00.000Z",
       "2026-06-15T09:00:00.000Z",
       "2026-06-15T10:00:00.000Z",
       "teacher-a",
       20,
+      "manager-a",
     ]);
+  });
+
+  it("rejects teacher access to lesson identities in room availability", async () => {
+    const { service, policy, query } = createService();
+    policy.assertManagerOnly.mockImplementationOnce(() => {
+      throw new Error("denied");
+    });
+
+    await expect(
+      service.listRoomAvailability(
+        { userId: "teacher-a", role: "teacher" },
+        { branchId: "branch-a" },
+      ),
+    ).rejects.toThrow("denied");
+    expect(query).not.toHaveBeenCalled();
   });
 
   it("creates rooms through CRM write policy and audit", async () => {

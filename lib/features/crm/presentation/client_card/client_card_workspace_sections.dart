@@ -343,11 +343,12 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               Icons.comment_outlined,
               _buildCommentsTab(cs, embedded: true),
             ),
-            (
-              'История',
-              Icons.history_rounded,
-              _buildStudentHistoryTab(cs, embedded: true),
-            ),
+            if (_internalContextAllowed)
+              (
+                'История',
+                Icons.history_rounded,
+                _buildStudentHistoryTab(cs, embedded: true),
+              ),
           ]
         : <(String, IconData, Widget)>[
             if (canReadTasks)
@@ -361,11 +362,12 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               Icons.comment_outlined,
               _buildCommentsTab(cs, embedded: true),
             ),
-            (
-              'История',
-              Icons.history_rounded,
-              _buildHistoryTab(cs, embedded: true),
-            ),
+            if (_internalContextAllowed)
+              (
+                'История',
+                Icons.history_rounded,
+                _buildHistoryTab(cs, embedded: true),
+              ),
           ];
     return Padding(
       padding: const EdgeInsets.all(AppSpace.lg),
@@ -562,12 +564,13 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         ? <(String, Widget)>[
             if (canReadTasks) ('Задачи', _buildStudentTasksTab(cs)),
             ('Комментарии', _buildCommentsTab(cs)),
-            ('История', _buildStudentHistoryTab(cs)),
+            if (_internalContextAllowed)
+              ('История', _buildStudentHistoryTab(cs)),
           ]
         : <(String, Widget)>[
             if (canReadTasks) ('Задачи', _buildTasksTab(cs)),
             ('Комментарии', _buildCommentsTab(cs)),
-            ('История', _buildHistoryTab(cs)),
+            if (_internalContextAllowed) ('История', _buildHistoryTab(cs)),
           ];
     return DefaultTabController(
       length: tabs.length,

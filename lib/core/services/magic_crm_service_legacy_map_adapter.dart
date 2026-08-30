@@ -363,6 +363,7 @@ Map<String, dynamic> _legacyRoomAvailability(Map<String, dynamic> item) {
 Map<String, dynamic> _legacyScheduleLesson(Map<String, dynamic> item) {
   return {
     ..._legacyLesson(item),
+    'scheduled_utc_offset_minutes': item['scheduledUtcOffsetMinutes'],
     'group_participants': item['groupParticipants'] ?? const [],
     'conflict_types': item['conflictTypes'] ?? const [],
   };
@@ -381,6 +382,7 @@ Map<String, dynamic> _legacyScheduleConflict(Map<String, dynamic> item) {
     'type': item['type'],
     'lesson_id': item['lessonId'],
     'scheduled_at': item['scheduledAt'],
+    'scheduled_utc_offset_minutes': item['scheduledUtcOffsetMinutes'],
     'room_id': item['roomId'],
     'teacher_id': item['teacherId'],
   };

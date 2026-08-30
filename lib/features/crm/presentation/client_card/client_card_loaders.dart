@@ -1,9 +1,6 @@
 part of 'client_card.dart';
 
 extension _ClientCardLoaders on _ClientCardState {
-  // The student timeline is part of the student card payload; kept separately so
-  // the merged history can fold it in alongside the lead status history.
-
   // Loads the student card in one round-trip (getStudentCard), mirroring
   // student_detail_screen._loadAllData. Per-section failures are isolated: the
   // bulk card load only fails the card if the student record itself is
@@ -102,7 +99,6 @@ extension _ClientCardLoaders on _ClientCardState {
         _studentTasks = _list(card['tasks']);
         _studentComments = _list(card['comments']);
         _groups = _list(card['groups']);
-        _studentCardTimeline = _list(card['timeline']);
         _studentTasks.sort(
           (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
         );
@@ -231,27 +227,6 @@ extension _ClientCardLoaders on _ClientCardState {
     } catch (e) {
       debugPrint('Duplicate candidates load failed: $e');
       if (mounted) _emitState(() => _loadingDuplicates = false);
-    }
-  }
-
-  Future<void> _fetchStatusHistory({String? leadId}) async {
-    final id = leadId ?? _leadId;
-    if (id.isEmpty) {
-      if (mounted) _emitState(() => _loadingHistory = false);
-      return;
-    }
-    try {
-      final items = await ref
-          .read(magicCrmServiceProvider)
-          .getLeadStatusHistory(id);
-      if (!mounted) return;
-      _emitState(() {
-        _statusHistory = items;
-        _loadingHistory = false;
-      });
-    } catch (e) {
-      debugPrint('Lead status history load failed: $e');
-      if (mounted) _emitState(() => _loadingHistory = false);
     }
   }
 

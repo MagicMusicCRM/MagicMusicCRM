@@ -271,21 +271,7 @@ extension _ClientCardCollaborationTabs on _ClientCardState {
       AppSpace.xl,
       AppSpace.xl,
     );
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_internalContextAllowed) ...[
-          _buildOperationalHistory(),
-          const SizedBox(height: AppSpace.lg),
-        ],
-        _sectionTitle('История статусов'),
-        _statusHistorySection(
-          cs,
-          loading: _loadingHistory,
-          history: _statusHistory,
-        ),
-      ],
-    );
+    final content = _buildOperationalHistory();
     if (embedded) return Padding(padding: padding, child: content);
     return SingleChildScrollView(padding: padding, child: content);
   }

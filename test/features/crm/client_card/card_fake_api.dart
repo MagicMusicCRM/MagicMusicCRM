@@ -41,6 +41,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.homeworks = const [],
     this.internalNote,
     this.operationalHistory = const [],
+    this.studentTimeline = const [],
     Map<String, dynamic>? family,
     List<Map<String, dynamic>> linkedUsers = const [],
     List<Map<String, dynamic>> clientUserCandidates = const [],
@@ -131,6 +132,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> homeworks;
   Map<String, dynamic>? internalNote;
   final List<Map<String, dynamic>> operationalHistory;
+  final List<Map<String, dynamic>> studentTimeline;
   Map<String, dynamic>? family;
   final List<Map<String, dynamic>> linkedUsers;
   final List<Map<String, dynamic>> clientUserCandidates;
@@ -420,7 +422,27 @@ class FakeCardApiClient extends MagicApiClient {
     if (RegExp(
       r'^/crm/clients/(lead|student)/[^/]+/operational-history$',
     ).hasMatch(path)) {
-      return <String, dynamic>{'items': operationalHistory, 'nextCursor': null}
+      final requestedLimit = int.tryParse(
+        queryParameters?['limit']?.toString() ?? '',
+      );
+      final limit = requestedLimit == null || requestedLimit < 1
+          ? 10
+          : requestedLimit;
+      final cursor = queryParameters?['cursor']?.toString();
+      final cursorIndex = cursor == null
+          ? -1
+          : operationalHistory.indexWhere(
+              (item) => item['id']?.toString() == cursor,
+            );
+      final start = cursorIndex < 0 ? 0 : cursorIndex + 1;
+      final end = (start + limit).clamp(0, operationalHistory.length);
+      final items = operationalHistory.sublist(start, end);
+      return <String, dynamic>{
+            'items': items,
+            'nextCursor': end < operationalHistory.length && items.isNotEmpty
+                ? items.last['id']
+                : null,
+          }
           as T;
     }
     if (RegExp(
@@ -471,7 +493,7 @@ class FakeCardApiClient extends MagicApiClient {
             'balance': null,
             'subscriptions': studentSubscriptions,
             'links': <dynamic>[],
-            'timeline': <dynamic>[],
+            'timeline': studentTimeline,
             'customFieldValues': <String, dynamic>{},
           }
           as T;

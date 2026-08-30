@@ -168,9 +168,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   Map<String, dynamic>? _leadCard;
   List<Map<String, dynamic>> _duplicateCandidates = [];
   bool _loadingDuplicates = true;
-  List<Map<String, dynamic>> _statusHistory = [];
-  List<Map<String, dynamic>> _studentCardTimeline = const [];
-  bool _loadingHistory = true;
   Map<String, dynamic>? _family;
   bool _loadingFamily = true;
   // True while a family add/remove write is in flight — disables the family
@@ -505,7 +502,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _fetchMetadata();
     _fetchCard(then: _resolveStudentCounterpart);
     _fetchDuplicateCandidates();
-    _fetchStatusHistory();
     _fetchFamily();
     _fetchClientAccess();
     _fetchInternalContext();

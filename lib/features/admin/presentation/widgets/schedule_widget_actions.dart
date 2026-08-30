@@ -439,7 +439,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
       // First open with no branch chosen yet → default to the user's OWN
       // branch (staff assignment), resolved once. Falls back to the first
       // branch only when the user has no assignment or it isn't in the list.
-      if (_selectedBranchId == null &&
+      if (!_allBranchesSelected &&
+          _selectedBranchId == null &&
           widget.fixedTeacherId == null &&
           !_homeBranchResolved) {
         _homeBranchResolved = true;
@@ -454,8 +455,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
         }
       }
 
-      String? defaultBranch = _selectedBranchId;
-      if (defaultBranch == null &&
+      String? defaultBranch = _allBranchesSelected ? null : _selectedBranchId;
+      if (!_allBranchesSelected &&
+          defaultBranch == null &&
           widget.fixedTeacherId == null &&
           branches.isNotEmpty) {
         final home = _homeBranchId;
@@ -508,8 +510,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
                   .listRoomAvailability(
                     branchId: defaultBranch,
                     date: dateOnly(_selectedDate),
-                    from: _slotIso(_selectedDate, 6),
-                    to: _slotIso(_selectedDate, 23),
+                    slotFromMinutes: 6 * 60,
+                    slotToMinutes: 23 * 60,
                     limit: 100,
                   )
                   .catchError((e) {
@@ -602,6 +604,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       // happens at most once and never loops (KVA-166).
       var rerunForBranch = false;
       if (enrichedLessons.isEmpty &&
+          !_allBranchesSelected &&
           _selectedBranchId == null &&
           !_autoBranchRetried &&
           visibleBranches.length > 1) {
@@ -658,26 +661,41 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   Future<void> _fetchAvailabilityForSelectedDay() async {
-    final branchId = _selectedBranchId;
-    if (branchId == null || branchId.isEmpty) return;
+    final branchIds = _allBranchesSelected
+        ? _branches
+              .map((branch) => branch['id']?.toString())
+              .whereType<String>()
+              .where((id) => id.isNotEmpty)
+              .toList(growable: false)
+        : [_selectedBranchId].whereType<String>().toList(growable: false);
+    if (branchIds.isEmpty) return;
     _emitState(() => _availabilityLoading = true);
     try {
-      final response = await ref
-          .read(magicCrmServiceProvider)
-          .listRoomAvailability(
-            branchId: branchId,
-            date: dateOnly(_selectedDate),
-            from: _slotIso(_selectedDate, 6),
-            to: _slotIso(_selectedDate, 23),
-            limit: 100,
-          );
-      final items = response['items'];
+      final crm = ref.read(magicCrmServiceProvider);
+      final responses = await Future.wait([
+        for (final branchId in branchIds)
+          crm
+              .listRoomAvailability(
+                branchId: branchId,
+                date: dateOnly(_selectedDate),
+                slotFromMinutes: 6 * 60,
+                slotToMinutes: 23 * 60,
+                limit: 100,
+              )
+              .catchError((error) {
+                debugPrint(
+                  'Error fetching room availability for branch $branchId: $error',
+                );
+                return <String, dynamic>{'items': const []};
+              }),
+      ]);
+      final items = <Map<String, dynamic>>[
+        for (final response in responses)
+          if (response['items'] is List)
+            ...(response['items'] as List).whereType<Map<String, dynamic>>(),
+      ];
       if (!mounted) return;
-      _emitState(() {
-        _roomAvailability = items is List
-            ? items.whereType<Map<String, dynamic>>().toList()
-            : const <Map<String, dynamic>>[];
-      });
+      _emitState(() => _roomAvailability = items);
     } catch (e) {
       debugPrint('Error fetching room availability: $e');
     } finally {
@@ -692,21 +710,12 @@ extension _ScheduleActions on _ScheduleWidgetState {
   // fetch (≈tens of lessons, well under the cap) backfills the selected day.
   Future<void> _fetchDayLessons(DateTime date) async {
     final branchId = _selectedBranchId;
-    if (branchId == null || branchId.isEmpty) return;
-    final offset = _branchOffsets[branchId] ?? 180;
-    // Branch-local midnight expressed as the corresponding UTC instant.
-    final dayStartUtc = DateTime.utc(
-      date.year,
-      date.month,
-      date.day,
-    ).subtract(Duration(minutes: offset));
-    final dayEndUtc = dayStartUtc.add(const Duration(days: 1));
+    if ((branchId == null || branchId.isEmpty) && !_allBranchesSelected) return;
     try {
       final result = await ref
           .read(magicCrmServiceProvider)
           .getScheduleMatrix(
-            from: dayStartUtc.toIso8601String(),
-            to: dayEndUtc.toIso8601String(),
+            localDate: dateOnly(date),
             branchId: branchId,
             groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
             teacherId: widget.fixedTeacherId ?? _filterTeacherId,
@@ -843,6 +852,12 @@ extension _ScheduleActions on _ScheduleWidgetState {
   // Offset for a specific lesson based on its branch, falling back to the
   // selected branch / Moscow.
   int _offsetForLesson(Map<String, dynamic> lesson) {
+    final scheduledOffset = lesson['scheduled_utc_offset_minutes'];
+    if (scheduledOffset is num) return scheduledOffset.toInt();
+    final parsedScheduledOffset = int.tryParse(
+      scheduledOffset?.toString() ?? '',
+    );
+    if (parsedScheduledOffset != null) return parsedScheduledOffset;
     final bid = lesson['branch_id']?.toString();
     return _branchOffsets[bid] ?? _selectedBranchOffset;
   }
@@ -853,21 +868,16 @@ extension _ScheduleActions on _ScheduleWidgetState {
     return dbTime.add(Duration(minutes: _offsetForLesson(lesson)));
   }
 
-  DateTime? _parseServerTime(dynamic value) {
+  DateTime? _parseServerTime(dynamic value, [dynamic utcOffsetMinutes]) {
     final raw = value?.toString();
     if (raw == null || raw.isEmpty) return null;
     final parsed = DateTime.tryParse(raw);
     if (parsed == null) return null;
-    return parsed.toUtc().add(Duration(minutes: _selectedBranchOffset));
-  }
-
-  String _slotIso(DateTime date, int hour) {
-    return DateTime(
-      date.year,
-      date.month,
-      date.day,
-      hour,
-    ).toUtc().toIso8601String();
+    final offset = utcOffsetMinutes is num
+        ? utcOffsetMinutes.toInt()
+        : int.tryParse(utcOffsetMinutes?.toString() ?? '') ??
+              _selectedBranchOffset;
+    return parsed.toUtc().add(Duration(minutes: offset));
   }
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -1147,12 +1157,12 @@ extension _ScheduleActions on _ScheduleWidgetState {
       start = DateTime(_displayedMonth.year, _displayedMonth.month, 1);
       end = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 1);
     }
-    DateTime utc(DateTime local) => DateTime.utc(
-      local.year,
-      local.month,
-      local.day,
-    ).subtract(Duration(minutes: _selectedBranchOffset));
-    return (utc(start).toIso8601String(), utc(end).toIso8601String());
+    DateTime utc(DateTime local) =>
+        DateTime.utc(local.year, local.month, local.day);
+    return (
+      utc(start).subtract(const Duration(days: 1)).toIso8601String(),
+      utc(end).add(const Duration(days: 1)).toIso8601String(),
+    );
   }
 
   Iterable<Map<String, dynamic>> _lessonsInCurrentView() {
@@ -1205,11 +1215,15 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   void _applyScheduleFilterResult(ScheduleFilterResult result) {
-    final branchChanged = result.branchId != _selectedBranchId;
+    final allBranchesSelected = result.branchId == null;
+    final branchChanged =
+        result.branchId != _selectedBranchId ||
+        allBranchesSelected != _allBranchesSelected;
     final modeChanged = result.mode != _dayViewMode;
     _emitState(() {
       _clearHighlight();
       _selectedBranchId = result.branchId;
+      _allBranchesSelected = allBranchesSelected;
       _dayViewMode = result.mode;
       _onlyTrial = result.onlyTrial;
       _onlyConflicts = result.onlyConflicts;

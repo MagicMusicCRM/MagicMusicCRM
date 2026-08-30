@@ -20,7 +20,10 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
           color: isToday ? AppColor.gold : cs.onSurfaceVariant,
           date: date,
           hasConflict: _scheduleConflicts.any((conflict) {
-            final at = _parseServerTime(conflict['scheduled_at']);
+            final at = _parseServerTime(
+              conflict['scheduled_at'],
+              conflict['scheduled_utc_offset_minutes'],
+            );
             return at != null && DateUtils.isSameDay(at, date);
           }),
         ),
