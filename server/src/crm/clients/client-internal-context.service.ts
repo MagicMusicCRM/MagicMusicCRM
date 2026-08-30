@@ -7,6 +7,7 @@ import {
   ActorContext,
   isManagerOrAdminRole,
 } from "../../common/security/actor-context";
+import { AuditPresentationService } from "../../audit/audit-presentation.service";
 import { managerAdminRolesSql } from "../../common/security/role-sql";
 import { DatabaseService } from "../../db/database.service";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
@@ -43,65 +44,15 @@ interface HistoryRow {
   metadata: Record<string, unknown> | null;
   before_ref: Record<string, unknown> | null;
   after_ref: Record<string, unknown> | null;
+  actor_id: string | null;
   actor_name: string;
+  actor_role: string | null;
+  target_type: string;
+  target_id: string | null;
+  target_display_name: string | null;
   created_at: Date | string;
 }
 
-const HISTORY_ACTIONS = [
-  "crm.lead_converted",
-  "crm.subscription_purchased",
-  "crm.subscription_issued",
-  "crm.subscription_replaced",
-  "crm.subscription_cancelled",
-  "crm.payment_record_created",
-  "crm.payment_record_transitioned",
-  "crm.installment_payment_due",
-  "crm.payment_reversed",
-  "crm.payment_adjustment_recorded",
-  "crm.lesson_rescheduled",
-  "crm.lesson_cancelled",
-  "crm.lesson_settled",
-  "crm.lessons_bulk_transitioned",
-  "crm.schedule_plan_ended",
-  "crm.client_internal_note_changed",
-  "crm.comment_created",
-  "crm.comment_teacher_sharing_changed",
-  "workflow.shared_task_created",
-  "workflow.shared_task_updated",
-  "workflow.shared_task_closed",
-  "crm.client_blacklisted",
-  "crm.client_unblacklisted",
-] as const;
-
-const ACTION_LABELS: Record<string, string> = {
-  "crm.lead_converted": "Лид конвертирован в ученика",
-  "crm.subscription_purchased": "Абонемент куплен",
-  "crm.subscription_issued": "Абонемент выдан",
-  "crm.subscription_replaced": "Абонемент заменён",
-  "crm.subscription_cancelled": "Абонемент отменён",
-  "crm.payment_record_created": "Оплата добавлена",
-  "crm.payment_record_transitioned": "Статус оплаты изменён",
-  "crm.installment_payment_due":
-    "Срок платежа рассрочки наступил — требуется проверка",
-  "crm.payment_reversed": "Оплата удалена из обычного учёта",
-  "crm.payment_adjustment_recorded": "Возврат или корректировка",
-  "crm.lesson_rescheduled": "Занятие перенесено",
-  "crm.lesson_cancelled": "Занятие отменено",
-  "crm.lesson_settled": "Занятие рассчитано",
-  "crm.lessons_bulk_transitioned": "Занятия изменены",
-  "crm.schedule_plan_ended": "Постоянное расписание завершено",
-  "crm.client_internal_note_changed": "Общая заметка изменена",
-  "crm.comment_created": "Комментарий добавлен",
-  "crm.comment_teacher_sharing_changed": "Видимость комментария изменена",
-  "workflow.shared_task_created": "Задача создана",
-  "workflow.shared_task_updated": "Задача изменена",
-  "workflow.shared_task_closed": "Задача закрыта",
-  "crm.client_blacklisted": "Клиент добавлен в чёрный список",
-  "crm.client_unblacklisted": "Клиент убран из чёрного списка",
-  "crm.lead_status_changed": "Статус клиента изменён",
-  "crm.lead_owner_changed": "Ответственный изменён",
-  "crm.lead_status_and_owner_changed": "Статус и ответственный изменены",
-};
 
 @Injectable()
 export class ClientInternalContextService {
@@ -110,6 +61,7 @@ export class ClientInternalContextService {
     private readonly references: ClientReferenceService,
     private readonly integrity: PlatformIntegrityRepository,
     private readonly realtime: RealtimeBus,
+    private readonly presenter: AuditPresentationService = new AuditPresentationService(),
   ) {}
 
   async getNote(actor: ActorContext, ref: ClientRef) {
@@ -238,12 +190,34 @@ export class ClientInternalContextService {
        audit_history as (
          select audit.id, audit.action, audit.reason, audit.reason_text,
            audit.metadata, audit.before_ref, audit.after_ref,
+           audit.actor_user_id as actor_id,
            coalesce(
              nullif(btrim(coalesce(profile.first_name, '') || ' ' ||
                coalesce(profile.last_name, '')), ''),
              nullif(actor_user.full_name, ''),
              'Системный процесс'
            ) as actor_name,
+           actor_user.role as actor_role,
+           coalesce(
+             nullif(audit.metadata ->> 'targetType', ''),
+             case audit.entity_type
+               when 'crm:student' then 'student'
+               when 'crm:lead' then 'lead'
+               when 'crm:comment' then 'comment'
+               when 'shared_task' then 'task'
+               else audit.entity_type
+             end
+           ) as target_type,
+           coalesce(nullif(audit.metadata ->> 'targetId', ''), audit.entity_id) as target_id,
+           coalesce(
+             nullif(audit.metadata ->> 'targetDisplayName', ''),
+             nullif(audit.after_ref ->> 'displayName', ''),
+             nullif(audit.after_ref ->> 'name', ''),
+             nullif(audit.before_ref ->> 'displayName', ''),
+             nullif(audit.before_ref ->> 'name', ''),
+             nullif(btrim(concat_ws(' ', student_profile.first_name, student_profile.last_name)), ''),
+             nullif(btrim(concat_ws(' ', target_lead.first_name, target_lead.last_name)), '')
+           ) as target_display_name,
            audit.created_at
          from app.audit_events audit
          cross join lineage
@@ -251,7 +225,18 @@ export class ClientInternalContextService {
            on actor_user.id = audit.actor_user_id and actor_user.deleted_at is null
          left join app.profiles profile
            on profile.user_id = actor_user.id and profile.deleted_at is null
-         where audit.action = any($3::text[])
+         left join app.students target_student
+           on audit.entity_type in ('student', 'crm:student')
+             and target_student.id::text = audit.entity_id
+             and target_student.deleted_at is null
+         left join app.profiles student_profile
+           on student_profile.id = target_student.profile_id
+             and student_profile.deleted_at is null
+         left join app.leads target_lead
+           on audit.entity_type in ('lead', 'crm:lead')
+             and target_lead.id::text = audit.entity_id
+             and target_lead.deleted_at is null
+         where (audit.action like 'crm.%' or audit.action like 'workflow.%')
            and (
              audit.entity_type = 'client_internal_note' and exists (
                select 1 from app.client_internal_notes note
@@ -364,12 +349,18 @@ export class ClientInternalContextService {
                nullif(new_owner.full_name, '')
              )
            ) as after_ref,
+           status_history.changed_by as actor_id,
            coalesce(
              nullif(btrim(coalesce(actor_profile.first_name, '') || ' ' ||
                coalesce(actor_profile.last_name, '')), ''),
              nullif(actor_user.full_name, ''),
              'Системный процесс'
            ) as actor_name,
+           actor_user.role as actor_role,
+           'lead'::text as target_type,
+           status_history.lead_id::text as target_id,
+           nullif(btrim(concat_ws(' ', target_lead.first_name, target_lead.last_name)), '')
+             as target_display_name,
            status_history.changed_at as created_at
          from app.lead_status_history status_history
          cross join lineage
@@ -389,6 +380,8 @@ export class ClientInternalContextService {
            on actor_user.id = status_history.changed_by and actor_user.deleted_at is null
          left join app.profiles actor_profile
            on actor_profile.user_id = actor_user.id and actor_profile.deleted_at is null
+         left join app.leads target_lead
+           on target_lead.id = status_history.lead_id and target_lead.deleted_at is null
          where lineage.lead_id is not null
            and status_history.lead_id = lineage.lead_id
        ),
@@ -398,24 +391,49 @@ export class ClientInternalContextService {
          select * from status_history
        ),
        cursor_event as (
-         select created_at, id from history_event where id = $4::uuid
+         select created_at, id from history_event where id = $3::uuid
        )
        select history.id, history.action, history.reason, history.reason_text,
          history.metadata, history.before_ref, history.after_ref,
-         history.actor_name, history.created_at
+         history.actor_id, history.actor_name, history.actor_role,
+         history.target_type, history.target_id, history.target_display_name,
+         history.created_at
        from history_event history
-       where $4::uuid is null
+       where $3::uuid is null
          or (history.created_at, history.id) < (
            select created_at, id from cursor_event
          )
        order by history.created_at desc, history.id desc
-       limit $5`,
-      [ref.type, ref.id, HISTORY_ACTIONS, query.cursor ?? null, limit + 1],
+       limit $4`,
+      [ref.type, ref.id, query.cursor ?? null, limit + 1],
     );
     const hasMore = result.rows.length > limit;
-    const rows = result.rows.slice(0, limit);
+    const rows = result.rows
+      .filter((row) => this.presenter.isBusinessAction(row.action))
+      .slice(0, limit);
     return {
-      items: rows.map((row) => this.historyDto(row)),
+      items: rows.map((row) =>
+        this.presenter.present({
+          id: row.id,
+          actionKey: row.action,
+          actor: {
+            id: row.actor_id,
+            name: row.actor_name,
+            role: row.actor_role,
+          },
+          target: {
+            type: row.target_type,
+            id: row.target_id,
+            displayName: row.target_display_name,
+          },
+          metadata: row.metadata,
+          beforeRef: row.before_ref,
+          afterRef: row.after_ref,
+          reason: row.reason,
+          reasonText: row.reason_text,
+          occurredAt: row.created_at,
+        }),
+      ),
       nextCursor: hasMore ? rows.at(-1)!.id : null,
     };
   }
@@ -471,116 +489,4 @@ export class ClientInternalContextService {
         };
   }
 
-  private historyDto(row: HistoryRow) {
-    const metadata = row.metadata ?? {};
-    const before = row.before_ref ?? {};
-    const after = row.after_ref ?? {};
-    const metadataReason = this.sanitizedMetadataReason(metadata);
-    const summary = this.historySummary(row.action, metadata, before, after);
-    const reason = this.historyReason(row, metadataReason, after);
-    return {
-      id: row.id,
-      actionKey: row.action,
-      action: ACTION_LABELS[row.action] ?? "Действие с клиентом",
-      reason,
-      summary,
-      actorName: row.actor_name,
-      occurredAt: row.created_at,
-    };
-  }
-
-  private sanitizedMetadataReason(metadata: Record<string, unknown>) {
-    const value = metadata["reason"];
-    if (typeof value !== "string") return "";
-    const reason = value.trim();
-    return /^\[(?:PRIVATE|PII|REDACTED)\]$/.test(reason) ? "" : reason;
-  }
-
-  private historySummary(
-    action: string,
-    metadata: Record<string, unknown>,
-    before: Record<string, unknown>,
-    after: Record<string, unknown>,
-  ): string | null {
-    const status = metadata["targetStatus"];
-    if (status) {
-      return `Новый статус: ${this.paymentStatusLabel(String(status))}`;
-    }
-    if (action === "crm.client_internal_note_changed") {
-      return `Версия ${before["version"] ?? 0} → ${after["version"] ?? "—"}`;
-    }
-    if (action === "crm.comment_teacher_sharing_changed") {
-      return ["Скрыт от преподавателя", "Опубликован преподавателю"][
-        Number(after["sharedWithTeacher"] === true)
-      ];
-    }
-    if (
-      action === "crm.lead_status_changed" ||
-      action === "crm.lead_owner_changed" ||
-      action === "crm.lead_status_and_owner_changed"
-    ) {
-      const changes: string[] = [];
-      if (before["status"] !== after["status"]) {
-        changes.push(
-          `Статус: ${before["status"] ?? "Не указано"} → ${after["status"] ?? "Не указано"}`,
-        );
-      }
-      if (before["ownerName"] !== after["ownerName"]) {
-        changes.push(
-          `Ответственный: ${before["ownerName"] ?? "Не назначен"} → ${after["ownerName"] ?? "Не назначен"}`,
-        );
-      }
-      return changes.join("\n") || null;
-    }
-    if (action !== "crm.lessons_bulk_transitioned") return null;
-    const items = before["items"];
-    const count = Array.isArray(items) ? items.length : 0;
-    return `Изменено занятий: ${count}`;
-  }
-
-  private historyReason(
-    row: HistoryRow,
-    metadataReason: string,
-    after: Record<string, unknown>,
-  ) {
-    return (
-      row.reason_text?.trim() ||
-      metadataReason ||
-      this.defaultHistoryReason(row.action, after) ||
-      row.reason ||
-      "Причина не указана"
-    );
-  }
-
-  private defaultHistoryReason(
-    action: string,
-    after: Record<string, unknown>,
-  ): string | null {
-    if (action === "crm.lead_converted") return "Конвертация лида завершена";
-    if (action === "crm.comment_created") return "Комментарий добавлен";
-    if (action === "crm.comment_teacher_sharing_changed") {
-      return after["sharedWithTeacher"] === true
-        ? "Комментарий опубликован преподавателю"
-        : "Комментарий скрыт от преподавателя";
-    }
-    if (action === "workflow.shared_task_created") return "Задача создана";
-    if (action === "workflow.shared_task_updated") return "Задача изменена";
-    if (action === "workflow.shared_task_closed") return "Задача закрыта";
-    if (
-      action === "crm.lead_status_changed" ||
-      action === "crm.lead_owner_changed" ||
-      action === "crm.lead_status_and_owner_changed"
-    ) {
-      return "Изменение зафиксировано в истории клиента";
-    }
-    return null;
-  }
-
-  private paymentStatusLabel(status: string) {
-    if (status === "paid") return "Оплачен";
-    if (status === "posted_pending")
-      return "Срок наступил — требуется проверка";
-    if (status === "unpaid") return "Не оплачен";
-    return status;
-  }
 }

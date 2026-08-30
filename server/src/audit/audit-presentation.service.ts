@@ -23,6 +23,7 @@ const ENTITY_LABELS: Record<string, string> = {
 };
 
 const FIELD_LABELS: Record<string, string> = {
+  direction: 'Направление',
   email: 'Электронная почта',
   phone: 'Телефон',
   name: 'Имя',
@@ -93,6 +94,7 @@ const ENTITY_POSSESSIVE_LABELS: Record<string, string> = {
 };
 
 const STUDENT_FIELD_UPDATE_TITLES: Record<string, string> = {
+  direction: 'Направление изменено',
   email: 'Электронная почта изменена',
   name: 'Имя ученика изменено',
   phone: 'Телефон ученика изменён',

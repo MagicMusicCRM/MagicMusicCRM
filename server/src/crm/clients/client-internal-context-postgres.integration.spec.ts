@@ -40,7 +40,13 @@ describe("ClientInternalContextService PostgreSQL history union", () => {
           deleted_at timestamptz
         );
         create table app.profiles (
-          user_id uuid, first_name text, last_name text, deleted_at timestamptz
+          id uuid, user_id uuid, first_name text, last_name text, deleted_at timestamptz
+        );
+        create table app.students (
+          id uuid primary key, profile_id uuid, deleted_at timestamptz
+        );
+        create table app.leads (
+          id uuid primary key, first_name text, last_name text, deleted_at timestamptz
         );
         create table app.client_internal_notes (id uuid, lead_id uuid, student_id uuid);
         create table app.entity_comments (
@@ -71,7 +77,8 @@ describe("ClientInternalContextService PostgreSQL history union", () => {
         insert into app.users values (
           '${ids.actor}', 'Анна Администратор', 'director', null
         );
-        insert into app.profiles values ('${ids.actor}', 'Анна', 'Администратор', null);
+        insert into app.profiles (user_id, first_name, last_name, deleted_at)
+        values ('${ids.actor}', 'Анна', 'Администратор', null);
         insert into app.lead_statuses values
           ('${ids.oldStatus}', 'Новый'), ('${ids.newStatus}', 'Занимается');
         insert into app.lead_status_history (
@@ -106,14 +113,34 @@ describe("ClientInternalContextService PostgreSQL history union", () => {
       });
       expect(first).toEqual({
         items: [
-          expect.objectContaining({
+          {
             id: ids.statusEvent,
             actionKey: "crm.lead_status_changed",
-            action: "Статус клиента изменён",
-            reason: "Клиент подтвердил обучение",
-            summary: "Статус: Новый → Занимается",
-            actorName: "Анна Администратор",
-          }),
+            title: "Действие выполнено",
+            summary: "Клиент подтвердил обучение",
+            reason: null,
+            actor: {
+              id: ids.actor,
+              name: "Анна Администратор",
+              role: "director",
+            },
+            target: {
+              type: "lead",
+              id: ids.lead,
+              label: "Лид",
+              displayName: null,
+              routeType: "lead",
+            },
+            changes: [
+              {
+                key: "status",
+                label: "Статус",
+                before: "Новый",
+                after: "Занимается",
+              },
+            ],
+            occurredAt: new Date("2026-08-30T12:00:00.000Z"),
+          },
         ],
         nextCursor: ids.statusEvent,
       });
@@ -124,14 +151,31 @@ describe("ClientInternalContextService PostgreSQL history union", () => {
       });
       expect(second).toEqual({
         items: [
-          expect.objectContaining({
+          {
             id: ids.auditEvent,
             actionKey: "crm.client_blacklisted",
-            reason: "Дубликат",
-          }),
+            title: "Действие выполнено",
+            summary: null,
+            reason: null,
+            actor: {
+              id: ids.actor,
+              name: "Анна Администратор",
+              role: "director",
+            },
+            target: {
+              type: "lead",
+              id: ids.lead,
+              label: "Лид",
+              displayName: null,
+              routeType: "lead",
+            },
+            changes: [],
+            occurredAt: new Date("2026-08-30T11:00:00.000Z"),
+          },
         ],
         nextCursor: null,
       });
+      expect(JSON.stringify(second.items)).not.toContain("Дубликат");
 
       await db.exec(
         `update app.users set role = 'teacher' where id = '${ids.actor}'`,

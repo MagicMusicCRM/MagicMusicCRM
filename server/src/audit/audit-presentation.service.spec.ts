@@ -43,6 +43,26 @@ describe('AuditPresentationService', () => {
     expect(JSON.stringify(service.present(emailChange))).not.toContain('version');
   });
 
+  it('presents a student direction change with the shared Russian title and label', () => {
+    expect(
+      service.present({
+        ...emailChange,
+        beforeRef: { direction: 'Вокал' },
+        afterRef: { direction: 'Фортепиано' },
+      }),
+    ).toMatchObject({
+      title: 'Направление изменено',
+      changes: [
+        {
+          key: 'direction',
+          label: 'Направление',
+          before: 'Вокал',
+          after: 'Фортепиано',
+        },
+      ],
+    });
+  });
+
   it.each([
     [
       'crm.student_marketing_consent_updated',
