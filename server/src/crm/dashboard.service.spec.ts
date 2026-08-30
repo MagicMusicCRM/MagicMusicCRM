@@ -1,4 +1,5 @@
 import { DatabaseService } from "../db/database.service";
+import { AuditPresentationService } from "../audit/audit-presentation.service";
 import { CrmPolicy } from "./crm.policy";
 import { DashboardService } from "./dashboard.service";
 
@@ -21,6 +22,7 @@ describe("DashboardService", () => {
     const service = new DashboardService(
       { query } as unknown as DatabaseService,
       policy as unknown as CrmPolicy,
+      new AuditPresentationService(),
     );
     return { service, query, policy };
   };
@@ -36,6 +38,7 @@ describe("DashboardService", () => {
     const service = new DashboardService(
       { query } as unknown as DatabaseService,
       policy as unknown as CrmPolicy,
+      new AuditPresentationService(),
     );
     return { service, query, policy };
   };
@@ -252,71 +255,70 @@ describe("DashboardService", () => {
     ]);
   });
 
-  it("lists CRM activity log with actor and metadata context", async () => {
+  it("presents CRM activity log through the shared audit contract", async () => {
     const { service, query, policy } = createService([
       {
-        id: "audit-a",
-        actor_user_id: "manager-a",
-        actor_email: "manager@example.com",
+        id: "audit-1",
+        actor_user_id: actor.userId,
+        actor_email: "natalia@example.com",
         actor_app_role: "manager",
         actor_staff_role: "manager",
         actor_position: "Управляющий",
-        actor_first_name: "Ольга",
-        actor_last_name: "Смирнова",
+        actor_first_name: "Наталия",
+        actor_last_name: "Назарова",
         actor_branches: [{ id: "branch-a", name: "Центр" }],
         action: "crm.student_updated",
         entity_type: "student",
-        entity_id: "student-a",
-        metadata: {
-          historyType: "student",
-          description: "Обновлена карточка",
-          branchId: "branch-a",
+        entity_id: "student-1",
+        target_display_name: "Мария Баранова",
+        metadata: null,
+        before_ref: {
+          email: "old@example.com",
         },
+        after_ref: {
+          email: "new@example.com",
+        },
+        reason: null,
+        reason_text: null,
         created_at: "2026-06-15T00:00:00.000Z",
       },
     ]);
 
-    await expect(
-      service.listActivityLog(actor, {
-        q: "карточка",
-        actorUserId: "manager-a",
-        entityType: "student",
-        entityId: "student-a",
-        branchId: "branch-a",
-        role: "manager",
-        historyType: "student",
-        from: "2026-06-01T00:00:00.000Z",
-        to: "2026-07-01T00:00:00.000Z",
-        limit: 25,
-      }),
-    ).resolves.toEqual({
-      items: [
+    const result = await service.listActivityLog(actor, {
+      q: "карточка",
+      actorUserId: "manager-a",
+      entityType: "student",
+      entityId: "student-a",
+      branchId: "branch-a",
+      role: "manager",
+      historyType: "student",
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-07-01T00:00:00.000Z",
+      limit: 25,
+    });
+
+    expect(result.items[0]).toMatchObject({
+      id: "audit-1",
+      title: "Электронная почта изменена",
+      actor: { id: actor.userId, name: "Наталия Назарова" },
+      target: {
+        type: "student",
+        id: "student-1",
+        label: "Ученик",
+        displayName: "Мария Баранова",
+      },
+      changes: [
         {
-          id: "audit-a",
-          actorUserId: "manager-a",
-          actorName: "Ольга Смирнова",
-          actorEmail: "manager@example.com",
-          actorRole: "manager",
-          actorStaffRole: "manager",
-          actorPosition: "Управляющий",
-          actorBranches: [{ id: "branch-a", name: "Центр" }],
-          action: "crm.student_updated",
-          entityType: "student",
-          entityId: "student-a",
-          historyType: "student",
-          description: "Обновлена карточка",
-          branchId: "branch-a",
-          metadata: {
-            historyType: "student",
-            description: "Обновлена карточка",
-            branchId: "branch-a",
-          },
-          createdAt: "2026-06-15T00:00:00.000Z",
+          key: "email",
+          label: "Электронная почта",
+          before: "old@example.com",
+          after: "new@example.com",
         },
       ],
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0][1]).toEqual([
       "карточка",
       "manager-a",
@@ -329,5 +331,6 @@ describe("DashboardService", () => {
       "2026-07-01T00:00:00.000Z",
       25,
     ]);
+    expect(query.mock.calls[0][0]).toContain("ae.action not like 'auth.%'");
   });
 });

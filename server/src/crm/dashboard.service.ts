@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { AuditPresentationService } from "../audit/audit-presentation.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { branchIdExpr } from "./branch-scope";
@@ -68,6 +69,11 @@ interface ActivityLogRow {
   entity_type: string;
   entity_id: string | null;
   metadata: Record<string, unknown> | null;
+  before_ref: Record<string, unknown> | null;
+  after_ref: Record<string, unknown> | null;
+  reason: string | null;
+  reason_text: string | null;
+  target_display_name: string | null;
   created_at: Date | string;
 }
 
@@ -76,6 +82,7 @@ export class DashboardService {
   constructor(
     private readonly database: DatabaseService,
     private readonly policy: CrmPolicy,
+    private readonly presenter: AuditPresentationService,
   ) {}
 
   async getOverview(actor: ActorContext) {
@@ -511,20 +518,69 @@ export class DashboardService {
           u.role::text as actor_app_role, sm.role as actor_staff_role,
           sm.position as actor_position, p.first_name as actor_first_name,
           p.last_name as actor_last_name,
-          coalesce(
-            jsonb_agg(
-              distinct jsonb_build_object('id', b.id, 'name', b.name)
-            ) filter (where b.id is not null),
-            '[]'::jsonb
-          ) as actor_branches,
-          ae.action, ae.entity_type, ae.entity_id, ae.metadata, ae.created_at
+          coalesce(actor_branches.branches, '[]'::jsonb) as actor_branches,
+          ae.action, ae.entity_type, ae.entity_id, ae.metadata,
+          ae.before_ref, ae.after_ref, ae.reason, ae.reason_text,
+          case ae.entity_type
+            when 'student' then nullif(btrim(concat_ws(' ', student_profile.first_name, student_profile.last_name)), '')
+            when 'lead' then nullif(btrim(concat_ws(' ', target_lead.first_name, target_lead.last_name)), '')
+            when 'lesson' then to_char(target_lesson.scheduled_at at time zone 'Europe/Moscow', 'DD.MM.YYYY HH24:MI')
+            when 'staff' then nullif(btrim(concat_ws(' ', staff_profile.first_name, staff_profile.last_name)), '')
+            when 'teacher' then nullif(btrim(concat_ws(' ', teacher_profile.first_name, teacher_profile.last_name)), '')
+            when 'profile' then nullif(btrim(concat_ws(' ', target_profile.first_name, target_profile.last_name)), '')
+            when 'group' then target_group.name
+            when 'task' then coalesce(shared_task.title, legacy_task.title)
+            when 'payment' then concat_ws(' ', target_payment.amount::text, target_payment.currency)
+            when 'subscription' then concat('Абонемент на ', target_subscription.lessons_total, ' занятий')
+            when 'homework' then target_homework.title
+            when 'comment' then coalesce(target_comment.body, target_lead_comment.body)
+            else null
+          end as target_display_name,
+          ae.created_at
         from app.audit_events ae
         left join app.users u on u.id = ae.actor_user_id and u.deleted_at is null
         left join app.profiles p on p.user_id = u.id and p.deleted_at is null
         left join app.staff_members sm on sm.profile_id = p.id and sm.deleted_at is null
-        left join app.staff_branch_assignments sba
-          on sba.staff_member_id = sm.id and sba.deleted_at is null
-        left join app.branches b on b.id = sba.branch_id and b.deleted_at is null
+        left join lateral (
+          select jsonb_agg(distinct jsonb_build_object('id', b.id, 'name', b.name)) as branches
+          from app.staff_branch_assignments sba
+          join app.branches b on b.id = sba.branch_id and b.deleted_at is null
+          where sba.staff_member_id = sm.id and sba.deleted_at is null
+        ) actor_branches on true
+        left join app.students target_student
+          on ae.entity_type = 'student' and target_student.id::text = ae.entity_id
+        left join app.profiles student_profile
+          on student_profile.id = target_student.profile_id and student_profile.deleted_at is null
+        left join app.leads target_lead
+          on ae.entity_type = 'lead' and target_lead.id::text = ae.entity_id and target_lead.deleted_at is null
+        left join app.lessons target_lesson
+          on ae.entity_type = 'lesson' and target_lesson.id::text = ae.entity_id and target_lesson.deleted_at is null
+        left join app.staff_members target_staff
+          on ae.entity_type = 'staff' and target_staff.id::text = ae.entity_id and target_staff.deleted_at is null
+        left join app.profiles staff_profile
+          on staff_profile.id = target_staff.profile_id and staff_profile.deleted_at is null
+        left join app.teachers target_teacher
+          on ae.entity_type = 'teacher' and target_teacher.id::text = ae.entity_id and target_teacher.deleted_at is null
+        left join app.profiles teacher_profile
+          on teacher_profile.id = target_teacher.profile_id and teacher_profile.deleted_at is null
+        left join app.profiles target_profile
+          on ae.entity_type = 'profile' and target_profile.id::text = ae.entity_id and target_profile.deleted_at is null
+        left join app.groups target_group
+          on ae.entity_type = 'group' and target_group.id::text = ae.entity_id and target_group.deleted_at is null
+        left join app.shared_tasks shared_task
+          on ae.entity_type = 'task' and shared_task.id::text = ae.entity_id and shared_task.deleted_at is null
+        left join app.tasks legacy_task
+          on ae.entity_type = 'task' and legacy_task.id::text = ae.entity_id and legacy_task.deleted_at is null
+        left join app.payments target_payment
+          on ae.entity_type = 'payment' and target_payment.id::text = ae.entity_id and target_payment.deleted_at is null
+        left join app.subscriptions target_subscription
+          on ae.entity_type = 'subscription' and target_subscription.id::text = ae.entity_id
+        left join app.lesson_homeworks target_homework
+          on ae.entity_type = 'homework' and target_homework.id::text = ae.entity_id and target_homework.deleted_at is null
+        left join app.entity_comments target_comment
+          on ae.entity_type = 'comment' and target_comment.id::text = ae.entity_id and target_comment.deleted_at is null
+        left join app.lead_comments target_lead_comment
+          on ae.entity_type = 'comment' and target_lead_comment.id::text = ae.entity_id and target_lead_comment.deleted_at is null
         where (
             $1::text is null
             or lower(
@@ -567,7 +623,16 @@ export class DashboardService {
           )
           and ($8::timestamptz is null or ae.created_at >= $8)
           and ($9::timestamptz is null or ae.created_at < $9)
-        group by ae.id, u.id, p.id, sm.id
+          and ae.action not like 'auth.%'
+          and ae.action not ilike '%refresh%'
+          and ae.action not ilike '%session%'
+          and ae.entity_type not in ('session', 'refresh_session', 'auth_session')
+          and coalesce(
+            ae.metadata->>'historyType',
+            ae.metadata->>'history_type',
+            ae.metadata->>'type',
+            ''
+          ) not in ('session', 'refresh_session', 'auth_session')
         order by ae.created_at desc, ae.id desc
         limit $10
       `,
@@ -585,49 +650,31 @@ export class DashboardService {
       ],
     );
 
-    return { items: result.rows.map((row) => this.toActivityLogDto(row)) };
-  }
-
-  private toActivityLogDto(row: ActivityLogRow) {
-    const metadata = row.metadata ?? {};
-    const metadataString = (key: string) => {
-      const value = metadata[key];
-      return typeof value === "string" && value.trim().length > 0
-        ? value
-        : null;
-    };
-    const actorNameText = [row.actor_first_name, row.actor_last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    const actorName = actorNameText.length > 0 ? actorNameText : null;
     return {
-      id: row.id,
-      actorUserId: row.actor_user_id,
-      actorName,
-      actorEmail: row.actor_email,
-      actorRole: row.actor_app_role,
-      actorStaffRole: row.actor_staff_role,
-      actorPosition: row.actor_position,
-      actorBranches: row.actor_branches ?? [],
-      action: row.action,
-      entityType: row.entity_type,
-      entityId: row.entity_id,
-      historyType:
-        metadataString("historyType") ??
-        metadataString("history_type") ??
-        metadataString("type") ??
-        row.action,
-      description:
-        metadataString("description") ??
-        metadataString("body") ??
-        metadataString("comment") ??
-        metadataString("notes") ??
-        metadataString("reason"),
-      branchId:
-        metadataString("branchId") ?? metadataString("branch_id") ?? null,
-      metadata,
-      createdAt: row.created_at,
+      items: result.rows.map((row) =>
+        this.presenter.present({
+          id: row.id,
+          actionKey: row.action,
+          actor: {
+            id: row.actor_user_id,
+            name: [row.actor_first_name, row.actor_last_name]
+              .filter(Boolean)
+              .join(" "),
+            role: row.actor_app_role ?? row.actor_staff_role,
+          },
+          target: {
+            type: row.entity_type,
+            id: row.entity_id,
+            displayName: row.target_display_name,
+          },
+          metadata: row.metadata,
+          beforeRef: row.before_ref,
+          afterRef: row.after_ref,
+          reason: row.reason,
+          reasonText: row.reason_text,
+          occurredAt: row.created_at,
+        }),
+      ),
     };
   }
 
