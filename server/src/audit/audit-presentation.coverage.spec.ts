@@ -11,6 +11,7 @@ interface AuditContractInventory {
 }
 
 type LiteralBindings = Map<ts.Symbol, string[]>;
+type CallSites = Map<ts.SignatureDeclaration | ts.JSDocSignature, ts.CallExpression[]>;
 
 interface ResolvedAuditObject {
   node: ts.ObjectLiteralExpression;
@@ -109,21 +110,41 @@ function returnedExpressions(
 function resolveAuditObjects(
   expression: ts.Expression,
   checker: ts.TypeChecker,
+  callSites: CallSites,
   seen = new Set<ts.Node>(),
   bindings: LiteralBindings = new Map(),
 ): ResolvedAuditObject[] {
   if (seen.has(expression)) return [];
   seen.add(expression);
   if (ts.isParenthesizedExpression(expression)) {
-    return resolveAuditObjects(expression.expression, checker, seen, bindings);
+    return resolveAuditObjects(expression.expression, checker, callSites, seen, bindings);
+  }
+  if (ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression)) {
+    return resolveAuditObjects(expression.expression, checker, callSites, seen, bindings);
+  }
+  if (ts.isNonNullExpression(expression)) {
+    return resolveAuditObjects(expression.expression, checker, callSites, seen, bindings);
+  }
+  if (ts.isConditionalExpression(expression)) {
+    return [expression.whenTrue, expression.whenFalse].flatMap((branch) =>
+      resolveAuditObjects(branch, checker, callSites, new Set(seen), bindings),
+    );
   }
   if (ts.isObjectLiteralExpression(expression)) return [{ node: expression, bindings }];
   if (ts.isIdentifier(expression)) {
     const symbol = checker.getSymbolAtLocation(expression);
     return (symbol?.declarations ?? []).flatMap((declaration) =>
       ts.isVariableDeclaration(declaration) && declaration.initializer
-        ? resolveAuditObjects(declaration.initializer, checker, seen, bindings)
-        : [],
+        ? resolveAuditObjects(declaration.initializer, checker, callSites, seen, bindings)
+        : ts.isParameter(declaration)
+          ? (callSites.get(declaration.parent) ?? []).flatMap((call) => {
+            const parameterIndex = declaration.parent.parameters.indexOf(declaration);
+            const argument = call.arguments[parameterIndex];
+            return argument
+              ? resolveAuditObjects(argument, checker, callSites, new Set(seen), bindings)
+              : [];
+          })
+          : [],
     );
   }
   if (ts.isCallExpression(expression)) {
@@ -138,7 +159,7 @@ function resolveAuditObjects(
       if (symbol && values) callBindings.set(symbol, values);
     });
     return returnedExpressions(declaration).flatMap((returned) =>
-      resolveAuditObjects(returned, checker, seen, callBindings),
+      resolveAuditObjects(returned, checker, callSites, seen, callBindings),
     );
   }
   return [];
@@ -193,22 +214,25 @@ function expandStringExpression(
 function auditObjectsForCall(
   call: ts.CallExpression,
   checker: ts.TypeChecker,
+  callSites: CallSites,
 ): ResolvedAuditObject[] {
   if (!ts.isPropertyAccessExpression(call.expression)) return [];
   const receiver = call.expression.expression;
   const method = call.expression.name.text;
   const receiverSymbol = symbolName(checker, receiver);
   if (receiverSymbol === 'AuditService' && method === 'record' && call.arguments[0]) {
-    return resolveAuditObjects(call.arguments[0], checker);
+    return resolveAuditObjects(call.arguments[0], checker, callSites);
   }
   if (
     receiverSymbol === 'PlatformIntegrityService'
     && method === 'executeVersionedMutation'
     && call.arguments[0]
   ) {
-    return resolveAuditObjects(call.arguments[0], checker).flatMap((mutation) => {
+    return resolveAuditObjects(call.arguments[0], checker, callSites).flatMap((mutation) => {
       const audit = objectPropertyExpression(mutation.node, 'audit', checker);
-      return audit ? resolveAuditObjects(audit, checker, new Set(), mutation.bindings) : [];
+      return audit
+        ? resolveAuditObjects(audit, checker, callSites, new Set(), mutation.bindings)
+        : [];
     });
   }
   return [];
@@ -228,6 +252,23 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
     strict: true,
   });
   const checker = program.getTypeChecker();
+  const callSites: CallSites = new Map();
+  for (const source of program.getSourceFiles()) {
+    const sourcePath = resolve(source.fileName).replaceAll('\\', '/').toLowerCase();
+    if (!productionPaths.has(sourcePath)) continue;
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node)) {
+        const declaration = checker.getResolvedSignature(node)?.declaration;
+        if (declaration) {
+          const calls = callSites.get(declaration) ?? [];
+          calls.push(node);
+          callSites.set(declaration, calls);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
   const actions = new Set<string>();
   const entityTypes = new Set<string>();
   const unresolvedActions: string[] = [];
@@ -237,7 +278,7 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
     if (!productionPaths.has(sourcePath)) continue;
     const visit = (node: ts.Node) => {
       if (ts.isCallExpression(node)) {
-        for (const audit of auditObjectsForCall(node, checker)) {
+        for (const audit of auditObjectsForCall(node, checker, callSites)) {
           const actionExpression = objectPropertyExpression(audit.node, 'action', checker);
           const entityExpression = objectPropertyExpression(audit.node, 'entityType', checker);
           const expandedActions = actionExpression
@@ -293,6 +334,11 @@ describe('Audit presentation production coverage', () => {
     const actionTitles = registryKeys(presenterSource, 'ACTION_TITLES');
 
     expect(inventory.actions).toContain('crm.student_updated');
+    expect(inventory.actions).toContain('crm.lesson_deleted');
+    expect(inventory.actions).toContain('crm.schedule_series_stopped');
+    expect(inventory.actions).toContain('crm.reference_discipline_archived');
+    expect(inventory.actions).toContain('crm.reference_loss_reason_archived');
+    expect(inventory.actions).toContain('crm.reference_branch_discipline_unassigned');
     expect(inventory.unresolvedActions).toEqual([]);
     expect([...inventory.actions].filter((action) => !actionTitles.has(action))).toEqual([]);
     for (const actionKey of inventory.actions) {
