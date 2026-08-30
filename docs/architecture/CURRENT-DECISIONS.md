@@ -393,6 +393,13 @@ version во всех first-party вызовах. Удалить compatibility p
 после подтверждённого отсутствия трафика старых клиентов; параллельный endpoint
 для этого не создаётся.
 
+DECISION (owner, 2026-08-30): Email Student-карточки отделён от глобально
+уникальной `app.users.email` и хранится как неуникальный contact email самого
+Student. Сохранение контакта не переименовывает login identity и не создаёт
+неявную привязку к совпавшему app-account. Durable email outbox хранит ссылку
+на Student и разрешает актуальный contact email при отправке приглашения;
+остальные email-сценарии продолжают использовать account identity.
+
 ## Release
 
 DECISION: Release-ready означает полный автоматический gate плюс platform smoke
