@@ -268,19 +268,71 @@ describe("DashboardService", () => {
         actor_last_name: "Назарова",
         actor_branches: [{ id: "branch-a", name: "Центр" }],
         action: "crm.student_updated",
-        entity_type: "student",
+        entity_type: "crm:student",
         entity_id: "student-1",
         target_display_name: "Мария Баранова",
-        metadata: null,
+        metadata: { branchId: "branch-a", internalTrace: "not-for-response" },
         before_ref: {
           email: "old@example.com",
         },
         after_ref: {
           email: "new@example.com",
         },
+        reason: "contact.update",
+        reason_text: "Адрес изменён по просьбе ученика",
+        created_at: "2026-06-15T00:00:00.000Z",
+      },
+      {
+        id: "audit-lead-1",
+        action: "crm.lead_updated",
+        entity_type: "crm:lead",
+        entity_id: "lead-1",
+        target_display_name: "Вера Власова",
+        metadata: null,
+        before_ref: null,
+        after_ref: null,
         reason: null,
         reason_text: null,
-        created_at: "2026-06-15T00:00:00.000Z",
+        created_at: "2026-06-14T00:00:00.000Z",
+      },
+      {
+        id: "audit-comment-1",
+        action: "crm.comment_created",
+        entity_type: "crm:comment",
+        entity_id: "comment-1",
+        target_display_name: "Перезвонить после занятия",
+        metadata: null,
+        before_ref: null,
+        after_ref: null,
+        reason: null,
+        reason_text: null,
+        created_at: "2026-06-13T00:00:00.000Z",
+      },
+      {
+        id: "audit-task-1",
+        action: "task.created",
+        entity_type: "shared_task",
+        entity_id: "task-1",
+        target_display_name: "Позвонить родителю",
+        metadata: null,
+        before_ref: null,
+        after_ref: null,
+        reason: null,
+        reason_text: null,
+        created_at: "2026-06-12T00:00:00.000Z",
+      },
+      {
+        id: "audit-archived-student-1",
+        action: "crm.student_archived",
+        entity_type: "student",
+        entity_id: "archived-student-1",
+        target_display_name: null,
+        metadata: null,
+        before_ref: null,
+        after_ref: null,
+        reason: null,
+        reason_text: null,
+        created_at: "2026-06-11T00:00:00.000Z",
       },
     ]);
 
@@ -315,6 +367,35 @@ describe("DashboardService", () => {
           after: "new@example.com",
         },
       ],
+      reason: "contact.update",
+      summary: "Адрес изменён по просьбе ученика",
+    });
+    expect(result.items[0]).not.toHaveProperty("metadata");
+    expect(result.items[1].target).toMatchObject({
+      type: "lead",
+      id: "lead-1",
+      label: "Лид",
+      displayName: "Вера Власова",
+      routeType: "lead",
+    });
+    expect(result.items[2].target).toMatchObject({
+      type: "comment",
+      id: "comment-1",
+      label: "Comment",
+      displayName: "Перезвонить после занятия",
+      routeType: "comment",
+    });
+    expect(result.items[3].target).toMatchObject({
+      type: "task",
+      id: "task-1",
+      label: "Задача",
+      displayName: "Позвонить родителю",
+      routeType: "task",
+    });
+    expect(result.items[4].target).toMatchObject({
+      type: "student",
+      id: "archived-student-1",
+      displayName: null,
     });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
@@ -331,6 +412,12 @@ describe("DashboardService", () => {
       "2026-07-01T00:00:00.000Z",
       25,
     ]);
-    expect(query.mock.calls[0][0]).toContain("ae.action not like 'auth.%'");
+    const activitySql = String(query.mock.calls[0][0]);
+    expect(activitySql).toContain("ae.action not like 'auth.%'");
+    expect(activitySql).toContain("when 'crm:student' then 'student'");
+    expect(activitySql).toContain("when 'crm:lead' then 'lead'");
+    expect(activitySql).toContain("when 'crm:comment' then 'comment'");
+    expect(activitySql).toContain("when 'shared_task' then 'task'");
+    expect(activitySql).toContain("target_student.deleted_at is null");
   });
 });
