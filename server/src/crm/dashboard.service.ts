@@ -514,21 +514,99 @@ export class DashboardService {
     const q = query.q?.trim();
     const result = await this.database.query<ActivityLogRow>(
       `
-        with activity_events as (
-          select audit.*, case audit.entity_type
-            when 'crm:student' then 'student'
-            when 'crm:lead' then 'lead'
-            when 'crm:comment' then 'comment'
-            when 'shared_task' then 'task'
-            else audit.entity_type
-          end as presentation_entity_type
+        with normalized_events as (
+          select audit.*,
+            case audit.entity_type
+              when 'crm:student' then 'student'
+              when 'crm:lead' then 'lead'
+              when 'crm:comment' then 'comment'
+              when 'shared_task' then 'task'
+              else audit.entity_type
+            end as presentation_entity_type,
+            case
+              when audit.entity_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                then audit.entity_id::uuid
+              else null
+            end as target_entity_uuid
           from app.audit_events audit
+        ),
+        candidate_events as materialized (
+          select ae.id, ae.actor_user_id, u.email as actor_email,
+            u.role::text as actor_app_role, sm.role as actor_staff_role,
+            sm.position as actor_position, p.first_name as actor_first_name,
+            p.last_name as actor_last_name,
+            coalesce(actor_branches.branches, '[]'::jsonb) as actor_branches,
+            ae.action, ae.presentation_entity_type, ae.entity_id,
+            ae.target_entity_uuid, ae.metadata, ae.before_ref, ae.after_ref,
+            ae.reason, ae.reason_text, ae.created_at
+          from normalized_events ae
+          left join app.users u on u.id = ae.actor_user_id and u.deleted_at is null
+          left join app.profiles p on p.user_id = u.id and p.deleted_at is null
+          left join app.staff_members sm on sm.profile_id = p.id and sm.deleted_at is null
+          left join lateral (
+            select jsonb_agg(distinct jsonb_build_object('id', b.id, 'name', b.name)) as branches
+            from app.staff_branch_assignments sba
+            join app.branches b on b.id = sba.branch_id and b.deleted_at is null
+            where sba.staff_member_id = sm.id and sba.deleted_at is null
+          ) actor_branches on true
+          where (
+              $1::text is null
+              or lower(
+                coalesce(ae.action, '') || ' ' ||
+                coalesce(ae.presentation_entity_type, '') || ' ' ||
+                coalesce(ae.entity_id, '') || ' ' ||
+                coalesce(ae.metadata::text, '') || ' ' ||
+                coalesce(p.first_name, '') || ' ' ||
+                coalesce(p.last_name, '') || ' ' ||
+                coalesce(u.email, '')
+              ) like lower('%' || $1 || '%')
+            )
+            and ($2::uuid is null or ae.actor_user_id = $2)
+            and ($3::text is null or ae.presentation_entity_type = $3)
+            and ($4::text is null or ae.entity_id = $4)
+            and (
+              $5::uuid is null
+              or ae.metadata->>'branchId' = $5::text
+              or ae.metadata->>'branch_id' = $5::text
+              or exists (
+                select 1
+                from app.staff_branch_assignments branch_scope
+                where branch_scope.staff_member_id = sm.id
+                  and branch_scope.branch_id = $5
+                  and branch_scope.deleted_at is null
+              )
+            )
+            and (
+              $6::text is null
+              or u.role::text = $6
+              or sm.role = $6
+            )
+            and (
+              $7::text is null
+              or ae.action = $7
+              or ae.action like $7 || '.%'
+              or ae.metadata->>'historyType' = $7
+              or ae.metadata->>'history_type' = $7
+              or ae.metadata->>'type' = $7
+            )
+            and ($8::timestamptz is null or ae.created_at >= $8)
+            and ($9::timestamptz is null or ae.created_at < $9)
+            and ae.action not like 'auth.%'
+            and ae.action not ilike '%refresh%'
+            and ae.action not ilike '%session%'
+            and ae.presentation_entity_type not in ('session', 'refresh_session', 'auth_session')
+            and coalesce(
+              ae.metadata->>'historyType',
+              ae.metadata->>'history_type',
+              ae.metadata->>'type',
+              ''
+            ) not in ('session', 'refresh_session', 'auth_session')
+          order by ae.created_at desc, ae.id desc
+          limit $10
         )
-        select ae.id, ae.actor_user_id, u.email as actor_email,
-          u.role::text as actor_app_role, sm.role as actor_staff_role,
-          sm.position as actor_position, p.first_name as actor_first_name,
-          p.last_name as actor_last_name,
-          coalesce(actor_branches.branches, '[]'::jsonb) as actor_branches,
+        select ae.id, ae.actor_user_id, ae.actor_email,
+          ae.actor_app_role, ae.actor_staff_role, ae.actor_position,
+          ae.actor_first_name, ae.actor_last_name, ae.actor_branches,
           ae.action, ae.presentation_entity_type as entity_type, ae.entity_id, ae.metadata,
           ae.before_ref, ae.after_ref, ae.reason, ae.reason_text,
           case ae.presentation_entity_type
@@ -543,108 +621,45 @@ export class DashboardService {
             when 'payment' then concat_ws(' ', target_payment.amount::text, target_payment.currency)
             when 'subscription' then concat('Абонемент на ', target_subscription.lessons_total, ' занятий')
             when 'homework' then target_homework.title
-            when 'comment' then coalesce(target_comment.body, target_lead_comment.body)
             else null
           end as target_display_name,
           ae.created_at
-        from activity_events ae
-        left join app.users u on u.id = ae.actor_user_id and u.deleted_at is null
-        left join app.profiles p on p.user_id = u.id and p.deleted_at is null
-        left join app.staff_members sm on sm.profile_id = p.id and sm.deleted_at is null
+        from candidate_events ae
         left join lateral (
-          select jsonb_agg(distinct jsonb_build_object('id', b.id, 'name', b.name)) as branches
-          from app.staff_branch_assignments sba
-          join app.branches b on b.id = sba.branch_id and b.deleted_at is null
-          where sba.staff_member_id = sm.id and sba.deleted_at is null
-        ) actor_branches on true
-        left join app.students target_student
-          on ae.presentation_entity_type = 'student'
-            and target_student.id::text = ae.entity_id
-            and target_student.deleted_at is null
+          select target_student_record.profile_id
+          from app.students target_student_record
+          where ae.presentation_entity_type = 'student'
+            and target_student_record.id = ae.target_entity_uuid
+            and target_student_record.deleted_at is null
+          limit 1
+        ) target_student on true
         left join app.profiles student_profile
           on student_profile.id = target_student.profile_id and student_profile.deleted_at is null
         left join app.leads target_lead
-          on ae.presentation_entity_type = 'lead' and target_lead.id::text = ae.entity_id and target_lead.deleted_at is null
+          on ae.presentation_entity_type = 'lead' and target_lead.id = ae.target_entity_uuid and target_lead.deleted_at is null
         left join app.lessons target_lesson
-          on ae.presentation_entity_type = 'lesson' and target_lesson.id::text = ae.entity_id and target_lesson.deleted_at is null
+          on ae.presentation_entity_type = 'lesson' and target_lesson.id = ae.target_entity_uuid and target_lesson.deleted_at is null
         left join app.staff_members target_staff
-          on ae.presentation_entity_type = 'staff' and target_staff.id::text = ae.entity_id and target_staff.deleted_at is null
+          on ae.presentation_entity_type = 'staff' and target_staff.id = ae.target_entity_uuid and target_staff.deleted_at is null
         left join app.profiles staff_profile
           on staff_profile.id = target_staff.profile_id and staff_profile.deleted_at is null
         left join app.teachers target_teacher
-          on ae.presentation_entity_type = 'teacher' and target_teacher.id::text = ae.entity_id and target_teacher.deleted_at is null
+          on ae.presentation_entity_type = 'teacher' and target_teacher.id = ae.target_entity_uuid and target_teacher.deleted_at is null
         left join app.profiles teacher_profile
           on teacher_profile.id = target_teacher.profile_id and teacher_profile.deleted_at is null
         left join app.profiles target_profile
-          on ae.presentation_entity_type = 'profile' and target_profile.id::text = ae.entity_id and target_profile.deleted_at is null
+          on ae.presentation_entity_type = 'profile' and target_profile.id = ae.target_entity_uuid and target_profile.deleted_at is null
         left join app.groups target_group
-          on ae.presentation_entity_type = 'group' and target_group.id::text = ae.entity_id and target_group.deleted_at is null
+          on ae.presentation_entity_type = 'group' and target_group.id = ae.target_entity_uuid and target_group.deleted_at is null
         left join app.shared_tasks shared_task
-          on ae.presentation_entity_type = 'task' and shared_task.id::text = ae.entity_id and shared_task.deleted_at is null
+          on ae.presentation_entity_type = 'task' and shared_task.id = ae.target_entity_uuid and shared_task.deleted_at is null
         left join app.payments target_payment
-          on ae.presentation_entity_type = 'payment' and target_payment.id::text = ae.entity_id and target_payment.deleted_at is null
+          on ae.presentation_entity_type = 'payment' and target_payment.id = ae.target_entity_uuid and target_payment.deleted_at is null
         left join app.subscriptions target_subscription
-          on ae.presentation_entity_type = 'subscription' and target_subscription.id::text = ae.entity_id
+          on ae.presentation_entity_type = 'subscription' and target_subscription.id = ae.target_entity_uuid
         left join app.lesson_homeworks target_homework
-          on ae.presentation_entity_type = 'homework' and target_homework.id::text = ae.entity_id and target_homework.deleted_at is null
-        left join app.entity_comments target_comment
-          on ae.presentation_entity_type = 'comment' and target_comment.id::text = ae.entity_id and target_comment.deleted_at is null
-        left join app.lead_comments target_lead_comment
-          on ae.presentation_entity_type = 'comment' and target_lead_comment.id::text = ae.entity_id and target_lead_comment.deleted_at is null
-        where (
-            $1::text is null
-            or lower(
-              coalesce(ae.action, '') || ' ' ||
-              coalesce(ae.entity_type, '') || ' ' ||
-              coalesce(ae.entity_id, '') || ' ' ||
-              coalesce(ae.metadata::text, '') || ' ' ||
-              coalesce(p.first_name, '') || ' ' ||
-              coalesce(p.last_name, '') || ' ' ||
-              coalesce(u.email, '')
-            ) like lower('%' || $1 || '%')
-          )
-          and ($2::uuid is null or ae.actor_user_id = $2)
-          and ($3::text is null or ae.entity_type = $3)
-          and ($4::text is null or ae.entity_id = $4)
-          and (
-            $5::uuid is null
-            or ae.metadata->>'branchId' = $5::text
-            or ae.metadata->>'branch_id' = $5::text
-            or exists (
-              select 1
-              from app.staff_branch_assignments branch_scope
-              where branch_scope.staff_member_id = sm.id
-                and branch_scope.branch_id = $5
-                and branch_scope.deleted_at is null
-            )
-          )
-          and (
-            $6::text is null
-            or u.role::text = $6
-            or sm.role = $6
-          )
-          and (
-            $7::text is null
-            or ae.action = $7
-            or ae.action like $7 || '.%'
-            or ae.metadata->>'historyType' = $7
-            or ae.metadata->>'history_type' = $7
-            or ae.metadata->>'type' = $7
-          )
-          and ($8::timestamptz is null or ae.created_at >= $8)
-          and ($9::timestamptz is null or ae.created_at < $9)
-          and ae.action not like 'auth.%'
-          and ae.action not ilike '%refresh%'
-          and ae.action not ilike '%session%'
-          and ae.entity_type not in ('session', 'refresh_session', 'auth_session')
-          and coalesce(
-            ae.metadata->>'historyType',
-            ae.metadata->>'history_type',
-            ae.metadata->>'type',
-            ''
-          ) not in ('session', 'refresh_session', 'auth_session')
+          on ae.presentation_entity_type = 'homework' and target_homework.id = ae.target_entity_uuid and target_homework.deleted_at is null
         order by ae.created_at desc, ae.id desc
-        limit $10
       `,
       [
         q || null,
@@ -675,7 +690,9 @@ export class DashboardService {
           target: {
             type: this.normalizedActivityEntityType(row.entity_type),
             id: row.entity_id,
-            displayName: row.target_display_name,
+            displayName: this.normalizedActivityEntityType(row.entity_type) === 'comment'
+              ? null
+              : row.target_display_name,
           },
           metadata: row.metadata,
           beforeRef: row.before_ref,

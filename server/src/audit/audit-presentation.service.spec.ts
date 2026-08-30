@@ -215,11 +215,67 @@ describe('AuditPresentationService', () => {
         {
           key: 'sharedWithTeacher',
           label: 'Доступ преподавателя',
-          before: 'false',
-          after: 'true',
+          before: 'Нет',
+          after: 'Да',
         },
       ],
     });
+  });
+
+  it('suppresses identifier and technical reference keys before formatting safe changes', () => {
+    const presented = service.present({
+      ...emailChange,
+      actionKey: 'crm.comment_teacher_sharing_changed',
+      beforeRef: {
+        lessonId: '11111111-1111-4111-8111-111111111111',
+        bodyLength: 20,
+        'private.key': 'old-private-key',
+        sharedWithTeacher: false,
+      },
+      afterRef: {
+        lessonId: '22222222-2222-4222-8222-222222222222',
+        bodyLength: 24,
+        'private.key': 'new-private-key',
+        sharedWithTeacher: true,
+      },
+    });
+
+    expect(presented.changes).toEqual([
+      {
+        key: 'sharedWithTeacher',
+        label: 'Доступ преподавателя',
+        before: 'Нет',
+        after: 'Да',
+      },
+    ]);
+    expect(JSON.stringify(presented)).not.toMatch(
+      /lessonId|bodyLength|private\.key|private-key|11111111|22222222/,
+    );
+  });
+
+  it('never exposes internal note contents or length as changes', () => {
+    const presented = service.present({
+      ...emailChange,
+      actionKey: 'crm.client_internal_note_changed',
+      target: { type: 'client_internal_note', id: 'note-1', displayName: null },
+      beforeRef: { body: 'Секретная заметка до', bodyLength: 20, version: 3 },
+      afterRef: { body: 'Секретная заметка после', bodyLength: 24, version: 4 },
+    });
+
+    expect(presented.changes).toEqual([]);
+    expect(JSON.stringify(presented)).not.toMatch(/Секретная заметка|bodyLength|version/);
+  });
+
+  it.each([
+    ['task.created', 'Задача создана'],
+    ['catalog.record_review_requested', 'Изменение: Record review requested'],
+  ])('uses a concrete readable title for business action %s', (actionKey, title) => {
+    expect(service.present({
+      ...emailChange,
+      actionKey,
+      beforeRef: null,
+      afterRef: null,
+    }).title).toBe(title);
   });
 
   it.each([
@@ -292,7 +348,7 @@ describe('AuditPresentationService', () => {
       {
         key: 'status',
         label: 'Статус',
-        before: 'lead',
+        before: 'Лид',
         after: null,
       },
     ]);
@@ -319,7 +375,7 @@ describe('AuditPresentationService', () => {
           {
             key: 'status',
             label: 'Статус',
-            before: 'lead',
+            before: 'Лид',
             after: null,
           },
         ],

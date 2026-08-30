@@ -60,27 +60,71 @@ void main() {
       expect(event.occurredAt, DateTime.parse('2026-08-30T10:15:00.000Z'));
     });
 
-    test('keeps contract defaults for absent nullable and nested values', () {
+    test('keeps only explicitly nullable contract fields nullable', () {
       final event = AuditPresentationEvent.fromJson(<String, dynamic>{
         'id': 'audit-empty',
         'actionKey': 'crm.student_archived',
         'title': 'Ученик архивирован',
-        'actor': <String, dynamic>{},
-        'target': <String, dynamic>{'type': 'student', 'label': 'Ученик'},
-        'occurredAt': 'not-a-date',
+        'summary': null,
+        'reason': null,
+        'actor': <String, dynamic>{'id': null, 'name': 'Система', 'role': null},
+        'target': <String, dynamic>{
+          'type': 'student',
+          'id': null,
+          'label': 'Ученик',
+          'displayName': null,
+          'routeType': null,
+        },
+        'changes': <dynamic>[],
+        'occurredAt': '2026-08-30T10:15:00.000Z',
       });
 
       expect(event.summary, isNull);
       expect(event.reason, isNull);
       expect(event.actor.id, isNull);
-      expect(event.actor.name, 'Неизвестный пользователь');
+      expect(event.actor.name, 'Система');
       expect(event.actor.role, isNull);
       expect(event.target.id, isNull);
       expect(event.target.displayName, isNull);
       expect(event.target.routeType, isNull);
       expect(event.changes, isEmpty);
-      expect(event.occurredAt, isNull);
+      expect(event.occurredAt, DateTime.parse('2026-08-30T10:15:00.000Z'));
     });
+
+    test(
+      'fails fast when required event or nested DTO fields are malformed',
+      () {
+        final invalidPayloads = <Map<String, dynamic>>[
+          {...fixture}..remove('id'),
+          {...fixture}..remove('title'),
+          {...fixture, 'occurredAt': 'not-a-date'},
+          {...fixture, 'actor': null},
+          {
+            ...fixture,
+            'actor': <String, dynamic>{'id': null, 'role': null},
+          },
+          {
+            ...fixture,
+            'target': <String, dynamic>{'id': null},
+          },
+          {...fixture, 'changes': null},
+          {
+            ...fixture,
+            'changes': <Map<String, dynamic>>[
+              <String, dynamic>{'key': 'email', 'before': null, 'after': null},
+            ],
+          },
+        ];
+
+        for (final payload in invalidPayloads) {
+          expect(
+            () => AuditPresentationEvent.fromJson(payload),
+            throwsFormatException,
+            reason: payload.toString(),
+          );
+        }
+      },
+    );
 
     test('exposes parsed changes as an unmodifiable list', () {
       final event = AuditPresentationEvent.fromJson(fixture);

@@ -401,7 +401,10 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               ),
               branchId: _dashboardFilter.branchId,
             ),
-            _ => _ActivityLogTab(filter: _dashboardFilter),
+            _ => _ActivityLogTab(
+              filter: _dashboardFilter,
+              accessSnapshot: widget.accessSnapshot,
+            ),
           },
         ),
       ],

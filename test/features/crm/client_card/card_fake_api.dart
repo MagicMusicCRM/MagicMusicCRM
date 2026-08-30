@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 
@@ -1016,6 +1017,7 @@ Future<void> pumpClientCard(
   String initialSection = 'overview',
   ContextViewState? initialViewState,
   ProviderContainer? container,
+  CapabilitySnapshot? capabilitySnapshot,
   ValueChanged<bool?>? onClosed,
 }) async {
   final app = MaterialApp(
@@ -1034,6 +1036,7 @@ Future<void> pumpClientCard(
                     routed: routed,
                     initialSection: initialSection,
                     initialViewState: initialViewState,
+                    capabilitySnapshot: capabilitySnapshot,
                   );
                   return routed ? Material(child: card) : card;
                 },

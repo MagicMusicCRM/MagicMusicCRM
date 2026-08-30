@@ -54,7 +54,7 @@ void main() {
     expect(find.text('Электронная почта изменена'), findsOneWidget);
     expect(find.text('crm.student_updated'), findsNothing);
     expect(find.text('old@example.com'), findsNothing);
-    expect(find.text('Анна Иванова'), findsOneWidget);
+    expect(find.text('Ученик · Анна Иванова'), findsOneWidget);
     expect(find.text('Мария Администратор'), findsOneWidget);
     expect(
       find.text('Почта обновлена после обращения ученика'),
@@ -115,7 +115,76 @@ void main() {
       ),
     );
 
-    expect(find.text('Неизвестная запись'), findsOneWidget);
+    expect(find.text('Неизвестная запись · Не указано'), findsOneWidget);
     expect(find.byType(TextButton), findsNothing);
+  });
+
+  testWidgets('renders absent change values as Не указано', (tester) async {
+    final absentValueEvent = AuditPresentationEvent.fromJson(<String, dynamic>{
+      'id': 'audit-absent-value',
+      'actionKey': 'crm.student_updated',
+      'title': 'Электронная почта изменена',
+      'summary': null,
+      'reason': null,
+      'actor': <String, dynamic>{'id': null, 'name': 'Система', 'role': null},
+      'target': <String, dynamic>{
+        'type': 'student',
+        'id': null,
+        'label': 'Ученик',
+        'displayName': null,
+        'routeType': null,
+      },
+      'changes': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'key': 'email',
+          'label': 'Электронная почта',
+          'before': null,
+          'after': 'new@example.com',
+        },
+      ],
+      'occurredAt': '2026-08-30T10:15:00.000Z',
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AuditEventCard(event: absentValueEvent)),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('audit-event-expand')));
+    await tester.pumpAndSettle();
+    expect(find.text('Было: Не указано'), findsOneWidget);
+  });
+
+  testWidgets('never renders a raw comment body as the target name', (
+    tester,
+  ) async {
+    const privateBody = 'PRIVATE-COMMENT-BODY-MUST-NOT-LEAK';
+    final commentEvent = AuditPresentationEvent.fromJson(<String, dynamic>{
+      'id': 'audit-comment',
+      'actionKey': 'crm.comment_created',
+      'title': 'Комментарий добавлен',
+      'summary': null,
+      'reason': null,
+      'actor': <String, dynamic>{'id': null, 'name': 'Система', 'role': null},
+      'target': <String, dynamic>{
+        'type': 'comment',
+        'id': 'comment-1',
+        'label': 'Комментарий',
+        'displayName': null,
+        'routeType': 'comment',
+        'body': privateBody,
+      },
+      'changes': <Map<String, dynamic>>[],
+      'occurredAt': '2026-08-30T10:15:00.000Z',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AuditEventCard(event: commentEvent)),
+      ),
+    );
+
+    expect(find.text('Комментарий · Не указано'), findsOneWidget);
+    expect(find.text(privateBody), findsNothing);
   });
 }

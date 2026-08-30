@@ -42,9 +42,10 @@ class _ReportsError extends StatelessWidget {
 }
 
 class _ActivityLogTab extends ConsumerStatefulWidget {
-  const _ActivityLogTab({required this.filter});
+  const _ActivityLogTab({required this.filter, required this.accessSnapshot});
 
   final DashboardFilter filter;
+  final CapabilitySnapshot? accessSnapshot;
 
   @override
   ConsumerState<_ActivityLogTab> createState() => _ActivityLogTabState();
@@ -135,6 +136,11 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
   }
 
   Future<void> _openActivityEntity(ContextTransition transition) async {
+    final snapshot = widget.accessSnapshot;
+    if (snapshot == null ||
+        !EntityRouteRegistry().resolve(transition.target, snapshot).canOpen) {
+      return;
+    }
     try {
       await openEntityLink(
         context,
@@ -183,10 +189,15 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
 
   Widget _activityCard(AuditPresentationEvent event) {
     final transition = _activityTransition(event);
+    final snapshot = widget.accessSnapshot;
+    final canOpen =
+        transition != null &&
+        snapshot != null &&
+        EntityRouteRegistry().resolve(transition.target, snapshot).canOpen;
     return AuditEventCard(
       key: ValueKey(event.id),
       event: event,
-      onOpenTarget: transition == null
+      onOpenTarget: !canOpen
           ? null
           : () => unawaited(_openActivityEntity(transition)),
     );

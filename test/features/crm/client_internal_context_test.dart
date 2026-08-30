@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/shared/widgets/audit_event_card.dart';
 
@@ -72,6 +73,47 @@ List<Map<String, dynamic>> _operationalHistoryFixture() =>
     });
 
 void main() {
+  testWidgets(
+    'client history hides target navigation without route capability',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = FakeCardApiClient(
+        role: 'admin',
+        student: _student,
+        operationalHistory: [
+          _auditEvent(
+            id: '00000000-0000-4000-8000-000000000099',
+            actionKey: 'crm.student_updated',
+            title: 'Данные ученика изменены',
+            reason: '',
+            summary: '',
+            occurredAt: '2026-08-30T12:00:00.000Z',
+          ),
+        ],
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: _student,
+        entityType: 'student',
+        routed: true,
+        capabilitySnapshot: const CapabilitySnapshot(
+          accountId: 'restricted-admin',
+          role: 'admin',
+          accessVersion: 1,
+          capabilities: {'report.status.read', 'workflow.task.read'},
+          scopes: {},
+        ),
+      );
+
+      expect(find.text('Данные ученика изменены'), findsOneWidget);
+      expect(find.text('Открыть ученика'), findsNothing);
+    },
+  );
+
   testWidgets('staff edits the versioned note and sees exact audit context', (
     tester,
   ) async {

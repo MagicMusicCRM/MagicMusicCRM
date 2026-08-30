@@ -18,6 +18,38 @@ interface ResolvedAuditObject {
   bindings: LiteralBindings;
 }
 
+function enclosingSignature(node: ts.Node): ts.SignatureDeclaration | ts.JSDocSignature | null {
+  let current: ts.Node | undefined = node.parent;
+  while (current) {
+    if (ts.isFunctionLike(current)) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
+function callSiteBindings(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  callSites: CallSites,
+): LiteralBindings[] {
+  const declaration = enclosingSignature(node);
+  if (!declaration) return [new Map()];
+  const callers = callSites.get(declaration) ?? [];
+  if (callers.length === 0) return [new Map()];
+
+  return callers.map((caller) => {
+    const bindings: LiteralBindings = new Map();
+    declaration.parameters.forEach((parameter, index) => {
+      if (!ts.isIdentifier(parameter.name)) return;
+      const argument = caller.arguments[index];
+      const symbol = checker.getSymbolAtLocation(parameter.name);
+      const values = argument ? expandStringExpression(argument, checker) : null;
+      if (symbol && values) bindings.set(symbol, values);
+    });
+    return bindings;
+  });
+}
+
 function productionTypescriptFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -221,7 +253,9 @@ function auditObjectsForCall(
   const method = call.expression.name.text;
   const receiverSymbol = symbolName(checker, receiver);
   if (receiverSymbol === 'AuditService' && method === 'record' && call.arguments[0]) {
-    return resolveAuditObjects(call.arguments[0], checker, callSites);
+    return callSiteBindings(call, checker, callSites).flatMap((bindings) =>
+      resolveAuditObjects(call.arguments[0], checker, callSites, new Set(), bindings),
+    );
   }
   if (
     receiverSymbol === 'PlatformIntegrityService'
@@ -234,6 +268,15 @@ function auditObjectsForCall(
         ? resolveAuditObjects(audit, checker, callSites, new Set(), mutation.bindings)
         : [];
     });
+  }
+  if (
+    receiverSymbol === 'PlatformIntegrityRepository'
+    && method === 'appendAudit'
+    && call.arguments[1]
+  ) {
+    return callSiteBindings(call, checker, callSites).flatMap((bindings) =>
+      resolveAuditObjects(call.arguments[1], checker, callSites, new Set(), bindings),
+    );
   }
   return [];
 }
@@ -287,16 +330,11 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
           const actionSource = actionExpression
             ?.getText(actionExpression.getSourceFile())
             .replace(/\s+/g, '');
-          if (
-            actionExpression
-            && !expandedActions
-            && actionSource
-            && /^(?:`|['"])?(?:crm|workflow)\./.test(actionSource)
-          ) {
+          if (actionExpression && !expandedActions && actionSource) {
             unresolvedActions.push(actionSource);
           }
           for (const action of expandedActions ?? []) {
-            if (/^(crm|workflow)\./.test(action)) actions.add(action);
+            actions.add(action);
           }
           for (const entityType of entityExpression
             ? expandStringExpression(entityExpression, checker, audit.bindings) ?? []
@@ -329,9 +367,12 @@ describe('Audit presentation production coverage', () => {
   const sourceRoot = join(__dirname, '..');
   const presenterSource = join(__dirname, 'audit-presentation.service.ts');
 
-  it('requires every real CRM/workflow audit producer action to have an explicit shared title', () => {
+  it('requires every real business audit producer action to have an explicit shared title', () => {
     const inventory = productionAuditContract(sourceRoot);
     const actionTitles = registryKeys(presenterSource, 'ACTION_TITLES');
+    const businessActions = [...inventory.actions].filter((action) =>
+      service.isBusinessAction(action),
+    );
 
     expect(inventory.actions).toContain('crm.student_updated');
     expect(inventory.actions).toContain('crm.lesson_deleted');
@@ -339,10 +380,14 @@ describe('Audit presentation production coverage', () => {
     expect(inventory.actions).toContain('crm.reference_discipline_archived');
     expect(inventory.actions).toContain('crm.reference_loss_reason_archived');
     expect(inventory.actions).toContain('crm.reference_branch_discipline_unassigned');
+    expect(inventory.actions).toContain('crm.client_internal_note_changed');
+    expect(inventory.actions).toContain('crm.installment_payment_due');
+    expect(actionTitles).toContain('task.created');
     expect(inventory.unresolvedActions).toEqual([]);
-    expect([...inventory.actions].filter((action) => !actionTitles.has(action))).toEqual([]);
-    for (const actionKey of inventory.actions) {
+    expect(businessActions.filter((action) => !actionTitles.has(action))).toEqual([]);
+    for (const actionKey of businessActions) {
       expect(service.present({ ...input, actionKey }).title).not.toBe('Действие выполнено');
+      expect(service.present({ ...input, actionKey }).title).not.toMatch(/^Изменение: [A-Za-z0-9_.:-]+$/);
     }
   });
 

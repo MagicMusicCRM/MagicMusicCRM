@@ -8,6 +8,8 @@ import 'package:magic_music_crm/core/models/client_internal_context.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/context_transition_registry.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
@@ -395,6 +397,7 @@ class ClientOperationalHistoryView extends ConsumerWidget {
     required this.loading,
     required this.loadingMore,
     required this.items,
+    required this.capabilitySnapshot,
     required this.hasMore,
     required this.onRetry,
     required this.onLoadMore,
@@ -405,6 +408,7 @@ class ClientOperationalHistoryView extends ConsumerWidget {
   final bool loadingMore;
   final String? error;
   final List<AuditPresentationEvent> items;
+  final CapabilitySnapshot? capabilitySnapshot;
   final bool hasMore;
   final VoidCallback onRetry;
   final VoidCallback onLoadMore;
@@ -440,7 +444,7 @@ class ClientOperationalHistoryView extends ConsumerWidget {
           )
         else
           for (final item in items) ...[
-            _clientAuditCard(context, ref, item),
+            _clientAuditCard(context, ref, item, capabilitySnapshot),
             const SizedBox(height: AppSpace.sm),
           ],
         if (hasMore)
@@ -467,14 +471,28 @@ Widget _clientAuditCard(
   BuildContext context,
   WidgetRef ref,
   AuditPresentationEvent event,
+  CapabilitySnapshot? capabilitySnapshot,
 ) {
   final transition = _clientAuditTransition(event);
+  final canOpen =
+      transition != null &&
+      capabilitySnapshot != null &&
+      EntityRouteRegistry()
+          .resolve(transition.target, capabilitySnapshot)
+          .canOpen;
   return AuditEventCard(
     key: ValueKey(event.id),
     event: event,
-    onOpenTarget: transition == null
+    onOpenTarget: !canOpen
         ? null
-        : () => unawaited(_openClientAuditTarget(context, ref, transition)),
+        : () => unawaited(
+            _openClientAuditTarget(
+              context,
+              ref,
+              transition,
+              capabilitySnapshot,
+            ),
+          ),
   );
 }
 
@@ -503,7 +521,13 @@ Future<void> _openClientAuditTarget(
   BuildContext context,
   WidgetRef ref,
   ContextTransition transition,
+  CapabilitySnapshot capabilitySnapshot,
 ) async {
+  if (!EntityRouteRegistry()
+      .resolve(transition.target, capabilitySnapshot)
+      .canOpen) {
+    return;
+  }
   try {
     await openEntityLink(
       context,

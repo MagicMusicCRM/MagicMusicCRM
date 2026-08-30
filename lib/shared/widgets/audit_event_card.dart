@@ -27,7 +27,10 @@ class _AuditEventCardState extends State<AuditEventCard> {
   @override
   Widget build(BuildContext context) {
     final event = widget.event;
-    final targetName = event.target.displayName ?? event.target.label;
+    final displayName = event.target.displayName?.trim();
+    final targetName =
+        '${event.target.label} · '
+        '${displayName == null || displayName.isEmpty ? 'Не указано' : displayName}';
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -73,14 +76,12 @@ class _AuditEventCardState extends State<AuditEventCard> {
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: AppColor.text3),
                           ),
-                          if (event.occurredAt != null) ...[
-                            const SizedBox(height: AppSpace.xs),
-                            Text(
-                              _formattedTime(event.occurredAt!),
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: AppColor.text3),
-                            ),
-                          ],
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            _formattedTime(event.occurredAt),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColor.text3),
+                          ),
                           if (event.summary != null) ...[
                             const SizedBox(height: AppSpace.sm),
                             Text(
@@ -162,13 +163,13 @@ class _AuditChangeRow extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Было: ${change.before ?? '—'}',
+            'Было: ${change.before ?? 'Не указано'}',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: AppColor.text2),
           ),
           Text(
-            'Стало: ${change.after ?? '—'}',
+            'Стало: ${change.after ?? 'Не указано'}',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: AppColor.text2),

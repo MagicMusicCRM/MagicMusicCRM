@@ -300,7 +300,7 @@ describe("DashboardService", () => {
         action: "crm.comment_created",
         entity_type: "crm:comment",
         entity_id: "comment-1",
-        target_display_name: "Перезвонить после занятия",
+        target_display_name: "PRIVATE-COMMENT-BODY-MUST-NOT-LEAK",
         metadata: null,
         before_ref: null,
         after_ref: null,
@@ -382,9 +382,10 @@ describe("DashboardService", () => {
       type: "comment",
       id: "comment-1",
       label: "Комментарий",
-      displayName: "Перезвонить после занятия",
+      displayName: null,
       routeType: "comment",
     });
+    expect(JSON.stringify(result.items)).not.toContain("PRIVATE-COMMENT-BODY-MUST-NOT-LEAK");
     expect(result.items[3].target).toMatchObject({
       type: "task",
       id: "task-1",
@@ -418,8 +419,18 @@ describe("DashboardService", () => {
     expect(activitySql).toContain("when 'crm:lead' then 'lead'");
     expect(activitySql).toContain("when 'crm:comment' then 'comment'");
     expect(activitySql).toContain("when 'shared_task' then 'task'");
+    expect(activitySql).toContain("ae.presentation_entity_type = $3");
     expect(activitySql).toContain("left join app.shared_tasks shared_task");
     expect(activitySql).not.toContain("app.tasks");
-    expect(activitySql).toContain("target_student.deleted_at is null");
+    expect(activitySql).toContain("target_student_record.deleted_at is null");
+    expect(activitySql).toContain("target_student_record.id = ae.target_entity_uuid");
+    expect(activitySql).not.toContain("target_student.id::text = ae.entity_id");
+    expect(activitySql).not.toContain("target_comment.body");
+    expect(activitySql).not.toContain("target_lead_comment.body");
+    expect(activitySql).not.toContain("join app.entity_comments");
+    expect(activitySql).not.toContain("join app.lead_comments");
+    expect(activitySql.indexOf("limit $10")).toBeLessThan(
+      activitySql.indexOf("from app.students target_student_record"),
+    );
   });
 });

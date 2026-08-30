@@ -629,8 +629,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
             {
               key: "sharedWithTeacher",
               label: "Доступ преподавателя",
-              before: "false",
-              after: "true",
+              before: "Нет",
+              after: "Да",
             },
           ],
           reason: "Комментарий опубликован преподавателю",

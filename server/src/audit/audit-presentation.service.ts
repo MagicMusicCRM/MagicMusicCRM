@@ -83,7 +83,37 @@ const FIELD_LABELS: Record<string, string> = {
   sharedWithTeacher: 'Доступ преподавателя',
 };
 
+const ENUM_VALUE_LABELS: Record<string, Record<string, string>> = {
+  status: {
+    active: 'Активен',
+    archived: 'Архивирован',
+    cancelled: 'Отменён',
+    canceled: 'Отменён',
+    completed: 'Завершён',
+    draft: 'Черновик',
+    failed: 'Ошибка',
+    inactive: 'Неактивен',
+    lead: 'Лид',
+    new: 'Новый',
+    open: 'Открыт',
+    overdue: 'Просрочен',
+    paid: 'Оплачен',
+    pending: 'Ожидает',
+    student: 'Ученик',
+  },
+  state: {
+    closed: 'Закрыта',
+    completed: 'Завершена',
+    open: 'Открыта',
+  },
+};
+
 const ACTION_TITLES: Record<string, string> = {
+  'access.role_package_replaced': 'Пакет прав роли изменён',
+  'access.user.override_set': 'Индивидуальные права пользователя изменены',
+  'access.user.role_assigned': 'Роль пользователя назначена',
+  'analytics.finance_exported': 'Финансовый отчёт выгружен',
+  'analytics.report_exported': 'Отчёт выгружен',
   'crm.account_transfer_created': 'Перевод между счетами создан',
   'crm.branch_archived': 'Филиал архивирован',
   'crm.branch_created': 'Филиал создан',
@@ -170,6 +200,7 @@ const ACTION_TITLES: Record<string, string> = {
   'workflow.shared_task_created': 'Задача создана',
   'workflow.shared_task_updated': 'Задача изменена',
   'workflow.shared_task_closed': 'Задача закрыта',
+  'task.created': 'Задача создана',
   'crm.client_blacklisted': 'Клиент добавлен в чёрный список',
   'crm.client_unblacklisted': 'Клиент убран из чёрного списка',
   'crm.lead_status_changed': 'Статус лида изменён',
@@ -207,6 +238,41 @@ const ACTION_TITLES: Record<string, string> = {
   'crm.reference_branch_discipline_renamed': 'Направление филиала переименовано',
   'crm.reference_branch_discipline_restored': 'Направление филиала восстановлено',
   'crm.reference_branch_discipline_unassigned': 'Направление отвязано от филиала',
+  'files.deleted': 'Файл удалён',
+  'files.download_token_issued': 'Ссылка на скачивание файла создана',
+  'files.uploaded': 'Файл загружен',
+  'legal.consents_accepted': 'Согласия приняты',
+  'legal.deletion_requested': 'Удаление аккаунта запрошено',
+  'legal.deletion_status_updated': 'Статус удаления аккаунта изменён',
+  'messenger.channel_created': 'Канал создан',
+  'messenger.channel_post_created': 'Публикация в канале создана',
+  'messenger.channel_updated': 'Канал изменён',
+  'messenger.chat_claimed': 'Чат назначен сотруднику',
+  'messenger.chat_muted': 'Уведомления чата отключены',
+  'messenger.chat_unassigned': 'Ответственный за чат снят',
+  'messenger.chat_unmuted': 'Уведомления чата включены',
+  'messenger.group_created': 'Группа чата создана',
+  'messenger.group_members_updated': 'Участники группы чата изменены',
+  'messenger.message_deleted': 'Сообщение удалено',
+  'messenger.message_updated': 'Сообщение изменено',
+  'notifications.admin_sent': 'Уведомление отправлено администратором',
+  'notifications.device_deleted': 'Устройство уведомлений удалено',
+  'notifications.device_registered': 'Устройство уведомлений зарегистрировано',
+  'notifications.email_delivery_attempted': 'Выполнена попытка доставки письма',
+  'notifications.email_dispatch_failed': 'Отправка письма не удалась',
+  'notifications.email_enqueue_failed': 'Письмо не удалось поставить в очередь',
+  'notifications.email_outbox_failed': 'Доставка исходящего письма не удалась',
+  'notifications.preference_updated': 'Настройки уведомлений изменены',
+  'notifications.push_delivery_attempted': 'Выполнена попытка доставки уведомления',
+  'notifications.push_dispatch_failed': 'Отправка уведомления не удалась',
+  'profile.crm_lead_linked': 'Лид привязан к профилю',
+  'profile.crm_staff_linked': 'Сотрудник привязан к профилю',
+  'profile.crm_student_linked': 'Ученик привязан к профилю',
+  'profile.crm_teacher_linked': 'Преподаватель привязан к профилю',
+  'profile.note_created': 'Заметка профиля добавлена',
+  'profile.updated': 'Профиль изменён',
+  'settings.admin_chat_avatar_updated': 'Аватар рабочего чата изменён',
+  'settings.crm_custom_fields_updated': 'Дополнительные поля CRM изменены',
   'workflow.shared_task_legacy_status': 'Статус задачи перенесён',
 };
 
@@ -279,11 +345,13 @@ const FIELD_UPDATE_VERBS: Record<string, string> = {
 @Injectable()
 export class AuditPresentationService {
   present(input: AuditPresentationInput): AuditPresentationEvent {
-    const changes = this.extractChanges(
-      input.metadata,
-      input.beforeRef,
-      input.afterRef,
-    );
+    const changes = input.actionKey === 'crm.client_internal_note_changed'
+      ? []
+      : this.extractChanges(
+        input.metadata,
+        input.beforeRef,
+        input.afterRef,
+      );
 
     return {
       id: input.id,
@@ -398,8 +466,8 @@ export class AuditPresentationService {
         return [];
       }
 
-      const beforeValue = this.safeValue(before[key]);
-      const afterValue = this.safeValue(after[key]);
+      const beforeValue = this.safeChangeValue(key, before[key]);
+      const afterValue = this.safeChangeValue(key, after[key]);
       if (beforeValue === afterValue) {
         return [];
       }
@@ -440,8 +508,8 @@ export class AuditPresentationService {
       return [{
         key,
         label: FIELD_LABELS[key] ?? this.humanizeIdentifier(key),
-        before: this.safeValue(rawChange[beforeKey]),
-        after: this.safeValue(rawChange[afterKey]),
+        before: this.safeChangeValue(key, rawChange[beforeKey]),
+        after: this.safeChangeValue(key, rawChange[afterKey]),
       }];
     });
   }
@@ -466,11 +534,17 @@ export class AuditPresentationService {
   private humanizeAction(actionKey: string): string {
     const segments = actionKey.split('.').filter(Boolean);
     const action = segments.pop() ?? actionKey;
-    const suffix = Object.keys(ACTION_SUFFIXES).find((candidate) =>
-      action.endsWith(`_${candidate}`),
-    );
+    const suffix = ACTION_SUFFIXES[action]
+      ? action
+      : Object.keys(ACTION_SUFFIXES).find((candidate) =>
+        action.endsWith(`_${candidate}`),
+      );
 
     if (suffix) {
+      if (action === suffix) {
+        return GENERIC_ACTION_TITLES[suffix] ?? `Изменение: ${this.humanizeIdentifier(action)}`;
+      }
+
       const subject = action.slice(0, -(suffix.length + 1));
       const localizedSubject = this.localizeActionSubject(subject);
       if (localizedSubject) {
@@ -480,10 +554,10 @@ export class AuditPresentationService {
         )}`;
       }
 
-      return GENERIC_ACTION_TITLES[suffix] ?? 'Действие выполнено';
+      return GENERIC_ACTION_TITLES[suffix] ?? `Изменение: ${this.humanizeIdentifier(action)}`;
     }
 
-    return 'Действие выполнено';
+    return `Изменение: ${this.humanizeIdentifier(action)}`;
   }
 
   private localizeActionSubject(
@@ -532,7 +606,43 @@ export class AuditPresentationService {
   }
 
   private isTechnicalOrSensitiveKey(key: string): boolean {
-    return key.toLowerCase() === 'version' || SENSITIVE_KEY.test(key);
+    const segments = key
+      .replace(/([a-zа-я0-9])([A-ZА-Я])/g, '$1.$2')
+      .split(/[._:\-\s]+/)
+      .filter(Boolean)
+      .map((segment) => segment.toLowerCase());
+    const collapsed = segments.join('');
+    return segments.some((segment) =>
+      segment === 'id'
+      || segment === 'ids'
+      || segment === 'uuid'
+      || segment === 'version'
+      || segment === 'versions'
+      )
+      || collapsed === 'bodylength'
+      || SENSITIVE_KEY.test(key)
+      || SENSITIVE_KEY.test(collapsed);
+  }
+
+  private safeChangeValue(key: string, value: unknown): string | null {
+    if (typeof value === 'boolean') {
+      return value ? 'Да' : 'Нет';
+    }
+
+    const safe = this.safeValue(value);
+    if (!safe) {
+      return null;
+    }
+
+    const normalizedKey = key
+      .replace(/([a-zа-я0-9])([A-ZА-Я])/g, '$1.$2')
+      .split(/[._:\-\s]+/)
+      .filter(Boolean)
+      .at(-1)
+      ?.toLowerCase();
+    return normalizedKey
+      ? ENUM_VALUE_LABELS[normalizedKey]?.[safe.toLowerCase()] ?? safe
+      : safe;
   }
 
   private safeValue(value: unknown): string | null {

@@ -422,6 +422,7 @@ extension _ClientCardStudent on _ClientCardState {
       loadingMore: _operationalHistoryLoadingMore,
       error: _internalContextError,
       items: _operationalHistory,
+      capabilitySnapshot: widget.capabilitySnapshot,
       hasMore: _operationalHistoryCursor != null,
       onRetry: _fetchInternalContext,
       onLoadMore: _loadMoreOperationalHistory,

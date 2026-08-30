@@ -150,6 +150,10 @@ describe("ClientInternalContextService operational history", () => {
         { key: "status", label: "Статус", before: "Новый", after: "Занимается" },
       ],
     });
+    expect(result.items.find((item) => item.id === "note")).toMatchObject({
+      actionKey: "crm.client_internal_note_changed",
+      changes: [],
+    });
     expect(result.items.find((item) => item.id === "generic-field")).toMatchObject({
       changes: [
         {

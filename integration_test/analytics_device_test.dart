@@ -46,7 +46,8 @@ void main() {
 
     final xlsxButton = find.widgetWithText(OutlinedButton, 'XLSX');
     await tester.ensureVisible(xlsxButton);
-    tester.widget<OutlinedButton>(xlsxButton).onPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(xlsxButton);
     await tester.pumpAndSettle();
     expect(directorApi.exports, hasLength(1));
     expect(directorApi.openedReports, hasLength(1));
@@ -69,7 +70,8 @@ void main() {
     await tester.pumpAndSettle();
     final csvButton = find.widgetWithText(OutlinedButton, 'CSV');
     await tester.ensureVisible(csvButton);
-    tester.widget<OutlinedButton>(csvButton).onPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(csvButton);
     await tester.pumpAndSettle();
     expect(directorApi.openedReports, hasLength(2));
     final csv = directorApi.openedReports[1];
@@ -124,7 +126,7 @@ void main() {
       await tester.tap(find.text('Журналы'));
       await tester.pumpAndSettle();
       expect(find.text('Электронная почта изменена'), findsOneWidget);
-      expect(find.text('Мария Баранова'), findsOneWidget);
+      expect(find.text('Ученик · Мария Баранова'), findsOneWidget);
       expect(find.text('Наталия Назарова'), findsOneWidget);
 
       await tester.enterText(
@@ -141,6 +143,16 @@ void main() {
       expect(
         api.queries['/crm/activity'],
         containsPair('entityType', 'student'),
+      );
+      expect(api.queries['/crm/activity'], containsPair('branchId', _branchA));
+      expect(api.queries['/crm/activity'], containsPair('limit', 100));
+      expect(
+        api.queries['/crm/activity'],
+        containsPair('from', _fixedApiFilterFor(_branchA)['from']),
+      );
+      expect(
+        api.queries['/crm/activity'],
+        containsPair('to', _fixedApiFilterFor(_branchA)['to']),
       );
       final activityLoadsBeforeExpansion = api.activityRequests;
 
@@ -165,11 +177,42 @@ void main() {
       expect(navigation.openedLink?.entityType, EntityLinkType.client);
       expect(navigation.openedLink?.entityId, _studentId);
       expect(navigation.openedLink?.rawEntityType, 'student');
+      expect(navigation.openedLink?.optionalFocus?.focus, 'changedEntity');
       expect(navigation.preservedView?.filters['entityType'], 'student');
       expect(navigation.preservedView?.filters['query'], 'мария');
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('audit journal hides forbidden target navigation', (
+    tester,
+  ) async {
+    final api = _DeviceApi();
+    final navigation = _NavigationProbe();
+    const restricted = CapabilitySnapshot(
+      accountId: 'restricted-director',
+      role: 'director',
+      accessVersion: 1,
+      capabilities: {'report.status.read'},
+      scopes: {},
+    );
+    await tester.pumpWidget(
+      _app(
+        api,
+        role: 'director',
+        initialViewState: _fixedFilter,
+        navigation: navigation,
+        accessSnapshot: restricted,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Журналы'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Электронная почта изменена'), findsOneWidget);
+    expect(find.text('Открыть ученика'), findsNothing);
+    expect(navigation.openedLink, isNull);
+  });
 }
 
 final _fixedFilter = ContextViewState(
@@ -199,6 +242,12 @@ Map<String, dynamic> get _fixedApiFilter => DashboardFilter(
   from: DateTime(2026, 7, 1),
   to: DateTime(2026, 7, 31),
   branchId: _branchB,
+).apiFilter;
+
+Map<String, dynamic> _fixedApiFilterFor(String branchId) => DashboardFilter(
+  from: DateTime(2026, 7, 1),
+  to: DateTime(2026, 7, 31),
+  branchId: branchId,
 ).apiFilter;
 
 void _expectSharedFilter(_DeviceApi api, String branchId) {
