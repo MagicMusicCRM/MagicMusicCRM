@@ -90,4 +90,32 @@ void main() {
     await tester.tap(find.text('Открыть ученика'));
     expect(openCount, 1);
   });
+
+  testWidgets('renders an unknown target without an open action', (
+    tester,
+  ) async {
+    final fallbackEvent = AuditPresentationEvent.fromJson(<String, dynamic>{
+      'id': 'audit-unknown-target',
+      'actionKey': 'crm.unknown_updated',
+      'title': 'Данные изменены',
+      'actor': <String, dynamic>{'name': 'Мария Администратор'},
+      'target': <String, dynamic>{
+        'type': 'unknown',
+        'label': 'Неизвестная запись',
+        'displayName': null,
+        'routeType': null,
+      },
+      'changes': <Map<String, dynamic>>[],
+      'occurredAt': '2026-08-30T10:15:00.000Z',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AuditEventCard(event: fallbackEvent)),
+      ),
+    );
+
+    expect(find.text('Неизвестная запись'), findsOneWidget);
+    expect(find.byType(TextButton), findsNothing);
+  });
 }

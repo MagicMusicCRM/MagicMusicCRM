@@ -69,7 +69,7 @@ class AuditPresentationChange {
 }
 
 class AuditPresentationEvent {
-  const AuditPresentationEvent({
+  AuditPresentationEvent({
     required this.id,
     required this.actionKey,
     required this.title,
@@ -77,9 +77,9 @@ class AuditPresentationEvent {
     required this.reason,
     required this.actor,
     required this.target,
-    required this.changes,
+    required List<AuditPresentationChange> changes,
     required this.occurredAt,
-  });
+  }) : changes = List.unmodifiable(changes);
 
   final String id;
   final String actionKey;

@@ -81,5 +81,31 @@ void main() {
       expect(event.changes, isEmpty);
       expect(event.occurredAt, isNull);
     });
+
+    test('exposes parsed changes as an unmodifiable list', () {
+      final event = AuditPresentationEvent.fromJson(fixture);
+
+      expect(event.changes.first.before, 'old@example.com');
+      expect(
+        () => event.changes[0] = const AuditPresentationChange(
+          key: 'email',
+          label: 'Электронная почта',
+          before: 'replacement@example.com',
+          after: 'new@example.com',
+        ),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => event.changes.add(
+          const AuditPresentationChange(
+            key: 'status',
+            label: 'Статус',
+            before: 'Новый',
+            after: 'Активный',
+          ),
+        ),
+        throwsUnsupportedError,
+      );
+    });
   });
 }
