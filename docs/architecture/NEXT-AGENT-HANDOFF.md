@@ -1,11 +1,24 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-30
-> Production: client `1.5.24+204`, server `43a0651f`,
-> image `sha256:583a2a23…`, migration `0145`
+> Production: client `1.5.25+205`, server `f005bf5e`,
+> image `sha256:35e2ad37…`, migration `0145`
 > Рабочая ветка: `codex/customer-corrections`
-> Статус: contact email/direction/invitation production rollout PASS;
-> общий update build `204` опубликован, локальный Release запущен
+> Статус: smooth client-card save и актуальная почта приглашения rollout PASS;
+> общий update build `205` опубликован
+
+Release `1.5.25+205` устранил полную перезагрузку карточки при сохранении,
+комментариях и realtime-событиях. Пустая почта теперь действительно очищается,
+невалидный незавершённый адрес не отправляется на сервер, а приглашение ждёт
+сохранения текущего адреса. Worker fail-closed отклоняет stale invitation после
+замены или удаления контакта. Flutter `1466/1466`, backend `269/269` suites /
+`3393/3393` tests, analyze/typecheck/build, exact image, Windows/Setup/APK/AAB
+и Android signing PASS. Production image `f005bf5e` healthy/restart `0`,
+migration `0145`, reconciliation дважды `issues=[]`, email outbox `0/0`,
+API/Caddy ошибки `0/0`. Fresh encrypted pre/post backup скопированы off-host;
+оба прошли isolated candidate/rollback restore. Оба manifest, четыре public
+artifacts и GitHub Release `v1.5.25` опубликованы. Evidence:
+`docs/audits/v7-production-client-card-smooth-save-205.md`.
 
 Release `1.5.24+204` отделил контактную почту ученика от глобально уникального
 login identity и устранил оставшиеся ошибки сохранения email/направления в
