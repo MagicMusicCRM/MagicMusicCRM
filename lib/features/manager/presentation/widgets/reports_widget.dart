@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/models/audit_presentation_event.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/context_transition_registry.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
@@ -13,7 +14,6 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
@@ -21,6 +21,7 @@ import 'package:magic_music_crm/features/manager/presentation/reporting/reportin
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
+import 'package:magic_music_crm/shared/widgets/audit_event_card.dart';
 
 part 'reports_widget_widgets.dart';
 

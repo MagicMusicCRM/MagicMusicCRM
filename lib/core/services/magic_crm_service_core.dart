@@ -849,7 +849,7 @@ extension MagicCrmCore on MagicCrmService {
     return _items(response).map(_legacyStaff).toList();
   }
 
-  Future<List<Map<String, dynamic>>> listActivityLog({
+  Future<List<AuditPresentationEvent>> listActivityLog({
     String? q,
     String? actorUserId,
     String? entityType,
@@ -883,6 +883,8 @@ extension MagicCrmCore on MagicCrmService {
       '/crm/activity',
       queryParameters: queryParameters,
     );
-    return _items(response).map(_legacyActivityLog).toList();
+    return _items(
+      response,
+    ).map(AuditPresentationEvent.fromJson).toList(growable: false);
   }
 }

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/models/audit_presentation_event.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 void main() {
@@ -674,23 +675,31 @@ void main() {
               'items': [
                 {
                   'id': 'audit-a',
-                  'actorUserId': 'staff-user-a',
-                  'actorName': 'Ольга Смирнова',
-                  'actorEmail': 'staff@example.com',
-                  'actorRole': 'manager',
-                  'actorStaffRole': 'manager',
-                  'actorPosition': 'Управляющий',
-                  'actorBranches': [
-                    {'id': 'branch-a', 'name': 'Центр'},
+                  'actionKey': 'crm.student_updated',
+                  'title': 'Электронная почта изменена',
+                  'summary': 'Контактные данные обновлены',
+                  'reason': 'Уточнение данных',
+                  'actor': {
+                    'id': 'staff-user-a',
+                    'name': 'Ольга Смирнова',
+                    'role': 'manager',
+                  },
+                  'target': {
+                    'type': 'student',
+                    'id': 'student-a',
+                    'label': 'Ученик',
+                    'displayName': 'Мария Баранова',
+                    'routeType': 'student',
+                  },
+                  'changes': [
+                    {
+                      'key': 'email',
+                      'label': 'Электронная почта',
+                      'before': 'old@example.com',
+                      'after': 'new@example.com',
+                    },
                   ],
-                  'action': 'crm.student_updated',
-                  'entityType': 'student',
-                  'entityId': 'student-a',
-                  'historyType': 'student',
-                  'description': 'Обновлена карточка',
-                  'branchId': 'branch-a',
-                  'metadata': {'branchId': 'branch-a'},
-                  'createdAt': '2026-06-15T00:00:00.000Z',
+                  'occurredAt': '2026-06-15T00:00:00.000Z',
                 },
               ],
             },
@@ -738,7 +747,10 @@ void main() {
         expect(teachers.single['students_count'], 12);
         expect(teachers.single['branches'].single['name'], 'Центр');
         expect(staff.single['custom_data']['birthday'], '1990-06-01');
-        expect(activity.single['description'], 'Обновлена карточка');
+        expect(activity, isA<List<AuditPresentationEvent>>());
+        expect(activity.single.title, 'Электронная почта изменена');
+        expect(activity.single.target.displayName, 'Мария Баранова');
+        expect(activity.single.changes.single.before, 'old@example.com');
         expect(adapter.requests[0].queryParameters['ratingFrom'], 4);
         expect(
           adapter.requests[0].queryParameters['authorization'],
@@ -746,6 +758,7 @@ void main() {
         );
         expect(adapter.requests[1].queryParameters['appRole'], 'manager');
         expect(adapter.requests[2].queryParameters['historyType'], 'student');
+        expect(adapter.requests[2].queryParameters['limit'], 25);
       },
     );
 

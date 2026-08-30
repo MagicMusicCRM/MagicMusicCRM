@@ -1,12 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/client_internal_context.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/context_transition_registry.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
+import 'package:magic_music_crm/shared/widgets/audit_event_card.dart';
 
 typedef ClientInternalNoteFlush = Future<bool> Function();
 
@@ -384,7 +389,7 @@ class _ClientInternalNoteCardState extends State<ClientInternalNoteCard> {
   }
 }
 
-class ClientOperationalHistoryView extends StatelessWidget {
+class ClientOperationalHistoryView extends ConsumerWidget {
   const ClientOperationalHistoryView({
     super.key,
     required this.loading,
@@ -399,13 +404,13 @@ class ClientOperationalHistoryView extends StatelessWidget {
   final bool loading;
   final bool loadingMore;
   final String? error;
-  final List<ClientOperationalHistoryItem> items;
+  final List<AuditPresentationEvent> items;
   final bool hasMore;
   final VoidCallback onRetry;
   final VoidCallback onLoadMore;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (loading && items.isEmpty) return const SkeletonBox(height: 160);
     if (error != null && items.isEmpty) {
       return MagicPageState(
@@ -434,7 +439,10 @@ class ClientOperationalHistoryView extends StatelessWidget {
             ),
           )
         else
-          for (final item in items) _OperationalHistoryRow(item: item),
+          for (final item in items) ...[
+            _clientAuditCard(context, ref, item),
+            const SizedBox(height: AppSpace.sm),
+          ],
         if (hasMore)
           Align(
             alignment: Alignment.centerLeft,
@@ -455,52 +463,61 @@ class ClientOperationalHistoryView extends StatelessWidget {
   }
 }
 
-class _OperationalHistoryRow extends StatelessWidget {
-  const _OperationalHistoryRow({required this.item});
+Widget _clientAuditCard(
+  BuildContext context,
+  WidgetRef ref,
+  AuditPresentationEvent event,
+) {
+  final transition = _clientAuditTransition(event);
+  return AuditEventCard(
+    key: ValueKey(event.id),
+    event: event,
+    onOpenTarget: transition == null
+        ? null
+        : () => unawaited(_openClientAuditTarget(context, ref, transition)),
+  );
+}
 
-  final ClientOperationalHistoryItem item;
+ContextTransition? _clientAuditTransition(AuditPresentationEvent event) {
+  final id = event.target.id?.trim();
+  final routeType = event.target.routeType?.trim();
+  if (id == null || id.isEmpty || routeType == null || routeType.isEmpty) {
+    return null;
+  }
+  try {
+    return const ContextTransitionRegistry().create(
+      source: ContextSourceType.audit,
+      target: ContextTargetType.changedEntity,
+      entityId: id,
+      sourceState: ContextViewState(filters: const {'section': 'history'}),
+      rawEntityType: routeType,
+    );
+  } on FormatException {
+    return null;
+  } on StateError {
+    return null;
+  }
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: cs.outlineVariant)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: Icon(Icons.history_rounded, size: 18, color: AppColor.gold),
-          ),
-          const SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.action,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                Text('Причина: ${item.reason}'),
-                if (item.summary?.trim().isNotEmpty == true)
-                  Text(
-                    item.summary!,
-                    style: const TextStyle(color: AppColor.text2),
-                  ),
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  '${item.actorName} · '
-                  '${DateFormat('dd.MM.yyyy HH:mm').format(item.occurredAt.toLocal())}',
-                  style: const TextStyle(color: AppColor.text2, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
+Future<void> _openClientAuditTarget(
+  BuildContext context,
+  WidgetRef ref,
+  ContextTransition transition,
+) async {
+  try {
+    await openEntityLink(
+      context,
+      ref,
+      transition.target,
+      sourceViewState: transition.sourceState,
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          userErrorMessage(error, fallback: 'Не удалось открыть запись.'),
+        ),
       ),
     );
   }

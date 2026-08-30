@@ -238,7 +238,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   ClientInternalNoteFlush? _flushInternalNote;
-  List<ClientOperationalHistoryItem> _operationalHistory = const [];
+  List<AuditPresentationEvent> _operationalHistory = const [];
   String? _operationalHistoryCursor;
   final Map<String, GlobalKey> _desktopSectionKeys = {
     for (final section in [

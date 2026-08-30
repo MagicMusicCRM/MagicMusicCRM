@@ -1,3 +1,7 @@
+import 'package:magic_music_crm/core/models/audit_presentation_event.dart';
+
+export 'package:magic_music_crm/core/models/audit_presentation_event.dart';
+
 class ClientInternalNote {
   const ClientInternalNote({
     required this.body,
@@ -26,49 +30,18 @@ class ClientInternalNote {
       );
 }
 
-class ClientOperationalHistoryItem {
-  const ClientOperationalHistoryItem({
-    required this.id,
-    required this.actionKey,
-    required this.action,
-    required this.reason,
-    required this.actorName,
-    required this.occurredAt,
-    this.summary,
-  });
-
-  final String id;
-  final String actionKey;
-  final String action;
-  final String reason;
-  final String? summary;
-  final String actorName;
-  final DateTime occurredAt;
-
-  factory ClientOperationalHistoryItem.fromJson(Map<String, dynamic> json) =>
-      ClientOperationalHistoryItem(
-        id: json['id'].toString(),
-        actionKey: json['actionKey'].toString(),
-        action: json['action'].toString(),
-        reason: json['reason'].toString(),
-        summary: json['summary']?.toString(),
-        actorName: json['actorName'].toString(),
-        occurredAt: DateTime.parse(json['occurredAt'].toString()),
-      );
-}
-
 class ClientOperationalHistoryPage {
   const ClientOperationalHistoryPage({required this.items, this.nextCursor});
 
-  final List<ClientOperationalHistoryItem> items;
+  final List<AuditPresentationEvent> items;
   final String? nextCursor;
 
   factory ClientOperationalHistoryPage.fromJson(Map<String, dynamic> json) =>
       ClientOperationalHistoryPage(
         items: [
           for (final item in json['items'] as List? ?? const [])
-            if (item is Map<String, dynamic>)
-              ClientOperationalHistoryItem.fromJson(item),
+            if (item is Map)
+              AuditPresentationEvent.fromJson(Map<String, dynamic>.from(item)),
         ],
         nextCursor: json['nextCursor']?.toString(),
       );

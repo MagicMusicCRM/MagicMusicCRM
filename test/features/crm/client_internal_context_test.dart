@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/shared/widgets/audit_event_card.dart';
 
 import '../crm/client_card/card_fake_api.dart';
 
@@ -17,18 +18,58 @@ const _student = <String, dynamic>{
   'branchName': 'Сокол',
 };
 
-List<Map<String, dynamic>> _operationalHistoryFixture() => List.generate(
-  12,
-  (index) => {
-    'id': '00000000-0000-4000-8000-${(index + 1).toString().padLeft(12, '0')}',
-    'actionKey': 'crm.test_${index + 1}',
-    'action': 'Понятное действие ${index + 1}',
-    'reason': 'Причина ${index + 1}',
-    'summary': 'Результат ${index + 1}',
-    'actorName': 'Анна Администратор',
-    'occurredAt': DateTime.utc(2026, 8, 30 - index, 12).toIso8601String(),
+Map<String, dynamic> _auditEvent({
+  required String id,
+  required String actionKey,
+  required String title,
+  required String reason,
+  required String summary,
+  required String occurredAt,
+  String before = 'Старое значение',
+  String after = 'Новое значение',
+}) => <String, dynamic>{
+  'id': id,
+  'actionKey': actionKey,
+  'title': title,
+  'summary': summary,
+  'reason': reason,
+  'actor': <String, dynamic>{
+    'id': 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    'name': 'Анна Администратор',
+    'role': 'admin',
   },
-);
+  'target': <String, dynamic>{
+    'type': 'student',
+    'id': _student['id'],
+    'label': 'Ученик',
+    'displayName': 'Анна Соколова',
+    'routeType': 'student',
+  },
+  'changes': <Map<String, dynamic>>[
+    <String, dynamic>{
+      'key': 'status',
+      'label': 'Статус',
+      'before': before,
+      'after': after,
+    },
+  ],
+  'occurredAt': occurredAt,
+};
+
+List<Map<String, dynamic>> _operationalHistoryFixture() =>
+    List.generate(12, (index) {
+      final number = index + 1;
+      return _auditEvent(
+        id: '00000000-0000-4000-8000-${number.toString().padLeft(12, '0')}',
+        actionKey: 'crm.test_$number',
+        title: 'Понятное действие $number',
+        reason: 'Причина $number',
+        summary: 'Результат $number',
+        before: 'До $number',
+        after: 'После $number',
+        occurredAt: DateTime.utc(2026, 8, 30 - index, 12).toIso8601String(),
+      );
+    });
 
 void main() {
   testWidgets('staff edits the versioned note and sees exact audit context', (
@@ -48,16 +89,17 @@ void main() {
         'updatedByName': 'Мария Управляющая',
         'updatedAt': '2026-08-07T10:00:00.000Z',
       },
-      operationalHistory: const [
-        {
-          'id': 'history-1',
-          'actionKey': 'crm.payment_reversed',
-          'action': 'Оплата удалена из статистики',
-          'reason': 'Дубль банковской операции',
-          'summary': 'Сумма: 3 000 ₽',
-          'actorName': 'Анна Администратор',
-          'occurredAt': '2026-08-07T11:00:00.000Z',
-        },
+      operationalHistory: [
+        _auditEvent(
+          id: 'history-1',
+          actionKey: 'crm.payment_reversed',
+          title: 'Оплата удалена из статистики',
+          reason: 'Дубль банковской операции',
+          summary: 'Сумма: 3 000 ₽',
+          before: 'Оплачено',
+          after: 'Сторнировано',
+          occurredAt: '2026-08-07T11:00:00.000Z',
+        ),
       ],
     );
     final events = StreamController<CrmChangedEvent>();
@@ -128,8 +170,27 @@ void main() {
 
     expect(find.byKey(const Key('client-operational-history')), findsOneWidget);
     expect(find.text('Оплата удалена из статистики'), findsOneWidget);
-    expect(find.text('Причина: Дубль банковской операции'), findsOneWidget);
     expect(find.textContaining('Анна Администратор'), findsOneWidget);
+    expect(find.text('Причина: Дубль банковской операции'), findsNothing);
+    final historyLoadsBeforeExpansion = api.getCalls
+        .where((call) => call.path.endsWith('/operational-history'))
+        .length;
+
+    final expand = find.byKey(const Key('audit-event-expand'));
+    await tester.ensureVisible(expand);
+    await tester.tap(expand);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Было: Оплачено'), findsOneWidget);
+    expect(find.text('Стало: Сторнировано'), findsOneWidget);
+    expect(find.text('Причина: Дубль банковской операции'), findsOneWidget);
+    expect(find.textContaining('Версия'), findsNothing);
+    expect(
+      api.getCalls
+          .where((call) => call.path.endsWith('/operational-history'))
+          .length,
+      historyLoadsBeforeExpansion,
+    );
   });
 
   testWidgets('teacher neither requests nor sees staff-only client context', (
@@ -189,10 +250,11 @@ void main() {
         find.byKey(const Key('client-operational-history')),
         findsOneWidget,
       );
-      expect(find.textContaining('Причина: Причина '), findsNWidgets(10));
+      expect(find.byType(AuditEventCard), findsNWidgets(10));
       expect(find.text('Понятное действие 10'), findsOneWidget);
       expect(find.text('Понятное действие 11'), findsNothing);
       expect(find.text('Занятие из legacy-ленты'), findsNothing);
+      expect(find.textContaining('Версия'), findsNothing);
       final more = find.byKey(const Key('client-operational-history-more'));
       expect(more, findsOneWidget);
       final firstHistoryRequest = api.getCalls.firstWhere(
@@ -201,13 +263,20 @@ void main() {
       expect(firstHistoryRequest.query['limit'], 10);
       expect(firstHistoryRequest.query['cursor'], isNull);
 
+      final firstExpand = find.byKey(const Key('audit-event-expand')).first;
+      await tester.ensureVisible(firstExpand);
+      await tester.tap(firstExpand);
+      await tester.pumpAndSettle();
+      expect(find.text('Было: До 1'), findsOneWidget);
+
       await tester.ensureVisible(more);
       await tester.tap(more);
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Причина: Причина '), findsNWidgets(12));
+      expect(find.byType(AuditEventCard), findsNWidgets(12));
       expect(find.text('Понятное действие 11'), findsOneWidget);
       expect(find.text('Понятное действие 12'), findsOneWidget);
+      expect(find.text('Было: До 1'), findsOneWidget);
       expect(more, findsNothing);
       final historyRequests = api.getCalls
           .where((call) => call.path.endsWith('/operational-history'))

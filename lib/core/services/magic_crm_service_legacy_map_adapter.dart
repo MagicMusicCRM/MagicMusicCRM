@@ -293,27 +293,6 @@ Map<String, dynamic> _legacyStaff(Map<String, dynamic> item) {
   };
 }
 
-Map<String, dynamic> _legacyActivityLog(Map<String, dynamic> item) {
-  return {
-    'id': item['id'],
-    'actor_user_id': item['actorUserId'],
-    'actor_name': item['actorName'],
-    'actor_email': item['actorEmail'],
-    'actor_role': item['actorRole'],
-    'actor_staff_role': item['actorStaffRole'],
-    'actor_position': item['actorPosition'],
-    'actor_branches': item['actorBranches'] ?? const [],
-    'action': item['action'],
-    'entity_type': item['entityType'],
-    'entity_id': item['entityId'],
-    'history_type': item['historyType'],
-    'description': item['description'],
-    'branch_id': item['branchId'],
-    'metadata': item['metadata'] ?? const <String, dynamic>{},
-    'created_at': item['createdAt'],
-  };
-}
-
 Map<String, dynamic> _legacyBranch(Map<String, dynamic> item) {
   return {
     'id': item['id'],

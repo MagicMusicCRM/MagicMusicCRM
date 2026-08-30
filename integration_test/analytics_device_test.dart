@@ -9,10 +9,14 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/workspace/entity_navigation_scope.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 
+import '../test/support/minimal_xlsx_fixture.dart';
 import 'evidence_screenshot.dart';
 
 void main() {
@@ -40,8 +44,11 @@ void main() {
     await tester.pumpAndSettle();
     _expectSharedFilter(directorApi, _branchB);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'XLSX'));
+    final xlsxButton = find.widgetWithText(OutlinedButton, 'XLSX');
+    await tester.ensureVisible(xlsxButton);
+    tester.widget<OutlinedButton>(xlsxButton).onPressed!();
     await tester.pumpAndSettle();
+    expect(directorApi.exports, hasLength(1));
     expect(directorApi.openedReports, hasLength(1));
     final xlsx = directorApi.openedReports[0];
     expect(xlsx.filename, startsWith('client-status-'));
@@ -60,7 +67,9 @@ void main() {
       const Offset(0, 600),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(OutlinedButton, 'CSV'));
+    final csvButton = find.widgetWithText(OutlinedButton, 'CSV');
+    await tester.ensureVisible(csvButton);
+    tester.widget<OutlinedButton>(csvButton).onPressed!();
     await tester.pumpAndSettle();
     expect(directorApi.openedReports, hasLength(2));
     final csv = directorApi.openedReports[1];
@@ -95,6 +104,72 @@ void main() {
     await captureEvidence(tester, 'manager-dashboard-without-school-finance');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'audit journal keeps filters while expanding and opens its target',
+    (tester) async {
+      final api = _DeviceApi();
+      final navigation = _NavigationProbe();
+      await tester.pumpWidget(
+        _app(
+          api,
+          role: 'director',
+          initialViewState: _fixedFilter,
+          navigation: navigation,
+          accessSnapshot: _navigationSnapshot,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Журналы'));
+      await tester.pumpAndSettle();
+      expect(find.text('Электронная почта изменена'), findsOneWidget);
+      expect(find.text('Мария Баранова'), findsOneWidget);
+      expect(find.text('Наталия Назарова'), findsOneWidget);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Поиск действий'),
+        'мария',
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Все объекты'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ученики').last);
+      await tester.pumpAndSettle();
+      expect(api.queries['/crm/activity'], containsPair('q', 'мария'));
+      expect(
+        api.queries['/crm/activity'],
+        containsPair('entityType', 'student'),
+      );
+      final activityLoadsBeforeExpansion = api.activityRequests;
+
+      await tester.tap(find.byKey(const Key('audit-event-expand')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Было: old@example.com'), findsOneWidget);
+      expect(find.text('Стало: new@example.com'), findsOneWidget);
+      expect(find.textContaining('Версия'), findsNothing);
+      expect(
+        tester
+            .widget<TextField>(find.widgetWithText(TextField, 'Поиск действий'))
+            .controller
+            ?.text,
+        'мария',
+      );
+      expect(find.text('Ученики'), findsOneWidget);
+      expect(api.activityRequests, activityLoadsBeforeExpansion);
+
+      await tester.tap(find.text('Открыть ученика'));
+      await tester.pumpAndSettle();
+      expect(navigation.openedLink?.entityType, EntityLinkType.client);
+      expect(navigation.openedLink?.entityId, _studentId);
+      expect(navigation.openedLink?.rawEntityType, 'student');
+      expect(navigation.preservedView?.filters['entityType'], 'student');
+      expect(navigation.preservedView?.filters['query'], 'мария');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 final _fixedFilter = ContextViewState(
@@ -107,6 +182,18 @@ final _fixedFilter = ContextViewState(
 
 const _branchA = '11111111-1111-4111-8111-111111111111';
 const _branchB = '22222222-2222-4222-8222-222222222222';
+const _studentId = '33333333-3333-4333-8333-333333333333';
+const _navigationSnapshot = CapabilitySnapshot(
+  accountId: 'account-director',
+  role: 'director',
+  accessVersion: 1,
+  capabilities: {
+    'crm.client.read.basic',
+    'report.status.read',
+    'commerce.school_finance.read',
+  },
+  scopes: {},
+);
 
 Map<String, dynamic> get _fixedApiFilter => DashboardFilter(
   from: DateTime(2026, 7, 1),
@@ -139,9 +226,13 @@ Widget _app(
   _DeviceApi api, {
   required String role,
   ContextViewState? initialViewState,
+  _NavigationProbe? navigation,
+  CapabilitySnapshot? accessSnapshot,
 }) => ProviderScope(
   overrides: [
     magicApiClientProvider.overrideWithValue(api),
+    if (accessSnapshot != null)
+      capabilitySnapshotProvider.overrideWith((ref) async => accessSnapshot),
     reportFileOpenerProvider.overrideWithValue((bytes, filename) async {
       api.openedReports.add((bytes: List<int>.from(bytes), filename: filename));
       return ReportFileOpenResult(path: 'C:/Reports/$filename', opened: true);
@@ -151,11 +242,35 @@ Widget _app(
     key: evidenceRootKey,
     child: MaterialApp(
       home: Scaffold(
-        body: ReportsWidget(role: role, initialViewState: initialViewState),
+        body: navigation == null
+            ? ReportsWidget(
+                role: role,
+                initialViewState: initialViewState,
+                accessSnapshot: accessSnapshot,
+              )
+            : EntityNavigationScope(
+                isDesktop: true,
+                preserveCurrentView: (state) =>
+                    navigation.preservedView = state,
+                open: (link, {titleHint}) {
+                  navigation.openedLink = link;
+                  return EntityNavigationOpenResult.opened;
+                },
+                child: ReportsWidget(
+                  role: role,
+                  initialViewState: initialViewState,
+                  accessSnapshot: accessSnapshot,
+                ),
+              ),
       ),
     ),
   ),
 );
+
+class _NavigationProbe {
+  EntityLink? openedLink;
+  ContextViewState? preservedView;
+}
 
 class _DeviceApi extends MagicApiClient {
   _DeviceApi()
@@ -164,6 +279,7 @@ class _DeviceApi extends MagicApiClient {
   final Map<String, Map<String, dynamic>> queries = {};
   final List<Map<String, dynamic>> exports = [];
   final List<({List<int> bytes, String filename})> openedReports = [];
+  int activityRequests = 0;
 
   @override
   Future<T> get<T>(
@@ -177,6 +293,42 @@ class _DeviceApi extends MagicApiClient {
             'items': [
               {'id': _branchA, 'name': 'Первый филиал'},
               {'id': _branchB, 'name': 'Второй филиал'},
+            ],
+          }
+          as T;
+    }
+    if (path == '/crm/activity') {
+      activityRequests++;
+      return <String, dynamic>{
+            'items': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'id': 'audit-email-change',
+                'actionKey': 'crm.student_updated',
+                'title': 'Электронная почта изменена',
+                'summary': 'Контактные данные обновлены',
+                'reason': 'Уточнение данных',
+                'actor': <String, dynamic>{
+                  'id': 'user-director',
+                  'name': 'Наталия Назарова',
+                  'role': 'director',
+                },
+                'target': <String, dynamic>{
+                  'type': 'student',
+                  'id': _studentId,
+                  'label': 'Ученик',
+                  'displayName': 'Мария Баранова',
+                  'routeType': 'student',
+                },
+                'changes': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'key': 'email',
+                    'label': 'Электронная почта',
+                    'before': 'old@example.com',
+                    'after': 'new@example.com',
+                  },
+                ],
+                'occurredAt': '2026-08-30T17:21:00.000Z',
+              },
             ],
           }
           as T;
@@ -206,6 +358,6 @@ class _DeviceApi extends MagicApiClient {
         'student;Алёна Смирнова;Занимается;$_branchB;2026-07-10\r\n',
       );
     }
-    return [0x50, 0x4b, 0x03, 0x04, 0x14, 0x00];
+    return minimalXlsxBytes();
   }
 }

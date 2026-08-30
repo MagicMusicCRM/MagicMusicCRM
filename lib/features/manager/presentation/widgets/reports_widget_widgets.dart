@@ -58,7 +58,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
   int _loadSequence = 0;
   Object? _loadError;
   String _entityType = 'all';
-  List<Map<String, dynamic>> _items = [];
+  List<AuditPresentationEvent> _items = [];
 
   @override
   void initState() {
@@ -134,29 +134,14 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
     _loadActivity(preserveContent: true);
   }
 
-  /// «Активность» used to be a dead-end list. Every row carries the entity it
-  /// touched (entity_type + entity_id — already in the payload), so a tap now
-  /// opens that client / lesson / profile. `audit_events.entity_type` is a free
-  /// string, so unknown kinds are simply non-tappable (see [_activityOpenable]).
-  Future<void> _openActivityEntity(Map<String, dynamic> item) async {
-    final entityType = item['entity_type']?.toString();
-    final entityId = item['entity_id']?.toString();
-    if (entityId == null || entityId.trim().isEmpty) return;
+  Future<void> _openActivityEntity(ContextTransition transition) async {
     try {
-      final transition = const ContextTransitionRegistry().create(
-        source: ContextSourceType.audit,
-        target: ContextTargetType.changedEntity,
-        entityId: entityId,
-        sourceState: ContextViewState(
-          filters: {
-            ...widget.filter.toContextViewState().filters,
-            'entityType': _entityType,
-            'query': _searchCtrl.text,
-          },
-        ),
-        rawEntityType: entityType,
+      await openEntityLink(
+        context,
+        ref,
+        transition.target,
+        sourceViewState: transition.sourceState,
       );
-      await openEntityLink(context, ref, transition.target);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -169,20 +154,42 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
     }
   }
 
-  static bool _activityOpenable(Map<String, dynamic> item) {
-    const openable = {
-      'student',
-      'lead',
-      'lesson',
-      'profile',
-      'staff',
-      'group',
-      'teacher',
-    };
-    final id = item['entity_id']?.toString();
-    return id != null &&
-        id.trim().isNotEmpty &&
-        openable.contains(item['entity_type']?.toString());
+  ContextTransition? _activityTransition(AuditPresentationEvent event) {
+    final id = event.target.id?.trim();
+    final routeType = event.target.routeType?.trim();
+    if (id == null || id.isEmpty || routeType == null || routeType.isEmpty) {
+      return null;
+    }
+    try {
+      return const ContextTransitionRegistry().create(
+        source: ContextSourceType.audit,
+        target: ContextTargetType.changedEntity,
+        entityId: id,
+        sourceState: ContextViewState(
+          filters: {
+            ...widget.filter.toContextViewState().filters,
+            'entityType': _entityType,
+            'query': _searchCtrl.text,
+          },
+        ),
+        rawEntityType: routeType,
+      );
+    } on FormatException {
+      return null;
+    } on StateError {
+      return null;
+    }
+  }
+
+  Widget _activityCard(AuditPresentationEvent event) {
+    final transition = _activityTransition(event);
+    return AuditEventCard(
+      key: ValueKey(event.id),
+      event: event,
+      onOpenTarget: transition == null
+          ? null
+          : () => unawaited(_openActivityEntity(transition)),
+    );
   }
 
   @override
@@ -267,146 +274,12 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     itemCount: _items.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) => _ActivityLogTile(
-                      item: _items[index],
-                      onOpen: _activityOpenable(_items[index])
-                          ? () => _openActivityEntity(_items[index])
-                          : null,
-                    ),
+                    itemBuilder: (context, index) =>
+                        _activityCard(_items[index]),
                   ),
                 ),
         ),
       ],
-    );
-  }
-}
-
-class _ActivityLogTile extends StatelessWidget {
-  final Map<String, dynamic> item;
-  // Non-null when the row's entity can be opened; a tap then routes to it.
-  final VoidCallback? onOpen;
-
-  const _ActivityLogTile({required this.item, this.onOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    final createdAt = DateTime.tryParse(item['created_at']?.toString() ?? '');
-    final dateText = createdAt == null
-        ? ''
-        : DateFormat('d MMM, HH:mm', 'ru').format(createdAt.toLocal());
-    final actor = item['actor_name']?.toString().trim();
-    final description = item['description']?.toString().trim();
-    final action = item['action']?.toString() ?? '';
-    final entityType = item['entity_type']?.toString();
-    final historyType = item['history_type']?.toString();
-    final role = item['actor_role']?.toString();
-
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: onOpen,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant.withAlpha(90),
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: _activityColor(action).withAlpha(28),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  _activityIcon(action),
-                  color: _activityColor(action),
-                  size: 19,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            description == null || description.isEmpty
-                                ? _activityLabel(action)
-                                : description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        if (dateText.isNotEmpty) ...[
-                          const SizedBox(width: 10),
-                          Text(
-                            dateText,
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        if (actor != null && actor.isNotEmpty)
-                          _ReportTag(
-                            label: actor,
-                            color: AppTheme.secondaryGold,
-                          ),
-                        if (role != null && role.isNotEmpty)
-                          _ReportTag(
-                            label: _activityRoleLabel(role),
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
-                        if (entityType != null && entityType.isNotEmpty)
-                          _ReportTag(
-                            label: _activityEntityLabel(entityType),
-                            color: AppColor.gold,
-                          ),
-                        if (historyType != null && historyType.isNotEmpty)
-                          _ReportTag(
-                            label: _activityHistoryLabel(historyType),
-                            color: AppColor.success,
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (onOpen != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 6, top: 2),
-                  child: Icon(
-                    Icons.chevron_right_rounded,
-                    size: 18,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -453,99 +326,4 @@ class _ReportFilterDropdown extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ReportTag extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _ReportTag({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(25),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-IconData _activityIcon(String action) {
-  if (action.contains('delete')) return Icons.delete_outline_rounded;
-  if (action.contains('update') || action.contains('updated')) {
-    return Icons.edit_note_rounded;
-  }
-  if (action.contains('created') || action.contains('create')) {
-    return Icons.add_circle_outline_rounded;
-  }
-  return Icons.history_rounded;
-}
-
-Color _activityColor(String action) {
-  if (action.contains('delete')) return AppTheme.danger;
-  if (action.contains('update') || action.contains('updated')) {
-    return AppTheme.secondaryGold;
-  }
-  if (action.contains('created') || action.contains('create')) {
-    return AppTheme.success;
-  }
-  return AppTheme.primaryGold;
-}
-
-String _activityLabel(String action) {
-  if (action.contains('student')) return 'Изменение ученика';
-  if (action.contains('lead')) return 'Изменение лида';
-  if (action.contains('lesson')) return 'Изменение занятия';
-  if (action.contains('task')) return 'Изменение задачи';
-  if (action.contains('comment')) return 'Комментарий';
-  return 'Действие';
-}
-
-String _activityEntityLabel(String entityType) {
-  return switch (entityType) {
-    'student' => 'Ученик',
-    'lead' => 'Лид',
-    'teacher' => 'Учитель',
-    'staff' => 'Сотрудник',
-    'lesson' => 'Занятие',
-    'task' => 'Задача',
-    'comment' => 'Комментарий',
-    _ => entityType,
-  };
-}
-
-String _activityHistoryLabel(String historyType) {
-  return switch (historyType) {
-    'comment' => 'Комментарий',
-    'task' => 'Задача',
-    'status' => 'Статус',
-    'payment' => 'Платёж',
-    'lesson' => 'Занятие',
-    _ => historyType,
-  };
-}
-
-String _activityRoleLabel(String role) {
-  return switch (role) {
-    'admin' => 'Администратор',
-    'system_admin' => 'Администратор системы',
-    'manager' => 'Управляющий',
-    'director' => 'Директор',
-    'teacher' => 'Учитель',
-    'client' => 'Клиент',
-    _ => role,
-  };
 }
