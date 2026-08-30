@@ -536,7 +536,7 @@ export class DashboardService {
             sm.position as actor_position, p.first_name as actor_first_name,
             p.last_name as actor_last_name,
             coalesce(actor_branches.branches, '[]'::jsonb) as actor_branches,
-            ae.action, ae.presentation_entity_type, ae.entity_id,
+            ae.action, ae.entity_type, ae.presentation_entity_type, ae.entity_id,
             ae.target_entity_uuid, ae.metadata, ae.before_ref, ae.after_ref,
             ae.reason, ae.reason_text, ae.created_at
           from normalized_events ae
@@ -553,6 +553,7 @@ export class DashboardService {
               $1::text is null
               or lower(
                 coalesce(ae.action, '') || ' ' ||
+                coalesce(ae.entity_type, '') || ' ' ||
                 coalesce(ae.presentation_entity_type, '') || ' ' ||
                 coalesce(ae.entity_id, '') || ' ' ||
                 coalesce(ae.metadata::text, '') || ' ' ||
@@ -562,7 +563,11 @@ export class DashboardService {
               ) like lower('%' || $1 || '%')
             )
             and ($2::uuid is null or ae.actor_user_id = $2)
-            and ($3::text is null or ae.presentation_entity_type = $3)
+            and (
+              $3::text is null
+              or ae.presentation_entity_type = $3
+              or ae.entity_type = $3
+            )
             and ($4::text is null or ae.entity_id = $4)
             and (
               $5::uuid is null

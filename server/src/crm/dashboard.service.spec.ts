@@ -420,6 +420,8 @@ describe("DashboardService", () => {
     expect(activitySql).toContain("when 'crm:comment' then 'comment'");
     expect(activitySql).toContain("when 'shared_task' then 'task'");
     expect(activitySql).toContain("ae.presentation_entity_type = $3");
+    expect(activitySql).toContain("or ae.entity_type = $3");
+    expect(activitySql).toContain("coalesce(ae.entity_type, '')");
     expect(activitySql).toContain("left join app.shared_tasks shared_task");
     expect(activitySql).not.toContain("app.tasks");
     expect(activitySql).toContain("target_student_record.deleted_at is null");

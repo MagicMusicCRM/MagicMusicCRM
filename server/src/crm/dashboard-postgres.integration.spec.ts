@@ -1,6 +1,5 @@
-import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { Pool, PoolClient, QueryConfig, QueryResultRow } from 'pg';
 import { AuditPresentationService } from '../audit/audit-presentation.service';
 import { ActorContext } from '../common/security/actor-context';
 import { DatabaseService } from '../db/database.service';
@@ -10,7 +9,12 @@ import { DashboardService } from './dashboard.service';
 
 const databaseUrl = process.env.V4_PLATFORM_TEST_DATABASE_URL
   ?? 'postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm';
-if (!new Set(['127.0.0.1', 'localhost', '[::1]']).has(new URL(databaseUrl).hostname)) {
+const parsedDatabaseUrl = new URL(databaseUrl);
+const testDatabaseName = parsedDatabaseUrl.pathname.replace(/^\//, '');
+if (
+  !new Set(['127.0.0.1', 'localhost', '[::1]']).has(parsedDatabaseUrl.hostname)
+  || (testDatabaseName !== 'magiccrm' && !testDatabaseName.toLowerCase().includes('test'))
+) {
   throw new Error('Dashboard activity tests require local PostgreSQL.');
 }
 
@@ -30,16 +34,123 @@ interface ExplainNode {
   Plans?: ExplainNode[];
 }
 
+interface FixtureCounts {
+  auditEvents: number;
+  comments: number;
+  tasks: number;
+  students: number;
+  staffMembers: number;
+  profiles: number;
+  users: number;
+}
+
+interface CleanupEvidence {
+  resolved: FixtureCounts;
+  deleted: FixtureCounts;
+}
+
 function planNodes(root: ExplainNode): ExplainNode[] {
   return [root, ...(root.Plans ?? []).flatMap(planNodes)];
 }
 
+async function staleDashboardFixtureCleanup(client: PoolClient): Promise<CleanupEvidence> {
+  await client.query('begin');
+  try {
+    const userIds = (await client.query<{ id: string }>(
+      `select id::text as id
+       from app.users
+       where email ~ '^dashboard-(actor|client)-[0-9a-f-]{36}@example[.]test$'`,
+    )).rows.map((row) => row.id);
+    const profileIds = (await client.query<{ id: string }>(
+      'select id::text as id from app.profiles where user_id = any($1::uuid[])',
+      [userIds],
+    )).rows.map((row) => row.id);
+    const staffIds = (await client.query<{ id: string }>(
+      'select id::text as id from app.staff_members where profile_id = any($1::uuid[])',
+      [profileIds],
+    )).rows.map((row) => row.id);
+    const studentIds = (await client.query<{ id: string }>(
+      'select id::text as id from app.students where profile_id = any($1::uuid[])',
+      [profileIds],
+    )).rows.map((row) => row.id);
+    const commentIds = (await client.query<{ id: string }>(
+      `select id::text as id
+       from app.entity_comments
+       where body ~ '^PRIVATE-COMMENT-[0-9a-f-]{36}$'
+         and author_id = any($1::uuid[])
+         and entity_id = any($2::uuid[])`,
+      [userIds, studentIds],
+    )).rows.map((row) => row.id);
+    const taskIds = (await client.query<{ id: string }>(
+      `select id::text as id
+       from app.shared_tasks
+       where created_by = any($1::uuid[])
+         and (
+           title ~ '^DASHBOARD-TEST-TASK-[0-9a-f-]{36}$'
+           or title = 'Позвонить родителю'
+         )`,
+      [userIds],
+    )).rows.map((row) => row.id);
+    const auditIds = (await client.query<{ id: string }>(
+      'select id::text as id from app.audit_events where actor_user_id = any($1::uuid[])',
+      [userIds],
+    )).rows.map((row) => row.id);
+
+    const resolved: FixtureCounts = {
+      auditEvents: auditIds.length,
+      comments: commentIds.length,
+      tasks: taskIds.length,
+      students: studentIds.length,
+      staffMembers: staffIds.length,
+      profiles: profileIds.length,
+      users: userIds.length,
+    };
+    const deleted: FixtureCounts = {
+      auditEvents: (await client.query(
+        'delete from app.audit_events where id = any($1::uuid[])',
+        [auditIds],
+      )).rowCount ?? 0,
+      comments: (await client.query(
+        'delete from app.entity_comments where id = any($1::uuid[])',
+        [commentIds],
+      )).rowCount ?? 0,
+      tasks: (await client.query(
+        'delete from app.shared_tasks where id = any($1::uuid[])',
+        [taskIds],
+      )).rowCount ?? 0,
+      students: (await client.query(
+        'delete from app.students where id = any($1::uuid[])',
+        [studentIds],
+      )).rowCount ?? 0,
+      staffMembers: (await client.query(
+        'delete from app.staff_members where id = any($1::uuid[])',
+        [staffIds],
+      )).rowCount ?? 0,
+      profiles: (await client.query(
+        'delete from app.profiles where id = any($1::uuid[])',
+        [profileIds],
+      )).rowCount ?? 0,
+      users: (await client.query(
+        'delete from app.users where id = any($1::uuid[])',
+        [userIds],
+      )).rowCount ?? 0,
+    };
+    await client.query('commit');
+    return { resolved, deleted };
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  }
+}
+
 describe('DashboardService activity journal (PostgreSQL)', () => {
   let pool: Pool;
-  let database: DatabaseService;
+  let fixtureClient: PoolClient;
+  let fixtureTransactionOpen = false;
   let service: DashboardService;
   let actor: ActorContext;
   let captured: CapturedQuery | null;
+  let cleanupEvidence: CleanupEvidence;
   const ids = {
     actor: randomUUID(),
     actorProfile: randomUUID(),
@@ -52,19 +163,34 @@ describe('DashboardService activity journal (PostgreSQL)', () => {
     taskAudit: randomUUID(),
     commentAudit: randomUUID(),
     studentAudit: randomUUID(),
+    lead: randomUUID(),
+    leadAudit: randomUUID(),
   };
   const commentBody = `PRIVATE-COMMENT-${randomUUID()}`;
+  const taskTitle = `DASHBOARD-TEST-TASK-${ids.task}`;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
     await new MigrationRunner(pool).up();
-    database = new DatabaseService({
-      getOrThrow: () => databaseUrl,
-    } as unknown as ConfigService);
+    fixtureClient = await pool.connect();
+    cleanupEvidence = await staleDashboardFixtureCleanup(fixtureClient);
+    if (Object.values(cleanupEvidence.deleted).some((count) => count > 0)) {
+      process.stderr.write(
+        `dashboard stale fixture cleanup ${JSON.stringify(cleanupEvidence)}\n`,
+      );
+    }
+    await fixtureClient.query('begin');
+    fixtureTransactionOpen = true;
     const capturingDatabase = {
-      query: async <T extends Record<string, unknown>>(sql: string, params: unknown[] = []) => {
-        captured = { sql, params };
-        return database.query<T>(sql, params);
+      query: async <T extends QueryResultRow = QueryResultRow>(
+        query: string | QueryConfig<unknown[]>,
+        params: unknown[] = [],
+      ) => {
+        if (typeof query !== 'string') {
+          throw new Error('Dashboard test adapter expects SQL text.');
+        }
+        captured = { sql: query, params };
+        return fixtureClient.query<T>(query, params);
       },
     } as unknown as DatabaseService;
     service = new DashboardService(
@@ -74,7 +200,7 @@ describe('DashboardService activity journal (PostgreSQL)', () => {
     );
     actor = { userId: ids.actor, role: 'director' };
 
-    await pool.query(
+    await fixtureClient.query(
       `insert into app.users (id, email, role, email_verified_at)
        values ($1, $2, 'director', now()), ($3, $4, 'client', now())`,
       [
@@ -84,39 +210,40 @@ describe('DashboardService activity journal (PostgreSQL)', () => {
         `dashboard-client-${ids.clientUser}@example.test`,
       ],
     );
-    await pool.query(
+    await fixtureClient.query(
       `insert into app.profiles (id, user_id, first_name, last_name)
        values ($1, $2, 'Анна', 'Директор'), ($3, $4, 'Мария', 'Ученица')`,
       [ids.actorProfile, ids.actor, ids.studentProfile, ids.clientUser],
     );
-    await pool.query(
+    await fixtureClient.query(
       `insert into app.staff_members (id, profile_id, role)
        values ($1, $2, 'director')`,
       [ids.actorStaff, ids.actorProfile],
     );
-    await pool.query(
+    await fixtureClient.query(
       `insert into app.students (id, profile_id) values ($1, $2)`,
       [ids.student, ids.studentProfile],
     );
-    await pool.query(
+    await fixtureClient.query(
       `insert into app.shared_tasks (
          id, title, all_day, start_at, created_by
-       ) values ($1, 'Позвонить родителю', true, now() + interval '1 day', $2)`,
-      [ids.task, ids.actor],
+       ) values ($1, $2, true, now() + interval '1 day', $3)`,
+      [ids.task, taskTitle, ids.actor],
     );
-    await pool.query(
+    await fixtureClient.query(
       `insert into app.entity_comments (
          id, entity_type, entity_id, author_id, body
        ) values ($1, 'student', $2, $3, $4)`,
       [ids.comment, ids.student, ids.actor, commentBody],
     );
-    await pool.query(
+    await fixtureClient.query(
       `insert into app.audit_events (
          id, actor_user_id, action, entity_type, entity_id, metadata, created_at
        ) values
        ($1, $2, 'workflow.shared_task_created', 'shared_task', $3, '{}'::jsonb, now()),
-       ($4, $2, 'crm.comment_created', 'comment', $5, '{}'::jsonb, now() - interval '1 second'),
-       ($6, $2, 'crm.student_updated', 'student', $7, '{}'::jsonb, now() - interval '2 seconds')`,
+       ($4, $2, 'crm.comment_created', 'crm:comment', $5, '{}'::jsonb, now() - interval '1 second'),
+       ($6, $2, 'crm.student_updated', 'crm:student', $7, '{}'::jsonb, now() - interval '2 seconds'),
+       ($8, $2, 'crm.lead_updated', 'crm:lead', $9, '{}'::jsonb, now() - interval '3 seconds')`,
       [
         ids.taskAudit,
         ids.actor,
@@ -125,32 +252,23 @@ describe('DashboardService activity journal (PostgreSQL)', () => {
         ids.comment,
         ids.studentAudit,
         ids.student,
+        ids.leadAudit,
+        ids.lead,
       ],
     );
   });
 
   afterAll(async () => {
-    if (pool) {
-      await pool.query('delete from app.audit_events where id = any($1::uuid[])', [[
-        ids.taskAudit,
-        ids.commentAudit,
-        ids.studentAudit,
-      ]]);
-      await pool.query('delete from app.entity_comments where id = $1', [ids.comment]);
-      await pool.query('delete from app.shared_tasks where id = $1', [ids.task]);
-      await pool.query('delete from app.students where id = $1', [ids.student]);
-      await pool.query('delete from app.staff_members where id = $1', [ids.actorStaff]);
-      await pool.query('delete from app.profiles where id = any($1::uuid[])', [[
-        ids.actorProfile,
-        ids.studentProfile,
-      ]]);
-      await pool.query('delete from app.users where id = any($1::uuid[])', [[
-        ids.actor,
-        ids.clientUser,
-      ]]);
+    if (fixtureClient && fixtureTransactionOpen) {
+      await fixtureClient.query('rollback');
+      fixtureTransactionOpen = false;
     }
-    if (database) await database.onModuleDestroy();
+    if (fixtureClient) fixtureClient.release();
     if (pool) await pool.end();
+  });
+
+  it('removes every exact stale local fixture resolved before the suite', () => {
+    expect(cleanupEvidence.deleted).toEqual(cleanupEvidence.resolved);
   });
 
   it('matches the task presentation alias and never returns comment bodies', async () => {
@@ -165,7 +283,7 @@ describe('DashboardService activity journal (PostgreSQL)', () => {
         target: expect.objectContaining({
           type: 'task',
           id: ids.task,
-          displayName: 'Позвонить родителю',
+          displayName: taskTitle,
         }),
       }),
     ]);
@@ -188,39 +306,83 @@ describe('DashboardService activity journal (PostgreSQL)', () => {
     expect(JSON.stringify(commentResult)).not.toContain(commentBody);
   });
 
+  it.each([
+    ['shared_task', ids.task, 'workflow.shared_task_created'],
+    ['crm:comment', ids.comment, 'crm.comment_created'],
+    ['crm:student', ids.student, 'crm.student_updated'],
+    ['crm:lead', ids.lead, 'crm.lead_updated'],
+  ])('keeps the raw %s entity filter compatible', async (entityType, entityId, actionKey) => {
+    const result = await service.listActivityLog(actor, {
+      entityType,
+      entityId,
+      limit: 100,
+    });
+    expect(result.items).toEqual([
+      expect.objectContaining({ actionKey }),
+    ]);
+  });
+
+  it('searches the raw entity type as well as its presentation alias', async () => {
+    const result = await service.listActivityLog(actor, {
+      q: 'crm:student',
+      entityId: ids.student,
+      limit: 100,
+    });
+    expect(result.items).toEqual([
+      expect.objectContaining({ actionKey: 'crm.student_updated' }),
+    ]);
+  });
+
+  it('keeps transaction fixtures invisible to an observer connection', async () => {
+    const observer = await pool.connect();
+    try {
+      const result = await observer.query<{
+        actor_visible: boolean;
+        task_visible: boolean;
+        student_visible: boolean;
+      }>(
+        `select
+           exists(select 1 from app.users where id = $1) as actor_visible,
+           exists(select 1 from app.shared_tasks where id = $2) as task_visible,
+           exists(select 1 from app.students where id = $3) as student_visible`,
+        [ids.actor, ids.task, ids.student],
+      );
+      expect(result.rows[0]).toEqual({
+        actor_visible: false,
+        task_visible: false,
+        student_visible: false,
+      });
+    } finally {
+      observer.release();
+    }
+  });
+
   it('limits audit candidates before target joins and keeps UUID PK lookup usable', async () => {
     await service.listActivityLog(actor, { limit: 25 });
     expect(captured).not.toBeNull();
 
-    const client = await pool.connect();
-    try {
-      await client.query('begin');
-      await client.query('set local enable_seqscan = off');
-      const explained = await client.query<{ 'QUERY PLAN': Array<{ Plan: ExplainNode }> }>(
-        `explain (format json) ${captured!.sql}`,
-        captured!.params,
-      );
-      const root = explained.rows[0]!['QUERY PLAN'][0]!.Plan;
-      const nodes = planNodes(root);
-      const candidatePlan = nodes.find(
-        (node) => node['Subplan Name'] === 'CTE candidate_events',
-      );
-      expect(candidatePlan?.['Node Type']).toBe('Limit');
-      expect(planNodes(candidatePlan!).some(
-        (node) => node['Relation Name'] === 'students',
-      )).toBe(false);
+    await fixtureClient.query('set local enable_seqscan = off');
+    const explained = await fixtureClient.query<{ 'QUERY PLAN': Array<{ Plan: ExplainNode }> }>(
+      `explain (format json) ${captured!.sql}`,
+      captured!.params,
+    );
+    const root = explained.rows[0]!['QUERY PLAN'][0]!.Plan;
+    const nodes = planNodes(root);
+    const candidatePlan = nodes.find(
+      (node) => node['Subplan Name'] === 'CTE candidate_events',
+    );
+    expect(candidatePlan?.['Node Type']).toBe('Limit');
+    expect(planNodes(candidatePlan!).some(
+      (node) => node['Relation Name'] === 'students',
+    )).toBe(false);
 
-      const studentLookups = nodes.filter(
-        (node) => node['Relation Name'] === 'students',
-      );
-      expect(studentLookups.some(
-        (node) => /Index/.test(node['Node Type'])
-          && node['Index Cond']?.includes('target_entity_uuid') === true,
-      )).toBe(true);
-      expect(captured!.sql).toContain('target_student_record.id = ae.target_entity_uuid');
-      await client.query('rollback');
-    } finally {
-      client.release();
-    }
+    const studentLookups = nodes.filter(
+      (node) => node['Relation Name'] === 'students',
+    );
+    expect(studentLookups.some(
+      (node) => /Index/.test(node['Node Type'])
+        && node['Index Cond']?.includes('target_entity_uuid') === true,
+    )).toBe(true);
+    expect(captured!.sql).toContain('target_student_record.id = ae.target_entity_uuid');
   });
 });
