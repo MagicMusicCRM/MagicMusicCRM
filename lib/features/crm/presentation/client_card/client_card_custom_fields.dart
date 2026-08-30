@@ -7,6 +7,7 @@ extension _ClientCardCustomFields on _ClientCardState {
     String? value,
     ValueChanged<String?> onChanged, {
     TextInputType? keyboard,
+    String? errorText,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
@@ -15,7 +16,11 @@ extension _ClientCardCustomFields on _ClientCardState {
         // recreated the field on every keystroke, dropping cursor/IME state.
         key: ValueKey('$label-$_editorEpoch'),
         initialValue: value ?? '',
-        decoration: _inputDecoration(cs, label: label, isDense: true),
+        decoration: _inputDecoration(
+          cs,
+          label: label,
+          isDense: true,
+        ).copyWith(errorText: errorText),
         keyboardType: keyboard,
         onChanged: (v) => onChanged(v.trim().isEmpty ? null : v),
       ),

@@ -90,6 +90,9 @@ extension _ClientCardOverviewTab on _ClientCardState {
             _clientEmail,
             (value) => _updateClientCore('email', value),
             keyboard: TextInputType.emailAddress,
+            errorText: _clientEmailWasEdited
+                ? _clientEmailValidationError
+                : null,
           ),
           if (!_loadingMetadata) _buildBranchDropdown(cs, 'Основной филиал'),
           if (!_loadingMetadata) _buildSourceDropdown(cs),

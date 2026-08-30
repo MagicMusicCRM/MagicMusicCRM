@@ -769,7 +769,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }): Promise<{ queued: boolean; delivered: boolean }> {
     const recipient = input.studentId
       ? await this.database.query<{ email: string }>(
-          `select coalesce(nullif(btrim(student.contact_email), ''), account.email) as email
+          `select nullif(btrim(student.contact_email), '') as email
            from app.students student
            join app.profiles profile
              on profile.id = student.profile_id and profile.deleted_at is null

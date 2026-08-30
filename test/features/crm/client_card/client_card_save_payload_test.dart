@@ -470,6 +470,270 @@ void main() {
     },
   );
 
+  testWidgets(
+    'late matching realtime echo keeps the editor mounted without global loading',
+    (tester) async {
+      final events = StreamController<CrmChangedEvent>();
+      addTearDown(events.close);
+      final api = FakeCardApiClient(
+        student: <String, dynamic>{
+          'id': 'student-1',
+          'version': 2,
+          'status': 'active',
+          'firstName': 'Иван',
+          'lastName': 'Петров',
+          'email': 'old@example.com',
+          'customData': <String, dynamic>{},
+        },
+      );
+      final container = ProviderContainer(
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          crmRealtimeProvider.overrideWith((ref) => events.stream),
+        ],
+      );
+      addTearDown(container.dispose);
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: const {'id': 'student-1'},
+        entityType: 'student',
+        container: container,
+      );
+
+      final nameField = find.widgetWithText(TextFormField, 'Имя');
+      final nameEditor = find.descendant(
+        of: nameField,
+        matching: find.byType(EditableText),
+      );
+      final stateBefore = tester.state<EditableTextState>(nameEditor);
+      await tester.enterText(nameField, 'Пётр');
+      await _waitForClientAutoSave(tester);
+      expect(api.updateStudentBodies, hasLength(1));
+
+      final lateLoad = Completer<void>();
+      addTearDown(() {
+        if (!lateLoad.isCompleted) lateLoad.complete();
+      });
+      api.nextStudentCardGate = lateLoad;
+      api.student!
+        ..['version'] = 7
+        ..['firstName'] = 'Удалённое имя';
+      events.add(
+        const CrmChangedEvent(
+          entity: 'student',
+          action: 'updated',
+          id: 'student-1',
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(api.studentCardLoadCount, 2);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(tester.state<EditableTextState>(nameEditor), same(stateBefore));
+      expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
+
+      lateLoad.complete();
+      await tester.pumpAndSettle();
+      expect(tester.state<EditableTextState>(nameEditor), same(stateBefore));
+      expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Фамилия'),
+        'Сидоров',
+      );
+      await _waitForClientAutoSave(tester);
+      expect(api.updateStudentBodies, hasLength(2));
+      expect(api.updateStudentBodies.last['expectedVersion'], 7);
+    },
+  );
+
+  testWidgets(
+    'foreign and task realtime events do not reload the client card',
+    (tester) async {
+      final events = StreamController<CrmChangedEvent>();
+      addTearDown(events.close);
+      final api = FakeCardApiClient(
+        student: <String, dynamic>{
+          'id': 'student-1',
+          'version': 2,
+          'status': 'active',
+          'firstName': 'Иван',
+          'lastName': 'Петров',
+          'customData': <String, dynamic>{},
+        },
+      );
+      final container = ProviderContainer(
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          crmRealtimeProvider.overrideWith((ref) => events.stream),
+        ],
+      );
+      addTearDown(container.dispose);
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: const {'id': 'student-1'},
+        entityType: 'student',
+        container: container,
+      );
+      expect(api.studentCardLoadCount, 1);
+
+      events.add(
+        const CrmChangedEvent(
+          entity: 'student',
+          action: 'updated',
+          id: 'student-other',
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(api.studentCardLoadCount, 1);
+
+      events.add(
+        const CrmChangedEvent(entity: 'task', action: 'updated', id: 'task-1'),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(api.studentCardLoadCount, 1);
+    },
+  );
+
+  testWidgets('direct comment submit does not reload the whole student card', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final events = StreamController<CrmChangedEvent>();
+    addTearDown(events.close);
+    final api = FakeCardApiClient(
+      role: 'manager',
+      student: <String, dynamic>{
+        'id': 'student-1',
+        'version': 2,
+        'status': 'active',
+        'firstName': 'Иван',
+        'lastName': 'Петров',
+        'customData': <String, dynamic>{},
+      },
+    );
+    final container = ProviderContainer(
+      overrides: [
+        magicApiClientProvider.overrideWithValue(api),
+        crmRealtimeProvider.overrideWith((ref) => events.stream),
+      ],
+    );
+    addTearDown(container.dispose);
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'student-1'},
+      entityType: 'student',
+      initialSection: 'comments',
+      routed: true,
+      container: container,
+    );
+    expect(api.studentCardLoadCount, 1);
+
+    final commentInput = find.byType(TextField).last;
+    await tester.ensureVisible(commentInput);
+    await tester.enterText(commentInput, 'Тестовая заметка');
+    await tester.tap(find.byTooltip('Отправить комментарий'));
+    await tester.pumpAndSettle();
+
+    expect(
+      api.postRequests.any((request) => request.path == '/crm/comments'),
+      isTrue,
+    );
+    expect(api.studentCardLoadCount, 1);
+    events.add(
+      const CrmChangedEvent(
+        entity: 'comment',
+        action: 'created',
+        id: 'comment-created',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(api.studentCardLoadCount, 1);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('invalid email draft stays local and shows inline validation', (
+    tester,
+  ) async {
+    final api = FakeCardApiClient(
+      student: <String, dynamic>{
+        'id': 'student-1',
+        'version': 2,
+        'status': 'active',
+        'firstName': 'Иван',
+        'lastName': 'Петров',
+        'email': 'old@example.com',
+        'customData': <String, dynamic>{},
+      },
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'student-1'},
+      entityType: 'student',
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Электронная почта'),
+      'broken@',
+    );
+    await _waitForClientAutoSave(tester);
+
+    expect(api.updateStudentBodies, isEmpty);
+    expect(
+      find.text('Введите корректный адрес электронной почты'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('blank email clears both halves of a converted client', (
+    tester,
+  ) async {
+    final api = FakeCardApiClient(
+      lead: {...rawLead(), 'email': 'old@example.com'},
+      student: <String, dynamic>{
+        'id': 'student-1',
+        'version': 1,
+        'leadId': 'lead-1',
+        'status': 'active',
+        'firstName': 'Иван',
+        'lastName': 'Петров',
+        'email': 'old@example.com',
+        'customData': <String, dynamic>{},
+      },
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'student-1'},
+      entityType: 'student',
+      settle: false,
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Электронная почта'),
+      '',
+    );
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(api.updateLeadBody, containsPair('clearEmail', true));
+    expect(api.updateStudentBody, containsPair('clearEmail', true));
+    expect(api.updateLeadBody!.containsKey('email'), isFalse);
+    expect(api.updateStudentBody!.containsKey('email'), isFalse);
+  });
+
   testWidgets('неизменённый UUID-статус тоже не отправляется', (tester) async {
     final api = FakeCardApiClient(lead: rawLead(statusId: uuid));
     await pumpClientCard(

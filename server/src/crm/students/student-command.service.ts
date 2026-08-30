@@ -269,6 +269,7 @@ export class StudentCommandService {
       lastName: trimOptional(dto.lastName),
       phone: trimOptional(dto.phone),
       email: trimOptional(dto.email)?.toLowerCase() ?? null,
+      clearEmail: dto.clearEmail ?? false,
       status: dto.status === undefined ? null : dto.status.trim(),
       customDataPatch,
       requestedResponsibleId,

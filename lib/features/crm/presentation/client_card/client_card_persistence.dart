@@ -41,6 +41,7 @@ extension _ClientCardPersistence on _ClientCardState {
     if (!mounted) return false;
     _autoSavePending = false;
     if (_autoSaveConflict) return false;
+    if (_hasInvalidEditedEmail) return false;
     if (!_edited) return true;
 
     final active = _autoSaveInFlight;
@@ -112,6 +113,19 @@ extension _ClientCardPersistence on _ClientCardState {
   }
 
   Widget _buildAutoSaveControl(ColorScheme colors, {bool enabled = true}) {
+    if (_hasInvalidEditedEmail) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline_rounded, size: 17, color: colors.error),
+          const SizedBox(width: AppSpace.xs),
+          Text(
+            'Исправьте email',
+            style: TextStyle(color: colors.error, fontWeight: FontWeight.w600),
+          ),
+        ],
+      );
+    }
     if (_autoSaveFailed) {
       return FilledButton.icon(
         key: const Key('client-autosave-retry'),
@@ -269,6 +283,7 @@ extension _ClientCardPersistence on _ClientCardState {
                 rawStatus != originalStatus)
             ? rawStatus
             : null;
+        final saveLeadEmail = leadCoreFields.contains('email');
         final updatedLead = await service.updateLead(
           _leadId,
           expectedVersion: expectedLeadVersion,
@@ -279,7 +294,8 @@ extension _ClientCardPersistence on _ClientCardState {
               ? _clientLastName
               : null,
           phone: leadCoreFields.contains('phone') ? _clientPhone : null,
-          email: leadCoreFields.contains('email') ? _clientEmail : null,
+          email: saveLeadEmail ? _clientEmail : null,
+          clearEmail: saveLeadEmail && _clientEmail == null,
           sourceId: leadCoreFields.contains('sourceId')
               ? _clientSourceId
               : null,
@@ -358,6 +374,7 @@ extension _ClientCardPersistence on _ClientCardState {
         if (studentCoreFields.contains('branchId')) {
           customDataPatch['branchId'] = _clientBranchId;
         }
+        final saveStudentEmail = studentCoreFields.contains('email');
         final updatedStudent = await service.updateStudent(
           _studentId,
           expectedVersion: expectedStudentVersion,
@@ -368,7 +385,8 @@ extension _ClientCardPersistence on _ClientCardState {
               ? _clientLastName
               : null,
           phone: studentCoreFields.contains('phone') ? _clientPhone : null,
-          email: studentCoreFields.contains('email') ? _clientEmail : null,
+          email: saveStudentEmail ? _clientEmail : null,
+          clearEmail: saveStudentEmail && _clientEmail == null,
           status: saveStudentStatus ? (_student?['status']?.toString()) : null,
           sourceId: studentCoreFields.contains('sourceId')
               ? _clientSourceId

@@ -22,6 +22,7 @@ export interface PreparedStudentUpdate {
   readonly lastName: string | null;
   readonly phone: string | null;
   readonly email: string | null;
+  readonly clearEmail?: boolean;
   readonly status: string | null;
   readonly customDataPatch: Readonly<Record<string, unknown>>;
   readonly requestedResponsibleId: string | undefined;

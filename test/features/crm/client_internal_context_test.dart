@@ -1,5 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 
 import '../crm/client_card/card_fake_api.dart';
 
@@ -42,6 +47,15 @@ void main() {
         },
       ],
     );
+    final events = StreamController<CrmChangedEvent>();
+    addTearDown(events.close);
+    final container = ProviderContainer(
+      overrides: [
+        magicApiClientProvider.overrideWithValue(api),
+        crmRealtimeProvider.overrideWith((ref) => events.stream),
+      ],
+    );
+    addTearDown(container.dispose);
 
     await pumpClientCard(
       tester,
@@ -49,6 +63,7 @@ void main() {
       seed: _student,
       entityType: 'student',
       routed: true,
+      container: container,
     );
 
     expect(find.byKey(const Key('client-internal-note')), findsOneWidget);
@@ -67,6 +82,36 @@ void main() {
       'expectedVersion': 4,
     });
     expect(find.text('Сохранено'), findsWidgets);
+
+    final noteEditor = find.descendant(
+      of: find.byKey(const Key('client-internal-note-input')),
+      matching: find.byType(EditableText),
+    );
+    final stateBeforeEcho = tester.state<EditableTextState>(noteEditor);
+    final echoLoad = Completer<void>();
+    addTearDown(() {
+      if (!echoLoad.isCompleted) echoLoad.complete();
+    });
+    api.nextStudentCardGate = echoLoad;
+    events.add(
+      const CrmChangedEvent(
+        entity: 'student',
+        action: 'updated',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(api.studentCardLoadCount, 2);
+    expect(tester.state<EditableTextState>(noteEditor), same(stateBeforeEcho));
+
+    echoLoad.complete();
+    await tester.pumpAndSettle();
+    expect(tester.state<EditableTextState>(noteEditor), same(stateBeforeEcho));
+    expect(
+      tester.widget<EditableText>(noteEditor).controller.text,
+      'Позвонить за час',
+    );
 
     expect(find.byKey(const Key('client-operational-history')), findsOneWidget);
     expect(find.text('Оплата удалена из статистики'), findsOneWidget);

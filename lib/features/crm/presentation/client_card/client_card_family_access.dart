@@ -216,9 +216,34 @@ extension _ClientCardFamilyAccess on _ClientCardState {
 
   Future<void> _inviteClientToApp() async {
     final studentId = _studentId;
-    if (studentId.isEmpty) return;
+    if (studentId.isEmpty || _clientAccessBusy) return;
     _emitState(() => _clientAccessBusy = true);
     try {
+      final saved = await _flushAutoSave();
+      if (!mounted) return;
+      if (!saved) {
+        final validationError = _clientEmailValidationError;
+        MagicToast.show(
+          context,
+          validationError ?? 'Сначала сохраните изменения карточки',
+          type: MagicToastType.danger,
+        );
+        return;
+      }
+      final email = _clientEmail;
+      if (email == null) {
+        MagicToast.show(
+          context,
+          'Укажите электронную почту в карточке клиента',
+          type: MagicToastType.danger,
+        );
+        return;
+      }
+      final validationError = _clientEmailValidationError;
+      if (validationError != null) {
+        MagicToast.show(context, validationError, type: MagicToastType.danger);
+        return;
+      }
       final result = await ref
           .read(magicCrmServiceProvider)
           .inviteStudent(studentId);

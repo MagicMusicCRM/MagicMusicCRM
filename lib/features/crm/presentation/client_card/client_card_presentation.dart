@@ -1,5 +1,7 @@
 part of 'client_card.dart';
 
+final RegExp _clientEmailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
 extension _ClientCardPresentation on _ClientCardState {
   // ══ STUDENT (entityType == 'student') ════════════════════════════════════
   // Ported from student_detail_screen.dart, adapted to the compact dialog and
@@ -77,6 +79,19 @@ extension _ClientCardPresentation on _ClientCardState {
   String? get _clientEmail => _isStudent
       ? _nonEmpty(_student?['email'])
       : _nonEmpty(_leadData['email']);
+
+  bool get _clientEmailWasEdited =>
+      _leadCoreEditRevisions.containsKey('email') ||
+      _studentCoreEditRevisions.containsKey('email');
+
+  String? get _clientEmailValidationError {
+    final email = _clientEmail;
+    if (email == null || _clientEmailPattern.hasMatch(email)) return null;
+    return 'Введите корректный адрес электронной почты';
+  }
+
+  bool get _hasInvalidEditedEmail =>
+      _clientEmailWasEdited && _clientEmailValidationError != null;
 
   String? get _clientSourceId => _isStudent
       ? _nonEmpty(_student?['source_id'] ?? _leadData['source_id'])

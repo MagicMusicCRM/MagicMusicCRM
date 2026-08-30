@@ -383,7 +383,10 @@ in-flight write, coalescing, row-locked expected version, flush-before-close и
 retry без потери ввода. Конфликт не выполняет silent merge: UI сохраняет draft,
 загружает актуальную версию и требует явного применения только локально
 изменённых полей. Поздний realtime response не заменяет грязный draft. Финансовые, schedule и
-другие signed preview/commit-команды остаются явными.
+другие signed preview/commit-команды остаются явными. Realtime invalidation
+передаёт карточке полный event: Lead/Student фильтруются по entity id, а
+comment/task/staff-note обновляют принадлежащие им проекции либо выполняют
+background reconciliation без общего loading-state и смены editor epoch.
 
 DECISION (owner, 2026-08-29): До завершения перехода выпущенных desktop-клиентов
 на build 201 `expectedVersion` для PATCH Lead/Student опционален только на HTTP-
@@ -400,7 +403,11 @@ Student. Сохранение контакта не переименовывае
 на Student и разрешает актуальный contact email при отправке приглашения;
 привязка после подтверждения почты требует outbox-факт с SHA-256 именно этого
 адреса, поэтому старое приглашение не переносит право доступа на новый contact
-email. Остальные email-сценарии продолжают использовать account identity.
+email. Явный `clearEmail` очищает contact email без изменения login identity;
+пустой contact не имеет fallback на `app.users.email`. Invite сначала flush-ит
+карточку, а worker отправляет student-письмо только если текущий contact email
+совпадает с сохранённым outbox hash; иначе stale row завершается без отправки.
+Остальные email-сценарии продолжают использовать account identity.
 
 ## Release
 

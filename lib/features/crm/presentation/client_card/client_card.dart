@@ -329,7 +329,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _loadingStudent = true;
   String? _studentError;
   bool _realtimeRefreshQueued = false;
-  bool _realtimeRefreshDeferred = false;
+  final List<CrmChangedEvent> _realtimeRefreshQueue = [];
+  final List<CrmChangedEvent> _realtimeRefreshDeferred = [];
   // Bumped ONLY when field values are replaced from the server (fetch/merge).
   // Text editors key on this instead of their live value, so local keystrokes
   // never recreate the field (which would drop cursor/focus/IME state), while
@@ -744,7 +745,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
       // card every 30s, flashing spinners and jittering fields. Real socket
       // events still refresh.
       if (event.isFallbackPoll) return;
-      _scheduleRealtimeRefresh(event.entity);
+      _scheduleRealtimeRefresh(event);
     });
 
     final cs = Theme.of(context).colorScheme;

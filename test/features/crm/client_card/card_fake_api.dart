@@ -809,6 +809,22 @@ class FakeCardApiClient extends MagicApiClient {
           }
           as T;
     }
+    if (path == '/crm/comments') {
+      final body = Map<String, dynamic>.from(data as Map);
+      return <String, dynamic>{
+            'id': 'comment-created',
+            'entityType': body['entityType'],
+            'entityId': body['entityId'],
+            'authorId': 'manager-1',
+            'authorName': 'Мария Управляющая',
+            'body': body['body'],
+            'kind': body['kind'],
+            'progress': body['progress'] ?? false,
+            'createdAt': '2026-08-30T12:00:00.000Z',
+            'version': 1,
+          }
+          as T;
+    }
     return <String, dynamic>{} as T;
   }
 

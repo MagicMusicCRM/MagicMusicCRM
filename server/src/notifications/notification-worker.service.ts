@@ -4,6 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import {
@@ -17,7 +18,9 @@ import { ProviderResult } from "./notifications.types";
 interface OutboxRow {
   id: string;
   user_id: string;
-  email: string;
+  email: string | null;
+  recipient_student_id?: string | null;
+  to_email_hash?: string;
   template: string;
   attempt_count: number | string;
   payload: {
@@ -123,6 +126,10 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
   async dispatchEmailById(id: string): Promise<EmailDispatchResult> {
     const item = await this.claimEmail(id);
     if (!item) return { processed: false, status: "busy" };
+    if (!this.isCurrentStudentRecipient(item)) {
+      await this.exhaustEmail(item.id, "recipient_contact_changed");
+      return { processed: true, status: "failed" };
+    }
     try {
       const delivered = await this.dispatchEmail(item);
       return {
@@ -231,16 +238,16 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
           and eo.status in ('queued', 'failed')
           and eo.next_attempt_at <= now()
         returning eo.id, eo.user_id,
-          coalesce(
-            (
+          case when eo.recipient_student_id is null then u.email
+            else (
               select nullif(btrim(student.contact_email), '')
               from app.students student
               where student.id = eo.recipient_student_id
                 and student.deleted_at is null
               limit 1
-            ),
-            u.email
-          ) as email,
+            )
+          end as email,
+          eo.recipient_student_id, eo.to_email_hash,
           eo.template, eo.payload, eo.attempt_count
       `,
       [id],
@@ -248,7 +255,9 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     return claimed.rows[0];
   }
 
-  private async dispatchEmail(item: OutboxRow): Promise<boolean> {
+  private async dispatchEmail(
+    item: OutboxRow & { email: string },
+  ): Promise<boolean> {
     const body = item.payload.body ?? "";
     const message = {
       to: item.email,
@@ -295,6 +304,18 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
       });
     }
     return false;
+  }
+
+  private isCurrentStudentRecipient(
+    item: OutboxRow,
+  ): item is OutboxRow & { email: string } {
+    const email = item.email?.trim().toLowerCase();
+    if (!email) return false;
+    if (!item.recipient_student_id) return true;
+    if (!item.to_email_hash) return false;
+    return (
+      createHash("sha256").update(email).digest("hex") === item.to_email_hash
+    );
   }
 
   private renderMagicEmailHtml(

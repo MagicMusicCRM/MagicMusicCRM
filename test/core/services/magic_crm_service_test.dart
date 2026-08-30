@@ -2228,6 +2228,52 @@ void main() {
       },
     );
 
+    test('sends explicit email clear flags only when requested', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/leads/lead-a',
+          statusCode: 200,
+          body: {'id': 'lead-a', 'customData': <String, dynamic>{}},
+        ),
+        _FakeResponse(
+          path: '/crm/students/student-a',
+          statusCode: 200,
+          body: {'id': 'student-a', 'customData': <String, dynamic>{}},
+        ),
+        _FakeResponse(
+          path: '/crm/leads/lead-a',
+          statusCode: 200,
+          body: {'id': 'lead-a', 'customData': <String, dynamic>{}},
+        ),
+        _FakeResponse(
+          path: '/crm/students/student-a',
+          statusCode: 200,
+          body: {'id': 'student-a', 'customData': <String, dynamic>{}},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      await service.updateLead('lead-a', expectedVersion: 1, clearEmail: true);
+      await service.updateStudent(
+        'student-a',
+        expectedVersion: 1,
+        clearEmail: true,
+      );
+      await service.updateLead('lead-a', expectedVersion: 2);
+      await service.updateStudent('student-a', expectedVersion: 2);
+
+      expect(adapter.requests[0].body, {
+        'expectedVersion': 1,
+        'clearEmail': true,
+      });
+      expect(adapter.requests[1].body, {
+        'expectedVersion': 1,
+        'clearEmail': true,
+      });
+      expect(adapter.requests[2].body, {'expectedVersion': 2});
+      expect(adapter.requests[3].body, {'expectedVersion': 2});
+    });
+
     test('creates lessons with branch and room ids', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

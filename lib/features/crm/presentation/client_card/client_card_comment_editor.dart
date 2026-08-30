@@ -104,7 +104,7 @@ extension _ClientCardCommentEditor on _ClientCardState {
     if (target == null) return;
     final kind = _commentKindFor(target.$1);
     try {
-      await ref
+      final created = await ref
           .read(magicCrmServiceProvider)
           .createComment(
             entityType: target.$1,
@@ -113,7 +113,7 @@ extension _ClientCardCommentEditor on _ClientCardState {
             kind: kind,
           );
       _commentCtrl.clear();
-      _onCommentCreated(kind);
+      _onCommentCreated(kind, target: target, created: created);
     } catch (e) {
       _showCommentFailure(e);
     }
@@ -135,7 +135,11 @@ extension _ClientCardCommentEditor on _ClientCardState {
     return role == 'teacher' ? 'teacher_note' : null;
   }
 
-  void _onCommentCreated(String? kind) {
+  void _onCommentCreated(
+    String? kind, {
+    required (String, String) target,
+    required Map<String, dynamic> created,
+  }) {
     if (!mounted) return;
     MagicToast.show(
       context,
@@ -145,11 +149,21 @@ extension _ClientCardCommentEditor on _ClientCardState {
       type: MagicToastType.success,
     );
     _emitState(() {
+      if (target.$1 == 'student') {
+        _studentComments = mergeByIdSorted([
+          [created],
+          _studentComments,
+        ], dateKey: 'created_at');
+      } else if (target.$1 == 'lead' && _leadCard != null) {
+        _leadCard!['comments'] = mergeByIdSorted([
+          [created],
+          _list(_leadCard!['comments']),
+        ], dateKey: 'created_at');
+      }
       _commentsRefreshKey++;
       _commentKind = 'admin_comment';
     });
-    if (_mode.hasStudentHalf) _fetchStudentData();
-    if (_mode.hasLeadHalf) _fetchCard();
+    unawaited(_reloadOperationalHistory());
   }
 
   void _showCommentFailure(Object error) {

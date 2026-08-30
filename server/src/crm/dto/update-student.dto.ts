@@ -42,6 +42,12 @@ export class UpdateStudentDto {
   @MaxLength(255)
   email?: string;
 
+  // Omission preserves the saved contact address; clearing is an explicit
+  // operation so released partial-update clients remain backwards compatible.
+  @IsOptional()
+  @IsBoolean()
+  clearEmail?: boolean;
+
   @IsOptional()
   @IsString()
   @MaxLength(50)

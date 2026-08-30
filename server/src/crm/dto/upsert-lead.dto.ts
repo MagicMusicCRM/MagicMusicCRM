@@ -50,6 +50,11 @@ export class UpsertLeadDto {
   @IsEmail()
   email?: string;
 
+  // Omission preserves the saved contact address; clearing is explicit.
+  @IsOptional()
+  @IsBoolean()
+  clearEmail?: boolean;
+
   @IsOptional()
   @IsString()
   @MaxLength(120)

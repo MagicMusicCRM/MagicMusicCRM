@@ -212,10 +212,9 @@ export class StudentMutationExecutor {
     const result = await client.query<StudentWriteSnapshot>(
       `select s.version, s.status, s.branch_id, s.custom_data,
          p.first_name, p.last_name, p.phone,
-         coalesce(s.contact_email, u.email) as email
+         nullif(btrim(s.contact_email), '') as email
        from app.students s
        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-       left join app.users u on u.id = p.user_id and u.deleted_at is null
        where s.id = $1 and s.deleted_at is null
        for update of s`,
       [studentId],
@@ -309,7 +308,8 @@ export class StudentMutationExecutor {
         updated_student as (
           update app.students s
           set status = coalesce($6, s.status),
-            contact_email = coalesce($5, s.contact_email),
+            contact_email = case when $11::boolean then null
+                                 else coalesce($5, s.contact_email) end,
             custom_data = case when $9::boolean then
                 jsonb_strip_nulls(coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb)
                   - 'responsible' - 'responsibleUserId' - 'responsibleName'
@@ -330,7 +330,7 @@ export class StudentMutationExecutor {
           us.custom_data, us.blacklisted, us.blacklist_reason,
           coalesce(updated_profile_dependency.first_name, p.first_name) as first_name,
           coalesce(updated_profile_dependency.last_name, p.last_name) as last_name,
-          coalesce(us.contact_email, u.email) as email,
+          nullif(btrim(us.contact_email), '') as email,
           coalesce(updated_profile_dependency.phone, p.phone) as phone,
           us.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
@@ -338,14 +338,13 @@ export class StudentMutationExecutor {
         join app.students s on s.id = us.id
         left join updated_profile updated_profile_dependency on true
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-        left join app.users u on u.id = p.user_id and u.deleted_at is null
         left join app.lead_sources source on source.id = us.source_id
         left join app.lessons l on l.student_id = s.id and l.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         group by us.id, us.version, us.status, us.profile_id, us.lead_id, us.source_id,
           us.contact_email, us.custom_data,
-          us.blacklisted, us.blacklist_reason, us.created_at, p.id, u.id,
+          us.blacklisted, us.blacklist_reason, us.created_at, p.id,
           updated_profile_dependency.user_id,
           updated_profile_dependency.first_name,
           updated_profile_dependency.last_name,
@@ -363,6 +362,7 @@ export class StudentMutationExecutor {
         command.branchId,
         command.clearResponsible,
         command.sourceId,
+        command.clearEmail ?? false,
       ],
     );
     return updated.rows[0];

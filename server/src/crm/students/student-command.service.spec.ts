@@ -13,6 +13,7 @@ import type { CrmPolicy } from "../crm.policy";
 import type { StudentRow } from "../student-read";
 import { StudentCommandService } from "./student-command.service";
 import type { StudentMutationExecutor } from "./student-mutation.executor";
+import type { UpdateStudentDto } from "../dto/update-student.dto";
 
 describe("StudentCommandService", () => {
   const actor: ActorContext = { userId: "manager-a", role: "manager" };
@@ -288,6 +289,7 @@ describe("StudentCommandService", () => {
       lastName: "Иванова",
       phone: "+79990000000",
       email: "student@example.com",
+      clearEmail: false,
       status: "active",
       customDataPatch: {},
       requestedResponsibleId: undefined,
@@ -313,6 +315,27 @@ describe("StudentCommandService", () => {
     expect(database.query).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
+  });
+
+  it("forwards an explicit email clear without treating omission as a clear", async () => {
+    const { service, mutations } = createHarness();
+
+    await service.updateStudent(
+      actor,
+      "student-a",
+      {
+        expectedVersion: 7,
+        clearEmail: true,
+      } as UpdateStudentDto & { clearEmail: boolean },
+    );
+
+    expect(mutations.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        studentId: "student-a",
+        email: null,
+        clearEmail: true,
+      }),
+    );
   });
 
   it("returns a business error when a saved email belongs to another user", async () => {

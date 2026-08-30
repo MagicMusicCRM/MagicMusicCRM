@@ -300,7 +300,8 @@ export class LeadWriteRepository {
           first_name = coalesce($3, first_name),
           last_name = coalesce($4, last_name),
           phone = coalesce($5, phone),
-          email = coalesce($6, email),
+          email = case when $15::boolean then null
+                       else coalesce($6, email) end,
           source = coalesce($7, source),
           source_id = coalesce($14::uuid, source_id),
           notes = coalesce($8, notes),
@@ -334,6 +335,7 @@ export class LeadWriteRepository {
         branchId,
         dto.clearAssignedTo ?? false,
         dto.sourceId ?? null,
+        dto.clearEmail ?? false,
       ],
     );
     return result.rows[0] ?? null;

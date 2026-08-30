@@ -3,7 +3,12 @@ import { Pool, PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { linkInvitedStudentsByVerifiedEmail } from "../../auth/student-invitation-linker";
+import { LeadWriteRepository } from "../lead-write.repository";
+import type { UpdateLeadDto } from "../dto/upsert-lead.dto";
+import { findStudent } from "../student-read";
 import type { StudentFunnelService } from "../student-funnel.service";
+import { NotificationWorker } from "../../notifications/notification-worker.service";
+import { StudentCommandService } from "./student-command.service";
 import { StudentMutationExecutor } from "./student-mutation.executor";
 import type { PreparedStudentUpdate } from "./student-mutation.types";
 
@@ -183,5 +188,302 @@ describe("Student contact email (PostgreSQL)", () => {
     expect(linked.rows).toEqual([
       { user_id: changedAppUserId, link_source: "auto_email" },
     ]);
+  });
+
+  it("preserves omitted contact email and clears it only when explicitly requested", async () => {
+    const accountUserId = randomUUID();
+    const profileId = randomUUID();
+    const studentId = randomUUID();
+    const suffix = randomUUID();
+    const loginEmail = `login-${suffix}@example.test`;
+    const contactEmail = `contact-${suffix}@example.test`;
+
+    await client.query(
+      `insert into app.users (id, email, role, is_app_account)
+       values ($1, $2, 'client', true)`,
+      [accountUserId, loginEmail],
+    );
+    await client.query(
+      `insert into app.profiles (id, user_id, first_name, last_name)
+       values ($1, $2, 'Анна', 'Тестова')`,
+      [profileId, accountUserId],
+    );
+    const inserted = await client.query<{ version: string | number }>(
+      `insert into app.students (
+         id, client_id, profile_id, status, contact_email
+       ) values ($1, $1, $2, 'active', $3)
+       returning version`,
+      [studentId, profileId, contactEmail],
+    );
+    const versionBefore = Number(inserted.rows[0]!.version);
+    const baseCommand = {
+      studentId,
+      firstName: null,
+      lastName: null,
+      phone: null,
+      email: null,
+      status: null,
+      customDataPatch: {},
+      requestedResponsibleId: undefined,
+      branchId: null,
+      clearResponsible: false,
+      sourceId: null,
+    } satisfies Omit<PreparedStudentUpdate, "expectedVersion">;
+
+    await executor.update({ ...baseCommand, expectedVersion: versionBefore });
+    const preserved = await client.query<{ contact_email: string | null }>(
+      "select contact_email from app.students where id = $1",
+      [studentId],
+    );
+    expect(preserved.rows[0]?.contact_email).toBe(contactEmail);
+
+    const cleared = await executor.update({
+      ...baseCommand,
+      expectedVersion: versionBefore + 1,
+      clearEmail: true,
+    } as PreparedStudentUpdate & { clearEmail: boolean });
+
+    expect(cleared.student?.email).toBeNull();
+    const state = await client.query<{ contact_email: string | null }>(
+      "select contact_email from app.students where id = $1",
+      [studentId],
+    );
+    expect(state.rows[0]?.contact_email).toBeNull();
+    await expect(findStudent(database, studentId)).resolves.toEqual(
+      expect.objectContaining({ email: null }),
+    );
+
+    const notifications = { sendEmail: jest.fn() };
+    const commands = new StudentCommandService(
+      database,
+      { record: jest.fn() } as never,
+      { assertCanWriteCrm: jest.fn() } as never,
+      notifications as never,
+      { emitCrmChanged: jest.fn() } as never,
+      executor,
+    );
+    await expect(
+      commands.inviteStudent(
+        { userId: accountUserId, role: "admin" },
+        studentId,
+      ),
+    ).rejects.toThrow("У ученика нет email для приглашения.");
+    expect(notifications.sendEmail).not.toHaveBeenCalled();
+    const outbox = await client.query<{ count: string }>(
+      `select count(*)::text as count from app.email_outbox
+       where recipient_student_id = $1`,
+      [studentId],
+    );
+    expect(outbox.rows[0]?.count).toBe("0");
+  });
+
+  it("preserves an omitted lead email and clears it only when explicitly requested", async () => {
+    const actorUserId = randomUUID();
+    const leadId = randomUUID();
+    const suffix = randomUUID();
+    const contactEmail = `lead-${suffix}@example.test`;
+    await client.query(
+      `insert into app.users (id, email, role, is_app_account)
+       values ($1, $2, 'admin', true)`,
+      [actorUserId, `admin-${suffix}@example.test`],
+    );
+    const inserted = await client.query<{ version: string | number }>(
+      `insert into app.leads (id, first_name, email, created_by)
+       values ($1, 'Мария', $2, $3)
+       returning version`,
+      [leadId, contactEmail, actorUserId],
+    );
+    const writes = new LeadWriteRepository(database, {
+      assertLeadTransition: jest.fn(),
+    } as never);
+
+    await writes.update(
+      { userId: actorUserId, role: "admin" },
+      leadId,
+      { expectedVersion: Number(inserted.rows[0]!.version) },
+    );
+    const preserved = await client.query<{ email: string | null }>(
+      "select email from app.leads where id = $1",
+      [leadId],
+    );
+    expect(preserved.rows[0]?.email).toBe(contactEmail);
+
+    await writes.update(
+      { userId: actorUserId, role: "admin" },
+      leadId,
+      {
+        expectedVersion: Number(inserted.rows[0]!.version) + 1,
+        clearEmail: true,
+      } as UpdateLeadDto & { clearEmail: boolean },
+    );
+    const cleared = await client.query<{ email: string | null }>(
+      "select email from app.leads where id = $1",
+      [leadId],
+    );
+    expect(cleared.rows[0]?.email).toBeNull();
+  });
+
+  it("never sends a stale student invitation after the card email changes", async () => {
+    const userId = randomUUID();
+    const profileId = randomUUID();
+    const studentId = randomUUID();
+    const suffix = randomUUID();
+    const oldEmail = `old-${suffix}@example.test`;
+    const currentEmail = `current-${suffix}@example.test`;
+    await client.query(
+      `insert into app.users (id, email, role, is_app_account)
+       values ($1, $2, 'client', true)`,
+      [userId, `login-${suffix}@example.test`],
+    );
+    await client.query(
+      `insert into app.profiles (id, user_id, first_name)
+       values ($1, $2, 'Ольга')`,
+      [profileId, userId],
+    );
+    await client.query(
+      `insert into app.students (
+         id, client_id, profile_id, status, contact_email
+       ) values ($1, $1, $2, 'active', $3)`,
+      [studentId, profileId, currentEmail],
+    );
+    const inserted = await client.query<{ id: string }>(
+      `insert into app.email_outbox (
+         user_id, to_email_hash, template, recipient_student_id, payload
+       ) values ($1, $2, 'student_invite', $3, $4::jsonb)
+       returning id`,
+      [
+        userId,
+        createHash("sha256").update(oldEmail).digest("hex"),
+        studentId,
+        JSON.stringify({ title: "Приглашение", body: "Установите приложение" }),
+      ],
+    );
+    const resend = {
+      send: jest.fn().mockResolvedValue({ provider: "resend", status: "sent" }),
+    };
+    const smtp = { send: jest.fn() };
+    const worker = new NotificationWorker(
+      database,
+      { record: jest.fn() } as never,
+      resend as never,
+      smtp as never,
+      { decrypt: jest.fn() } as never,
+      { send: jest.fn() } as never,
+    );
+
+    await expect(worker.dispatchEmailById(inserted.rows[0]!.id)).resolves.toEqual({
+      processed: true,
+      status: "failed",
+    });
+    expect(resend.send).not.toHaveBeenCalled();
+    expect(smtp.send).not.toHaveBeenCalled();
+    const state = await client.query<{
+      status: string;
+      attempt_count: string | number;
+      last_error: string | null;
+    }>(
+      `select status, attempt_count, last_error
+       from app.email_outbox where id = $1`,
+      [inserted.rows[0]!.id],
+    );
+    expect(state.rows[0]).toEqual({
+      status: "failed",
+      attempt_count: 5,
+      last_error: "recipient_contact_changed",
+    });
+
+    await client.query(
+      "update app.students set contact_email = null where id = $1",
+      [studentId],
+    );
+    const clearedRecipient = await client.query<{ id: string }>(
+      `insert into app.email_outbox (
+         user_id, to_email_hash, template, recipient_student_id, payload
+       ) values ($1, $2, 'student_invite', $3, $4::jsonb)
+       returning id`,
+      [
+        userId,
+        createHash("sha256").update(oldEmail).digest("hex"),
+        studentId,
+        JSON.stringify({ title: "Приглашение", body: "Установите приложение" }),
+      ],
+    );
+    resend.send.mockClear();
+    smtp.send.mockClear();
+
+    await expect(
+      worker.dispatchEmailById(clearedRecipient.rows[0]!.id),
+    ).resolves.toEqual({ processed: true, status: "failed" });
+    expect(resend.send).not.toHaveBeenCalled();
+    expect(smtp.send).not.toHaveBeenCalled();
+    const clearedState = await client.query<{
+      status: string;
+      attempt_count: string | number;
+      last_error: string | null;
+    }>(
+      `select status, attempt_count, last_error
+       from app.email_outbox where id = $1`,
+      [clearedRecipient.rows[0]!.id],
+    );
+    expect(clearedState.rows[0]).toEqual({
+      status: "failed",
+      attempt_count: 5,
+      last_error: "recipient_contact_changed",
+    });
+  });
+
+  it("sends a student invitation only to the current matching card email", async () => {
+    const userId = randomUUID();
+    const profileId = randomUUID();
+    const studentId = randomUUID();
+    const suffix = randomUUID();
+    const currentEmail = `current-${suffix}@example.test`;
+    await client.query(
+      `insert into app.users (id, email, role, is_app_account)
+       values ($1, $2, 'client', true)`,
+      [userId, `login-${suffix}@example.test`],
+    );
+    await client.query(
+      `insert into app.profiles (id, user_id, first_name)
+       values ($1, $2, 'Ирина')`,
+      [profileId, userId],
+    );
+    await client.query(
+      `insert into app.students (
+         id, client_id, profile_id, status, contact_email
+       ) values ($1, $1, $2, 'active', $3)`,
+      [studentId, profileId, currentEmail],
+    );
+    const inserted = await client.query<{ id: string }>(
+      `insert into app.email_outbox (
+         user_id, to_email_hash, template, recipient_student_id, payload
+       ) values ($1, $2, 'student_invite', $3, $4::jsonb)
+       returning id`,
+      [
+        userId,
+        createHash("sha256").update(currentEmail).digest("hex"),
+        studentId,
+        JSON.stringify({ title: "Приглашение", body: "Установите приложение" }),
+      ],
+    );
+    const resend = {
+      send: jest.fn().mockResolvedValue({ provider: "resend", status: "sent" }),
+    };
+    const worker = new NotificationWorker(
+      database,
+      { record: jest.fn() } as never,
+      resend as never,
+      { send: jest.fn() } as never,
+      { decrypt: jest.fn() } as never,
+      { send: jest.fn() } as never,
+    );
+
+    await expect(worker.dispatchEmailById(inserted.rows[0]!.id)).resolves.toEqual({
+      processed: true,
+      status: "sent",
+    });
+    expect(resend.send).toHaveBeenCalledWith(
+      expect.objectContaining({ to: currentEmail }),
+    );
   });
 });

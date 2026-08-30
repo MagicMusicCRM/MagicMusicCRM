@@ -190,6 +190,7 @@ describe('NotificationsService', () => {
     ).resolves.toEqual({ queued: true, delivered: false });
 
     expect(database.query.mock.calls[0]?.[0]).toContain('student.contact_email');
+    expect(database.query.mock.calls[0]?.[0]).not.toContain('account.email');
     expect(database.query.mock.calls[1]?.[0]).toContain('recipient_student_id');
     expect(database.query.mock.calls[1]?.[1]).toEqual([
       'technical-user',
@@ -198,6 +199,26 @@ describe('NotificationsService', () => {
       expect.any(String),
       'student-a'
     ]);
+  });
+
+  it('does not queue a student invitation when the card contact email was cleared', async () => {
+    const { service, database, worker } = createService();
+    database.query.mockResolvedValueOnce({ rows: [{ email: null }] } as never);
+
+    await expect(
+      service.sendEmail({
+        userId: 'technical-user',
+        studentId: 'student-a',
+        template: 'student_invite',
+        title: 'Приглашение',
+        body: 'Установите приложение'
+      })
+    ).resolves.toEqual({ queued: false, delivered: false });
+
+    expect(database.query).toHaveBeenCalledTimes(1);
+    expect(database.query.mock.calls[0]?.[0]).toContain('student.contact_email');
+    expect(database.query.mock.calls[0]?.[0]).not.toContain('account.email');
+    expect(worker.dispatchEmailById).not.toHaveBeenCalled();
   });
 
   it('stops retries when required OTP delivery fails', async () => {
