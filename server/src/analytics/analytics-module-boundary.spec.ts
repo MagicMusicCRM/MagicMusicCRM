@@ -2,6 +2,7 @@ import { MODULE_METADATA } from "@nestjs/common/constants";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as ts from "typescript";
+import { AuditModule } from "../audit/audit.module";
 import { CrmAnalyticsSupportModule } from "../crm/crm-analytics-support.module";
 import { CrmPolicy } from "../crm/crm.policy";
 import { CrmModule } from "../crm/crm.module";
@@ -45,6 +46,12 @@ describe("analytics module boundary", () => {
     expect(importsOf("../crm/crm.module.ts")).toContain(
       "./crm-analytics-support.module",
     );
+  });
+
+  it("imports AuditModule so DashboardService can present audit events", () => {
+    expect(
+      metadata(MODULE_METADATA.IMPORTS, CrmAnalyticsSupportModule),
+    ).toContain(AuditModule);
   });
 
   it.each([CrmPolicy, DashboardService])(
