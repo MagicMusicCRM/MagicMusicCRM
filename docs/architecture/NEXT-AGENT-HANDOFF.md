@@ -1,11 +1,25 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-30
-> Production: client `1.5.25+205`, server `f005bf5e`,
-> image `sha256:35e2ad37…`, migration `0145`
+> Production: client `1.5.26+206`, server `e5503e51`,
+> image `sha256:d666238e…`, migration `0145`
 > Рабочая ветка: `codex/customer-corrections`
-> Статус: smooth client-card save и актуальная почта приглашения rollout PASS;
-> общий update build `205` опубликован
+> Статус: branch-wide schedule и единая история клиента rollout PASS;
+> общий update build `206` опубликован
+
+Release `1.5.26+206` исправил «Все филиалы» в расписании для полного
+доступного role scope, добавил DST-safe локальную дату и effective branch для
+агрегаций. В карточке клиента оставлена единая человекочитаемая история с
+первичными 10 событиями и раскрытием остальных; progress empty state приведён
+к общему UI. Текущая DB-роль повторно проверяется до внутренних client-card и
+schedule projections. Flutter `1471/1471`, backend `271/271` suites /
+`3405/3405` tests, analyze/typecheck/build, production-like и exact image gates,
+Windows/Setup/APK/AAB и Android signing PASS. Production image `e5503e51`
+healthy/restart `0`, migration `0145`, reconciliation дважды `issues=[]`,
+fresh outbox `0/0`, API/Caddy ошибки `0/0`. Fresh encrypted pre/post backup
+скопированы off-host и оба прошли isolated candidate/rollback restore. Оба
+manifest, четыре public artifacts и GitHub Release `v1.5.26` опубликованы.
+Evidence: `docs/audits/v7-production-client-history-schedule-206.md`.
 
 Release `1.5.25+205` устранил полную перезагрузку карточки при сохранении,
 комментариях и realtime-событиях. Пустая почта теперь действительно очищается,
