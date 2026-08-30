@@ -820,18 +820,15 @@ void main() {
   });
 
   testWidgets(
-    'system fields stay out of additional fields and typed save payload',
+    'dedicated direction stays out of typed payload with a stale legacy flag',
     (tester) async {
       const directionDefinitionId = '30000000-0000-4000-8000-000000000778';
       const legacyDefinitionId = '30000000-0000-4000-8000-000000000779';
       final api = FakeCardApiClient(
-        lead: rawLead(
-          customData: const {
-            'discipline': 'Вокал',
-            'disciplines': ['Вокал'],
-            'legacyCrmCode': 'HH-42',
-          },
-        ),
+        lead: rawLead(customData: const {'legacyCrmCode': 'HH-42'}),
+        disciplines: const [
+          {'id': '40000000-0000-4000-8000-000000000001', 'name': 'VOCAL'},
+        ],
         customFields: const [
           {
             'id': directionDefinitionId,
@@ -839,7 +836,9 @@ void main() {
             'key': 'discipline',
             'label': 'Направление',
             'valueType': 'select',
-            'isSystem': true,
+            // Production had this legacy definition marked non-system while
+            // the card already owned direction through its dedicated editor.
+            'isSystem': false,
             'options': ['Вокал'],
             'placements': ['edit', 'card'],
           },
@@ -861,7 +860,7 @@ void main() {
         statuses: statuses,
       );
 
-      expect(find.text('Вокал'), findsOneWidget);
+      expect(find.text('VOCAL'), findsOneWidget);
       await tester.ensureVisible(
         find.byKey(const Key('client-custom-fields-expansion')),
       );
@@ -869,14 +868,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Старый код CRM'), findsNothing);
 
-      await tester.ensureVisible(find.text('Вокал'));
-      await tester.tap(find.text('Вокал'));
+      await tester.ensureVisible(find.text('VOCAL'));
+      await tester.tap(find.text('VOCAL'));
       await _waitForClientAutoSave(tester);
 
       expect(api.updateLeadBody?['customFields'], isNull);
       expect(api.updateLeadBody?['customDataPatch'], {
-        'discipline': null,
-        'disciplines': <String>[],
+        'discipline': 'VOCAL',
+        'disciplines': ['VOCAL'],
       });
     },
   );

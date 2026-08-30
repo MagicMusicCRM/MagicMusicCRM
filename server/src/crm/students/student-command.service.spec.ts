@@ -336,7 +336,7 @@ describe("StudentCommandService", () => {
   });
 
   it("sends invitation before recording a deterministic lowercase email hash", async () => {
-    const { service, events, audit, notifications } = createHarness();
+    const { service, events, database, audit, notifications } = createHarness();
 
     await expect(service.inviteStudent(actor, "student-a")).resolves.toEqual({
       studentId: "student-a",
@@ -348,9 +348,17 @@ describe("StudentCommandService", () => {
     expect(notifications.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: "user-a",
+        studentId: "student-a",
         template: "student_invite",
         title: "Приглашение в личный кабинет Magic Music",
       }),
+    );
+    expect(database.query).toHaveBeenCalledWith(
+      expect.stringContaining("insert into app.user_crm_links"),
+      ["student-a", "student@example.com", "manager-a"],
+    );
+    expect(String(database.query.mock.calls.at(-1)?.[0])).toContain(
+      "account.email_verified_at is not null",
     );
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

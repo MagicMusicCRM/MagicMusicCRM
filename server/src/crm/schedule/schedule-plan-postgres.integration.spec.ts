@@ -1028,6 +1028,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         fixture.subscriptionIds[0],
       );
       expect(await new MigrationRunner(pool).down()).toBe(
+        "0145_student_contact_email",
+      );
+      expect(await new MigrationRunner(pool).down()).toBe(
         "0144_direct_subscription_payment_isolation",
       );
       expect(await new MigrationRunner(pool).down()).toBe(
@@ -1046,6 +1049,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         expect(await new MigrationRunner(pool).up()).toEqual([
           "0143_payment_record_link_permission",
           "0144_direct_subscription_payment_isolation",
+          "0145_student_contact_email",
         ]);
       }
     } finally {

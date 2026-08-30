@@ -44,11 +44,12 @@ export class ClientConversionService {
       }
       const leadResult = await client.query<{
         id: string;
+        email: string | null;
         source_id: string | null;
         custom_data: Record<string, unknown> | null;
       }>(
         `
-          select id, source_id, custom_data
+          select id, email, source_id, custom_data
           from app.leads
           where id = $1 and deleted_at is null
           for update
@@ -84,9 +85,9 @@ export class ClientConversionService {
           )
           insert into app.students (
             id, client_id, profile_id, lead_id, status, custom_data, branch_id,
-            source_id
+            source_id, contact_email
           )
-          select $5, $5, id, $5, $6, $7::jsonb, $8, $9 from profile
+          select $5, $5, id, $5, $6, $7::jsonb, $8, $9, $10 from profile
           returning id, client_id
         `,
         [
@@ -99,6 +100,7 @@ export class ClientConversionService {
           JSON.stringify(legacyCustomData),
           validated.branchId,
           validated.sourceId,
+          lead.email,
         ],
       );
       const studentId = student.rows[0]!.id;
@@ -238,5 +240,4 @@ export class ClientConversionService {
     }
     return { leadId, ...outcome };
   }
-
 }

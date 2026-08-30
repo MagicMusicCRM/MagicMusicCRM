@@ -2,10 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { ActorContext } from "../../common/security/actor-context";
 import { managerAdminRolesSql } from "../../common/security/role-sql";
 import { DatabaseService } from "../../db/database.service";
-import {
-  branchIdExpr,
-  managerBranchScopeSql,
-} from "../branch-scope";
+import { branchIdExpr, managerBranchScopeSql } from "../branch-scope";
 import { CrmPolicy } from "../crm.policy";
 import { CrmListQuery } from "../dto/crm-list.query";
 import { StudentSearchQuery } from "../dto/student-search.query";
@@ -19,6 +16,7 @@ import {
   toStudentSearchDto,
 } from "./student-presenter";
 import { buildStudentSearchFilter } from "./student-search-filter";
+import { studentContactEmailSql } from "./student-contact-email";
 import { typedClientTableFieldsSql } from "../clients/client-config.repository";
 
 @Injectable()
@@ -35,7 +33,9 @@ export class StudentDirectoryService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+          p.first_name, p.last_name, ${studentContactEmailSql()} as email,
+          p.phone, s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from app.students s
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -55,7 +55,7 @@ export class StudentDirectoryService {
           })}
           and (
             $3::text is null
-            or lower(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '') || ' ' || coalesce(u.email, '')) like lower('%' || $3 || '%')
+            or lower(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '') || ' ' || coalesce(${studentContactEmailSql()}, '')) like lower('%' || $3 || '%')
           )
         group by s.id, p.id, u.id
         order by s.created_at desc, s.id desc
@@ -76,7 +76,8 @@ export class StudentDirectoryService {
         select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
           ${typedClientTableFieldsSql("student", "s.id")} as table_custom_fields,
-          p.first_name, p.last_name, u.email, p.phone,
+          p.first_name, p.last_name, ${studentContactEmailSql()} as email,
+          p.phone,
           s.created_at, count(*) over() as total_count,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids,
           ${branchIdExpr("s")} as branch_id,
@@ -219,7 +220,9 @@ export class StudentDirectoryService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+          p.first_name, p.last_name, ${studentContactEmailSql()} as email,
+          p.phone, s.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from app.group_students gs
         join app.groups g on g.id = gs.group_id and g.deleted_at is null

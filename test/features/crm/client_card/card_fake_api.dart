@@ -47,6 +47,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.studentLessons = const [],
     this.customFields = const [],
     this.sources = const [],
+    this.disciplines = const [],
     this.branches = const [],
     this.teachers = const [],
     this.rooms = const [],
@@ -136,6 +137,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> studentLessons;
   final List<Map<String, dynamic>> customFields;
   final List<Map<String, dynamic>> sources;
+  final List<Map<String, dynamic>> disciplines;
   final List<Map<String, dynamic>> branches;
   final List<Map<String, dynamic>> teachers;
   final List<Map<String, dynamic>> rooms;
@@ -238,6 +240,9 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (path == '/crm/client-config/sources') {
       return <String, dynamic>{'items': sources} as T;
+    }
+    if (path == '/crm/disciplines') {
+      return <String, dynamic>{'items': disciplines} as T;
     }
     if (path == '/crm/branches') {
       return <String, dynamic>{'items': branches} as T;

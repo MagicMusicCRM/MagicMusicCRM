@@ -1,4 +1,5 @@
 import { DatabaseService } from "../db/database.service";
+import { studentContactEmailSql } from "./students/student-contact-email";
 
 /**
  * Shared student read model + lookup (B3 StudentRepository seed). Several CRM
@@ -38,7 +39,8 @@ export async function findStudent(
       select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
         s.lead_id, s.source_id, source.display_name as source_name,
         s.custom_data, s.blacklisted, s.blacklist_reason,
-        p.first_name, p.last_name, u.email, p.phone, s.created_at,
+        p.first_name, p.last_name, ${studentContactEmailSql()} as email,
+        p.phone, s.created_at,
         coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
       from app.students s
       left join app.profiles p on p.id = s.profile_id and p.deleted_at is null

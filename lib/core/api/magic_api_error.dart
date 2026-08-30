@@ -138,12 +138,21 @@ String _userMessage(String raw, {int? statusCode, required String fallback}) {
   };
 
   final hasRussian = RegExp(r'[А-Яа-яЁё]').hasMatch(normalized);
-  final hasLatin = RegExp(r'[A-Za-z]').hasMatch(normalized);
+  // `email` is normal product language in otherwise Russian business errors.
+  // Treating that one word as technical text hid useful 400 responses behind
+  // a generic fallback (including duplicate-email and invite validation).
+  final textWithoutUserFacingLatin = normalized.replaceAll(
+    RegExp(r'\bemail\b', caseSensitive: false),
+    '',
+  );
+  final hasUnsafeLatin = RegExp(
+    r'[A-Za-z]',
+  ).hasMatch(textWithoutUserFacingLatin);
   final hasTechnicalText = RegExp(
     r'\b(exception|stack|trace|sql|http|statuscode|constraint|undefined|null)\b',
     caseSensitive: false,
   ).hasMatch(normalized);
-  if (hasRussian && hasLatin) {
+  if (hasRussian && hasUnsafeLatin) {
     final separator = normalized.indexOf(':');
     if (separator > 0) {
       final prefix = normalized.substring(0, separator).trim();

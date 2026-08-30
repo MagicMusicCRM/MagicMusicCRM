@@ -3,7 +3,7 @@ import {
   Logger,
   NotFoundException,
   OnModuleDestroy,
-  OnModuleInit,
+  OnModuleInit
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
@@ -103,9 +103,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     // owns lesson reminders.
     const lessonsEnabled = process.env.LESSON_REMINDERS_ENABLED === 'true';
     if (!lessonsEnabled) {
-      this.logger.log(
-        'Lesson reminders disabled (set LESSON_REMINDERS_ENABLED=true to enable)'
-      );
+      this.logger.log('Lesson reminders disabled (set LESSON_REMINDERS_ENABLED=true to enable)');
     }
     if (!lessonsEnabled) return;
     this.reminderTimer = setInterval(() => {
@@ -114,9 +112,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           if (sent > 0) this.logger.log(`Lesson reminders enqueued: ${sent}`);
         })
         .catch((error: unknown) => {
-          this.logger.error(
-            `Lesson reminder tick failed: ${this.errorName(error)}`
-          );
+          this.logger.error(`Lesson reminder tick failed: ${this.errorName(error)}`);
         });
     }, 60_000);
     this.reminderTimer.unref?.();
@@ -246,9 +242,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    * nobody subscribed, which is a legitimate configuration (the whole point of
    * a settings screen), not a failure.
    */
-  private async loadRoleChannels(
-    eventType: string
-  ): Promise<Map<string, NotificationChannel[]>> {
+  private async loadRoleChannels(eventType: string): Promise<Map<string, NotificationChannel[]>> {
     const result = await this.database.query<{
       role: string;
       channels: string[];
@@ -262,8 +256,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     );
     const byRole = new Map<string, NotificationChannel[]>();
     for (const row of result.rows) {
-      const channels = (row.channels ?? []).filter((channel): channel is NotificationChannel =>
-        channel === 'in_app' || channel === 'push' || channel === 'email'
+      const channels = (row.channels ?? []).filter(
+        (channel): channel is NotificationChannel =>
+          channel === 'in_app' || channel === 'push' || channel === 'email'
       );
       if (channels.length > 0) byRole.set(row.role, channels);
     }
@@ -282,16 +277,12 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     roleChannels: Map<string, NotificationChannel[]>,
     assigneeFallback: NotificationChannel[]
   ): Map<string, { channels: NotificationChannel[]; userIds: string[] }> {
-    const groups = new Map<
-      string,
-      { channels: NotificationChannel[]; userIds: string[] }
-    >();
+    const groups = new Map<string, { channels: NotificationChannel[]; userIds: string[] }>();
     for (const recipient of recipients) {
       // The assignee is notified about their own task even when their role has
       // opted out of the broadcast — "assigned to you" is not a preference.
       const channels =
-        roleChannels.get(recipient.role) ??
-        (recipient.id === assignedTo ? assigneeFallback : null);
+        roleChannels.get(recipient.role) ?? (recipient.id === assignedTo ? assigneeFallback : null);
       if (!channels || channels.length === 0) continue;
       const key = [...channels].sort().join(',');
       const group = groups.get(key) ?? { channels, userIds: [] };
@@ -327,18 +318,12 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         eventType: row.event_type,
         enabled: row.enabled,
         channels: row.channels ?? [],
-        updatedAt:
-          row.updated_at instanceof Date
-            ? row.updated_at.toISOString()
-            : row.updated_at
+        updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
       }))
     };
   }
 
-  async updatePreference(
-    actor: ActorContext,
-    dto: UpdateNotificationPreferenceDto
-  ) {
+  async updatePreference(actor: ActorContext, dto: UpdateNotificationPreferenceDto) {
     this.policy.assertCanManagePreferences(actor);
     // Upsert rather than update: migration 0062 seeds every (role, event) pair,
     // but a role added later would otherwise have no row to update.
@@ -386,11 +371,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   // Materialize an inbound.lead.created outbox event for eligible staff.
   // Manual CRM and chat/app Lead creation never call this method.
-  async notifyNewLead(input: {
-    leadId: string;
-    name: string;
-    source: string;
-  }): Promise<void> {
+  async notifyNewLead(input: { leadId: string; name: string; source: string }): Promise<void> {
     const roleChannels = await this.loadRoleChannels('new_lead');
     const roles = [...roleChannels.keys()];
     if (roles.length === 0) return; // every role opted out — a valid setting
@@ -406,12 +387,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     );
     if (users.rows.length === 0) return;
     // A lead has no assignee yet, so there is no always-notify fallback here.
-    const groups = this.groupRecipientsByChannels(
-      users.rows,
-      null,
-      roleChannels,
-      []
-    );
+    const groups = this.groupRecipientsByChannels(users.rows, null, roleChannels, []);
     for (const group of groups.values()) {
       await this.createNotification({
         type: 'new_lead',
@@ -425,10 +401,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     this.schedulePushDispatch();
   }
 
-  async notifyInboundLead(
-    ingestionId: string,
-    notificationId: string
-  ): Promise<void> {
+  async notifyInboundLead(ingestionId: string, notificationId: string): Promise<void> {
     const roleChannels = await this.loadRoleChannels('new_lead');
     const roles = [...roleChannels.keys()];
     if (roles.length === 0) return;
@@ -499,15 +472,12 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       .filter((user) => user.channels.length > 0);
   }
 
-  private async persistInboundLeadNotification(
-    input: InboundLeadNotification
-  ): Promise<void> {
+  private async persistInboundLeadNotification(input: InboundLeadNotification): Promise<void> {
     const { notificationId, title, body, data, recipients } = input;
     await this.database.transaction(async (client) => {
-      await client.query(
-        'select pg_advisory_xact_lock(hashtextextended($1::text, 0))',
-        [notificationId]
-      );
+      await client.query('select pg_advisory_xact_lock(hashtextextended($1::text, 0))', [
+        notificationId
+      ]);
       await client.query(
         `
           insert into app.notifications (id, type, title, body, data)
@@ -576,11 +546,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     successorId?: string | null;
   }): Promise<void> {
     const source = await this.loadLessonNotificationContext(input.lessonId);
-    const target = input.action === 'rescheduled'
-      ? await this.loadLessonNotificationContext(
-          input.successorId ?? source.successor_id
-        )
-      : source;
+    const target =
+      input.action === 'rescheduled'
+        ? await this.loadLessonNotificationContext(input.successorId ?? source.successor_id)
+        : source;
     const userIds = await audienceForLesson(this.database, target);
     const copy = this.lessonChangeCopy(input.action, target);
     if (userIds.length > 0) {
@@ -615,9 +584,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         },
         userIds: [source.teacher_user_id],
         channels: ['in_app', 'push'],
-        notificationId: this.stableUuid(
-          `lesson-change\0${input.eventId}\0teacher-unassigned`
-        )
+        notificationId: this.stableUuid(`lesson-change\0${input.eventId}\0teacher-unassigned`)
       });
     }
   }
@@ -685,10 +652,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       // role. Serialize ownership transfer by token hash, disable the previous
       // owner, then enable/upsert only the current actor. Migration 0072 adds a
       // partial unique index as the final race-proof invariant.
-      await client.query(
-        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
-        [tokenHash]
-      );
+      await client.query('select pg_advisory_xact_lock(hashtextextended($1::text, 0))', [
+        tokenHash
+      ]);
       await client.query(
         `
           update app.notification_devices
@@ -795,21 +761,42 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   async sendEmail(input: {
     userId: string;
+    studentId?: string;
     template: string;
     title: string;
     body: string;
     deliveryMode?: 'queued' | 'required';
   }): Promise<{ queued: boolean; delivered: boolean }> {
-    const user = await this.database.query<{ email: string }>(
-      'select email from app.users where id = $1 and deleted_at is null limit 1',
-      [input.userId]
-    );
-    const email = user.rows[0]?.email;
+    const recipient = input.studentId
+      ? await this.database.query<{ email: string }>(
+          `select coalesce(nullif(btrim(student.contact_email), ''), account.email) as email
+           from app.students student
+           join app.profiles profile
+             on profile.id = student.profile_id and profile.deleted_at is null
+           join app.users account
+             on account.id = profile.user_id and account.deleted_at is null
+           where student.id = $1
+             and profile.user_id = $2
+             and student.deleted_at is null
+           limit 1`,
+          [input.studentId, input.userId]
+        )
+      : await this.database.query<{ email: string }>(
+          'select email from app.users where id = $1 and deleted_at is null limit 1',
+          [input.userId]
+        );
+    const email = recipient.rows[0]?.email;
     if (!email) return { queued: false, delivered: false };
-    const outboxId = await this.enqueueEmail(input.userId, email, input.template, {
-      title: input.title,
-      body: input.body
-    });
+    const outboxId = await this.enqueueEmail(
+      input.userId,
+      email,
+      input.template,
+      {
+        title: input.title,
+        body: input.body
+      },
+      input.studentId
+    );
     if (input.deliveryMode === 'required') {
       try {
         const dispatch = await this.worker.dispatchEmailById(outboxId);
@@ -898,7 +885,11 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
                 userId,
                 this.sha256(user.rows[0].email.toLowerCase()),
                 input.type,
-                JSON.stringify({ notificationId, title: input.title, body: input.body }),
+                JSON.stringify({
+                  notificationId,
+                  title: input.title,
+                  body: input.body
+                }),
                 notificationId
               ]
             );
@@ -937,15 +928,24 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     userId: string,
     email: string,
     template: string,
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    studentId?: string
   ): Promise<string> {
     const result = await this.database.query<{ id: string }>(
       `
-        insert into app.email_outbox (user_id, to_email_hash, template, payload)
-        values ($1, $2, $3, $4::jsonb)
+        insert into app.email_outbox (
+          user_id, to_email_hash, template, payload, recipient_student_id
+        )
+        values ($1, $2, $3, $4::jsonb, $5)
         returning id
       `,
-      [userId, this.sha256(email.toLowerCase()), template, JSON.stringify(payload)]
+      [
+        userId,
+        this.sha256(email.toLowerCase()),
+        template,
+        JSON.stringify(payload),
+        studentId ?? null
+      ]
     );
     return result.rows[0].id;
   }
@@ -1052,10 +1052,16 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   ): { title: string; body: string } {
     const context = this.lessonContext(lesson);
     if (action === 'created') {
-      return { title: 'Занятие назначено', body: `Занятие назначено на ${context}.` };
+      return {
+        title: 'Занятие назначено',
+        body: `Занятие назначено на ${context}.`
+      };
     }
     if (action === 'cancelled') {
-      return { title: 'Занятие отменено', body: `Занятие ${context} отменено.` };
+      return {
+        title: 'Занятие отменено',
+        body: `Занятие ${context} отменено.`
+      };
     }
     return {
       title: 'Занятие перенесено',

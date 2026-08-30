@@ -101,7 +101,7 @@ export class StudentMutationExecutor {
     const inserted = await client.query<StudentRow>(
       `
         with identity as (
-          select coalesce($3::text, 'student-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid') as email
+          select 'student-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid' as email
         ),
         inserted_user as (
           insert into app.users (email, full_name, phone, role, profile_completed, is_app_account)
@@ -117,9 +117,10 @@ export class StudentMutationExecutor {
         ),
         inserted_student as (
           insert into app.students (
-            profile_id, status, lead_id, custom_data, branch_id, source_id
+            profile_id, status, lead_id, custom_data, branch_id, source_id,
+            contact_email
           )
-          select id, $6, $7, $8::jsonb, $9::uuid, $10::uuid
+          select id, $6, $7, $8::jsonb, $9::uuid, $10::uuid, $3::text
           from inserted_profile
           returning id, version, status, profile_id, lead_id, source_id, custom_data, created_at,
             blacklisted, blacklist_reason
@@ -146,7 +147,8 @@ export class StudentMutationExecutor {
         )
         select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.source_id, source.display_name as source_name,
-          s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name,
+          s.contact_email as email, p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from inserted_student s
         join inserted_profile p on p.id = s.profile_id
@@ -176,7 +178,9 @@ export class StudentMutationExecutor {
     customFields: PreparedStudentCreate["customFields"],
   ): Promise<void> {
     if (customFields === undefined) return;
-    await saveTypedClientValues(client, "student", studentId, [...customFields]);
+    await saveTypedClientValues(client, "student", studentId, [
+      ...customFields,
+    ]);
   }
 
   private async updateInTransaction(
@@ -207,7 +211,8 @@ export class StudentMutationExecutor {
   ): Promise<StudentWriteSnapshot | null> {
     const result = await client.query<StudentWriteSnapshot>(
       `select s.version, s.status, s.branch_id, s.custom_data,
-         p.first_name, p.last_name, p.phone, u.email
+         p.first_name, p.last_name, p.phone,
+         coalesce(s.contact_email, u.email) as email
        from app.students s
        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
        left join app.users u on u.id = p.user_id and u.deleted_at is null
@@ -301,17 +306,10 @@ export class StudentMutationExecutor {
           where p.id = target.profile_id
           returning p.id, p.user_id, p.first_name, p.last_name, p.phone
         ),
-        updated_user as (
-          update app.users u
-          set email = coalesce($5, u.email),
-            updated_at = now()
-          from target
-          where u.id = target.user_id
-          returning u.id, u.email
-        ),
         updated_student as (
           update app.students s
           set status = coalesce($6, s.status),
+            contact_email = coalesce($5, s.contact_email),
             custom_data = case when $9::boolean then
                 jsonb_strip_nulls(coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb)
                   - 'responsible' - 'responsibleUserId' - 'responsibleName'
@@ -322,7 +320,8 @@ export class StudentMutationExecutor {
             updated_at = now()
           from target
           where s.id = target.id
-          returning s.id, s.version, s.status, s.profile_id, s.lead_id, s.source_id, s.custom_data,
+          returning s.id, s.version, s.status, s.profile_id, s.lead_id, s.source_id,
+            s.contact_email, s.custom_data,
             s.blacklisted, s.blacklist_reason, s.created_at
         )
         select us.id, us.version, us.status, us.profile_id,
@@ -331,27 +330,26 @@ export class StudentMutationExecutor {
           us.custom_data, us.blacklisted, us.blacklist_reason,
           coalesce(updated_profile_dependency.first_name, p.first_name) as first_name,
           coalesce(updated_profile_dependency.last_name, p.last_name) as last_name,
-          coalesce(updated_user_dependency.email, u.email) as email,
+          coalesce(us.contact_email, u.email) as email,
           coalesce(updated_profile_dependency.phone, p.phone) as phone,
           us.created_at,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
         from updated_student us
         join app.students s on s.id = us.id
         left join updated_profile updated_profile_dependency on true
-        left join updated_user updated_user_dependency on true
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
         left join app.lead_sources source on source.id = us.source_id
         left join app.lessons l on l.student_id = s.id and l.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        group by us.id, us.version, us.status, us.profile_id, us.lead_id, us.source_id, us.custom_data,
+        group by us.id, us.version, us.status, us.profile_id, us.lead_id, us.source_id,
+          us.contact_email, us.custom_data,
           us.blacklisted, us.blacklist_reason, us.created_at, p.id, u.id,
           updated_profile_dependency.user_id,
           updated_profile_dependency.first_name,
           updated_profile_dependency.last_name,
-          updated_profile_dependency.phone,
-          updated_user_dependency.email, source.id
+          updated_profile_dependency.phone, source.id
         limit 1
       `,
       [
@@ -376,12 +374,9 @@ export class StudentMutationExecutor {
     student: StudentRow | undefined,
   ): Promise<void> {
     if (!student || command.customFields === undefined) return;
-    await replaceTypedClientValues(
-      client,
-      "student",
-      command.studentId,
-      [...command.customFields],
-    );
+    await replaceTypedClientValues(client, "student", command.studentId, [
+      ...command.customFields,
+    ]);
   }
 
   private async appendStatusHistory(

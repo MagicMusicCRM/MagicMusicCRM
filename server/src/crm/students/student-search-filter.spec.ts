@@ -7,7 +7,7 @@ describe("buildStudentSearchFilter", () => {
   const teacher: ActorContext = { userId: "teacher-a", role: "teacher" };
 
   it.each([
-    ["q", { q: "  Анна  " }, ["manager", "manager-a", "анна", null], "lower(concat_ws(' ', p.first_name, p.last_name, u.email, p.phone)) like"],
+    ["q", { q: "  Анна  " }, ["manager", "manager-a", "анна", null], "btrim(s.contact_email)"],
     ["status", { status: " active " }, ["manager", "manager-a", "active"], "s.status = $3::text"],
     ["branch", { branchId: "branch-a" }, ["manager", "manager-a", "branch-a"], "coalesce(s.branch_id::text"],
     ["no branch", { noBranch: true }, ["manager", "manager-a"], "coalesce(s.branch_id::text, s.custom_data->>'branchId', s.custom_data->>'branch_id') is null"],
@@ -18,7 +18,7 @@ describe("buildStudentSearchFilter", () => {
     ["date bounds", { from: "2026-01-01", to: "2026-02-01" }, ["manager", "manager-a", "2026-01-01", "2026-02-01"], "s.created_at < $4::timestamptz"],
     ["linked user", { linkedUser: true }, ["manager", "manager-a"], "or u.is_app_account = true"],
     ["not linked", { linkedUser: false }, ["manager", "manager-a"], "not (exists (select 1 from app.user_crm_links"],
-    ["no email", { noEmail: true }, ["manager", "manager-a"], "coalesce(nullif(btrim(u.email), ''), '') = ''"],
+    ["no email", { noEmail: true }, ["manager", "manager-a"], "when lower(u.email) like '%@local.magicmusiccrm.invalid' then null"],
     ["no open tasks", { noOpenTasks: true }, ["manager", "manager-a"], "from app.canonical_tasks task_filter"],
     ["valid cursor", { cursor: "2026-08-01T10:00:00.000Z|11111111-1111-4111-8111-111111111111" }, ["manager", "manager-a", "2026-08-01T10:00:00.000Z", "11111111-1111-4111-8111-111111111111"], "(s.created_at, s.id) < ($3::timestamptz, $4::uuid)"],
     ["malformed cursor", { cursor: "malformed" }, ["manager", "manager-a"], "s.deleted_at is null"],

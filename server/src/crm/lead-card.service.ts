@@ -18,6 +18,7 @@ import {
 import { SharedTaskService } from "./tasks/shared-task.service";
 import { StudentFunnelService } from "./student-funnel.service";
 import { StudentRow } from "./student-read";
+import { studentContactEmailSql } from "./students/student-contact-email";
 import { TimelineService } from "./timeline.service";
 
 @Injectable()
@@ -167,7 +168,9 @@ export class LeadCardService {
     };
   }
 
-  private buildTimeline(related: Awaited<ReturnType<LeadCardService["loadRelated"]>>) {
+  private buildTimeline(
+    related: Awaited<ReturnType<LeadCardService["loadRelated"]>>,
+  ) {
     return [
       ...related.comments.map((comment) => ({
         id: comment.id,
@@ -213,7 +216,8 @@ export class LeadCardService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+          p.first_name, p.last_name, ${studentContactEmailSql()} as email, p.phone,
           s.created_at, '{}'::uuid[] as teacher_user_ids
         from app.students s
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null

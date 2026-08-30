@@ -62,6 +62,7 @@ describe("NotificationWorker", () => {
           ),
         }),
       );
+      expect(query.mock.calls[1]?.[0]).toContain("student.contact_email");
     } finally {
       if (previousAndroid === undefined)
         delete process.env.CLIENT_ANDROID_INSTALL_URL;
@@ -96,13 +97,11 @@ describe("NotificationWorker", () => {
       .mockResolvedValue({ rows: [] });
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const resend = {
-      send: jest
-        .fn()
-        .mockResolvedValue({
-          provider: "resend",
-          status: "failed",
-          error: "status_500",
-        }),
+      send: jest.fn().mockResolvedValue({
+        provider: "resend",
+        status: "failed",
+        error: "status_500",
+      }),
     };
     const smtp = {
       send: jest
@@ -163,22 +162,18 @@ describe("NotificationWorker", () => {
       .mockResolvedValue({ rows: [] });
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const resend = {
-      send: jest
-        .fn()
-        .mockResolvedValue({
-          provider: "resend",
-          status: "failed",
-          error: "timeout",
-        }),
+      send: jest.fn().mockResolvedValue({
+        provider: "resend",
+        status: "failed",
+        error: "timeout",
+      }),
     };
     const smtp = {
-      send: jest
-        .fn()
-        .mockResolvedValue({
-          provider: "smtp_fallback",
-          status: "failed",
-          error: "smtp_timeout",
-        }),
+      send: jest.fn().mockResolvedValue({
+        provider: "smtp_fallback",
+        status: "failed",
+        error: "smtp_timeout",
+      }),
     };
     const tokenCrypto = { decrypt: jest.fn() };
     const pushProvider = { send: jest.fn() };
@@ -238,22 +233,18 @@ describe("NotificationWorker", () => {
       .mockResolvedValue({ rows: [] });
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const resend = {
-      send: jest
-        .fn()
-        .mockResolvedValue({
-          provider: "resend",
-          status: "failed",
-          error: "timeout",
-        }),
+      send: jest.fn().mockResolvedValue({
+        provider: "resend",
+        status: "failed",
+        error: "timeout",
+      }),
     };
     const smtp = {
-      send: jest
-        .fn()
-        .mockResolvedValue({
-          provider: "smtp_fallback",
-          status: "failed",
-          error: "smtp_timeout",
-        }),
+      send: jest.fn().mockResolvedValue({
+        provider: "smtp_fallback",
+        status: "failed",
+        error: "smtp_timeout",
+      }),
     };
     const worker = new NotificationWorker(
       { query } as unknown as DatabaseService,

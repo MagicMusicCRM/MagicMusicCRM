@@ -651,8 +651,9 @@ export class SubscriptionsService {
                 returning id
               )
               insert into app.students
-                (profile_id, lead_id, status, custom_data, branch_id, source_id)
-              select id, $5, 'active', $6::jsonb, $7, $8
+                (profile_id, lead_id, status, custom_data, branch_id, source_id,
+                 contact_email)
+              select id, $5, 'active', $6::jsonb, $7, $8, $9
               from updated_profile
               returning id
             `,
@@ -665,6 +666,7 @@ export class SubscriptionsService {
                 JSON.stringify(customData),
                 lead.branch_id,
                 lead.source_id,
+                lead.email,
               ],
             );
             studentId = inserted.rows[0].id;
@@ -675,13 +677,7 @@ export class SubscriptionsService {
             const inserted = await client.query<{ id: string }>(
               `
               with identity as (
-                select case
-                  when $3::text is not null and not exists (
-                    select 1 from app.users
-                    where lower(email) = lower($3::text) and deleted_at is null
-                  ) then lower($3::text)
-                  else 'student-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid'
-                end as email
+                select 'student-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid' as email
               ), inserted_user as (
                 insert into app.users
                   (email, full_name, phone, role, profile_completed, is_app_account)
@@ -696,8 +692,9 @@ export class SubscriptionsService {
                 returning id
               )
               insert into app.students
-                (profile_id, lead_id, status, custom_data, branch_id, source_id)
-              select id, $6, 'active', $7::jsonb, $8, $9
+                (profile_id, lead_id, status, custom_data, branch_id, source_id,
+                 contact_email)
+              select id, $6, 'active', $7::jsonb, $8, $9, $3
               from inserted_profile
               returning id
             `,
@@ -928,10 +925,7 @@ export class SubscriptionsService {
         const replayed = await this.loadExistingLeadIssue(client, leadId);
         if (!replayed)
           throw new NotFoundException("Покупка абонемента не найдена.");
-        if (
-          result.replayed &&
-          replayed.id !== result.resultRef.studentId
-        ) {
+        if (result.replayed && replayed.id !== result.resultRef.studentId) {
           throw new NotFoundException("Покупка абонемента не найдена.");
         }
         return this.outcomeFromExistingIssue(replayed);

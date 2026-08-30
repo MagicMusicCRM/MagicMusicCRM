@@ -230,7 +230,18 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
           and u.id = eo.user_id and u.deleted_at is null
           and eo.status in ('queued', 'failed')
           and eo.next_attempt_at <= now()
-        returning eo.id, eo.user_id, u.email, eo.template, eo.payload, eo.attempt_count
+        returning eo.id, eo.user_id,
+          coalesce(
+            (
+              select nullif(btrim(student.contact_email), '')
+              from app.students student
+              where student.id = eo.recipient_student_id
+                and student.deleted_at is null
+              limit 1
+            ),
+            u.email
+          ) as email,
+          eo.template, eo.payload, eo.attempt_count
       `,
       [id],
     );

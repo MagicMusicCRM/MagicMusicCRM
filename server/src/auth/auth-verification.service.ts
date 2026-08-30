@@ -12,6 +12,7 @@ import {
 import { AuthRateLimitService } from "./auth-rate-limit.service";
 import { AcceptedResponse, AuthUserResponse, UserRecord } from "./auth.types";
 import { SessionService, TokenPair } from "./session.service";
+import { linkInvitedStudentsByVerifiedEmail } from "./student-invitation-linker";
 
 @Injectable()
 export class AuthVerificationService {
@@ -111,13 +112,18 @@ export class AuthVerificationService {
         "Код подтверждения недействителен или истек.",
       );
     }
+    const linkedStudentIds = await linkInvitedStudentsByVerifiedEmail(
+      this.database,
+      user.id,
+      user.email,
+    );
 
     await this.audit.record({
       actor: { userId: user.id, role: user.role },
       action: "auth.otp_verified",
       entityType: "user",
       entityId: user.id,
-      metadata: { emailHash },
+      metadata: { emailHash, linkedStudentCount: linkedStudentIds.length },
     });
     if (
       Boolean(user.email_otp_2fa_enabled) ||
@@ -166,12 +172,18 @@ export class AuthVerificationService {
         "Код подтверждения недействителен или истек.",
       );
     }
+    const linkedStudentIds = await linkInvitedStudentsByVerifiedEmail(
+      this.database,
+      user.id,
+      user.email,
+    );
 
     await this.audit.record({
       actor: { userId: user.id, role: user.role },
       action: "auth.email_verified",
       entityType: "user",
       entityId: user.id,
+      metadata: { linkedStudentCount: linkedStudentIds.length },
     });
     return { user: toAuthUserResponse(user) };
   }
@@ -192,4 +204,5 @@ export class AuthVerificationService {
     );
     return result.rows[0];
   }
+
 }

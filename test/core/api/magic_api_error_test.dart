@@ -3,6 +3,20 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 
 void main() {
   group('userErrorMessage', () {
+    test('keeps safe Russian email business errors visible', () {
+      for (final message in const [
+        'Пользователь с таким email уже существует.',
+        'У ученика нет email для приглашения.',
+      ]) {
+        final error = MagicApiException(statusCode: 400, message: message);
+
+        expect(
+          error.toUserMessage(fallback: 'Не удалось сохранить карточку.'),
+          message,
+        );
+      }
+    });
+
     test('maps an English server failure to a Russian message', () {
       const error = MagicApiException(
         statusCode: 500,

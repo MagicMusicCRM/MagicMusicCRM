@@ -128,13 +128,33 @@ export class StudentCommandService {
 
     await this.notifications.sendEmail({
       userId: student.profile_user_id,
+      studentId: student.id,
       template: "student_invite",
       title: "Приглашение в личный кабинет Magic Music",
       body:
         "Здравствуйте! Школа Magic Music подготовила для вас личный кабинет. " +
-        `Установите приложение по кнопке ниже и зарегистрируйтесь с этой почтой: ${email}. ` +
-        "После регистрации аккаунт будет привязан к вашей карточке ученика.",
+        `Установите приложение по кнопке ниже и войдите или зарегистрируйтесь с этой почтой: ${email}. ` +
+        "После подтверждения почты аккаунт будет привязан к вашей карточке ученика.",
     });
+    // The explicit manager action may target an already verified app account.
+    // Link it immediately; new accounts are linked only after email ownership
+    // is proven by AuthVerificationService.
+    await this.database.query(
+      `
+        insert into app.user_crm_links (
+          user_id, entity_type, entity_id, link_source, confirmed_at, created_by
+        )
+        select account.id, 'student', $1, 'auto_email', now(), $3
+        from app.users account
+        where lower(account.email) = lower($2)
+          and account.deleted_at is null
+          and account.is_app_account = true
+          and account.email_verified_at is not null
+        on conflict (entity_type, entity_id) where deleted_at is null
+        do nothing
+      `,
+      [student.id, email, actor.userId],
+    );
     await this.audit.record({
       actor,
       action: "crm.student_invite_sent",

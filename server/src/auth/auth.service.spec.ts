@@ -539,7 +539,8 @@ describe("AuthService", () => {
             email_verified_at: new Date(),
           },
         ],
-      });
+      })
+      .mockResolvedValueOnce({ rows: [] });
 
     const result = await service.verifyOtp("user@example.com", "123456");
 
@@ -564,7 +565,8 @@ describe("AuthService", () => {
             email_otp_2fa_enabled: true,
           },
         ],
-      });
+      })
+      .mockResolvedValueOnce({ rows: [] });
 
     const result = await service.verifyOtp("user@example.com", "123456");
 
@@ -591,7 +593,8 @@ describe("AuthService", () => {
             email_otp_2fa_enabled: false,
           },
         ],
-      });
+      })
+      .mockResolvedValueOnce({ rows: [] });
 
     const result = await service.verifyOtp(
       "system-admin@example.com",
@@ -982,23 +985,35 @@ describe("AuthService", () => {
   });
 
   it("verifies email with a valid token", async () => {
-    query.mockResolvedValueOnce({
-      rows: [
-        {
-          id: "user-a",
-          email: "user@example.com",
-          password_hash: "hash",
-          role: "client",
-          email_verified_at: new Date(),
-        },
-      ],
-    });
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "user-a",
+            email: "user@example.com",
+            password_hash: "hash",
+            role: "client",
+            email_verified_at: new Date(),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ entity_id: "student-a" }] });
 
     const result = await service.verifyEmail(
       "abcdefghijklmnopqrstuvwxyz0123456789",
     );
 
     expect(result.user.emailVerified).toBe(true);
+    expect(query.mock.calls[1]?.[0]).toContain(
+      "insert into app.user_crm_links",
+    );
+    expect(query.mock.calls[1]?.[0]).toContain(
+      "invite.template = 'student_invite'",
+    );
+    expect(query.mock.calls[1]?.[1]).toEqual([
+      "user-a",
+      "user@example.com",
+    ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "auth.email_verified" }),
     );
@@ -1017,6 +1032,7 @@ describe("AuthService", () => {
           },
         ],
       })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
     const token = "abcdefghijklmnopqrstuvwxyz0123456789";
 

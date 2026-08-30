@@ -5,6 +5,7 @@ import { ScheduleReadService } from "../schedule/schedule-read.service";
 import { StudentRow } from "../student-read";
 import { SharedTaskService } from "../tasks/shared-task.service";
 import { toStudentDto } from "./student-presenter";
+import { studentContactEmailSql } from "./student-contact-email";
 
 @Injectable()
 export class StudentSelfSummaryService {
@@ -62,7 +63,9 @@ export class StudentSelfSummaryService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+          p.first_name, p.last_name, ${studentContactEmailSql()} as email,
+          p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.students s
         join app.profiles p on p.id = s.profile_id and p.deleted_at is null
@@ -81,7 +84,9 @@ export class StudentSelfSummaryService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+          p.first_name, p.last_name, ${studentContactEmailSql()} as email,
+          p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.profiles acct
         join app.family_members parent_m
@@ -113,7 +118,9 @@ export class StudentSelfSummaryService {
     const result = await this.database.query<StudentRow>(
       `
         select s.id, s.version, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+          p.first_name, p.last_name, ${studentContactEmailSql()} as email,
+          p.phone, s.created_at,
           '{}'::uuid[] as teacher_user_ids
         from app.user_crm_links link
         join app.students s

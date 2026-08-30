@@ -393,6 +393,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'advertising_source',
     'source',
     'sourceid',
+    // Direction is edited through the canonical /crm/disciplines catalog.
+    // The old typed definition can remain non-system in upgraded databases,
+    // but it must never create a second, stale validation path.
+    'discipline',
+    'disciplines',
   };
 
   static const Set<String> _commonClientCustomFieldKeys = {

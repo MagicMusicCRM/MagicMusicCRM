@@ -56,6 +56,8 @@ type ConvertedCustomValue = {
   warnings: ClientValidationWarning[];
 };
 
+const DEDICATED_CLIENT_FIELD_KEYS = new Set(["discipline", "disciplines"]);
+
 @Injectable()
 export class ClientWriteValidator {
   constructor(private readonly repository: ClientConfigRepository) {}
@@ -161,6 +163,16 @@ export class ClientWriteValidator {
     const warnings: ClientValidationWarning[] = [];
     for (const input of inputs) {
       const definition = byId.get(input.definitionId);
+      // Direction is owned by the dedicated client-card editor backed by the
+      // live app.disciplines catalog. Released clients may still duplicate it
+      // as a typed custom value whose frozen options are stale; ignore that
+      // compatibility copy instead of rejecting the whole card PATCH.
+      if (
+        definition &&
+        DEDICATED_CLIENT_FIELD_KEYS.has(definition.field_key)
+      ) {
+        continue;
+      }
       if (
         !definition ||
         definition.is_system ||

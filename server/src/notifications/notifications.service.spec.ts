@@ -23,10 +23,12 @@ describe('NotificationsService', () => {
       dispatchPendingPush: jest.fn().mockResolvedValue({ processed: 0, failed: 0 }),
       dispatchEmailById: jest.fn().mockResolvedValue({ processed: true, status: 'sent' }),
       exhaustEmail: jest.fn().mockResolvedValue(undefined)
-    } as unknown as jest.Mocked<Pick<
-      NotificationWorker,
-      'dispatchPendingEmails' | 'dispatchPendingPush' | 'dispatchEmailById' | 'exhaustEmail'
-    >>;
+    } as unknown as jest.Mocked<
+      Pick<
+        NotificationWorker,
+        'dispatchPendingEmails' | 'dispatchPendingPush' | 'dispatchEmailById' | 'exhaustEmail'
+      >
+    >;
     const tokenCrypto = {
       hash: jest.fn((token: string) => `hash-${token}`),
       encrypt: jest.fn((token: string) => `encrypted-${token}`)
@@ -169,6 +171,35 @@ describe('NotificationsService', () => {
     expect(worker.exhaustEmail).not.toHaveBeenCalled();
   });
 
+  it('queues a student invitation against the card contact email', async () => {
+    const { service, database } = createService();
+    database.query
+      .mockResolvedValueOnce({
+        rows: [{ email: 'contact@example.com' }]
+      } as never)
+      .mockResolvedValueOnce({ rows: [{ id: 'outbox-student' }] } as never);
+
+    await expect(
+      service.sendEmail({
+        userId: 'technical-user',
+        studentId: 'student-a',
+        template: 'student_invite',
+        title: 'Приглашение',
+        body: 'Установите приложение'
+      })
+    ).resolves.toEqual({ queued: true, delivered: false });
+
+    expect(database.query.mock.calls[0]?.[0]).toContain('student.contact_email');
+    expect(database.query.mock.calls[1]?.[0]).toContain('recipient_student_id');
+    expect(database.query.mock.calls[1]?.[1]).toEqual([
+      'technical-user',
+      expect.any(String),
+      'student_invite',
+      expect.any(String),
+      'student-a'
+    ]);
+  });
+
   it('stops retries when required OTP delivery fails', async () => {
     const { service, database, worker } = createService();
     database.query
@@ -189,10 +220,7 @@ describe('NotificationsService', () => {
       })
     ).resolves.toEqual({ queued: true, delivered: false });
 
-    expect(worker.exhaustEmail).toHaveBeenCalledWith(
-      'outbox-a',
-      'required_delivery_failed'
-    );
+    expect(worker.exhaustEmail).toHaveBeenCalledWith('outbox-a', 'required_delivery_failed');
   });
 
   it('contains an immediate OTP worker error and exhausts the exact outbox row', async () => {
@@ -212,10 +240,7 @@ describe('NotificationsService', () => {
       })
     ).resolves.toEqual({ queued: true, delivered: false });
 
-    expect(worker.exhaustEmail).toHaveBeenCalledWith(
-      'outbox-a',
-      'required_delivery_error'
-    );
+    expect(worker.exhaustEmail).toHaveBeenCalledWith('outbox-a', 'required_delivery_error');
   });
 
   it('marks only current actor notification recipient as read', async () => {
@@ -244,7 +269,10 @@ describe('NotificationsService', () => {
 
     await expect(
       service.markRead({ userId: 'user-a', role: 'client' }, 'notification-a')
-    ).resolves.toMatchObject({ id: 'notification-a', isRead: true });
+    ).resolves.toMatchObject({
+      id: 'notification-a',
+      isRead: true
+    });
 
     expect(database.query).toHaveBeenLastCalledWith(expect.stringContaining('nr.user_id = $2'), [
       'notification-a',
@@ -316,19 +344,22 @@ describe('NotificationsService', () => {
     database.transaction.mockImplementationOnce(async (work) => work(client as never));
 
     await expect(
-      service.registerDevice({ userId: 'user-a', role: 'client' }, {
-        platform: 'android',
-        token: 'push-token-1234567890'
-      })
-    ).resolves.toMatchObject({ id: 'device-a', tokenHash: 'hash-push-token-1234567890' });
+      service.registerDevice(
+        { userId: 'user-a', role: 'client' },
+        {
+          platform: 'android',
+          token: 'push-token-1234567890'
+        }
+      )
+    ).resolves.toMatchObject({
+      id: 'device-a',
+      tokenHash: 'hash-push-token-1234567890'
+    });
 
     expect(tokenCrypto.encrypt).toHaveBeenCalledWith('push-token-1234567890');
     expect(String(client.query.mock.calls[0][0])).toContain('pg_advisory_xact_lock');
     expect(String(client.query.mock.calls[1][0])).toContain('enabled = false');
-    expect(client.query.mock.calls[1][1]).toEqual([
-      'hash-push-token-1234567890',
-      'user-a'
-    ]);
+    expect(client.query.mock.calls[1][1]).toEqual(['hash-push-token-1234567890', 'user-a']);
     expect(client.query).toHaveBeenLastCalledWith(expect.stringContaining('encrypted_token'), [
       'user-a',
       'android',
@@ -361,10 +392,10 @@ describe('NotificationsService', () => {
       })
     ).resolves.toEqual({ notificationId: 'notification-a', recipientCount: 1 });
 
-    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'push', 'firebase', 'queued'"), [
-      'notification-a',
-      'user-a'
-    ]);
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining("'push', 'firebase', 'queued'"),
+      ['notification-a', 'user-a']
+    );
     expect(worker.dispatchPendingEmails).not.toHaveBeenCalled();
     expect(worker.dispatchPendingPush).toHaveBeenCalled();
   });
@@ -434,10 +465,7 @@ describe('NotificationsService', () => {
         ]
       } as never)
       .mockResolvedValueOnce({
-        rows: [
-          { user_id: 'user-client' },
-          { user_id: 'user-new-teacher' }
-        ]
+        rows: [{ user_id: 'user-client' }, { user_id: 'user-new-teacher' }]
       } as never);
     const client = {
       query: jest.fn(async (sql: string, params?: unknown[]) =>
@@ -533,11 +561,18 @@ describe('NotificationsService', () => {
         // due (day)
         .mockResolvedValueOnce({
           rows: [
-            { id: 'lesson-1', when_local: '19.06 18:00', user_ids: ['u1', 'u2'] }
+            {
+              id: 'lesson-1',
+              when_local: '19.06 18:00',
+              user_ids: ['u1', 'u2']
+            }
           ]
         } as never)
         // claim (lesson-1, day)
-        .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'rem-1' }],
+          rowCount: 1
+        } as never)
         // due (hour) -> none
         .mockResolvedValueOnce({ rows: [] } as never);
       const client = {
@@ -586,7 +621,10 @@ describe('NotificationsService', () => {
         .mockResolvedValueOnce({
           rows: [{ id: 'lesson-1', when_local: '19.06 18:00', user_ids: [] }]
         } as never)
-        .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
+        .mockResolvedValueOnce({
+          rows: [{ id: 'rem-1' }],
+          rowCount: 1
+        } as never)
         .mockResolvedValueOnce({ rows: [] } as never);
 
       const result = await service.dispatchLessonReminders();
@@ -621,7 +659,11 @@ describe('NotificationsService', () => {
       };
       database.transaction.mockImplementationOnce(async (work) => work(client as never));
 
-      await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
+      await service.notifyNewLead({
+        leadId: 'lead-1',
+        name: 'Иван',
+        source: 'site'
+      });
 
       const rolesSql = String(database.query.mock.calls[1][0]);
       expect(rolesSql).toContain('role::text = any');
@@ -639,7 +681,11 @@ describe('NotificationsService', () => {
       const { service, database } = createService();
       database.query.mockResolvedValueOnce({ rows: [] } as never);
 
-      await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
+      await service.notifyNewLead({
+        leadId: 'lead-1',
+        name: 'Иван',
+        source: 'site'
+      });
 
       // Nobody subscribed is a valid setting, not an error: it must not fall
       // back to notifying everyone.
@@ -655,7 +701,11 @@ describe('NotificationsService', () => {
         } as never)
         .mockResolvedValueOnce({ rows: [] } as never);
 
-      await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
+      await service.notifyNewLead({
+        leadId: 'lead-1',
+        name: 'Иван',
+        source: 'site'
+      });
 
       expect(database.transaction).not.toHaveBeenCalled();
     });
@@ -668,9 +718,7 @@ describe('NotificationsService', () => {
     it('stops after preferences when every role opted out', async () => {
       const { service, ledger } = createInboundHarness([[]]);
 
-      await expect(
-        service.notifyInboundLead(ingestionId, notificationId)
-      ).resolves.toBeUndefined();
+      await expect(service.notifyInboundLead(ingestionId, notificationId)).resolves.toBeUndefined();
 
       expect(ledger).toEqual([
         {
@@ -687,9 +735,7 @@ describe('NotificationsService', () => {
         []
       ]);
 
-      await expect(
-        service.notifyInboundLead(ingestionId, notificationId)
-      ).resolves.toBeUndefined();
+      await expect(service.notifyInboundLead(ingestionId, notificationId)).resolves.toBeUndefined();
 
       expect(ledger).toEqual([
         {
@@ -760,9 +806,7 @@ describe('NotificationsService', () => {
       const title = 'Новая заявка';
       const body = 'Лид Входящий — источник: Веб-сайт';
 
-      await expect(
-        service.notifyInboundLead(ingestionId, notificationId)
-      ).resolves.toBeUndefined();
+      await expect(service.notifyInboundLead(ingestionId, notificationId)).resolves.toBeUndefined();
 
       expect(ledger).toEqual([
         {
@@ -864,9 +908,7 @@ describe('NotificationsService', () => {
         }
       );
 
-      await expect(
-        service.notifyInboundLead(ingestionId, notificationId)
-      ).resolves.toBeUndefined();
+      await expect(service.notifyInboundLead(ingestionId, notificationId)).resolves.toBeUndefined();
 
       expect(ledger).toEqual([
         {
@@ -945,9 +987,9 @@ describe('NotificationsService', () => {
         { failedClientQuery: 2 }
       );
 
-      await expect(
-        service.notifyInboundLead(ingestionId, notificationId)
-      ).rejects.toBe(transactionError);
+      await expect(service.notifyInboundLead(ingestionId, notificationId)).rejects.toBe(
+        transactionError
+      );
 
       expect(ledger).toEqual([
         {

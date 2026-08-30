@@ -1,11 +1,9 @@
 import { ActorContext } from "../../common/security/actor-context";
 import { managerAdminRolesSql } from "../../common/security/role-sql";
-import {
-  branchIdExpr,
-  managerBranchScopeSql,
-} from "../branch-scope";
+import { branchIdExpr, managerBranchScopeSql } from "../branch-scope";
 import { StudentSearchQuery } from "../dto/student-search.query";
 import { buildTextSearch } from "../search-text";
+import { studentContactEmailSql } from "./student-contact-email";
 
 export interface StudentSearchSqlFilter {
   where: string;
@@ -15,7 +13,11 @@ export interface StudentSearchSqlFilter {
 
 type AddParameter = (value: unknown) => string;
 
-function addActorScope(filters: string[], add: AddParameter, actor: ActorContext) {
+function addActorScope(
+  filters: string[],
+  add: AddParameter,
+  actor: ActorContext,
+) {
   const role = add(actor.role);
   const userId = add(actor.userId);
   filters.push(`
@@ -56,7 +58,12 @@ function addTextAndScalarFilters(
   if (q) {
     const search = buildTextSearch({
       q,
-      columns: ["p.first_name", "p.last_name", "u.email", "p.phone"],
+      columns: [
+        "p.first_name",
+        "p.last_name",
+        studentContactEmailSql(),
+        "p.phone",
+      ],
       phoneColumn: "p.phone",
       customDataColumn: "s.custom_data",
       exactColumn: "concat_ws(' ', p.first_name, p.last_name)",
@@ -104,7 +111,8 @@ function addTextAndScalarFilters(
     "coalesce(s.custom_data->>'category', s.custom_data->>'categoryName', s.custom_data->>'category_name', s.custom_data->>'maturity')",
     query.category,
   );
-  if (query.from) filters.push(`s.created_at >= ${add(query.from)}::timestamptz`);
+  if (query.from)
+    filters.push(`s.created_at >= ${add(query.from)}::timestamptz`);
   if (query.to) filters.push(`s.created_at < ${add(query.to)}::timestamptz`);
   return searchRank;
 }
@@ -121,7 +129,7 @@ function addActivityAndCursorFilters(
     filters.push(query.linkedUser ? condition : `not ${condition}`);
   }
   if (query.noEmail === true) {
-    filters.push(`coalesce(nullif(btrim(u.email), ''), '') = ''`);
+    filters.push(`coalesce(${studentContactEmailSql()}, '') = ''`);
   }
   if (query.noOpenTasks === true) {
     filters.push(`

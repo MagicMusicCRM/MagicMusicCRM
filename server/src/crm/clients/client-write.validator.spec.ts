@@ -86,6 +86,22 @@ describe("ClientWriteValidator.validateCustomFields", () => {
     repository.listRequiredCustomDefinitions.mockResolvedValue([]);
   });
 
+  it("ignores the legacy typed discipline copy owned by the direction editor", async () => {
+    repository.findDefinitionsByIds.mockResolvedValue([
+      definition("select", ["Вокал"], {
+        field_key: "discipline",
+        label: "Направление",
+        is_system: false,
+      }),
+    ]);
+
+    await expect(
+      validator.validateCustomFields("lead", [
+        { definitionId: "field-1", value: "Сольфеджио" },
+      ]),
+    ).resolves.toEqual({ values: [], warnings: [] });
+  });
+
   const successfulConversions: Array<{
     name: string;
     valueType: ClientCustomValueType;
