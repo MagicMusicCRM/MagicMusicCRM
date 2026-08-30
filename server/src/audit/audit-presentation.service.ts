@@ -7,7 +7,7 @@ import {
 
 const SENSITIVE_KEY =
   /password|token|secret|authorization|credential|otp|hash|session|refresh|cookie|privatekey/i;
-const REDACTION_MARKER = '[REDACTED]';
+const REDACTION_MARKERS = new Set(['[REDACTED]', '[PRIVATE]', '[PII]', '[EMAIL]']);
 
 const ENTITY_LABELS: Record<string, string> = {
   student: 'Ученик',
@@ -67,6 +67,44 @@ const ACTION_SUFFIXES: Record<string, string> = {
   completed: 'завершено',
 };
 
+const GENERIC_ACTION_TITLES: Record<string, string> = {
+  created: 'Запись создана',
+  updated: 'Данные изменены',
+  deleted: 'Запись удалена',
+  archived: 'Запись архивирована',
+  restored: 'Запись восстановлена',
+  rescheduled: 'Запись перенесена',
+  cancelled: 'Запись отменена',
+  canceled: 'Запись отменена',
+  completed: 'Запись завершена',
+};
+
+const ENTITY_POSSESSIVE_LABELS: Record<string, string> = {
+  student: 'ученика',
+  client: 'клиента',
+  lead: 'лида',
+  teacher: 'преподавателя',
+  lesson: 'занятия',
+  group: 'группы',
+  branch: 'филиала',
+  payment: 'платежа',
+  subscription: 'абонемента',
+  task: 'задачи',
+};
+
+const STUDENT_FIELD_UPDATE_TITLES: Record<string, string> = {
+  email: 'Электронная почта изменена',
+  name: 'Имя ученика изменено',
+  phone: 'Телефон ученика изменён',
+};
+
+const FIELD_UPDATE_VERBS: Record<string, string> = {
+  email: 'изменена',
+  name: 'изменено',
+  phone: 'изменён',
+  marketingConsent: 'изменено',
+};
+
 @Injectable()
 export class AuditPresentationService {
   present(input: AuditPresentationInput): AuditPresentationEvent {
@@ -96,7 +134,7 @@ export class AuditPresentationService {
   }
 
   isBusinessAction(actionKey: string): boolean {
-    return !/^(auth|security|system|health)\./i.test(actionKey);
+    return !/^(auth|session|security|system|health)\./i.test(actionKey);
   }
 
   private extractChanges(
@@ -129,7 +167,7 @@ export class AuditPresentationService {
 
   private titleFor(actionKey: string, changes: AuditPresentationChange[]): string {
     if (actionKey === 'crm.student_updated' && changes.length === 1) {
-      return `${changes[0].label} изменена`;
+      return STUDENT_FIELD_UPDATE_TITLES[changes[0].key] ?? 'Данные ученика изменены';
     }
 
     return ACTION_TITLES[actionKey] ?? this.humanizeAction(actionKey);
@@ -144,10 +182,44 @@ export class AuditPresentationService {
 
     if (suffix) {
       const subject = action.slice(0, -(suffix.length + 1));
-      return `${this.humanizeIdentifier(subject)} ${ACTION_SUFFIXES[suffix]}`;
+      const localizedSubject = this.localizeActionSubject(subject);
+      if (localizedSubject) {
+        return `${localizedSubject.label} ${this.actionSuffixFor(
+          suffix,
+          localizedSubject.fieldKey,
+        )}`;
+      }
+
+      return GENERIC_ACTION_TITLES[suffix] ?? 'Действие выполнено';
     }
 
-    return this.humanizeIdentifier(action);
+    return 'Действие выполнено';
+  }
+
+  private localizeActionSubject(
+    subject: string,
+  ): { label: string; fieldKey: string | null } | null {
+    const [entityType, ...fieldParts] = subject.split('_').filter(Boolean);
+    const possessiveEntity = ENTITY_POSSESSIVE_LABELS[entityType];
+    if (!possessiveEntity) {
+      return null;
+    }
+
+    const fieldKey = this.toCamelCase(fieldParts);
+    const fieldLabel = FIELD_LABELS[fieldKey];
+    if (!fieldLabel) {
+      return { label: `Данные ${possessiveEntity}`, fieldKey: null };
+    }
+
+    return { label: `${fieldLabel} ${possessiveEntity}`, fieldKey };
+  }
+
+  private actionSuffixFor(suffix: string, fieldKey: string | null): string {
+    if (suffix === 'updated') {
+      return fieldKey ? FIELD_UPDATE_VERBS[fieldKey] ?? 'изменено' : 'изменены';
+    }
+
+    return ACTION_SUFFIXES[suffix] ?? 'изменено';
   }
 
   private humanizeIdentifier(value: string): string {
@@ -161,12 +233,20 @@ export class AuditPresentationService {
     return text ? `${text[0].toUpperCase()}${text.slice(1)}` : 'Неизвестно';
   }
 
+  private toCamelCase(parts: string[]): string {
+    return parts
+      .map((part, index) =>
+        index === 0 ? part : `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`,
+      )
+      .join('');
+  }
+
   private isTechnicalOrSensitiveKey(key: string): boolean {
     return key.toLowerCase() === 'version' || SENSITIVE_KEY.test(key);
   }
 
   private safeValue(value: unknown): string | null {
-    if (value === null || value === undefined || value === REDACTION_MARKER) {
+    if (value === null || value === undefined || this.isRedactionMarker(value)) {
       return null;
     }
 
@@ -175,5 +255,9 @@ export class AuditPresentationService {
     }
 
     return null;
+  }
+
+  private isRedactionMarker(value: unknown): value is string {
+    return typeof value === 'string' && REDACTION_MARKERS.has(value.trim().toUpperCase());
   }
 }

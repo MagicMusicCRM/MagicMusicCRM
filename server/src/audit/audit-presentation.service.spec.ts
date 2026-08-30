@@ -46,7 +46,7 @@ describe('AuditPresentationService', () => {
   it.each([
     [
       'crm.student_marketing_consent_updated',
-      'Student marketing consent изменено',
+      'Маркетинговое согласие ученика изменено',
     ],
     ['crm.lesson_rescheduled', 'Занятие перенесено'],
   ])('makes unknown action key %s readable', (actionKey, title) => {
@@ -97,8 +97,52 @@ describe('AuditPresentationService', () => {
     expect(JSON.stringify(presented)).not.toContain('version');
   });
 
+  it.each(['[REDACTED]', '[PRIVATE]', '[PII]', '[EMAIL]'])(
+    'converts sanitizer marker %s to null in every visible value',
+    (marker) => {
+      const presented = service.present({
+        ...emailChange,
+        reason: marker,
+        reasonText: marker,
+        beforeRef: { status: 'lead' },
+        afterRef: { status: marker },
+      });
+
+      expect(presented).toMatchObject({
+        reason: null,
+        summary: null,
+        changes: [
+          {
+            key: 'status',
+            label: 'Статус',
+            before: 'lead',
+            after: null,
+          },
+        ],
+      });
+      expect(JSON.stringify(presented)).not.toContain(marker);
+    },
+  );
+
+  it.each([
+    ['name', 'Мария', 'Марина', 'Имя ученика изменено'],
+    ['phone', '+79990000000', '+79991111111', 'Телефон ученика изменён'],
+  ])(
+    'uses a grammatically correct title when student %s changes',
+    (key, before, after, title) => {
+      expect(
+        service.present({
+          ...emailChange,
+          beforeRef: { [key]: before },
+          afterRef: { [key]: after },
+        }).title,
+      ).toBe(title);
+    },
+  );
+
   it('recognizes audit-only auth events as non-business actions', () => {
     expect(service.isBusinessAction('auth.session_rotated')).toBe(false);
+    expect(service.isBusinessAction('session.rotated')).toBe(false);
     expect(service.isBusinessAction('crm.student_updated')).toBe(true);
   });
 });
