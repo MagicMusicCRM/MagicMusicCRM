@@ -222,6 +222,25 @@ describe('AuditPresentationService', () => {
     });
   });
 
+  it.each([
+    'TEACHER_PAYOUT',
+    'payment_record_create',
+    'manual',
+    'crm.student_updated',
+    'student',
+    '550e8400-e29b-41d4-a716-446655440000',
+  ])('does not expose technical reason %s as business prose', (reason) => {
+    expect(service.present({ ...emailChange, reason }).reason).toBeNull();
+  });
+
+  it.each([
+    'Клиент попросил перенести занятие',
+    'Ошибка в платеже',
+    'Customer requested a refund',
+  ])('keeps safe human business reason %s', (reason) => {
+    expect(service.present({ ...emailChange, reason }).reason).toBe(reason);
+  });
+
   it('extracts only labeled safe changes and omits secret metadata', () => {
     const presented = service.present({
       ...emailChange,

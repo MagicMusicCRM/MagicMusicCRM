@@ -538,9 +538,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       { type: "student", id: studentId },
       { limit: 30 },
     );
-    expect(history.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
+    const exactEvents = [
+      {
           actionKey: "crm.client_internal_note_changed",
           title: "Общая заметка изменена",
           actor: { id: adminId, name: "Анна Администратор", role: "admin" },
@@ -554,9 +553,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           changes: [],
           summary: "Общая заметка обновлена",
           reason: null,
-          occurredAt: expect.anything(),
-        }),
-        expect.objectContaining({
+      },
+      {
           actionKey: "crm.client_blacklisted",
           title: "Клиент добавлен в чёрный список",
           actor: { id: adminId, name: "Анна Администратор", role: "admin" },
@@ -570,9 +568,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           changes: [],
           summary: "Повторяющийся спам",
           reason: null,
-          occurredAt: expect.anything(),
-        }),
-        expect.objectContaining({
+      },
+      {
           actionKey: "crm.client_unblacklisted",
           title: "Клиент убран из чёрного списка",
           actor: { id: adminId, name: "Анна Администратор", role: "admin" },
@@ -586,9 +583,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           changes: [],
           summary: null,
           reason: null,
-          occurredAt: expect.anything(),
-        }),
-        expect.objectContaining({
+      },
+      {
           actionKey: "crm.lead_converted",
           title: "Лид конвертирован в ученика",
           actor: { id: adminId, name: "Анна Администратор", role: "admin" },
@@ -602,8 +598,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           changes: [],
           summary: null,
           reason: null,
-        }),
-        expect.objectContaining({
+      },
+      {
           actionKey: "crm.comment_created",
           title: "Комментарий добавлен",
           actor: { id: adminId, name: "Анна Администратор", role: "admin" },
@@ -617,8 +613,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           changes: [],
           summary: null,
           reason: null,
-        }),
-        expect.objectContaining({
+      },
+      {
           actionKey: "crm.comment_teacher_sharing_changed",
           title: "Видимость комментария изменена",
           actor: { id: adminId, name: "Анна Администратор", role: "admin" },
@@ -639,8 +635,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           ],
           reason: "Комментарий опубликован преподавателю",
           summary: "Опубликован преподавателю",
-        }),
-        expect.objectContaining({
+      },
+      {
           actionKey: "workflow.shared_task_created",
           title: "Задача создана",
           actor: { id: adminId, name: "Анна Администратор", role: "admin" },
@@ -654,9 +650,34 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           changes: [],
           summary: null,
           reason: null,
-        }),
-      ]),
-    );
+      },
+    ];
+    for (const expected of exactEvents) {
+      const event = history.items.find((item) => item.actionKey === expected.actionKey);
+      expect(event).toBeDefined();
+      const { id, occurredAt } = event!;
+      expect(id).toEqual(expect.any(String));
+      expect(id.trim()).not.toBe("");
+      expect(occurredAt instanceof Date || typeof occurredAt === "string").toBe(true);
+      expect(new Date(occurredAt).toString()).not.toBe("Invalid Date");
+      expect(event).toEqual({ id, ...expected, occurredAt });
+      expect(event).not.toHaveProperty("action");
+      expect(event).not.toHaveProperty("actorName");
+      expect(event).not.toHaveProperty("actorRole");
+      expect(event).not.toHaveProperty("entityType");
+      expect(event).not.toHaveProperty("entityId");
+      expect(event).not.toHaveProperty("targetType");
+      expect(event).not.toHaveProperty("targetId");
+      expect(event).not.toHaveProperty("targetLabel");
+      expect(event).not.toHaveProperty("targetDisplayName");
+      expect(event).not.toHaveProperty("routeType");
+      expect(event).not.toHaveProperty("metadata");
+      expect(event).not.toHaveProperty("beforeRef");
+      expect(event).not.toHaveProperty("afterRef");
+      expect(event).not.toHaveProperty("reasonText");
+      expect(event).not.toHaveProperty("createdAt");
+      expect(event).not.toHaveProperty("version");
+    }
     expect(JSON.stringify(history)).not.toContain("PRIVATE-HISTORY-COMMENT");
 
     await expect(

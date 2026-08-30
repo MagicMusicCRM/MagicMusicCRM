@@ -10,24 +10,63 @@ const SENSITIVE_KEY =
 const REDACTION_MARKERS = new Set(['[REDACTED]', '[PRIVATE]', '[PII]', '[EMAIL]']);
 
 const ENTITY_LABELS: Record<string, string> = {
+  'access:user': 'Доступ пользователя',
+  account_deletion_request: 'Запрос на удаление аккаунта',
   student: 'Ученик',
+  'crm:student': 'Ученик',
   client: 'Клиент',
   lead: 'Лид',
+  'crm:lead': 'Лид',
   teacher: 'Преподаватель',
+  staff: 'Сотрудник',
   lesson: 'Занятие',
   group: 'Группа',
   branch: 'Филиал',
+  branch_discipline: 'Направление филиала',
   payment: 'Платёж',
   subscription: 'Абонемент',
+  subscription_package: 'Тариф абонемента',
   task: 'Задача',
   shared_task: 'Задача',
   comment: 'Комментарий',
+  'crm:comment': 'Комментарий',
   client_internal_note: 'Общая заметка клиента',
+  client_custom_field: 'Дополнительное поле клиента',
+  client_pipeline_revision: 'Версия воронки клиентов',
+  client_status_list: 'Список статусов клиентов',
   client_payment_record: 'Платёж клиента',
   account_adjustment: 'Корректировка счёта',
+  crm_configuration_revision: 'Версия настроек CRM',
+  discipline: 'Направление',
+  expense: 'Расход',
+  family: 'Семья',
+  family_member: 'Член семьи',
+  inbound_lead_ingestion: 'Импорт входящего лида',
+  lead_source: 'Источник лида',
   lesson_batch: 'Серия занятий',
+  lesson_list: 'Список занятий',
+  legal_consent: 'Юридическое согласие',
+  loss_reason: 'Причина отказа',
+  message: 'Сообщение',
+  chat: 'Чат',
+  channel: 'Канал',
+  email_outbox: 'Исходящее письмо',
+  file: 'Файл',
+  notification: 'Уведомление',
+  notification_delivery: 'Доставка уведомления',
+  notification_device: 'Устройство уведомлений',
+  notification_preference: 'Настройка уведомлений',
+  phone_review_queue: 'Проверка телефона',
+  profile: 'Профиль',
+  refresh_session: 'Сеанс обновления',
+  report: 'Отчёт',
+  room: 'Кабинет',
   schedule_plan: 'План занятий',
+  schedule_series: 'Серия расписания',
+  school_finance_month: 'Финансы школы за месяц',
+  setting: 'Настройка',
   homework: 'Домашнее задание',
+  user: 'Пользователь',
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -44,12 +83,63 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 const ACTION_TITLES: Record<string, string> = {
+  'crm.account_transfer_created': 'Перевод между счетами создан',
+  'crm.branch_archived': 'Филиал архивирован',
+  'crm.branch_created': 'Филиал создан',
+  'crm.branch_hours_replaced': 'Часы работы филиала изменены',
+  'crm.branch_restored': 'Филиал восстановлен',
+  'crm.branch_updated': 'Филиал изменён',
+  'crm.client_archived': 'Клиент архивирован',
+  'crm.client_custom_field_archived': 'Дополнительное поле клиента архивировано',
+  'crm.client_custom_field_created': 'Дополнительное поле клиента создано',
+  'crm.client_custom_field_updated': 'Дополнительное поле клиента изменено',
+  'crm.client_pipeline_published': 'Воронка клиентов опубликована',
+  'crm.client_user_linked': 'Пользователь привязан к клиенту',
+  'crm.configuration_published': 'Настройки CRM опубликованы',
+  'crm.duplicate_candidate_decided': 'Дубликат клиента обработан',
+  'crm.expense_created': 'Расход создан',
+  'crm.expense_deleted': 'Расход удалён',
+  'crm.expense_updated': 'Расход изменён',
+  'crm.family_member_added': 'Член семьи добавлен',
+  'crm.family_member_removed': 'Член семьи удалён',
+  'crm.family_primary_payer_set': 'Основной плательщик семьи назначен',
+  'crm.group_archived': 'Группа архивирована',
+  'crm.group_created': 'Группа создана',
+  'crm.group_restored': 'Группа восстановлена',
+  'crm.group_student_added': 'Ученик добавлен в группу',
+  'crm.group_student_removed': 'Ученик удалён из группы',
+  'crm.group_updated': 'Группа изменена',
+  'crm.homework_assigned': 'Домашнее задание назначено',
+  'crm.homework_attachment_added': 'Вложение к домашнему заданию добавлено',
+  'crm.homework_submitted': 'Домашнее задание сдано',
+  'crm.homework_updated': 'Домашнее задание изменено',
+  'crm.inbound_lead_ingested': 'Входящий лид принят',
+  'crm.lead_created': 'Лид создан',
+  'crm.lead_source_archived': 'Источник лида архивирован',
+  'crm.lead_source_created': 'Источник лида создан',
+  'crm.lead_source_updated': 'Источник лида изменён',
+  'crm.lead_student_linked': 'Лид связан с учеником',
+  'crm.lead_updated': 'Лид изменён',
   'crm.student_created': 'Ученик создан',
   'crm.student_archived': 'Ученик архивирован',
   'crm.student_restored': 'Ученик восстановлен',
+  'crm.student_invite_sent': 'Приглашение ученику отправлено',
+  'crm.staff_access_managed': 'Доступ сотрудника изменён',
+  'crm.staff_created': 'Сотрудник создан',
+  'crm.staff_credentials_viewed': 'Данные для входа сотрудника просмотрены',
+  'crm.staff_offboarded': 'Сотрудник архивирован',
+  'crm.staff_restored': 'Сотрудник восстановлен',
+  'crm.staff_updated': 'Сотрудник изменён',
   'crm.lesson_rescheduled': 'Занятие перенесено',
   'crm.lesson_cancelled': 'Занятие отменено',
   'crm.lesson_completed': 'Занятие завершено',
+  'crm.lesson_created': 'Занятие создано',
+  'crm.lesson_deleted': 'Занятие удалено',
+  'crm.lesson_updated': 'Занятие изменено',
+  'crm.lesson_settlement_corrected': 'Проведение занятия скорректировано',
+  'crm.lesson_settlement_plan_updated': 'План проведения занятия изменён',
+  'crm.lesson_settlement_review_required': 'Занятие отправлено на проверку',
+  'crm.lessons_teacher_rate_bulk_set': 'Ставки преподавателя для занятий изменены',
   'crm.lead_converted': 'Лид конвертирован в ученика',
   'crm.subscription_purchased': 'Абонемент приобретён',
   'crm.subscription_issued': 'Абонемент выдан',
@@ -67,6 +157,11 @@ const ACTION_TITLES: Record<string, string> = {
   'crm.lesson_settlement_completed': 'Занятие проведено',
   'crm.lessons_bulk_transitioned': 'Статус занятий изменён',
   'crm.schedule_plan_ended': 'План занятий завершён',
+  'crm.schedule_plan_created': 'План занятий создан',
+  'crm.schedule_plan_updated': 'План занятий изменён',
+  'crm.schedule_series_created': 'Серия расписания создана',
+  'crm.schedule_series_stopped': 'Серия расписания завершена',
+  'crm.schedule_series_updated': 'Серия расписания изменена',
   'crm.client_internal_note_changed': 'Общая заметка изменена',
   'crm.comment_created': 'Комментарий добавлен',
   'crm.comment_teacher_sharing_changed': 'Видимость комментария изменена',
@@ -78,6 +173,39 @@ const ACTION_TITLES: Record<string, string> = {
   'crm.lead_status_changed': 'Статус лида изменён',
   'crm.lead_owner_changed': 'Ответственный по лиду изменён',
   'crm.lead_status_and_owner_changed': 'Статус и ответственный по лиду изменены',
+  'crm.phone_review_resolved': 'Проверка телефона завершена',
+  'crm.room_archived': 'Кабинет архивирован',
+  'crm.room_created': 'Кабинет создан',
+  'crm.room_restored': 'Кабинет восстановлен',
+  'crm.room_updated': 'Кабинет изменён',
+  'crm.subscription_package_archived': 'Тариф абонемента архивирован',
+  'crm.subscription_package_created': 'Тариф абонемента создан',
+  'crm.subscription_package_restored': 'Тариф абонемента восстановлен',
+  'crm.subscription_package_updated': 'Тариф абонемента изменён',
+  'crm.teacher_access_managed': 'Доступ преподавателя изменён',
+  'crm.teacher_availability_replaced': 'Доступность преподавателя изменена',
+  'crm.teacher_branches_replaced': 'Филиалы преподавателя изменены',
+  'crm.teacher_created': 'Преподаватель создан',
+  'crm.teacher_credentials_viewed': 'Данные для входа преподавателя просмотрены',
+  'crm.teacher_offboarded': 'Преподаватель архивирован',
+  'crm.teacher_payout_created': 'Выплата преподавателю создана',
+  'crm.teacher_payout_deleted': 'Выплата преподавателю удалена',
+  'crm.teacher_payout_updated': 'Выплата преподавателю изменена',
+  'crm.teacher_rate_deleted': 'Ставка преподавателя удалена',
+  'crm.teacher_rate_set': 'Ставка преподавателя назначена',
+  'crm.teacher_rate_updated': 'Ставка преподавателя изменена',
+  'crm.teacher_restored': 'Преподаватель восстановлен',
+  'crm.teacher_updated': 'Преподаватель изменён',
+  'crm.reference_discipline_archived': 'Направление архивировано',
+  'crm.reference_discipline_renamed': 'Направление переименовано',
+  'crm.reference_discipline_restored': 'Направление восстановлено',
+  'crm.reference_loss_reason_archived': 'Причина отказа архивирована',
+  'crm.reference_loss_reason_renamed': 'Причина отказа переименована',
+  'crm.reference_loss_reason_restored': 'Причина отказа восстановлена',
+  'crm.reference_branch_discipline_renamed': 'Направление филиала переименовано',
+  'crm.reference_branch_discipline_restored': 'Направление филиала восстановлено',
+  'crm.reference_branch_discipline_unassigned': 'Направление отвязано от филиала',
+  'workflow.shared_task_legacy_status': 'Статус задачи перенесён',
 };
 
 const ROUTE_TYPES: Record<string, string> = {
@@ -207,9 +335,21 @@ export class AuditPresentationService {
 
   private safeBusinessReason(value: unknown): string | null {
     const safe = this.safeValue(value);
-    return safe && !/^[a-z][a-z0-9_-]*(?:[.:][a-z0-9_-]+)+$/i.test(safe)
-      ? safe
-      : null;
+    if (!safe) {
+      return null;
+    }
+
+    const trimmed = safe.trim();
+    if (
+      !trimmed
+      || /^[a-z0-9]+(?:[_:./-][a-z0-9]+)*$/i.test(trimmed)
+      || /^(?:manual|automatic|system|migration|import|unknown|default)\b/i.test(trimmed)
+      || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)
+    ) {
+      return null;
+    }
+
+    return trimmed;
   }
 
   private commentSharingSummary(input: AuditPresentationInput): string | null {
