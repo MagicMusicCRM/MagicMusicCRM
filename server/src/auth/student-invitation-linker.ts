@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { DatabaseService } from "../db/database.service";
 
 /**
@@ -9,6 +10,8 @@ export async function linkInvitedStudentsByVerifiedEmail(
   userId: string,
   email: string,
 ): Promise<string[]> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const emailHash = createHash("sha256").update(normalizedEmail).digest("hex");
   const linked = await database.query<{ entity_id: string }>(
     `
       insert into app.user_crm_links (
@@ -23,12 +26,13 @@ export async function linkInvitedStudentsByVerifiedEmail(
           from app.email_outbox invite
           where invite.recipient_student_id = student.id
             and invite.template = 'student_invite'
+            and invite.to_email_hash = $3
         )
       on conflict (entity_type, entity_id) where deleted_at is null
       do nothing
       returning entity_id
     `,
-    [userId, email],
+    [userId, normalizedEmail, emailHash],
   );
   return linked.rows.map((row) => row.entity_id);
 }

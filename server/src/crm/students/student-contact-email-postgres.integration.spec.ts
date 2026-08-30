@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Pool, PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
@@ -51,16 +51,27 @@ describe("Student contact email (PostgreSQL)", () => {
   it("stores a duplicate login email as a client contact without changing identities", async () => {
     const technicalUserId = randomUUID();
     const existingAppUserId = randomUUID();
+    const changedAppUserId = randomUUID();
     const profileId = randomUUID();
     const studentId = randomUUID();
     const suffix = randomUUID();
     const technicalEmail = `student-${suffix}@local.magicmusiccrm.invalid`;
     const contactEmail = `client-${suffix}@example.test`;
+    const changedContactEmail = `changed-${suffix}@example.test`;
 
     await client.query(
       `insert into app.users (id, email, role, is_app_account)
-       values ($1, $2, 'client', false), ($3, $4, 'client', true)`,
-      [technicalUserId, technicalEmail, existingAppUserId, contactEmail],
+       values ($1, $2, 'client', false),
+         ($3, $4, 'client', true),
+         ($5, $6, 'client', true)`,
+      [
+        technicalUserId,
+        technicalEmail,
+        existingAppUserId,
+        contactEmail,
+        changedAppUserId,
+        changedContactEmail,
+      ],
     );
     await client.query(
       `insert into app.profiles (id, user_id, first_name, last_name)
@@ -123,15 +134,42 @@ describe("Student contact email (PostgreSQL)", () => {
     await client.query(
       `insert into app.email_outbox (
          user_id, to_email_hash, template, recipient_student_id
-       ) values ($1, 'redacted-test-hash', 'student_invite', $2)`,
-      [technicalUserId, studentId],
+       ) values ($1, $2, 'student_invite', $3)`,
+      [
+        technicalUserId,
+        createHash("sha256").update(contactEmail).digest("hex"),
+        studentId,
+      ],
+    );
+    await client.query(
+      "update app.students set contact_email = $2 where id = $1",
+      [studentId, changedContactEmail],
     );
 
     await expect(
       linkInvitedStudentsByVerifiedEmail(
         database,
-        existingAppUserId,
-        contactEmail.toUpperCase(),
+        changedAppUserId,
+        changedContactEmail,
+      ),
+    ).resolves.toEqual([]);
+
+    await client.query(
+      `insert into app.email_outbox (
+         user_id, to_email_hash, template, recipient_student_id
+       ) values ($1, $2, 'student_invite', $3)`,
+      [
+        technicalUserId,
+        createHash("sha256").update(changedContactEmail).digest("hex"),
+        studentId,
+      ],
+    );
+
+    await expect(
+      linkInvitedStudentsByVerifiedEmail(
+        database,
+        changedAppUserId,
+        changedContactEmail.toUpperCase(),
       ),
     ).resolves.toEqual([studentId]);
     const linked = await client.query<{ user_id: string; link_source: string }>(
@@ -143,7 +181,7 @@ describe("Student contact email (PostgreSQL)", () => {
       [studentId],
     );
     expect(linked.rows).toEqual([
-      { user_id: existingAppUserId, link_source: "auto_email" },
+      { user_id: changedAppUserId, link_source: "auto_email" },
     ]);
   });
 });
