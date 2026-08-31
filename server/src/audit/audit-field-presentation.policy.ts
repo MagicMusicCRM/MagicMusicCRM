@@ -42,6 +42,28 @@ const LEGACY_FIELD_ALIASES: Record<string, AuditFieldPresentationPolicy> = {
   visitDateTime: { label: 'Дата и время визита', valueType: 'datetime', displayMode: 'values' },
 };
 
+export const AUDIT_FIELD_PRESENTATION_POLICIES = {
+  accountEnabled: { label: 'Доступ к приложению', valueType: 'text', displayMode: 'changed_only' },
+  amountMinor: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  archiveEffectiveDate: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  archivedAt: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  branchAssignments: { label: 'Филиалы', valueType: 'text', displayMode: 'changed_only' },
+  capacity: { label: 'Вместимость', valueType: 'text', displayMode: 'changed_only' },
+  closedAt: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  currencyCode: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  entityType: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  field: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  financialDecision: { label: 'Финансовое решение', valueType: 'text', displayMode: 'changed_only' },
+  items: { label: 'Состав', valueType: 'text', displayMode: 'changed_only' },
+  kind: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  lifecycle: { label: 'Статус', valueType: 'text', displayMode: 'changed_only' },
+  lifecycleState: { label: 'Статус', valueType: 'text', displayMode: 'changed_only' },
+  personType: { label: 'Тип персоны', valueType: 'text', displayMode: 'changed_only' },
+  state: { label: 'Статус', valueType: 'text', displayMode: 'changed_only' },
+  value: { label: 'Значение', valueType: 'text', displayMode: 'changed_only' },
+  walletBalanceMinor: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+} as const satisfies Record<string, AuditFieldPresentationPolicy>;
+
 function customDataKey(field: string): string | null {
   const match = /^(?:custom_data|customData)[._](.+)$/.exec(field);
   return match?.[1]?.trim() || null;
@@ -90,12 +112,19 @@ function validSnapshot(input: AuditFieldChangeInput): input is AuditFieldChangeI
 function resolveAuditField(input: AuditFieldChangeInput): AuditFieldPresentationPolicy | null {
   if (!input.field.trim() || isTechnicalField(input.field)) return null;
 
+  const classifiedPolicy = (AUDIT_FIELD_PRESENTATION_POLICIES as Record<
+    string,
+    AuditFieldPresentationPolicy
+  >)[input.field];
+  if (classifiedPolicy?.valueType === 'technical') return classifiedPolicy;
+
   const customKey = customDataKey(input.field);
   const catalogField = customKey ? findDefaultCrmField(customKey) : null;
   const legacyAlias = customKey
     ? LEGACY_FIELD_ALIASES[customKey]
     : LEGACY_FIELD_ALIASES[input.field];
-  const fallback: AuditFieldPresentationPolicy = CORE_FIELD_ALIASES[input.field]
+  const fallback: AuditFieldPresentationPolicy = classifiedPolicy
+    ?? CORE_FIELD_ALIASES[input.field]
     ?? (catalogField
       ? {
         label: catalogField.label,

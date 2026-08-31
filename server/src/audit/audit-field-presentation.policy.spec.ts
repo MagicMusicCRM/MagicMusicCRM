@@ -42,6 +42,58 @@ describe('audit field presentation policy', () => {
     },
   );
 
+  it.each([
+    'amountMinor',
+    'archiveEffectiveDate',
+    'archivedAt',
+    'closedAt',
+    'currencyCode',
+    'entityType',
+    'field',
+    'kind',
+    'walletBalanceMinor',
+  ])('suppresses classified technical field %s despite a values hint', (field) => {
+    const input = {
+      field,
+      from: '2026-08-30T12:00:00.000Z',
+      to: '2026-08-31T12:00:00.000Z',
+      label: 'Время архивации',
+      valueType: 'datetime' as const,
+      displayMode: 'values' as const,
+    };
+
+    expect(createSafeAuditChange(input)).toBeNull();
+    expect(presentAuditFieldChange(input)).toBeNull();
+  });
+
+  it.each([
+    ['accountEnabled', 'Доступ к приложению'],
+    ['branchAssignments', 'Филиалы'],
+    ['capacity', 'Вместимость'],
+    ['financialDecision', 'Финансовое решение'],
+    ['items', 'Состав'],
+    ['lifecycle', 'Статус'],
+    ['lifecycleState', 'Статус'],
+    ['personType', 'Тип персоны'],
+    ['state', 'Статус'],
+    ['value', 'Значение'],
+  ])('presents classified business field %s without raw values', (field, label) => {
+    expect(createSafeAuditChange({ field, from: 'До', to: 'После' })).toEqual({
+      field,
+      from: null,
+      to: null,
+      label,
+      valueType: 'text',
+      displayMode: 'changed_only',
+    });
+    expect(presentAuditFieldChange({ field, from: 'До', to: 'После' })).toEqual({
+      key: field,
+      label,
+      before: null,
+      after: null,
+    });
+  });
+
   it('summarizes contact people without raw PII or JSON', () => {
     const change = presentAuditFieldChange({
       field: 'custom_data.contactPersons',

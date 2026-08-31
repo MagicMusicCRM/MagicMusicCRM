@@ -1,7 +1,17 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as ts from 'typescript';
-import { presentAuditFieldChange } from './audit-field-presentation.policy';
+import {
+  AUDIT_FIELD_PRESENTATION_POLICIES,
+  presentAuditFieldChange,
+} from './audit-field-presentation.policy';
 import { AuditPresentationInput } from './audit-presentation.types';
 import { AuditPresentationService } from './audit-presentation.service';
 
@@ -51,33 +61,13 @@ const NON_AST_AUDIT_PRODUCER_FIXTURES: AuditProducerFixture[] = [
   },
 ];
 
-const EXPLICIT_FIELD_CLASSIFICATIONS: Record<
-  string,
-  'technical' | 'changed_only'
-> = {
-  accountEnabled: 'changed_only',
-  amountMinor: 'technical',
-  archiveEffectiveDate: 'technical',
-  archivedAt: 'technical',
-  branchAssignments: 'changed_only',
-  capacity: 'changed_only',
-  closedAt: 'technical',
-  currencyCode: 'technical',
-  entityType: 'technical',
-  field: 'technical',
-  financialDecision: 'changed_only',
-  items: 'changed_only',
-  kind: 'technical',
-  lifecycle: 'changed_only',
-  lifecycleState: 'changed_only',
-  personType: 'changed_only',
-  state: 'changed_only',
-  value: 'changed_only',
-  walletBalanceMinor: 'technical',
-};
-
 type LiteralBindings = Map<ts.Symbol, string[]>;
 type CallSites = Map<ts.SignatureDeclaration | ts.JSDocSignature, ts.CallExpression[]>;
+
+const HINT_VALUE_TYPES = new Set([
+  'text', 'date', 'datetime', 'boolean', 'list', 'contact_list', 'reference', 'technical',
+]);
+const HINT_DISPLAY_MODES = new Set(['values', 'changed_only', 'count', 'hidden']);
 
 interface ResolvedAuditObject {
   node: ts.ObjectLiteralExpression;
@@ -173,8 +163,13 @@ function objectPropertyExpression(
   object: ts.ObjectLiteralExpression,
   name: string,
   checker: ts.TypeChecker,
+  callSites: CallSites,
+  bindings: LiteralBindings = new Map(),
+  seen = new Set<ts.Node>(),
 ): ts.Expression | null {
-  for (const property of object.properties) {
+  if (seen.has(object)) return null;
+  seen.add(object);
+  for (const property of [...object.properties].reverse()) {
     if (ts.isPropertyAssignment(property) && propertyName(property.name, object.getSourceFile()) === name) {
       return property.initializer;
     }
@@ -183,6 +178,25 @@ function objectPropertyExpression(
       const declaration = symbol?.valueDeclaration;
       if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer) {
         return declaration.initializer;
+      }
+    }
+    if (ts.isSpreadAssignment(property)) {
+      for (const spread of resolveAuditObjects(
+        property.expression,
+        checker,
+        callSites,
+        new Set(seen),
+        bindings,
+      )) {
+        const expression = objectPropertyExpression(
+          spread.node,
+          name,
+          checker,
+          callSites,
+          spread.bindings,
+          new Set(seen),
+        );
+        if (expression) return expression;
       }
     }
   }
@@ -290,6 +304,13 @@ function expandStringExpression(
   if (ts.isParenthesizedExpression(expression)) {
     return expandStringExpression(expression.expression, checker, bindings);
   }
+  if (
+    ts.isAsExpression(expression)
+    || ts.isTypeAssertionExpression(expression)
+    || ts.isNonNullExpression(expression)
+  ) {
+    return expandStringExpression(expression.expression, checker, bindings);
+  }
   if (ts.isConditionalExpression(expression)) {
     const whenTrue = expandStringExpression(expression.whenTrue, checker, bindings);
     const whenFalse = expandStringExpression(expression.whenFalse, checker, bindings);
@@ -307,6 +328,78 @@ function expandStringExpression(
     return expanded;
   }
   return stringLiteralUnion(checker, expression, bindings);
+}
+
+function resolveArrayElements(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  callSites: CallSites,
+  seen = new Set<ts.Node>(),
+  bindings: LiteralBindings = new Map(),
+): ts.Expression[] {
+  if (seen.has(expression)) return [];
+  seen.add(expression);
+  if (ts.isParenthesizedExpression(expression)) {
+    return resolveArrayElements(expression.expression, checker, callSites, seen, bindings);
+  }
+  if (
+    ts.isAsExpression(expression)
+    || ts.isTypeAssertionExpression(expression)
+    || ts.isNonNullExpression(expression)
+  ) {
+    return resolveArrayElements(expression.expression, checker, callSites, seen, bindings);
+  }
+  if (ts.isConditionalExpression(expression)) {
+    return [expression.whenTrue, expression.whenFalse].flatMap((branch) =>
+      resolveArrayElements(branch, checker, callSites, new Set(seen), bindings),
+    );
+  }
+  if (ts.isArrayLiteralExpression(expression)) {
+    return expression.elements.flatMap((element) => {
+      if (ts.isSpreadElement(element)) {
+        return resolveArrayElements(
+          element.expression,
+          checker,
+          callSites,
+          new Set(seen),
+          bindings,
+        );
+      }
+      return ts.isExpression(element) ? [element] : [];
+    });
+  }
+  if (ts.isIdentifier(expression)) {
+    const symbol = checker.getSymbolAtLocation(expression);
+    return (symbol?.declarations ?? []).flatMap((declaration) =>
+      ts.isVariableDeclaration(declaration) && declaration.initializer
+        ? resolveArrayElements(declaration.initializer, checker, callSites, seen, bindings)
+        : ts.isParameter(declaration)
+          ? (callSites.get(declaration.parent) ?? []).flatMap((call) => {
+            const parameterIndex = declaration.parent.parameters.indexOf(declaration);
+            const argument = call.arguments[parameterIndex];
+            return argument
+              ? resolveArrayElements(argument, checker, callSites, new Set(seen), bindings)
+              : [];
+          })
+          : [],
+    );
+  }
+  if (ts.isCallExpression(expression)) {
+    const declaration = checker.getResolvedSignature(expression)?.declaration;
+    if (!declaration) return [];
+    const callBindings = new Map(bindings);
+    declaration.parameters.forEach((parameter, index) => {
+      const argument = expression.arguments[index];
+      if (!argument || !ts.isIdentifier(parameter.name)) return;
+      const symbol = checker.getSymbolAtLocation(parameter.name);
+      const values = expandStringExpression(argument, checker, bindings);
+      if (symbol && values) callBindings.set(symbol, values);
+    });
+    return returnedExpressions(declaration).flatMap((returned) =>
+      resolveArrayElements(returned, checker, callSites, seen, callBindings),
+    );
+  }
+  return [];
 }
 
 function auditObjectsForCall(
@@ -329,7 +422,13 @@ function auditObjectsForCall(
     && call.arguments[0]
   ) {
     return resolveAuditObjects(call.arguments[0], checker, callSites).flatMap((mutation) => {
-      const audit = objectPropertyExpression(mutation.node, 'audit', checker);
+      const audit = objectPropertyExpression(
+        mutation.node,
+        'audit',
+        checker,
+        callSites,
+        mutation.bindings,
+      );
       return audit
         ? resolveAuditObjects(audit, checker, callSites, new Set(), mutation.bindings)
         : [];
@@ -353,7 +452,13 @@ function auditRefFields(
   checker: ts.TypeChecker,
   callSites: CallSites,
 ): string[] {
-  const expression = objectPropertyExpression(audit.node, property, checker);
+  const expression = objectPropertyExpression(
+    audit.node,
+    property,
+    checker,
+    callSites,
+    audit.bindings,
+  );
   if (!expression) return [];
   return resolveAuditObjects(
     expression,
@@ -361,11 +466,30 @@ function auditRefFields(
     callSites,
     new Set(),
     audit.bindings,
-  ).flatMap(({ node }) => node.properties.flatMap((candidate) =>
-    ts.isPropertyAssignment(candidate) || ts.isShorthandPropertyAssignment(candidate)
-      ? [propertyName(candidate.name, node.getSourceFile())]
-      : [],
-  ));
+  ).flatMap((resolved) => auditObjectFieldNames(resolved, checker, callSites));
+}
+
+function auditObjectFieldNames(
+  object: ResolvedAuditObject,
+  checker: ts.TypeChecker,
+  callSites: CallSites,
+  seen = new Set<ts.Node>(),
+): string[] {
+  if (seen.has(object.node)) return [];
+  seen.add(object.node);
+  return object.node.properties.flatMap((candidate) => {
+    if (ts.isPropertyAssignment(candidate) || ts.isShorthandPropertyAssignment(candidate)) {
+      return [propertyName(candidate.name, object.node.getSourceFile())];
+    }
+    if (!ts.isSpreadAssignment(candidate)) return [];
+    return resolveAuditObjects(
+      candidate.expression,
+      checker,
+      callSites,
+      new Set(seen),
+      object.bindings,
+    ).flatMap((spread) => auditObjectFieldNames(spread, checker, callSites, new Set(seen)));
+  });
 }
 
 function auditMetadataFields(
@@ -373,7 +497,13 @@ function auditMetadataFields(
   checker: ts.TypeChecker,
   callSites: CallSites,
 ): { fields: string[]; hintedFields: string[] } {
-  const metadataExpression = objectPropertyExpression(audit.node, 'metadata', checker);
+  const metadataExpression = objectPropertyExpression(
+    audit.node,
+    'metadata',
+    checker,
+    callSites,
+    audit.bindings,
+  );
   if (!metadataExpression) return { fields: [], hintedFields: [] };
   const fields: string[] = [];
   const hintedFields: string[] = [];
@@ -384,10 +514,21 @@ function auditMetadataFields(
     new Set(),
     audit.bindings,
   )) {
-    const changes = objectPropertyExpression(metadata.node, 'changes', checker);
-    if (!changes || !ts.isArrayLiteralExpression(changes)) continue;
-    for (const element of changes.elements) {
-      if (!ts.isExpression(element)) continue;
+    const changes = objectPropertyExpression(
+      metadata.node,
+      'changes',
+      checker,
+      callSites,
+      metadata.bindings,
+    );
+    if (!changes) continue;
+    for (const element of resolveArrayElements(
+      changes,
+      checker,
+      callSites,
+      new Set(),
+      metadata.bindings,
+    )) {
       for (const change of resolveAuditObjects(
         element,
         checker,
@@ -395,16 +536,57 @@ function auditMetadataFields(
         new Set(),
         metadata.bindings,
       )) {
-        const fieldExpression = objectPropertyExpression(change.node, 'field', checker)
-          ?? objectPropertyExpression(change.node, 'key', checker);
+        const fieldExpression = objectPropertyExpression(
+          change.node,
+          'field',
+          checker,
+          callSites,
+          change.bindings,
+        ) ?? objectPropertyExpression(
+          change.node,
+          'key',
+          checker,
+          callSites,
+          change.bindings,
+        );
         const expanded = fieldExpression
           ? expandStringExpression(fieldExpression, checker, change.bindings) ?? []
           : [];
         fields.push(...expanded);
+        const labelExpression = objectPropertyExpression(
+          change.node,
+          'label',
+          checker,
+          callSites,
+          change.bindings,
+        );
+        const valueTypeExpression = objectPropertyExpression(
+          change.node,
+          'valueType',
+          checker,
+          callSites,
+          change.bindings,
+        );
+        const displayModeExpression = objectPropertyExpression(
+          change.node,
+          'displayMode',
+          checker,
+          callSites,
+          change.bindings,
+        );
+        const labels = labelExpression
+          ? expandStringExpression(labelExpression, checker, change.bindings)
+          : null;
+        const valueTypes = valueTypeExpression
+          ? expandStringExpression(valueTypeExpression, checker, change.bindings)
+          : null;
+        const displayModes = displayModeExpression
+          ? expandStringExpression(displayModeExpression, checker, change.bindings)
+          : null;
         if (
-          objectPropertyExpression(change.node, 'label', checker)
-          && objectPropertyExpression(change.node, 'valueType', checker)
-          && objectPropertyExpression(change.node, 'displayMode', checker)
+          labels?.every((label) => label.trim().length > 0)
+          && valueTypes?.every((valueType) => HINT_VALUE_TYPES.has(valueType))
+          && displayModes?.every((displayMode) => HINT_DISPLAY_MODES.has(displayMode))
         ) {
           hintedFields.push(...expanded);
         }
@@ -457,8 +639,20 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
     const visit = (node: ts.Node) => {
       if (ts.isCallExpression(node)) {
         for (const audit of auditObjectsForCall(node, checker, callSites)) {
-          const actionExpression = objectPropertyExpression(audit.node, 'action', checker);
-          const entityExpression = objectPropertyExpression(audit.node, 'entityType', checker);
+          const actionExpression = objectPropertyExpression(
+            audit.node,
+            'action',
+            checker,
+            callSites,
+            audit.bindings,
+          );
+          const entityExpression = objectPropertyExpression(
+            audit.node,
+            'entityType',
+            checker,
+            callSites,
+            audit.bindings,
+          );
           const expandedActions = actionExpression
             ? expandStringExpression(actionExpression, checker, audit.bindings)
             : null;
@@ -497,6 +691,16 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
     fixture.presentedFields.forEach((field) => presentedFields.add(field));
   }
   return { actions, entityTypes, presentedFields, hintedFields, unresolvedActions };
+}
+
+function fixtureAuditContract(source: string): AuditContractInventory {
+  const root = mkdtempSync(join(tmpdir(), 'audit-contract-'));
+  try {
+    writeFileSync(join(root, 'fixture.ts'), source, 'utf8');
+    return productionAuditContract(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 describe('Audit presentation production coverage', () => {
@@ -549,6 +753,103 @@ describe('Audit presentation production coverage', () => {
     expect([...inventory.entityTypes].filter((type) => !entityLabels.has(type))).toEqual([]);
   });
 
+  it('resolves audit and reference fields inherited through object spreads', () => {
+    const inventory = fixtureAuditContract(`
+      class AuditService { record(_input: unknown): void {} }
+      const auditService = new AuditService();
+      const ref = { spreadReferenceField: 'До' };
+      const baseAudit = {
+        action: 'crm.fixture_object_spread',
+        entityType: 'fixture_object_spread',
+        beforeRef: { ...ref },
+      };
+      auditService.record({ ...baseAudit });
+    `);
+
+    expect(inventory.actions).toContain('crm.fixture_object_spread');
+    expect(inventory.entityTypes).toContain('fixture_object_spread');
+    expect(inventory.presentedFields).toContain('spreadReferenceField');
+  });
+
+  it('resolves a statically defined array identifier used as metadata changes', () => {
+    const inventory = fixtureAuditContract(`
+      class AuditService { record(_input: unknown): void {} }
+      const auditService = new AuditService();
+      const immutableChanges = [{
+        field: 'arrayHintField',
+        from: 'До',
+        to: 'После',
+        label: 'Поле из массива',
+        valueType: 'text',
+        displayMode: 'values',
+      }];
+      auditService.record({
+        action: 'crm.fixture_array_identifier',
+        entityType: 'fixture',
+        metadata: { changes: immutableChanges },
+      });
+    `);
+
+    expect(inventory.presentedFields).toContain('arrayHintField');
+    expect(inventory.hintedFields).toContain('arrayHintField');
+  });
+
+  it('accepts only statically resolved valid literal hint triples', () => {
+    const inventory = fixtureAuditContract(`
+      class AuditService { record(_input: unknown): void {} }
+      const auditService = new AuditService();
+      function dynamicLabel(): string { return 'Динамическая подпись'; }
+      auditService.record({
+        action: 'crm.fixture_hint_validation',
+        entityType: 'fixture',
+        metadata: {
+          changes: [
+            {
+              field: 'validHintField',
+              from: 'До',
+              to: 'После',
+              label: 'Надёжная подпись',
+              valueType: 'text',
+              displayMode: 'values',
+            },
+            {
+              field: 'dynamicLabelField',
+              label: dynamicLabel(),
+              valueType: 'text',
+              displayMode: 'values',
+            },
+            {
+              field: 'emptyLabelField',
+              label: '   ',
+              valueType: 'text',
+              displayMode: 'values',
+            },
+            {
+              field: 'invalidValueTypeField',
+              label: 'Тип',
+              valueType: 'money',
+              displayMode: 'values',
+            },
+            {
+              field: 'invalidDisplayModeField',
+              label: 'Режим',
+              valueType: 'text',
+              displayMode: 'raw',
+            },
+          ],
+        },
+      });
+    `);
+
+    expect([...inventory.hintedFields].sort()).toEqual(['validHintField']);
+    expect([
+      'dynamicLabelField',
+      'emptyLabelField',
+      'invalidValueTypeField',
+      'invalidDisplayModeField',
+    ].filter((field) => !inventory.presentedFields.has(field))).toEqual([]);
+  });
+
   it('classifies every statically known presented field through policy or immutable hints', () => {
     const inventory = productionAuditContract(sourceRoot);
     const compatibilityLabels = registryKeys(presenterSource, 'ACTION_FIELD_LABELS');
@@ -556,7 +857,6 @@ describe('Audit presentation production coverage', () => {
       if (
         inventory.hintedFields.has(field)
         || compatibilityLabels.has(field)
-        || EXPLICIT_FIELD_CLASSIFICATIONS[field]
       ) return false;
       const presented = presentAuditFieldChange({ field, from: 'До', to: 'После' });
       return presented !== null
@@ -574,5 +874,21 @@ describe('Audit presentation production coverage', () => {
     expect(expectedFixtureFields.filter((field) => !inventory.presentedFields.has(field)))
       .toEqual([]);
     expect(unclassified.sort()).toEqual([]);
+  });
+
+  it('enforces every central field classification through the runtime presenter', () => {
+    for (const [field, policy] of Object.entries(AUDIT_FIELD_PRESENTATION_POLICIES)) {
+      const presented = presentAuditFieldChange({ field, from: 'До', to: 'После' });
+      if (policy.valueType === 'technical') {
+        expect(presented).toBeNull();
+      } else if (policy.displayMode === 'changed_only') {
+        expect(presented).toEqual({
+          key: field,
+          label: policy.label,
+          before: null,
+          after: null,
+        });
+      }
+    }
   });
 });
