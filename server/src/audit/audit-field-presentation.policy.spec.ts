@@ -95,6 +95,109 @@ describe('audit field presentation policy', () => {
     });
   });
 
+  it.each([
+    '{"name":"Анна","phone":"+79991234567"}',
+    '[{"internal":"value"}]',
+    '{bad json',
+  ])('fails closed for JSON-like unknown custom value %s', (value) => {
+    const input = {
+      field: 'custom_data.directorField',
+      from: null,
+      to: value,
+    };
+
+    expect(createSafeAuditChange(input)).toEqual({
+      field: 'custom_data.directorField',
+      from: null,
+      to: null,
+      label: 'Дополнительное поле',
+      valueType: 'text',
+      displayMode: 'changed_only',
+    });
+    expect(presentAuditFieldChange(input)).toEqual({
+      key: 'custom_data.directorField',
+      label: 'Дополнительное поле',
+      before: null,
+      after: null,
+    });
+  });
+
+  it('keeps contact-list count safety when stored hints claim text values', () => {
+    const input = {
+      field: 'custom_data.contactPersons',
+      from: '[]',
+      to: '[{"name":"Анна","phone":"+79991234567"}]',
+      label: 'Контактные лица',
+      valueType: 'text' as const,
+      displayMode: 'values' as const,
+    };
+
+    expect(createSafeAuditChange(input)).toMatchObject({
+      from: 0,
+      to: 1,
+      valueType: 'contact_list',
+      displayMode: 'count',
+    });
+    expect(presentAuditFieldChange(input)).toMatchObject({
+      before: 'Контактных лиц: 0',
+      after: 'Контактных лиц: 1',
+    });
+  });
+
+  it('ignores a partial reference display snapshot', () => {
+    const input = {
+      field: 'assigned_to',
+      from: null,
+      to: 'Наталия Назарова',
+      displayMode: 'values' as const,
+    };
+
+    expect(presentAuditFieldChange(input)).toEqual({
+      key: 'assigned_to',
+      label: 'Ответственный',
+      before: null,
+      after: null,
+    });
+  });
+
+  it.each([
+    '550e8400-e29b-41d4-a716-446655440000',
+    'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    'sessionId-550e8400-e29b-41d4-a716-446655440000',
+  ])('does not treat unsafe reference value %s as a display name', (value) => {
+    const input = {
+      field: 'assigned_to',
+      from: null,
+      to: value,
+      label: 'Ответственный',
+      valueType: 'reference' as const,
+      displayMode: 'values' as const,
+    };
+
+    expect(createSafeAuditChange(input)).toMatchObject({
+      from: null,
+      to: null,
+      displayMode: 'changed_only',
+    });
+    expect(presentAuditFieldChange(input)).toEqual({
+      key: 'assigned_to',
+      label: 'Ответственный',
+      before: null,
+      after: null,
+    });
+  });
+
+  it.each([
+    '2026-08-31T17:21:99+03:00',
+    '2026-08-31T17:21:00+99:99',
+  ])('preserves invalid ISO date-time %s without localized formatting', (value) => {
+    expect(presentAuditFieldChange({
+      field: 'custom_data.visitDateTime',
+      from: null,
+      to: value,
+    })?.after).toBe(value);
+  });
+
   it('fails closed for malformed structured values', () => {
     expect(presentAuditFieldChange({
       field: 'custom_data.disciplines',

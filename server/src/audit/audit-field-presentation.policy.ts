@@ -20,6 +20,8 @@ const VALUE_TYPES = new Set<AuditFieldValueType>([
 const DISPLAY_MODES = new Set<AuditChangeDisplayMode>([
   'values', 'changed_only', 'count', 'hidden',
 ]);
+const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HASH_OR_SESSION_VALUE = /^(?:[a-f0-9]{32,}|(?:sha(?:1|224|256|384|512)|session(?:id)?|token|hash|fingerprint)[_:\- ])/i;
 
 const CORE_FIELD_ALIASES: Record<string, AuditFieldPresentationPolicy> = {
   first_name: { label: 'Имя', valueType: 'text', displayMode: 'values' },
@@ -77,6 +79,14 @@ function validDisplayMode(value: unknown): value is AuditChangeDisplayMode {
   return typeof value === 'string' && DISPLAY_MODES.has(value as AuditChangeDisplayMode);
 }
 
+function validSnapshot(input: AuditFieldChangeInput): input is AuditFieldChangeInput & Required<
+  Pick<AuditFieldChangeInput, 'label' | 'valueType' | 'displayMode'>
+> {
+  return validLabel(input.label)
+    && validValueType(input.valueType)
+    && validDisplayMode(input.displayMode);
+}
+
 function resolveAuditField(input: AuditFieldChangeInput): AuditFieldPresentationPolicy | null {
   if (!input.field.trim() || isTechnicalField(input.field)) return null;
 
@@ -94,11 +104,21 @@ function resolveAuditField(input: AuditFieldChangeInput): AuditFieldPresentation
       }
       : legacyAlias ?? { label: 'Дополнительное поле', valueType: 'text', displayMode: 'values' });
 
-  return {
-    label: validLabel(input.label) ? input.label : fallback.label,
-    valueType: validValueType(input.valueType) ? input.valueType : fallback.valueType,
-    displayMode: validDisplayMode(input.displayMode) ? input.displayMode : fallback.displayMode,
-  };
+  const snapshot = validSnapshot(input) ? input : null;
+  if (fallback.valueType === 'contact_list') {
+    return {
+      label: snapshot?.label ?? fallback.label,
+      valueType: 'contact_list',
+      displayMode: 'count',
+    };
+  }
+  return snapshot
+    ? {
+      label: snapshot.label,
+      valueType: snapshot.valueType,
+      displayMode: snapshot.displayMode,
+    }
+    : fallback;
 }
 
 function isRedactionMarker(value: unknown): boolean {
@@ -109,7 +129,9 @@ function scalarValue(value: unknown): string | number | boolean | null {
   if (value === null || value === undefined || isRedactionMarker(value)) return null;
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return value === '' ? null : value;
+    return value === '' || (typeof value === 'string' && /^[{\[]/.test(value.trim()))
+      ? null
+      : value;
   }
   return null;
 }
@@ -151,6 +173,12 @@ function hasUnsupportedValue(value: unknown, valueType: AuditFieldValueType): bo
     : scalarValue(value) === null;
 }
 
+function unsafeReferenceValue(value: unknown): boolean {
+  const scalar = scalarValue(value);
+  return typeof scalar === 'string'
+    && (UUID_VALUE.test(scalar) || HASH_OR_SESSION_VALUE.test(scalar));
+}
+
 function validIsoDate(value: string): RegExpExecArray | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
@@ -168,11 +196,19 @@ function formatDate(value: string): string {
 }
 
 function formatDateTime(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
   if (!match || !validIsoDate(`${match[1]}-${match[2]}-${match[3]}`)) return value;
   const hours = Number(match[4]);
   const minutes = Number(match[5]);
-  return hours < 24 && minutes < 60
+  const seconds = Number(match[6] ?? '0');
+  const offsetHours = Number(match[7] ?? '0');
+  const offsetMinutes = Number(match[8] ?? '0');
+  return hours < 24
+    && minutes < 60
+    && seconds < 60
+    && offsetHours <= 14
+    && offsetMinutes < 60
+    && (offsetHours < 14 || offsetMinutes === 0)
     ? `${match[3]}.${match[2]}.${match[1]} ${match[4]}:${match[5]}`
     : value;
 }
@@ -239,6 +275,18 @@ export function createSafeAuditChange(
     };
   }
 
+  if (policy.valueType === 'reference'
+    && (unsafeReferenceValue(input.from) || unsafeReferenceValue(input.to))) {
+    return {
+      field: input.field,
+      from: null,
+      to: null,
+      label: policy.label,
+      valueType: policy.valueType,
+      displayMode: 'changed_only',
+    };
+  }
+
   if (hasUnsupportedValue(input.from, policy.valueType) || hasUnsupportedValue(input.to, policy.valueType)) {
     return {
       field: input.field,
@@ -279,6 +327,11 @@ export function presentAuditFieldChange(
       before: from === null ? null : countLabel(from),
       after: to === null ? null : countLabel(to),
     };
+  }
+
+  if (policy.valueType === 'reference'
+    && (unsafeReferenceValue(input.from) || unsafeReferenceValue(input.to))) {
+    return { key: input.field, label: policy.label, before: null, after: null };
   }
 
   const before = formatValue(input.from, policy.valueType);
