@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import {
+  AuditFieldChangeInput,
   AuditPresentationChange,
   AuditPresentationEvent,
   AuditPresentationInput,
 } from './audit-presentation.types';
+import { presentAuditFieldChange } from './audit-field-presentation.policy';
 
-const SENSITIVE_KEY =
-  /password|token|secret|authorization|credential|otp|hash|session|refresh|cookie|privatekey/i;
 const REDACTION_MARKERS = new Set(['[REDACTED]', '[PRIVATE]', '[PII]', '[EMAIL]']);
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -70,7 +70,7 @@ const ENTITY_LABELS: Record<string, string> = {
   user: 'Пользователь',
 };
 
-const FIELD_LABELS: Record<string, string> = {
+const ACTION_FIELD_LABELS: Record<string, string> = {
   direction: 'Направление',
   discipline: 'Направление',
   disciplines: 'Направления',
@@ -84,33 +84,6 @@ const FIELD_LABELS: Record<string, string> = {
   level: 'Уровень',
   marketingConsent: 'Маркетинговое согласие',
   sharedWithTeacher: 'Доступ преподавателя',
-};
-
-const CUSTOM_DATA_LIST_FIELDS = new Set(['disciplines']);
-
-const ENUM_VALUE_LABELS: Record<string, Record<string, string>> = {
-  status: {
-    active: 'Активен',
-    archived: 'Архивирован',
-    cancelled: 'Отменён',
-    canceled: 'Отменён',
-    completed: 'Завершён',
-    draft: 'Черновик',
-    failed: 'Ошибка',
-    inactive: 'Неактивен',
-    lead: 'Лид',
-    new: 'Новый',
-    open: 'Открыт',
-    overdue: 'Просрочен',
-    paid: 'Оплачен',
-    pending: 'Ожидает',
-    student: 'Ученик',
-  },
-  state: {
-    closed: 'Закрыта',
-    completed: 'Завершена',
-    open: 'Открыта',
-  },
 };
 
 const ACTION_TITLES: Record<string, string> = {
@@ -467,22 +440,32 @@ export class AuditPresentationService {
       if (metadataKeys.has(key)) {
         return [];
       }
-      if (this.isTechnicalOrSensitiveKey(key)) {
+      if (before[key] === after[key]) {
         return [];
       }
 
-      const beforeValue = this.safeChangeValue(key, before[key]);
-      const afterValue = this.safeChangeValue(key, after[key]);
-      if (beforeValue === afterValue) {
+      const input: AuditFieldChangeInput = {
+        field: key,
+        from: before[key],
+        to: after[key],
+      };
+      let change = presentAuditFieldChange(input);
+      if (change?.label === 'Дополнительное поле'
+        && !/^(?:custom_data|customData)[._]/.test(key)) {
+        change = presentAuditFieldChange({
+          ...input,
+          label: ACTION_FIELD_LABELS[key] ?? this.humanizeIdentifier(key),
+          valueType: key === 'marketingConsent' || key === 'sharedWithTeacher'
+            ? 'boolean'
+            : 'text',
+          displayMode: 'values',
+        });
+      }
+      if (!change || (change.before !== null && change.before === change.after)) {
         return [];
       }
 
-      return [{
-        key,
-        label: this.fieldLabel(key),
-        before: beforeValue,
-        after: afterValue,
-      }];
+      return [change];
     })];
   }
 
@@ -500,7 +483,7 @@ export class AuditPresentationService {
       }
 
       const key = this.metadataChangeKey(rawChange);
-      if (!key || this.isTechnicalOrSensitiveKey(key)) {
+      if (!key) {
         return [];
       }
 
@@ -510,12 +493,37 @@ export class AuditPresentationService {
         return [];
       }
 
-      return [{
-        key,
-        label: this.fieldLabel(key),
-        before: this.safeChangeValue(key, rawChange[beforeKey]),
-        after: this.safeChangeValue(key, rawChange[afterKey]),
-      }];
+      const hasSnapshotHint = 'label' in rawChange
+        || 'valueType' in rawChange
+        || 'displayMode' in rawChange;
+      const input: AuditFieldChangeInput = {
+        field: key,
+        from: rawChange[beforeKey],
+        to: rawChange[afterKey],
+        label: hasSnapshotHint
+          ? rawChange.label as AuditFieldChangeInput['label']
+          : undefined,
+        valueType: hasSnapshotHint
+          ? rawChange.valueType as AuditFieldChangeInput['valueType']
+          : undefined,
+        displayMode: hasSnapshotHint
+          ? rawChange.displayMode as AuditFieldChangeInput['displayMode']
+          : undefined,
+      };
+      let change = presentAuditFieldChange(input);
+      if (!hasSnapshotHint
+        && change?.label === 'Дополнительное поле'
+        && !/^(?:custom_data|customData)[._]/.test(key)) {
+        change = presentAuditFieldChange({
+          ...input,
+          label: ACTION_FIELD_LABELS[key] ?? this.humanizeIdentifier(key),
+          valueType: key === 'marketingConsent' || key === 'sharedWithTeacher'
+            ? 'boolean'
+            : 'text',
+          displayMode: 'values',
+        });
+      }
+      return change ? [change] : [];
     });
   }
 
@@ -575,7 +583,7 @@ export class AuditPresentationService {
     }
 
     const fieldKey = this.toCamelCase(fieldParts);
-    const fieldLabel = FIELD_LABELS[fieldKey];
+    const fieldLabel = ACTION_FIELD_LABELS[fieldKey];
     if (!fieldLabel) {
       return { label: `Данные ${possessiveEntity}`, fieldKey: null };
     }
@@ -602,104 +610,12 @@ export class AuditPresentationService {
     return text ? `${text[0].toUpperCase()}${text.slice(1)}` : 'Неизвестно';
   }
 
-  private fieldLabel(key: string): string {
-    const directLabel = FIELD_LABELS[key];
-    if (directLabel) {
-      return directLabel;
-    }
-
-    const customField = this.customDataField(key);
-    return customField
-      ? FIELD_LABELS[customField] ?? 'Дополнительное поле'
-      : this.humanizeIdentifier(key);
-  }
-
-  private customDataField(key: string): string | null {
-    const match = /^(?:custom_data|customData)[._](.+)$/.exec(key);
-    return match?.[1]?.trim() || null;
-  }
-
   private toCamelCase(parts: string[]): string {
     return parts
       .map((part, index) =>
         index === 0 ? part : `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`,
       )
       .join('');
-  }
-
-  private isTechnicalOrSensitiveKey(key: string): boolean {
-    const segments = key
-      .replace(/([a-zа-я0-9])([A-ZА-Я])/g, '$1.$2')
-      .split(/[._:\-\s]+/)
-      .filter(Boolean)
-      .map((segment) => segment.toLowerCase());
-    const collapsed = segments.join('');
-    return segments.some((segment) =>
-      segment === 'id'
-      || segment === 'ids'
-      || segment === 'uuid'
-      || segment === 'version'
-      || segment === 'versions'
-      )
-      || collapsed === 'bodylength'
-      || SENSITIVE_KEY.test(key)
-      || SENSITIVE_KEY.test(collapsed);
-  }
-
-  private safeChangeValue(key: string, value: unknown): string | null {
-    if (typeof value === 'boolean') {
-      return value ? 'Да' : 'Нет';
-    }
-
-    const safe = this.safeValue(value);
-    if (!safe) {
-      return null;
-    }
-
-    const listValue = this.safeListChangeValue(key, safe);
-    if (listValue !== undefined) {
-      return listValue;
-    }
-
-    const normalizedKey = key
-      .replace(/([a-zа-я0-9])([A-ZА-Я])/g, '$1.$2')
-      .split(/[._:\-\s]+/)
-      .filter(Boolean)
-      .at(-1)
-      ?.toLowerCase();
-    return normalizedKey
-      ? ENUM_VALUE_LABELS[normalizedKey]?.[safe.toLowerCase()] ?? safe
-      : safe;
-  }
-
-  private safeListChangeValue(
-    key: string,
-    value: string,
-  ): string | null | undefined {
-    const field = this.customDataField(key) ?? key;
-    if (!CUSTOM_DATA_LIST_FIELDS.has(field) || !value.trim().startsWith('[')) {
-      return undefined;
-    }
-
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (!Array.isArray(parsed)) {
-        return null;
-      }
-      if (parsed.some((item) =>
-        item !== null
-        && !['string', 'number', 'boolean'].includes(typeof item),
-      )) {
-        return null;
-      }
-
-      const items = parsed
-        .map((item) => this.safeValue(item)?.trim() ?? '')
-        .filter(Boolean);
-      return items.length > 0 ? items.join(', ') : null;
-    } catch {
-      return null;
-    }
   }
 
   private safeValue(value: unknown): string | null {

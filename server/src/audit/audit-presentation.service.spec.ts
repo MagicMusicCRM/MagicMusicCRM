@@ -82,7 +82,7 @@ describe('AuditPresentationService', () => {
       '["DRUMS",null,""]',
       '["PIANO",{"internal":"value"}]',
       'Направления',
-      'DRUMS',
+      null,
       null,
     ],
   ])(
@@ -127,6 +127,83 @@ describe('AuditPresentationService', () => {
       },
     ]);
     expect(JSON.stringify(presented)).not.toMatch(/Custom data|Favorite color/);
+  });
+
+  it.each([
+    ['first_name', 'Анна', 'Мария', 'Имя', 'Анна', 'Мария'],
+    ['last_name', 'Иванова', 'Петрова', 'Фамилия', 'Иванова', 'Петрова'],
+    ['notes', 'До', 'После', 'Заметки', 'До', 'После'],
+    [
+      'assigned_to',
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      'Ответственный',
+      null,
+      null,
+    ],
+    [
+      'custom_data.birthday',
+      '2000-02-01',
+      '2001-03-02',
+      'Дата рождения',
+      '01.02.2000',
+      '02.03.2001',
+    ],
+    [
+      'custom_data.category',
+      'Дети',
+      'Взрослые',
+      'Категория обучения',
+      'Дети',
+      'Взрослые',
+    ],
+    [
+      'custom_data.levels',
+      'Начальный',
+      'Средний',
+      'Уровни обучения',
+      'Начальный',
+      'Средний',
+    ],
+    [
+      'custom_data.favoriteColor',
+      'Синий',
+      'Зелёный',
+      'Дополнительное поле',
+      'Синий',
+      'Зелёный',
+    ],
+  ])(
+    'routes field %s through the shared presentation policy',
+    (field, from, to, label, before, after) => {
+      expect(service.present({
+        ...emailChange,
+        beforeRef: { [field]: from },
+        afterRef: { [field]: to },
+      }).changes).toEqual([{ key: field, label, before, after }]);
+    },
+  );
+
+  it('suppresses a technical closedBy reference through the shared presentation policy', () => {
+    const uuid = '11111111-1111-4111-8111-111111111111';
+    const closedByInput: AuditPresentationInput = {
+      ...emailChange,
+      beforeRef: { closedBy: null },
+      afterRef: { closedBy: uuid },
+    };
+
+    expect(service.present(closedByInput).changes).toEqual([]);
+    expect(JSON.stringify(service.present(closedByInput))).not.toContain(uuid);
+  });
+
+  it('preserves director-defined values through the shared presentation policy', () => {
+    const directorValueInput: AuditPresentationInput = {
+      ...emailChange,
+      beforeRef: { 'custom_data.discipline': null },
+      afterRef: { 'custom_data.discipline': 'DRUMS' },
+    };
+
+    expect(service.present(directorValueInput).changes[0].after).toBe('DRUMS');
   });
 
   it('uses safe metadata changes before refs, deduplicates fields, and keeps valueless facts', () => {
@@ -411,7 +488,7 @@ describe('AuditPresentationService', () => {
       {
         key: 'status',
         label: 'Статус',
-        before: 'Лид',
+        before: 'lead',
         after: null,
       },
     ]);
@@ -438,7 +515,7 @@ describe('AuditPresentationService', () => {
           {
             key: 'status',
             label: 'Статус',
-            before: 'Лид',
+            before: 'lead',
             after: null,
           },
         ],

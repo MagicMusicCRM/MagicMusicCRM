@@ -155,6 +155,48 @@ void main() {
     expect(find.text('Было: Не указано'), findsOneWidget);
   });
 
+  testWidgets('renders a changed-only reference as a single fact', (
+    tester,
+  ) async {
+    final changedOnlyEvent = AuditPresentationEvent.fromJson(<String, dynamic>{
+      'id': 'audit-changed-only',
+      'actionKey': 'crm.lead_owner_changed',
+      'title': 'Ответственный по лиду изменён',
+      'summary': null,
+      'reason': null,
+      'actor': <String, dynamic>{'id': null, 'name': 'Система', 'role': null},
+      'target': <String, dynamic>{
+        'type': 'lead',
+        'id': 'lead-1',
+        'label': 'Лид',
+        'displayName': 'Анна Иванова',
+        'routeType': 'lead',
+      },
+      'changes': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'key': 'assigned_to',
+          'label': 'Ответственный',
+          'before': null,
+          'after': null,
+        },
+      ],
+      'occurredAt': '2026-08-30T10:15:00.000Z',
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AuditEventCard(event: changedOnlyEvent)),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('audit-event-expand')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ответственный'), findsOneWidget);
+    expect(find.text('Изменено'), findsOneWidget);
+    expect(find.textContaining('Было:'), findsNothing);
+    expect(find.textContaining('Стало:'), findsNothing);
+  });
+
   testWidgets('never renders a raw comment body as the target name', (
     tester,
   ) async {

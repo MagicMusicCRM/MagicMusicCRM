@@ -162,18 +162,27 @@ class _AuditChangeRow extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpace.xs),
-          Text(
-            'Было: ${change.before ?? 'Не указано'}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppColor.text2),
-          ),
-          Text(
-            'Стало: ${change.after ?? 'Не указано'}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppColor.text2),
-          ),
+          if (change.before == null && change.after == null)
+            Text(
+              'Изменено',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColor.text2),
+            )
+          else ...[
+            Text(
+              'Было: ${change.before ?? 'Не указано'}',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColor.text2),
+            ),
+            Text(
+              'Стало: ${change.after ?? 'Не указано'}',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColor.text2),
+            ),
+          ],
         ],
       ),
     );
