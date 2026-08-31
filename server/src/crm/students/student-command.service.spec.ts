@@ -301,6 +301,73 @@ describe("StudentCommandService", () => {
     expect(events).toEqual(["transaction", "responsible", "audit", "realtime"]);
   });
 
+  it("records safe merged changes with exact director-owned scalar text", async () => {
+    const { service, audit, mutations } = createHarness();
+    const contactPhone = "+79991234567";
+    mutations.update.mockResolvedValueOnce({
+      beforeStudent: {
+        status: "active",
+        branch_id: "branch-before",
+        first_name: "Анна",
+        last_name: "Иванова",
+        phone: "+79990000000",
+        email: "old@example.com",
+        custom_data: { level: "PIANO", contactPersons: [] },
+      },
+      student: {
+        ...student,
+        email: "new@example.com",
+        custom_data: {
+          level: "DRUMS",
+          contactPersons: [{ name: "Анна", phone: contactPhone }],
+        },
+      },
+    });
+
+    await service.updateStudent(actor, "student-a", {
+      expectedVersion: 1,
+      clearResponsible: true,
+      email: "new@example.com",
+      customDataPatch: { level: "DRUMS" },
+    });
+
+    const metadata = (audit.record as jest.Mock).mock.calls[0]?.[0]?.metadata;
+    expect(metadata).toEqual({
+      changes: [
+        {
+          field: "email",
+          from: null,
+          to: null,
+          label: "Электронная почта",
+          valueType: "text",
+          displayMode: "values",
+        },
+        {
+          field: "custom_data.contactPersons",
+          from: 0,
+          to: 1,
+          label: "Контактные лица",
+          valueType: "contact_list",
+          displayMode: "count",
+        },
+        {
+          field: "custom_data.level",
+          from: "PIANO",
+          to: "DRUMS",
+          label: "Уровень",
+          valueType: "text",
+          displayMode: "values",
+        },
+      ],
+      customFieldDefinitionIds: [],
+    });
+    const storedChanges = JSON.stringify(metadata?.changes);
+    expect(storedChanges).toContain('"to":"DRUMS"');
+    expect(storedChanges).not.toContain(contactPhone);
+    expect(storedChanges).not.toContain("old@example.com");
+    expect(storedChanges).not.toContain("new@example.com");
+  });
+
   it("does not publish or assign fallback responsible when update mutation fails", async () => {
     const { service, database, audit, realtime, mutations } = createHarness();
     mutations.update.mockRejectedValueOnce(new Error("transaction failed"));

@@ -12,6 +12,9 @@
  * duplicated and are consolidated here for the same reason.
  */
 
+import { createSafeAuditChange } from "../audit/audit-field-presentation.policy";
+import type { AuditFieldChangeInput } from "../audit/audit-presentation.types";
+
 export interface LessonRow {
   id: string;
   version?: number | string;
@@ -161,13 +164,6 @@ export function toLessonDto(row: LessonRow) {
   };
 }
 
-/** One edited field, as stored in audit_events.metadata.changes. */
-export interface FieldChange {
-  field: string;
-  from: string | null;
-  to: string | null;
-}
-
 /**
  * Fields recorded as "changed" without their values.
  *
@@ -182,12 +178,40 @@ export interface FieldChange {
  */
 const VALUELESS_AUDIT_FIELDS = new Set(["email"]);
 
-const toAuditScalar = (value: unknown): string | null => {
-  if (value === null || value === undefined) return null;
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === "object") return JSON.stringify(value);
-  const text = String(value);
-  return text.length === 0 ? null : text;
+const auditValuesEqual = (from: unknown, to: unknown): boolean => {
+  if (from === to) return true;
+  if (
+    (from === null || from === undefined || from === "") &&
+    (to === null || to === undefined || to === "")
+  ) return true;
+  if (from instanceof Date && to instanceof Date) {
+    return from.toISOString() === to.toISOString();
+  }
+  if (typeof from === "object" && typeof to === "object") {
+    return JSON.stringify(from) === JSON.stringify(to);
+  }
+  return false;
+};
+
+const createChangedAuditField = (
+  field: string,
+  from: unknown,
+  to: unknown,
+): AuditFieldChangeInput | null => {
+  if (auditValuesEqual(from, to)) return null;
+  const valueless = VALUELESS_AUDIT_FIELDS.has(field);
+  const change = createSafeAuditChange({
+    field,
+    from: valueless ? null : from,
+    to: valueless ? null : to,
+  });
+  if (!change) return null;
+  if (
+    !valueless &&
+    change.displayMode !== "changed_only" &&
+    auditValuesEqual(change.from, change.to)
+  ) return null;
+  return change;
 };
 
 /**
@@ -202,17 +226,11 @@ export function diffEntityFields(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
   fields: string[],
-): FieldChange[] {
-  const changes: FieldChange[] = [];
+): AuditFieldChangeInput[] {
+  const changes: AuditFieldChangeInput[] = [];
   for (const field of fields) {
-    const from = toAuditScalar(before[field]);
-    const to = toAuditScalar(after[field]);
-    if (from === to) continue;
-    changes.push(
-      VALUELESS_AUDIT_FIELDS.has(field)
-        ? { field, from: null, to: null }
-        : { field, from, to },
-    );
+    const change = createChangedAuditField(field, before[field], after[field]);
+    if (change) changes.push(change);
   }
 
   const beforeCustom = (before.custom_data ?? {}) as Record<string, unknown>;
@@ -222,38 +240,19 @@ export function diffEntityFields(
     ...Object.keys(afterCustom),
   ]);
   for (const key of [...keys].sort()) {
-    const from = toAuditScalar(beforeCustom[key]);
-    const to = toAuditScalar(afterCustom[key]);
-    if (from === to) continue;
-    changes.push({ field: `custom_data.${key}`, from, to });
+    const change = createChangedAuditField(
+      `custom_data.${key}`,
+      beforeCustom[key],
+      afterCustom[key],
+    );
+    if (change) changes.push(change);
   }
   return changes;
 }
 
-/** Russian labels for audited fields; unknown keys fall back to the raw name. */
-const AUDIT_FIELD_LABELS: Record<string, string> = {
-  first_name: "Имя",
-  last_name: "Фамилия",
-  phone: "Телефон",
-  email: "Почта",
-  source: "Источник",
-  notes: "Заметки",
-  status_id: "Статус",
-  assigned_to: "Ответственный",
-  branch_id: "Филиал",
-  status: "Статус",
-  "custom_data.birthday": "Дата рождения",
-  "custom_data.gender": "Пол",
-  "custom_data.level": "Уровень",
-  "custom_data.category": "Категория",
-  "custom_data.disciplines": "Дисциплины",
-  "custom_data.adSource": "Рекламный источник",
-  "custom_data.middleName": "Отчество",
-};
-
 const auditFieldLabel = (field: string): string =>
-  AUDIT_FIELD_LABELS[field] ??
-  (field.startsWith("custom_data.") ? field.slice("custom_data.".length) : field);
+  createSafeAuditChange({ field, from: null, to: null })?.label
+  ?? "Дополнительное поле";
 
 /**
  * Turns an audit row into something a human reads. The timeline hands us
@@ -269,7 +268,7 @@ function describeAuditRow(row: TimelineRow): { title: string; body: string | nul
     // Not JSON (or truncated) — leave the row as the raw action name.
     return { title: fallbackTitle, body: row.body };
   }
-  const changes = (parsed as { changes?: FieldChange[] } | null)?.changes;
+  const changes = (parsed as { changes?: AuditFieldChangeInput[] } | null)?.changes;
   if (!Array.isArray(changes) || changes.length === 0) {
     // An audited action with no diff (created/deleted) — keep the action name,
     // drop the empty jsonb so it does not render as "{}".

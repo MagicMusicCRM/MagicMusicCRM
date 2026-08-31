@@ -11,7 +11,14 @@ describe("diffEntityFields", () => {
     );
 
     expect(changes).toEqual([
-      { field: "phone", from: "+79161234567", to: "+79990000000" },
+      {
+        field: "phone",
+        from: "+79161234567",
+        to: "+79990000000",
+        label: "Телефон",
+        valueType: "text",
+        displayMode: "values",
+      },
     ]);
   });
 
@@ -46,7 +53,14 @@ describe("diffEntityFields", () => {
 
     // AuditService pipes metadata through redactSensitive, which masks e-mail
     // values — storing them would render as «Почта: [EMAIL] → [EMAIL]».
-    expect(changes).toEqual([{ field: "email", from: null, to: null }]);
+    expect(changes).toEqual([{
+      field: "email",
+      from: null,
+      to: null,
+      label: "Электронная почта",
+      valueType: "text",
+      displayMode: "values",
+    }]);
   });
 
   it("diffs custom_data per key rather than as a blob", () => {
@@ -58,7 +72,14 @@ describe("diffEntityFields", () => {
 
     // «Уровень: A1 → A2» is an audit entry; a jsonb dump is not.
     expect(changes).toEqual([
-      { field: "custom_data.level", from: "A1", to: "A2" },
+      {
+        field: "custom_data.level",
+        from: "A1",
+        to: "A2",
+        label: "Уровень",
+        valueType: "text",
+        displayMode: "values",
+      },
     ]);
   });
 
@@ -70,12 +91,26 @@ describe("diffEntityFields", () => {
     );
 
     expect(changes).toEqual([
-      { field: "custom_data.category", from: null, to: "kids" },
-      { field: "custom_data.level", from: "A1", to: null },
+      {
+        field: "custom_data.category",
+        from: null,
+        to: "kids",
+        label: "Категория обучения",
+        valueType: "text",
+        displayMode: "values",
+      },
+      {
+        field: "custom_data.level",
+        from: "A1",
+        to: null,
+        label: "Уровень",
+        valueType: "text",
+        displayMode: "values",
+      },
     ]);
   });
 
-  it("serialises a list value instead of rendering [object Object]", () => {
+  it("stores a primitive list without JSON serialization", () => {
     const changes = diffEntityFields(
       { custom_data: { disciplines: ["Вокал"] } },
       { custom_data: { disciplines: ["Вокал", "Гитара"] } },
@@ -85,10 +120,53 @@ describe("diffEntityFields", () => {
     expect(changes).toEqual([
       {
         field: "custom_data.disciplines",
-        from: '["Вокал"]',
-        to: '["Вокал","Гитара"]',
+        from: ["Вокал"],
+        to: ["Вокал", "Гитара"],
+        label: "Направления",
+        valueType: "list",
+        displayMode: "values",
       },
     ]);
+  });
+
+  it("stores responsibility as a changed-only fact without UUIDs", () => {
+    const oldUuid = "11111111-1111-4111-8111-111111111111";
+    const newUuid = "22222222-2222-4222-8222-222222222222";
+    const changes = diffEntityFields(
+      { assigned_to: oldUuid, custom_data: {} },
+      { assigned_to: newUuid, custom_data: {} },
+      ["assigned_to"],
+    );
+
+    expect(changes).toEqual([{
+      field: "assigned_to",
+      from: null,
+      to: null,
+      label: "Ответственный",
+      valueType: "reference",
+      displayMode: "changed_only",
+    }]);
+    expect(JSON.stringify(changes)).not.toContain(oldUuid);
+  });
+
+  it("stores contactPersons only as safe counts", () => {
+    const changes = diffEntityFields(
+      { custom_data: { contactPersons: [] } },
+      {
+        custom_data: {
+          contactPersons: [{ name: "Анна", phone: "+79991234567" }],
+        },
+      },
+      [],
+    );
+
+    expect(changes[0]).toMatchObject({
+      field: "custom_data.contactPersons",
+      from: 0,
+      to: 1,
+      displayMode: "count",
+    });
+    expect(JSON.stringify(changes)).not.toContain("+79991234567");
   });
 });
 
@@ -129,7 +207,7 @@ describe("toTimelineDto — audit rows", () => {
       auditRow(JSON.stringify({ changes: [{ field: "email", from: null, to: null }] })),
     );
 
-    expect(dto.body).toBe("Почта: изменено");
+    expect(dto.body).toBe("Электронная почта: изменено");
   });
 
   it("drops the body of an audited action that carries no diff", () => {
