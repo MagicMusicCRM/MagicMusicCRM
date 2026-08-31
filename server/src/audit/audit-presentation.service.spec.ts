@@ -66,6 +66,69 @@ describe('AuditPresentationService', () => {
     });
   });
 
+  it.each([
+    ['custom_data.level', null, 'Без опыта', 'Уровень', null, 'Без опыта'],
+    ['custom_data.discipline', null, 'DRUMS', 'Направление', null, 'DRUMS'],
+    [
+      'custom_data.disciplines',
+      '[]',
+      '["DRUMS"]',
+      'Направления',
+      null,
+      'DRUMS',
+    ],
+    [
+      'custom_data.disciplines',
+      '["DRUMS",null,""]',
+      '["PIANO",{"internal":"value"}]',
+      'Направления',
+      'DRUMS',
+      null,
+    ],
+  ])(
+    'presents custom field %s in Russian without JSON list syntax',
+    (field, from, to, label, before, after) => {
+      const presented = service.present({
+        ...emailChange,
+        metadata: { changes: [{ field, from, to }] },
+        beforeRef: null,
+        afterRef: null,
+      });
+
+      expect(presented.changes).toEqual([
+        { key: field, label, before, after },
+      ]);
+      expect(presented.changes[0].label).not.toMatch(/custom[._ ]data/i);
+    },
+  );
+
+  it('uses a Russian neutral label for an unknown custom field', () => {
+    const presented = service.present({
+      ...emailChange,
+      metadata: {
+        changes: [
+          {
+            field: 'custom_data.favoriteColor',
+            from: 'Синий',
+            to: 'Зелёный',
+          },
+        ],
+      },
+      beforeRef: null,
+      afterRef: null,
+    });
+
+    expect(presented.changes).toEqual([
+      {
+        key: 'custom_data.favoriteColor',
+        label: 'Дополнительное поле',
+        before: 'Синий',
+        after: 'Зелёный',
+      },
+    ]);
+    expect(JSON.stringify(presented)).not.toMatch(/Custom data|Favorite color/);
+  });
+
   it('uses safe metadata changes before refs, deduplicates fields, and keeps valueless facts', () => {
     const presented = service.present({
       ...emailChange,

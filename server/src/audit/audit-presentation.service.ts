@@ -72,6 +72,8 @@ const ENTITY_LABELS: Record<string, string> = {
 
 const FIELD_LABELS: Record<string, string> = {
   direction: 'Направление',
+  discipline: 'Направление',
+  disciplines: 'Направления',
   email: 'Электронная почта',
   phone: 'Телефон',
   name: 'Имя',
@@ -79,9 +81,12 @@ const FIELD_LABELS: Record<string, string> = {
   firstName: 'Имя',
   lastName: 'Фамилия',
   displayName: 'Отображаемое имя',
+  level: 'Уровень',
   marketingConsent: 'Маркетинговое согласие',
   sharedWithTeacher: 'Доступ преподавателя',
 };
+
+const CUSTOM_DATA_LIST_FIELDS = new Set(['disciplines']);
 
 const ENUM_VALUE_LABELS: Record<string, Record<string, string>> = {
   status: {
@@ -474,7 +479,7 @@ export class AuditPresentationService {
 
       return [{
         key,
-        label: FIELD_LABELS[key] ?? this.humanizeIdentifier(key),
+        label: this.fieldLabel(key),
         before: beforeValue,
         after: afterValue,
       }];
@@ -507,7 +512,7 @@ export class AuditPresentationService {
 
       return [{
         key,
-        label: FIELD_LABELS[key] ?? this.humanizeIdentifier(key),
+        label: this.fieldLabel(key),
         before: this.safeChangeValue(key, rawChange[beforeKey]),
         after: this.safeChangeValue(key, rawChange[afterKey]),
       }];
@@ -597,6 +602,23 @@ export class AuditPresentationService {
     return text ? `${text[0].toUpperCase()}${text.slice(1)}` : 'Неизвестно';
   }
 
+  private fieldLabel(key: string): string {
+    const directLabel = FIELD_LABELS[key];
+    if (directLabel) {
+      return directLabel;
+    }
+
+    const customField = this.customDataField(key);
+    return customField
+      ? FIELD_LABELS[customField] ?? 'Дополнительное поле'
+      : this.humanizeIdentifier(key);
+  }
+
+  private customDataField(key: string): string | null {
+    const match = /^(?:custom_data|customData)[._](.+)$/.exec(key);
+    return match?.[1]?.trim() || null;
+  }
+
   private toCamelCase(parts: string[]): string {
     return parts
       .map((part, index) =>
@@ -634,6 +656,11 @@ export class AuditPresentationService {
       return null;
     }
 
+    const listValue = this.safeListChangeValue(key, safe);
+    if (listValue !== undefined) {
+      return listValue;
+    }
+
     const normalizedKey = key
       .replace(/([a-zа-я0-9])([A-ZА-Я])/g, '$1.$2')
       .split(/[._:\-\s]+/)
@@ -643,6 +670,36 @@ export class AuditPresentationService {
     return normalizedKey
       ? ENUM_VALUE_LABELS[normalizedKey]?.[safe.toLowerCase()] ?? safe
       : safe;
+  }
+
+  private safeListChangeValue(
+    key: string,
+    value: string,
+  ): string | null | undefined {
+    const field = this.customDataField(key) ?? key;
+    if (!CUSTOM_DATA_LIST_FIELDS.has(field) || !value.trim().startsWith('[')) {
+      return undefined;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (!Array.isArray(parsed)) {
+        return null;
+      }
+      if (parsed.some((item) =>
+        item !== null
+        && !['string', 'number', 'boolean'].includes(typeof item),
+      )) {
+        return null;
+      }
+
+      const items = parsed
+        .map((item) => this.safeValue(item)?.trim() ?? '')
+        .filter(Boolean);
+      return items.length > 0 ? items.join(', ') : null;
+    } catch {
+      return null;
+    }
   }
 
   private safeValue(value: unknown): string | null {
