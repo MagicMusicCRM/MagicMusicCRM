@@ -63,6 +63,9 @@ text.
   for example `Контактных лиц: 1 → 2`.
 - Business references use a stored display name when the producer has one.
   Otherwise the event states that the field changed without showing an ID.
+- A changed-only fact keeps `before` and `after` empty in the compatible
+  response contract; the shared Flutter card renders one `Изменено` line
+  instead of two misleading `Не указано` lines.
 - UUIDs, hashes, fingerprints, version counters, session identifiers, and
   other technical-only fields never enter `AuditPresentationChange`.
 - A configured field uses its stored label snapshot. A known legacy field uses
@@ -70,7 +73,8 @@ text.
   `Дополнительное поле`; its Latin identifier and raw JSON are not shown.
 
 The same output continues to feed both the client-card history and Analytics
-journal, so Flutter performs no secondary localization.
+journal. Flutter performs no secondary key/value localization; it only applies
+the shared compact layout for changed-only facts.
 
 ## Data flow
 
