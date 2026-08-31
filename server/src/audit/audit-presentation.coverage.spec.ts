@@ -19,8 +19,13 @@ interface AuditContractInventory {
   actions: Set<string>;
   entityTypes: Set<string>;
   presentedFields: Set<string>;
-  hintedFields: Set<string>;
+  fieldOccurrences: AuditFieldOccurrence[];
   unresolvedActions: string[];
+}
+
+interface AuditFieldOccurrence {
+  field: string;
+  hinted: boolean;
 }
 
 interface AuditProducerFixture {
@@ -643,7 +648,7 @@ function auditMetadataFields(
   audit: ResolvedAuditObject,
   checker: ts.TypeChecker,
   callSites: CallSites,
-): { fields: string[]; hintedFields: string[] } {
+): AuditFieldOccurrence[] {
   const metadataExpression = objectPropertyExpression(
     audit.node,
     'metadata',
@@ -651,9 +656,8 @@ function auditMetadataFields(
     callSites,
     audit.bindings,
   );
-  if (!metadataExpression) return { fields: [], hintedFields: [] };
-  const fields: string[] = [];
-  const hintedFields: string[] = [];
+  if (!metadataExpression) return [];
+  const occurrences: AuditFieldOccurrence[] = [];
   for (const metadata of resolveAuditObjects(
     metadataExpression,
     checker,
@@ -699,7 +703,6 @@ function auditMetadataFields(
         const expanded = fieldExpression
           ? expandPotentialStringExpression(fieldExpression, checker, change.bindings) ?? []
           : [];
-        fields.push(...expanded);
         const labelExpression = objectPropertyExpression(
           change.node,
           'label',
@@ -730,17 +733,32 @@ function auditMetadataFields(
         const displayModes = displayModeExpression
           ? expandStaticHintExpression(displayModeExpression, checker, change.bindings)
           : null;
-        if (
+        const hinted = Boolean(
           labels?.every((label) => label.trim().length > 0)
           && valueTypes?.every((valueType) => HINT_VALUE_TYPES.has(valueType))
           && displayModes?.every((displayMode) => HINT_DISPLAY_MODES.has(displayMode))
-        ) {
-          hintedFields.push(...expanded);
-        }
+        );
+        occurrences.push(...expanded.map((field) => ({ field, hinted })));
       }
     }
   }
-  return { fields, hintedFields };
+  return occurrences;
+}
+
+function diffEntityFieldNames(
+  call: ts.CallExpression,
+  checker: ts.TypeChecker,
+  callSites: CallSites,
+): string[] {
+  if (!ts.isIdentifier(call.expression) || call.expression.text !== 'diffEntityFields') {
+    return [];
+  }
+  const fields = call.arguments[2];
+  if (!fields) return [];
+  return resolveArrayElements(fields, checker, callSites, new Set(), new Map())
+    .flatMap((element) =>
+      expandPotentialStringExpression(element, checker, new Map()) ?? [],
+    );
 }
 
 function productionAuditContract(sourceRoot: string): AuditContractInventory {
@@ -777,14 +795,21 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
   const actions = new Set<string>();
   const entityTypes = new Set<string>();
   const presentedFields = new Set<string>();
-  const hintedFields = new Set<string>();
+  const fieldOccurrences: AuditFieldOccurrence[] = [];
   const unresolvedActions: string[] = [];
+  const recordOccurrence = (occurrence: AuditFieldOccurrence) => {
+    presentedFields.add(occurrence.field);
+    fieldOccurrences.push(occurrence);
+  };
 
   for (const source of program.getSourceFiles()) {
     const sourcePath = resolve(source.fileName).replaceAll('\\', '/').toLowerCase();
     if (!productionPaths.has(sourcePath)) continue;
     const visit = (node: ts.Node) => {
       if (ts.isCallExpression(node)) {
+        for (const field of diffEntityFieldNames(node, checker, callSites)) {
+          recordOccurrence({ field, hinted: false });
+        }
         for (const audit of auditObjectsForCall(node, checker, callSites)) {
           const actionExpression = objectPropertyExpression(
             audit.node,
@@ -817,15 +842,20 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
             : []) {
             entityTypes.add(entityType);
           }
+          const metadataOccurrences = auditMetadataFields(audit, checker, callSites);
+          const metadataFields = new Set(
+            metadataOccurrences.map((occurrence) => occurrence.field),
+          );
           for (const field of [
             ...auditRefFields(audit, 'beforeRef', checker, callSites),
             ...auditRefFields(audit, 'afterRef', checker, callSites),
           ]) {
-            presentedFields.add(field);
+            if (metadataFields.has(field)) continue;
+            recordOccurrence({ field, hinted: false });
           }
-          const metadata = auditMetadataFields(audit, checker, callSites);
-          for (const field of metadata.fields) presentedFields.add(field);
-          for (const field of metadata.hintedFields) hintedFields.add(field);
+          for (const occurrence of metadataOccurrences) {
+            recordOccurrence(occurrence);
+          }
         }
       }
       ts.forEachChild(node, visit);
@@ -835,9 +865,11 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
   for (const fixture of NON_AST_AUDIT_PRODUCER_FIXTURES) {
     fixture.actions.forEach((action) => actions.add(action));
     fixture.entityTypes.forEach((entityType) => entityTypes.add(entityType));
-    fixture.presentedFields.forEach((field) => presentedFields.add(field));
+    fixture.presentedFields.forEach((field) =>
+      recordOccurrence({ field, hinted: false }),
+    );
   }
-  return { actions, entityTypes, presentedFields, hintedFields, unresolvedActions };
+  return { actions, entityTypes, presentedFields, fieldOccurrences, unresolvedActions };
 }
 
 function fixtureAuditContract(source: string): AuditContractInventory {
@@ -938,7 +970,71 @@ describe('Audit presentation production coverage', () => {
     `);
 
     expect(inventory.presentedFields).toContain('arrayHintField');
-    expect(inventory.hintedFields).toContain('arrayHintField');
+    expect(inventory.fieldOccurrences).toContainEqual({
+      field: 'arrayHintField',
+      hinted: true,
+    });
+  });
+
+  it('classifies duplicate field names per producer occurrence', () => {
+    const inventory = fixtureAuditContract(`
+      class AuditService { record(_input: unknown): void {} }
+      const auditService = new AuditService();
+      auditService.record({
+        action: 'crm.fixture_duplicate_occurrence',
+        entityType: 'fixture',
+        metadata: {
+          changes: [
+            {
+              field: 'duplicateOccurrenceField',
+              from: 'До',
+              to: 'После',
+              label: 'Надёжная подпись',
+              valueType: 'text',
+              displayMode: 'values',
+            },
+            {
+              field: 'duplicateOccurrenceField',
+              from: 'До',
+              to: 'После',
+            },
+          ],
+        },
+      });
+    `);
+    const occurrences = inventory.fieldOccurrences.filter(
+      (occurrence) => occurrence.field === 'duplicateOccurrenceField',
+    );
+
+    expect(occurrences).toEqual([
+      { field: 'duplicateOccurrenceField', hinted: true },
+      { field: 'duplicateOccurrenceField', hinted: false },
+    ]);
+  });
+
+  it('inventories static audited-field arrays passed to diffEntityFields', () => {
+    const inventory = fixtureAuditContract(`
+      function diffEntityFields(
+        _before: Record<string, unknown>,
+        _after: Record<string, unknown>,
+        _fields: string[],
+      ): unknown[] { return []; }
+      const LEAD_AUDITED_FIELDS = ['status_id', 'first_name', 'assigned_to'];
+      const STUDENT_AUDITED_FIELDS = ['status', 'phone', 'email'];
+      diffEntityFields({}, {}, LEAD_AUDITED_FIELDS);
+      diffEntityFields({}, {}, STUDENT_AUDITED_FIELDS);
+    `);
+
+    const expectedFields = [
+      'assigned_to',
+      'email',
+      'first_name',
+      'phone',
+      'status',
+      'status_id',
+    ];
+    expect(expectedFields.filter((field) => !inventory.presentedFields.has(field)))
+      .toEqual([]);
   });
 
   it('accepts only statically resolved valid literal hint triples', () => {
@@ -988,7 +1084,10 @@ describe('Audit presentation production coverage', () => {
       });
     `);
 
-    expect([...inventory.hintedFields].sort()).toEqual(['validHintField']);
+    expect(inventory.fieldOccurrences
+      .filter((occurrence) => occurrence.hinted)
+      .map((occurrence) => occurrence.field)
+      .sort()).toEqual(['validHintField']);
     expect([
       'dynamicLabelField',
       'emptyLabelField',
@@ -1059,7 +1158,10 @@ describe('Audit presentation production coverage', () => {
       });
     `);
 
-    expect([...inventory.hintedFields].sort()).toEqual(['staticControlField']);
+    expect(inventory.fieldOccurrences
+      .filter((occurrence) => occurrence.hinted)
+      .map((occurrence) => occurrence.field)
+      .sort()).toEqual(['staticControlField']);
     expect([
       'dynamicUnionModeField',
       'mutableUnionModeField',
@@ -1138,7 +1240,10 @@ describe('Audit presentation production coverage', () => {
       recordRuntimeMode(runtimeFlag ? 'values' : 'changed_only');
     `);
 
-    expect([...inventory.hintedFields].sort()).toEqual(['staticConditionalField']);
+    expect(inventory.fieldOccurrences
+      .filter((occurrence) => occurrence.hinted)
+      .map((occurrence) => occurrence.field)
+      .sort()).toEqual(['staticConditionalField']);
     expect([
       'runtimeConditionalLabelField',
       'runtimeConditionalValueTypeField',
@@ -1199,23 +1304,24 @@ describe('Audit presentation production coverage', () => {
     expect(potentialActions.filter((action) => !inventory.actions.has(action))).toEqual([]);
     expect(potentialEntityTypes.filter((type) => !inventory.entityTypes.has(type))).toEqual([]);
     expect(potentialFields.filter((field) => !inventory.presentedFields.has(field))).toEqual([]);
-    expect(potentialFields.filter((field) => inventory.hintedFields.has(field))).toEqual([]);
+    expect(potentialFields.filter((field) =>
+      inventory.fieldOccurrences.some((occurrence) =>
+        occurrence.field === field && occurrence.hinted,
+      ),
+    )).toEqual([]);
     expect(inventory.unresolvedActions).toEqual([]);
   });
 
   it('classifies every statically known presented field through policy or immutable hints', () => {
     const inventory = productionAuditContract(sourceRoot);
-    const compatibilityLabels = registryKeys(presenterSource, 'ACTION_FIELD_LABELS');
-    const unclassified = [...inventory.presentedFields].filter((field) => {
-      if (
-        inventory.hintedFields.has(field)
-        || compatibilityLabels.has(field)
-      ) return false;
+    const unclassified = inventory.fieldOccurrences.filter((occurrence) => {
+      if (occurrence.hinted) return false;
+      const { field } = occurrence;
       const presented = presentAuditFieldChange({ field, from: 'До', to: 'После' });
       return presented !== null
         && presented.label === 'Дополнительное поле'
         && (presented.before !== null || presented.after !== null);
-    });
+    }).map((occurrence) => occurrence.field);
 
     const expectedFixtureFields = [
       'closedBy',

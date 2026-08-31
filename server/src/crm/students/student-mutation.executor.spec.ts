@@ -81,6 +81,31 @@ describe("StudentMutationExecutor", () => {
         ]);
         return { rows: [student] };
       }
+      if (
+        sql.includes("from app.client_custom_field_definitions") &&
+        sql.includes("for update")
+      ) {
+        events.push("definition-lock");
+        expect(params).toEqual(["student", [definitionId]]);
+        return {
+          rows: [{
+            id: definitionId,
+            field_key: "priority",
+            label: "Приоритет",
+            value_type: "text",
+            is_required: false,
+            is_active: true,
+            is_system: false,
+            options: [],
+            version: 1,
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-01-01T00:00:00.000Z",
+            deleted_at: null,
+            visible_on_lead: true,
+            visible_on_student: true,
+          }],
+        };
+      }
       if (sql.includes("app.resolve_client_id")) {
         events.push("typed-resolve");
         return { rows: [{ client_id: "client-a" }] };
@@ -137,6 +162,7 @@ describe("StudentMutationExecutor", () => {
       customFields: [
         {
           definitionId,
+          definitionVersion: 1,
           fieldKey: "priority",
           label: "Приоритет",
           valueType: "text",
@@ -159,6 +185,7 @@ describe("StudentMutationExecutor", () => {
       "duplicate-recheck",
       "responsible-lock",
       "insert-student",
+      "definition-lock",
       "typed-resolve",
       "typed-save",
       "transaction-end",
@@ -226,6 +253,31 @@ describe("StudentMutationExecutor", () => {
         events.push("typed-resolve");
         return { rows: [{ client_id: "client-a" }] };
       }
+      if (
+        sql.includes("from app.client_custom_field_definitions") &&
+        sql.includes("for update")
+      ) {
+        events.push("definition-lock");
+        expect(params).toEqual(["student", [definitionId]]);
+        return {
+          rows: [{
+            id: definitionId,
+            field_key: "instrument",
+            label: "Любимый инструмент",
+            value_type: "select",
+            is_required: false,
+            is_active: true,
+            is_system: false,
+            options: ["PIANO"],
+            version: 1,
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-01-01T00:00:00.000Z",
+            deleted_at: null,
+            visible_on_lead: true,
+            visible_on_student: true,
+          }],
+        };
+      }
       if (sql.includes("from app.client_custom_field_values value")
         && sql.includes("join app.client_custom_field_definitions")) {
         events.push("typed-snapshot");
@@ -245,7 +297,11 @@ describe("StudentMutationExecutor", () => {
       }
       if (sql.includes("delete from app.client_custom_field_values")) {
         events.push("typed-delete");
-        expect(params).toEqual(["client-a", []]);
+        expect(params).toEqual(["client-a", [definitionId]]);
+        return { rows: [] };
+      }
+      if (sql.includes("insert into app.client_custom_field_values")) {
+        events.push("typed-save");
         return { rows: [] };
       }
       if (sql.includes("insert into app.student_status_history")) {
@@ -297,7 +353,20 @@ describe("StudentMutationExecutor", () => {
       branchId,
       clearResponsible: false,
       sourceId,
-      customFields: [],
+      customFields: [
+        {
+          definitionId,
+          definitionVersion: 1,
+          fieldKey: "instrument",
+          label: "Любимый инструмент",
+          valueType: "select",
+          valueText: "DRUMS",
+          valueNumber: null,
+          valueBoolean: null,
+          valueDate: null,
+          valueJson: null,
+        },
+      ],
     };
 
     await expect(executor.update(command)).resolves.toEqual({
@@ -309,7 +378,7 @@ describe("StudentMutationExecutor", () => {
         valueType: "text",
         displayMode: "values",
         from: "PIANO",
-        to: null,
+        to: "DRUMS",
       }],
     });
 
@@ -322,9 +391,11 @@ describe("StudentMutationExecutor", () => {
       "responsible-lock",
       "update-student",
       "typed-resolve",
+      "definition-lock",
       "typed-snapshot",
       "typed-delete",
       "typed-resolve",
+      "typed-save",
       "status-history",
       "transaction-end",
     ]);

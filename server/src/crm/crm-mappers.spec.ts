@@ -225,7 +225,7 @@ describe("toTimelineDto — audit rows", () => {
       ),
     );
 
-    expect(dto.title).toBe("Правка полей");
+    expect(dto.title).toBe("Лид изменён");
     expect(dto.body).toBe(
       "Телефон: +79161234567 → +79990000000\nУровень: A1 → A2",
     );
@@ -248,7 +248,7 @@ describe("toTimelineDto — audit rows", () => {
       auditRow(JSON.stringify({
         changes: [
           { field: "assigned_to", from: oldUuid, to: newUuid },
-          { field: "custom_data.level", from: null, to: hash },
+          { field: "legacyHash", from: null, to: hash },
           {
             field: "custom_data.contactPersons",
             from: JSON.stringify([{ name: "Анна", phone: contactPhone }]),
@@ -263,7 +263,6 @@ describe("toTimelineDto — audit rows", () => {
 
     expect(dto.body).toBe(
       "Ответственный: изменено\n" +
-      "Уровень: изменено\n" +
       "Контактные лица: Контактных лиц: 1 → Контактных лиц: 2",
     );
     expect(dto.body).not.toContain(oldUuid);
@@ -299,18 +298,54 @@ describe("toTimelineDto — audit rows", () => {
     );
   });
 
+  it("uses the shared action title and compatibility change aliases", () => {
+    const dto = toTimelineDto({
+      ...auditRow(JSON.stringify({
+        changes: [
+          { key: "direction", before: "Вокал", after: "Фортепиано" },
+        ],
+      })),
+      title: "crm.student_updated",
+      status: "student",
+    });
+
+    expect(dto.title).toBe("Направление изменено");
+    expect(dto.body).toBe("Направление: Вокал → Фортепиано");
+  });
+
+  it("skips malformed historical changes and keeps the valid entries", () => {
+    const dto = toTimelineDto({
+      ...auditRow(JSON.stringify({
+        changes: [
+          null,
+          "broken",
+          {},
+          { field: 42, from: "До", to: "После" },
+          { field: "phone", from: "+70000000000" },
+          { key: "custom_data.noEmail", before: false, after: true },
+        ],
+      })),
+      title: "crm.student_updated",
+      status: "student",
+    });
+
+    expect(dto.title).toBe("Данные ученика изменены");
+    expect(dto.body).toBe("Нет email: Нет → Да");
+  });
+
   it("drops the body of an audited action that carries no diff", () => {
     const dto = toTimelineDto(auditRow(JSON.stringify({})));
 
     // Otherwise a create/delete event renders as a literal "{}" in the card.
-    expect(dto.title).toBe("crm.lead_updated");
+    expect(dto.title).toBe("Лид изменён");
     expect(dto.body).toBeNull();
   });
 
-  it("leaves a non-json body alone rather than throwing", () => {
+  it("does not expose malformed audit metadata", () => {
     const dto = toTimelineDto(auditRow("not json at all"));
 
-    expect(dto.body).toBe("not json at all");
+    expect(dto.title).toBe("Лид изменён");
+    expect(dto.body).toBeNull();
   });
 
   it("leaves non-audit rows untouched", () => {

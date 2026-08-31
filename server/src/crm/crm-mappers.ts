@@ -12,10 +12,8 @@
  * duplicated and are consolidated here for the same reason.
  */
 
-import {
-  createSafeAuditChange,
-  presentAuditFieldChange,
-} from "../audit/audit-field-presentation.policy";
+import { createSafeAuditChange } from "../audit/audit-field-presentation.policy";
+import { AuditPresentationService } from "../audit/audit-presentation.service";
 import type { AuditFieldChangeInput } from "../audit/audit-presentation.types";
 
 export interface LessonRow {
@@ -258,36 +256,53 @@ export function diffEntityFields(
 }
 
 /**
- * Turns an audit row into something a human reads. The timeline hands us
- * metadata as raw JSON text in `body`; rendering that verbatim in the client
- * card would put `{"changes":[{"field":"phone",...}]}` on screen.
+ * Uses the same presenter as Analytics for audit action titles and fields.
+ * Timeline metadata arrives as raw JSON text in `body`, so malformed legacy
+ * rows are validated and ignored instead of reaching the client card.
  */
+const timelineAuditPresenter = new AuditPresentationService();
+
 function describeAuditRow(row: TimelineRow): { title: string; body: string | null } {
-  const fallbackTitle = row.title;
-  let parsed: unknown = null;
+  let metadata: Record<string, unknown> | null = null;
   try {
-    parsed = row.body ? JSON.parse(row.body) : null;
-  } catch {
-    // Not JSON (or truncated) — leave the row as the raw action name.
-    return { title: fallbackTitle, body: row.body };
-  }
-  const changes = (parsed as { changes?: AuditFieldChangeInput[] } | null)?.changes;
-  if (!Array.isArray(changes) || changes.length === 0) {
-    // An audited action with no diff (created/deleted) — keep the action name,
-    // drop the empty jsonb so it does not render as "{}".
-    return { title: fallbackTitle, body: null };
-  }
-  const lines = changes.flatMap((change) => {
-    const presented = presentAuditFieldChange(change);
-    if (!presented) return [];
-    if (presented.before === null && presented.after === null) {
-      return [`${presented.label}: изменено`];
+    const parsed: unknown = row.body ? JSON.parse(row.body) : null;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      metadata = parsed as Record<string, unknown>;
     }
-    return [
-      `${presented.label}: ${presented.before ?? "—"} → ${presented.after ?? "—"}`,
-    ];
+  } catch {
+    // Historical metadata is append-only. A malformed row must not break the
+    // whole timeline or leak its raw storage representation into the UI.
+  }
+
+  const actorName =
+    `${row.actor_first_name ?? ""} ${row.actor_last_name ?? ""}`.trim();
+  const presented = timelineAuditPresenter.present({
+    id: row.id,
+    actionKey: row.title,
+    actor: {
+      id: row.actor_user_id,
+      name: actorName || "Системный процесс",
+      role: null,
+    },
+    target: {
+      type: row.status ?? "client",
+      id: null,
+      displayName: null,
+    },
+    metadata,
+    beforeRef: null,
+    afterRef: null,
+    reason: null,
+    reasonText: null,
+    occurredAt: row.occurred_at,
   });
-  return { title: "Правка полей", body: lines.join("\n") };
+  const lines = presented.changes.map((change) => {
+    if (change.before === null && change.after === null) {
+      return `${change.label}: изменено`;
+    }
+    return `${change.label}: ${change.before ?? "—"} → ${change.after ?? "—"}`;
+  });
+  return { title: presented.title, body: lines.length > 0 ? lines.join("\n") : null };
 }
 
 export function toTimelineDto(row: TimelineRow) {

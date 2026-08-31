@@ -121,6 +121,7 @@ describe("ClientWriteValidator.validateCustomFields", () => {
 
     expect(result.values[0]).toMatchObject({
       definitionId: "field-1",
+      definitionVersion: 1,
       fieldKey: "instrument",
       label: "Любимый инструмент",
       valueType: "select",

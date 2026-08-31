@@ -20,8 +20,9 @@ const VALUE_TYPES = new Set<AuditFieldValueType>([
 const DISPLAY_MODES = new Set<AuditChangeDisplayMode>([
   'values', 'changed_only', 'count', 'hidden',
 ]);
-const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const HASH_OR_SESSION_VALUE = /^(?:[a-f0-9]{32,}|(?:sha(?:1|224|256|384|512)|session(?:id)?|token|hash|fingerprint)[_:\- ])/i;
+const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HASH_OR_SESSION_VALUE = /^(?:[a-f0-9]{16,}|(?:sha(?:1|224|256|384|512)|session(?:id)?|token|hash|fingerprint)[_:\- ])/i;
+const OPAQUE_ID_VALUE = /^(?:[0-9a-hjkmnp-tv-z]{26}|[a-z][a-z0-9]{1,31}[_:\-][a-z0-9_-]{16,}|(?=[a-z0-9_-]{20,32}$)(?=[a-z0-9_-]*[a-z])(?=[a-z0-9_-]*\d)[a-z0-9_-]+)$/i;
 
 const CORE_FIELD_ALIASES: Record<string, AuditFieldPresentationPolicy> = {
   first_name: { label: 'Имя', valueType: 'text', displayMode: 'values' },
@@ -58,6 +59,7 @@ export const AUDIT_FIELD_PRESENTATION_POLICIES = {
   kind: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
   lifecycle: { label: 'Статус', valueType: 'text', displayMode: 'changed_only' },
   lifecycleState: { label: 'Статус', valueType: 'text', displayMode: 'changed_only' },
+  name: { label: 'Имя', valueType: 'text', displayMode: 'values' },
   personType: { label: 'Тип персоны', valueType: 'text', displayMode: 'changed_only' },
   state: { label: 'Статус', valueType: 'text', displayMode: 'changed_only' },
   value: { label: 'Значение', valueType: 'text', displayMode: 'changed_only' },
@@ -218,7 +220,24 @@ function hasUnsupportedValue(value: unknown, valueType: AuditFieldValueType): bo
 function unsafeIdentifierValue(value: unknown): boolean {
   const scalar = scalarValue(value);
   return typeof scalar === 'string'
-    && (UUID_VALUE.test(scalar) || HASH_OR_SESSION_VALUE.test(scalar));
+    && (
+      UUID_VALUE.test(scalar)
+      || HASH_OR_SESSION_VALUE.test(scalar)
+      || OPAQUE_ID_VALUE.test(scalar)
+    );
+}
+
+function isTrustedBusinessScalar(
+  input: AuditFieldChangeInput,
+  policy: AuditFieldPresentationPolicy,
+): boolean {
+  if (policy.valueType !== 'text' || policy.displayMode !== 'values') return false;
+  const catalogKey = customDataKey(input.field);
+  if (catalogKey && findDefaultCrmField(catalogKey)) return true;
+  return /^(?:customFields)[._][^.]+$/.test(input.field)
+    && validSnapshot(input)
+    && input.valueType === 'text'
+    && input.displayMode === 'values';
 }
 
 function validIsoDate(value: string): RegExpExecArray | null {
@@ -317,7 +336,9 @@ export function createSafeAuditChange(
     };
   }
 
-  if (unsafeIdentifierValue(input.from) || unsafeIdentifierValue(input.to)) {
+  const trustedBusinessScalar = isTrustedBusinessScalar(input, policy);
+  if (!trustedBusinessScalar
+    && (unsafeIdentifierValue(input.from) || unsafeIdentifierValue(input.to))) {
     return {
       field: input.field,
       from: null,
@@ -328,7 +349,9 @@ export function createSafeAuditChange(
     };
   }
 
-  if (hasUnsupportedValue(input.from, policy.valueType) || hasUnsupportedValue(input.to, policy.valueType)) {
+  if (!trustedBusinessScalar
+    && (hasUnsupportedValue(input.from, policy.valueType)
+      || hasUnsupportedValue(input.to, policy.valueType))) {
     return {
       field: input.field,
       from: null,
@@ -370,13 +393,17 @@ export function presentAuditFieldChange(
     };
   }
 
-  if (unsafeIdentifierValue(input.from) || unsafeIdentifierValue(input.to)) {
+  const trustedBusinessScalar = isTrustedBusinessScalar(input, policy);
+  if (!trustedBusinessScalar
+    && (unsafeIdentifierValue(input.from) || unsafeIdentifierValue(input.to))) {
     return { key: input.field, label: policy.label, before: null, after: null };
   }
 
   const before = formatValue(input.from, policy.valueType);
   const after = formatValue(input.to, policy.valueType);
-  if (hasUnsupportedValue(input.from, policy.valueType) || hasUnsupportedValue(input.to, policy.valueType)) {
+  if (!trustedBusinessScalar
+    && (hasUnsupportedValue(input.from, policy.valueType)
+      || hasUnsupportedValue(input.to, policy.valueType))) {
     return { key: input.field, label: policy.label, before: null, after: null };
   }
   return { key: input.field, label: policy.label, before, after };

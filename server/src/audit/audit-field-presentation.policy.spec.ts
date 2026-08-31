@@ -4,6 +4,15 @@ import {
 } from './audit-field-presentation.policy';
 
 describe('audit field presentation policy', () => {
+  it('classifies the producer snapshot name without a presenter fallback label', () => {
+    expect(presentAuditFieldChange({ field: 'name', from: 'До', to: 'После' })).toEqual({
+      key: 'name',
+      label: 'Имя',
+      before: 'До',
+      after: 'После',
+    });
+  });
+
   it.each(['DRUMS', 'GUITAR', 'PIANO', 'VOCAL', 'Авторское направление №1'])(
     'preserves director value %s exactly',
     (value) => {
@@ -22,6 +31,56 @@ describe('audit field presentation policy', () => {
       from: null,
       to: value,
     })?.after).toBe(value);
+  });
+
+  it.each([
+    '550e8400-e29b-41d4-a716-446655440000',
+    '00000000-0000-0000-0000-000000000000',
+    'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    '{VIP}',
+    '{DRUMS}',
+    '["PIANO"]',
+    'usr_01HZX0NW8M3V0Y8M3V0Y8M3V0Y',
+  ])('preserves trusted catalog scalar %s exactly', (value) => {
+    const input = {
+      field: 'custom_data.discipline',
+      from: null,
+      to: value,
+    };
+
+    expect(createSafeAuditChange(input)).toMatchObject({
+      from: null,
+      to: value,
+      displayMode: 'values',
+    });
+    expect(presentAuditFieldChange(input)?.after).toBe(value);
+  });
+
+  it.each([
+    '550e8400-e29b-41d4-a716-446655440000',
+    '00000000-0000-0000-0000-000000000000',
+    'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    '{VIP}',
+    '{DRUMS}',
+    '["PIANO"]',
+    'usr_01HZX0NW8M3V0Y8M3V0Y8M3V0Y',
+  ])('preserves trusted typed custom-field scalar %s exactly', (value) => {
+    const input = {
+      field: 'customFields.directorField',
+      from: null,
+      to: value,
+      label: 'Поле директора',
+      valueType: 'text' as const,
+      displayMode: 'values' as const,
+    };
+
+    expect(createSafeAuditChange(input)).toEqual(input);
+    expect(presentAuditFieldChange(input)).toEqual({
+      key: 'customFields.directorField',
+      label: 'Поле директора',
+      before: null,
+      after: value,
+    });
   });
 
   it.each([
@@ -251,8 +310,14 @@ describe('audit field presentation policy', () => {
 
   it.each([
     '550e8400-e29b-41d4-a716-446655440000',
+    '00000000-0000-0000-0000-000000000000',
+    'ffffffff-ffff-ffff-ffff-ffffffffffff',
     'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     'sessionId-550e8400-e29b-41d4-a716-446655440000',
+    'usr_01HZX0NW8M3V0Y8M3V0Y8M3V0Y',
+    '01HZX0NW8M3V0Y8M3V0Y8M3V0Y',
+    '507f1f77bcf86cd799439011',
+    'clh3am7e80000jz08q4r4e0f1',
   ])('does not treat unsafe reference value %s as a display name', (value) => {
     const input = {
       field: 'assigned_to',
@@ -278,9 +343,15 @@ describe('audit field presentation policy', () => {
 
   it.each([
     '550e8400-e29b-41d4-a716-446655440000',
+    '00000000-0000-0000-0000-000000000000',
+    'ffffffff-ffff-ffff-ffff-ffffffffffff',
     'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     'sessionId-550e8400-e29b-41d4-a716-446655440000',
     'fingerprint:device-session-42',
+    'usr_01HZX0NW8M3V0Y8M3V0Y8M3V0Y',
+    '01HZX0NW8M3V0Y8M3V0Y8M3V0Y',
+    '507f1f77bcf86cd799439011',
+    'clh3am7e80000jz08q4r4e0f1',
   ])('suppresses unsafe unknown text value %s before storage', (value) => {
     const input = { field: 'owner', from: null, to: value };
 
@@ -296,9 +367,15 @@ describe('audit field presentation policy', () => {
 
   it.each([
     '550e8400-e29b-41d4-a716-446655440000',
+    '00000000-0000-0000-0000-000000000000',
+    'ffffffff-ffff-ffff-ffff-ffffffffffff',
     'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     'sessionId-550e8400-e29b-41d4-a716-446655440000',
     'fingerprint:device-session-42',
+    'usr_01HZX0NW8M3V0Y8M3V0Y8M3V0Y',
+    '01HZX0NW8M3V0Y8M3V0Y8M3V0Y',
+    '507f1f77bcf86cd799439011',
+    'clh3am7e80000jz08q4r4e0f1',
   ])('suppresses unsafe unknown text value %s during presentation', (value) => {
     const input = { field: 'owner', from: null, to: value };
 

@@ -216,6 +216,7 @@ export class ClientWriteValidator {
   ): TypedClientCustomFieldWrite {
     return {
       definitionId: definition.id,
+      definitionVersion: definition.version,
       fieldKey: definition.field_key,
       label: definition.label,
       valueType: definition.value_type,

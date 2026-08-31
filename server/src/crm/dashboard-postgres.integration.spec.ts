@@ -10,11 +10,18 @@ import { DashboardService } from './dashboard.service';
 const databaseUrl = process.env.V4_PLATFORM_TEST_DATABASE_URL
   ?? 'postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm';
 const parsedDatabaseUrl = new URL(databaseUrl);
-const testDatabaseName = parsedDatabaseUrl.pathname.replace(/^\//, '');
-if (
-  !new Set(['127.0.0.1', 'localhost', '[::1]']).has(parsedDatabaseUrl.hostname)
-  || (testDatabaseName !== 'magiccrm' && !testDatabaseName.toLowerCase().includes('test'))
-) {
+
+function isApprovedDashboardTestDatabase(url: URL): boolean {
+  const databaseName = url.pathname.replace(/^\//, '');
+  return new Set(['127.0.0.1', 'localhost', '[::1]']).has(url.hostname)
+    && (
+      databaseName === 'magiccrm'
+      || databaseName.toLowerCase().includes('test')
+      || /^magiccrm_v7_prodlike_audit_[0-9]{14}_[a-f0-9]{8}$/.test(databaseName)
+    );
+}
+
+if (!isApprovedDashboardTestDatabase(parsedDatabaseUrl)) {
   throw new Error('Dashboard activity tests require local PostgreSQL.');
 }
 
@@ -142,6 +149,25 @@ async function staleDashboardFixtureCleanup(client: PoolClient): Promise<Cleanup
     throw error;
   }
 }
+
+describe('dashboard PostgreSQL database guard', () => {
+  it.each([
+    'postgresql://user:pass@127.0.0.1:54329/magiccrm',
+    'postgresql://user:pass@localhost:54329/magiccrm_dashboard_test',
+    'postgresql://user:pass@127.0.0.1:54329/magiccrm_v7_prodlike_audit_20260831211734_23e8348b',
+  ])('accepts approved local database %s', (value) => {
+    expect(isApprovedDashboardTestDatabase(new URL(value))).toBe(true);
+  });
+
+  it.each([
+    'postgresql://user:pass@database.internal:54329/magiccrm_v7_prodlike_audit_20260831211734_23e8348b',
+    'postgresql://user:pass@127.0.0.1:54329/magiccrm_v7_prodlike_audit_2026083121173_23e8348b',
+    'postgresql://user:pass@127.0.0.1:54329/prefix_magiccrm_v7_prodlike_audit_20260831211734_23e8348b',
+    'postgresql://user:pass@127.0.0.1:54329/magiccrm_v7_prodlike_audit_20260831211734_23E8348B',
+  ])('rejects unapproved database %s', (value) => {
+    expect(isApprovedDashboardTestDatabase(new URL(value))).toBe(false);
+  });
+});
 
 describe('DashboardService activity journal (PostgreSQL)', () => {
   let pool: Pool;

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { isDeepStrictEqual } from "node:util";
 import { PoolClient } from "pg";
 import {
@@ -10,6 +10,7 @@ import type {
 } from "../../audit/audit-presentation.types";
 import { DatabaseService } from "../../db/database.service";
 import {
+  CLIENT_CUSTOM_VALUE_TYPES,
   ClientCustomValueType,
   ClientEntityType,
 } from "../dto/client-config.dto";
@@ -49,7 +50,7 @@ export interface ClientCustomFieldDefinitionRow {
 }
 
 export interface TypedClientCustomValue {
-  definitionId: string;
+  readonly definitionId: string;
   valueText: string | null;
   valueNumber: number | null;
   valueBoolean: boolean | null;
@@ -57,10 +58,15 @@ export interface TypedClientCustomValue {
   valueJson: unknown | null;
 }
 
-export interface TypedClientCustomFieldWrite extends TypedClientCustomValue {
-  fieldKey: string;
-  label: string;
-  valueType: ClientCustomValueType;
+interface TypedClientCustomFieldPresentation extends TypedClientCustomValue {
+  readonly fieldKey: string;
+  readonly label: string;
+  readonly valueType: ClientCustomValueType;
+}
+
+export interface TypedClientCustomFieldWrite
+  extends TypedClientCustomFieldPresentation {
+  readonly definitionVersion: number | string;
 }
 
 interface StoredTypedClientCustomValueRow {
@@ -79,7 +85,26 @@ export async function saveTypedClientValues(
   client: PoolClient,
   entityType: ClientEntityType,
   entityId: string,
-  values: TypedClientCustomValue[],
+  values: TypedClientCustomFieldWrite[],
+): Promise<void> {
+  const authoritativeValues = await lockAuthoritativeCustomFieldWrites(
+    client,
+    entityType,
+    values,
+  );
+  await insertTypedClientValues(
+    client,
+    entityType,
+    entityId,
+    authoritativeValues,
+  );
+}
+
+async function insertTypedClientValues(
+  client: PoolClient,
+  entityType: ClientEntityType,
+  entityId: string,
+  values: TypedClientCustomFieldWrite[],
 ): Promise<void> {
   const resolved = await client.query<{ client_id: string | null }>(
     `select app.resolve_client_id($1, $2) as client_id`,
@@ -142,6 +167,11 @@ export async function replaceTypedClientValues(
   );
   const clientId = resolved.rows[0]?.client_id;
   if (!clientId) throw new Error("Canonical Client identity was not found.");
+  const authoritativeValues = await lockAuthoritativeCustomFieldWrites(
+    client,
+    entityType,
+    values,
+  );
   const previous = await client.query<StoredTypedClientCustomValueRow>(
     `select value.definition_id, definition.field_key, definition.label,
        definition.value_type, value.value_text, value.value_number,
@@ -156,7 +186,9 @@ export async function replaceTypedClientValues(
      order by definition.field_key, definition.id`,
     [clientId],
   );
-  const definitionIds = values.map((value) => value.definitionId);
+  const definitionIds = authoritativeValues.map(
+    (value) => value.definitionId,
+  );
   await client.query(
     `delete from app.client_custom_field_values value
      using app.client_custom_field_definitions definition
@@ -167,8 +199,82 @@ export async function replaceTypedClientValues(
        and not (value.definition_id = any($2::uuid[]))`,
     [clientId, definitionIds],
   );
-  await saveTypedClientValues(client, entityType, entityId, values);
-  return diffTypedClientValues(previous.rows, values);
+  await insertTypedClientValues(
+    client,
+    entityType,
+    entityId,
+    authoritativeValues,
+  );
+  return diffTypedClientValues(previous.rows, authoritativeValues);
+}
+
+async function lockAuthoritativeCustomFieldWrites(
+  client: PoolClient,
+  entityType: ClientEntityType,
+  values: TypedClientCustomFieldWrite[],
+): Promise<TypedClientCustomFieldWrite[]> {
+  if (values.length === 0) return [];
+  const definitionIds = values.map((value) => value.definitionId);
+  const uniqueDefinitionIds = [...new Set(definitionIds)].sort();
+  if (uniqueDefinitionIds.length !== definitionIds.length) {
+    throw customFieldDefinitionConflict("customFields");
+  }
+  const locked = await client.query<ClientCustomFieldDefinitionRow>(
+    `select id, field_key, label, value_type, is_required,
+       is_active, is_system, options, version, created_at, updated_at,
+       deleted_at, visible_on_lead, visible_on_student
+     from app.client_custom_field_definitions
+     where $1::text in ('lead', 'student')
+       and id = any($2::uuid[])
+     order by id
+     for update`,
+    [entityType, uniqueDefinitionIds],
+  );
+  const byId = new Map(
+    locked.rows.map((definition) => [definition.id, definition]),
+  );
+  return values.map((value) => {
+    const definition = byId.get(value.definitionId);
+    const field = `customFields.${value.fieldKey}`;
+    if (!definition) throw customFieldDefinitionConflict(field);
+    const isVisible = entityType === "lead"
+      ? definition.visible_on_lead
+      : definition.visible_on_student;
+    if (
+      definition.is_system ||
+      !definition.is_active ||
+      definition.deleted_at !== null ||
+      !isVisible ||
+      !CLIENT_CUSTOM_VALUE_TYPES.includes(definition.value_type)
+    ) {
+      throw customFieldDefinitionConflict(field);
+    }
+    if (
+      definition.field_key !== value.fieldKey ||
+      definition.label !== value.label ||
+      definition.value_type !== value.valueType ||
+      String(definition.version) !== String(value.definitionVersion)
+    ) {
+      throw customFieldDefinitionConflict(field);
+    }
+    return {
+      ...value,
+      definitionId: definition.id,
+      definitionVersion: definition.version,
+      fieldKey: definition.field_key,
+      label: definition.label,
+      valueType: definition.value_type,
+    };
+  });
+}
+
+function customFieldDefinitionConflict(field: string): ConflictException {
+  return new ConflictException({
+    code: "CUSTOM_FIELD_DEFINITION_CHANGED",
+    field,
+    message:
+      "Состав дополнительных полей изменился. Обновите карточку и повторите сохранение.",
+  });
 }
 
 function diffTypedClientValues(
@@ -208,7 +314,7 @@ function diffTypedClientValues(
 
 function storedTypedValue(
   row: StoredTypedClientCustomValueRow,
-): TypedClientCustomFieldWrite {
+): TypedClientCustomFieldPresentation {
   return {
     definitionId: row.definition_id,
     fieldKey: row.field_key,
@@ -637,7 +743,7 @@ export class ClientConfigRepository {
     client: PoolClient,
     entityType: ClientEntityType,
     entityId: string,
-    values: TypedClientCustomValue[],
+    values: TypedClientCustomFieldWrite[],
   ): Promise<void> {
     await saveTypedClientValues(client, entityType, entityId, values);
   }

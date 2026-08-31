@@ -28,6 +28,7 @@ function typedWrite(
 ): TypedClientCustomFieldWrite {
   return {
     definitionId: typedDefinitionId,
+    definitionVersion: 1,
     fieldKey: "instrument",
     label: "Любимый инструмент",
     valueType,
@@ -144,6 +145,29 @@ describe("replaceTypedClientValues", () => {
           return { rows: [{ client_id: "client-a" }] };
         }
         if (
+          sql.includes("from app.client_custom_field_definitions") &&
+          sql.includes("for update")
+        ) {
+          return {
+            rows: [{
+              id: typedDefinitionId,
+              field_key: "instrument",
+              label: "Любимый инструмент",
+              value_type: writes[0]?.valueType ?? oldRows[0]?.value_type ?? "text",
+              is_required: false,
+              is_active: true,
+              is_system: false,
+              options: [],
+              version: 1,
+              created_at: "2026-01-01T00:00:00.000Z",
+              updated_at: "2026-01-01T00:00:00.000Z",
+              deleted_at: null,
+              visible_on_lead: true,
+              visible_on_student: true,
+            }],
+          };
+        }
+        if (
           sql.includes("from app.client_custom_field_values value") &&
           sql.includes("join app.client_custom_field_definitions")
         ) {
@@ -168,6 +192,61 @@ describe("replaceTypedClientValues", () => {
       ).resolves.toEqual(expected);
     },
   );
+
+  it("rejects a lead write when its validated definition changed before the transaction", async () => {
+    const events: string[] = [];
+    const query = jest.fn(async (text: string) => {
+      const sql = String(text);
+      if (sql.includes("app.resolve_client_id")) {
+        events.push("typed-resolve");
+        return { rows: [{ client_id: "client-a" }] };
+      }
+      if (
+        sql.includes("from app.client_custom_field_definitions") &&
+        sql.includes("for update")
+      ) {
+        events.push("definition-lock");
+        return {
+          rows: [{
+            id: typedDefinitionId,
+            field_key: "instrument",
+            label: "Переименованное поле",
+            value_type: "select",
+            is_required: false,
+            is_active: true,
+            is_system: false,
+            options: ["DRUMS"],
+            version: 2,
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-08-31T20:00:00.000Z",
+            deleted_at: null,
+            visible_on_lead: true,
+            visible_on_student: true,
+          }],
+        };
+      }
+      if (sql.includes("app.client_custom_field_values")) {
+        events.push("typed-mutation");
+        return { rows: [] };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+
+    await expect(
+      replaceTypedClientValues(
+        { query } as unknown as PoolClient,
+        "lead",
+        "lead-a",
+        [typedWrite("select", { valueText: "DRUMS" })],
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "CUSTOM_FIELD_DEFINITION_CHANGED",
+        field: "customFields.instrument",
+      }),
+    });
+    expect(events).toEqual(["typed-resolve", "definition-lock"]);
+  });
 });
 
 describe("LeadWriteRepository", () => {

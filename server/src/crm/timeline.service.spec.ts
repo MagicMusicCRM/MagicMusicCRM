@@ -499,7 +499,7 @@ describe("TimelineService", () => {
 
       expect(result.items).toEqual([
         expect.objectContaining({
-          title: "Правка полей",
+          title: "Лид изменён",
           body: "Телефон: +79161234567 → +79990000000",
           actorName: "Мария Менеджер",
         }),
