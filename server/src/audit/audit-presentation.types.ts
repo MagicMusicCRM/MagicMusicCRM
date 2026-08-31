@@ -5,6 +5,31 @@ export interface AuditPresentationChange {
   after: string | null;
 }
 
+export type AuditFieldValueType =
+  | 'text'
+  | 'date'
+  | 'datetime'
+  | 'boolean'
+  | 'list'
+  | 'contact_list'
+  | 'reference'
+  | 'technical';
+
+export type AuditChangeDisplayMode =
+  | 'values'
+  | 'changed_only'
+  | 'count'
+  | 'hidden';
+
+export interface AuditFieldChangeInput {
+  field: string;
+  from: unknown;
+  to: unknown;
+  label?: string;
+  valueType?: AuditFieldValueType;
+  displayMode?: AuditChangeDisplayMode;
+}
+
 export interface AuditPresentationEvent {
   id: string;
   actionKey: string;
