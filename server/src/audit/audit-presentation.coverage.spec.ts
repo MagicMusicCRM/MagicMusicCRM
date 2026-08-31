@@ -288,6 +288,7 @@ function staticStringValues(
   expression: ts.Expression,
   bindings: LiteralBindings,
   seen = new Set<ts.Symbol>(),
+  allowUnresolvedConditionals = false,
 ): string[] | null {
   const symbol = checker.getSymbolAtLocation(expression);
   const bound = symbol ? bindings.get(symbol) : null;
@@ -309,6 +310,7 @@ function staticStringValues(
       checker,
       bindings,
       new Set(seen),
+      allowUnresolvedConditionals,
     );
   });
   return expanded.every((values): values is string[] => values !== null)
@@ -354,17 +356,30 @@ function expandStringExpression(
   checker: ts.TypeChecker,
   bindings: LiteralBindings = new Map(),
   seen = new Set<ts.Symbol>(),
+  allowUnresolvedConditionals = false,
 ): string[] | null {
   if (ts.isStringLiteralLike(expression)) return [expression.text];
   if (ts.isParenthesizedExpression(expression)) {
-    return expandStringExpression(expression.expression, checker, bindings, seen);
+    return expandStringExpression(
+      expression.expression,
+      checker,
+      bindings,
+      seen,
+      allowUnresolvedConditionals,
+    );
   }
   if (
     ts.isAsExpression(expression)
     || ts.isTypeAssertionExpression(expression)
     || ts.isNonNullExpression(expression)
   ) {
-    return expandStringExpression(expression.expression, checker, bindings, seen);
+    return expandStringExpression(
+      expression.expression,
+      checker,
+      bindings,
+      seen,
+      allowUnresolvedConditionals,
+    );
   }
   if (ts.isConditionalExpression(expression)) {
     const condition = staticBooleanValue(expression.condition, checker, bindings);
@@ -374,10 +389,18 @@ function expandStringExpression(
         checker,
         bindings,
         new Set(seen),
+        allowUnresolvedConditionals,
       );
     }
+    if (!allowUnresolvedConditionals) return null;
     const branches = [expression.whenTrue, expression.whenFalse].map((branch) =>
-      expandStringExpression(branch, checker, bindings, new Set(seen)),
+      expandStringExpression(
+        branch,
+        checker,
+        bindings,
+        new Set(seen),
+        allowUnresolvedConditionals,
+      ),
     );
     return branches.every((values): values is string[] => values !== null)
       ? branches.flat()
@@ -391,6 +414,7 @@ function expandStringExpression(
         checker,
         bindings,
         new Set(seen),
+        allowUnresolvedConditionals,
       );
       if (!values) return null;
       expanded = expanded.flatMap((prefix) =>
@@ -399,7 +423,29 @@ function expandStringExpression(
     }
     return expanded;
   }
-  return staticStringValues(checker, expression, bindings, seen);
+  return staticStringValues(
+    checker,
+    expression,
+    bindings,
+    seen,
+    allowUnresolvedConditionals,
+  );
+}
+
+function expandStaticHintExpression(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  bindings: LiteralBindings,
+): string[] | null {
+  return expandStringExpression(expression, checker, bindings);
+}
+
+function expandPotentialStringExpression(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  bindings: LiteralBindings,
+): string[] | null {
+  return expandStringExpression(expression, checker, bindings, new Set(), true);
 }
 
 function resolveArrayElements(
@@ -630,7 +676,7 @@ function auditMetadataFields(
           change.bindings,
         );
         const expanded = fieldExpression
-          ? expandStringExpression(fieldExpression, checker, change.bindings) ?? []
+          ? expandPotentialStringExpression(fieldExpression, checker, change.bindings) ?? []
           : [];
         fields.push(...expanded);
         const labelExpression = objectPropertyExpression(
@@ -655,13 +701,13 @@ function auditMetadataFields(
           change.bindings,
         );
         const labels = labelExpression
-          ? expandStringExpression(labelExpression, checker, change.bindings)
+          ? expandStaticHintExpression(labelExpression, checker, change.bindings)
           : null;
         const valueTypes = valueTypeExpression
-          ? expandStringExpression(valueTypeExpression, checker, change.bindings)
+          ? expandStaticHintExpression(valueTypeExpression, checker, change.bindings)
           : null;
         const displayModes = displayModeExpression
-          ? expandStringExpression(displayModeExpression, checker, change.bindings)
+          ? expandStaticHintExpression(displayModeExpression, checker, change.bindings)
           : null;
         if (
           labels?.every((label) => label.trim().length > 0)
@@ -734,7 +780,7 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
             audit.bindings,
           );
           const expandedActions = actionExpression
-            ? expandStringExpression(actionExpression, checker, audit.bindings)
+            ? expandPotentialStringExpression(actionExpression, checker, audit.bindings)
             : null;
           const actionSource = actionExpression
             ?.getText(actionExpression.getSourceFile())
@@ -746,7 +792,7 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
             actions.add(action);
           }
           for (const entityType of entityExpression
-            ? expandStringExpression(entityExpression, checker, audit.bindings) ?? []
+            ? expandPotentialStringExpression(entityExpression, checker, audit.bindings) ?? []
             : []) {
             entityTypes.add(entityType);
           }
@@ -1000,6 +1046,86 @@ describe('Audit presentation production coverage', () => {
       'assertedLiteralLabelField',
       'assertedLiteralValueTypeField',
     ].filter((field) => !inventory.presentedFields.has(field))).toEqual([]);
+  });
+
+  it('rejects unresolved runtime conditionals in every hint property', () => {
+    const inventory = fixtureAuditContract(`
+      type HintValueType = 'text' | 'date';
+      type HintDisplayMode = 'values' | 'changed_only';
+      declare const runtimeFlag: boolean;
+      class AuditService { record(_input: unknown): void {} }
+      const auditService = new AuditService();
+      const staticChoice = 'safe' as const;
+      const staticLabel = staticChoice === 'safe' ? 'Статическая подпись' : 'Недостижимая подпись';
+      const staticValueType = staticChoice === 'safe' ? 'text' : 'date';
+      const staticDisplayMode = staticChoice === 'safe' ? 'values' : 'changed_only';
+      const runtimeLabel = runtimeFlag ? 'Подпись A' : 'Подпись B';
+      const runtimeValueType: HintValueType = runtimeFlag ? 'text' : 'date';
+      const runtimeDisplayMode: HintDisplayMode = runtimeFlag ? 'values' : 'changed_only';
+      function recordCorrelated(action: 'crm.fixture_correlated' | 'crm.fixture_other'): void {
+        auditService.record({
+          action,
+          entityType: 'fixture',
+          beforeRef: action === 'crm.fixture_correlated'
+            ? { correlatedSelectedField: 'До' }
+            : { correlatedUnselectedField: 'До' },
+          metadata: {
+            changes: [
+              {
+                field: 'staticConditionalField',
+                label: staticLabel,
+                valueType: staticValueType,
+                displayMode: staticDisplayMode,
+              },
+              {
+                field: 'runtimeConditionalLabelField',
+                label: runtimeLabel,
+                valueType: 'text',
+                displayMode: 'values',
+              },
+              {
+                field: 'runtimeConditionalValueTypeField',
+                label: 'Динамический тип',
+                valueType: runtimeValueType,
+                displayMode: 'values',
+              },
+              {
+                field: 'runtimeConditionalDisplayModeField',
+                label: 'Динамический режим',
+                valueType: 'text',
+                displayMode: runtimeDisplayMode,
+              },
+            ],
+          },
+        });
+      }
+      function recordRuntimeMode(displayMode: HintDisplayMode): void {
+        auditService.record({
+          action: 'crm.fixture_runtime_mode_argument',
+          entityType: 'fixture',
+          metadata: {
+            changes: [{
+              field: 'runtimeConditionalArgumentField',
+              label: 'Динамический аргумент',
+              valueType: 'text',
+              displayMode: displayMode,
+            }],
+          },
+        });
+      }
+      recordCorrelated('crm.fixture_correlated');
+      recordRuntimeMode(runtimeFlag ? 'values' : 'changed_only');
+    `);
+
+    expect([...inventory.hintedFields].sort()).toEqual(['staticConditionalField']);
+    expect([
+      'runtimeConditionalLabelField',
+      'runtimeConditionalValueTypeField',
+      'runtimeConditionalDisplayModeField',
+      'runtimeConditionalArgumentField',
+    ].filter((field) => !inventory.presentedFields.has(field))).toEqual([]);
+    expect(inventory.presentedFields).toContain('correlatedSelectedField');
+    expect(inventory.presentedFields).not.toContain('correlatedUnselectedField');
   });
 
   it('classifies every statically known presented field through policy or immutable hints', () => {
