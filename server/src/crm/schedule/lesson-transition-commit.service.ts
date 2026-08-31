@@ -132,7 +132,7 @@ export class LessonTransitionCommitService {
       clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
       teacherFinancialFactId: settled.teacherFact.id,
     });
-    return {
+    const committed = {
       lessonId: input.lessonId,
       state: toState,
       successorId: input.successorId,
@@ -140,8 +140,17 @@ export class LessonTransitionCommitService {
       clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
       teacherFinancialFactId: settled.teacherFact.id,
       financialDecision: dto.financialDecision,
-      transitionFingerprint: fingerprint,
-    };
+    } as CommittedTransition;
+    // Bulk validation reads the fingerprint before Platform Integrity serializes
+    // the result. Keeping it non-enumerable preserves that reconciliation input
+    // without copying the hash into audit or idempotency JSON.
+    Object.defineProperty(committed, "transitionFingerprint", {
+      value: fingerprint,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    return committed;
   }
 
   private async assertValidSuccessor(

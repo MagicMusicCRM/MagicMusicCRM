@@ -144,6 +144,7 @@ export class RoomLifecycleService {
         lifecycle: "archived",
         effectiveDate: dto.effectiveDate,
         preservedHistory: this.preservedHistory(initial),
+        changes: [this.lifecycleChange("active", "archived")],
       },
     };
     const result =
@@ -230,16 +231,20 @@ export class RoomLifecycleService {
             actorUserId: actor.userId,
             requestId: metadata.requestId,
             snapshot: {
-              ...this.auditRef(current),
+              ...this.historyRef(current),
               impact: this.impact(current),
             },
           });
           audit.beforeRef = this.auditRef(current);
-          audit.afterRef = after;
+          audit.afterRef = this.auditRef({
+            ...current,
+            lifecycle_state: "archived",
+          });
           audit.metadata = {
             lifecycle: "archived",
             effectiveDate: dto.effectiveDate,
             preservedHistory: this.preservedHistory(current),
+            changes: [this.lifecycleChange("active", "archived")],
           };
           return after;
         },
@@ -275,7 +280,11 @@ export class RoomLifecycleService {
       reason: "room.restore",
       reasonText: dto.reasonText.trim(),
       beforeRef: this.auditRef(initial),
-      metadata: { lifecycle: "restored", effectiveDate: dto.effectiveDate },
+      metadata: {
+        lifecycle: "restored",
+        effectiveDate: dto.effectiveDate,
+        changes: [this.lifecycleChange("archived", "active")],
+      },
     };
     const result =
       await this.integrity.executeVersionedMutation<LifecycleResultRef>({
@@ -349,10 +358,13 @@ export class RoomLifecycleService {
             effectiveDate: dto.effectiveDate,
             actorUserId: actor.userId,
             requestId: metadata.requestId,
-            snapshot: this.auditRef(current),
+            snapshot: this.historyRef(current),
           });
           audit.beforeRef = this.auditRef(current);
-          audit.afterRef = after;
+          audit.afterRef = this.auditRef({
+            ...current,
+            lifecycle_state: "active",
+          });
           return after;
         },
       });
@@ -550,6 +562,14 @@ export class RoomLifecycleService {
 
   private auditRef(row: RoomLifecycleRow) {
     return {
+      name: row.name,
+      capacity: row.capacity,
+      lifecycleState: row.lifecycle_state,
+    };
+  }
+
+  private historyRef(row: RoomLifecycleRow) {
+    return {
       roomId: row.id,
       branchId: row.branch_id,
       name: row.name,
@@ -558,6 +578,21 @@ export class RoomLifecycleService {
       roomVersion: Number(row.version),
       archivedAt: row.archived_at,
       archiveEffectiveDate: row.archive_effective_date,
+    };
+  }
+
+  private lifecycleChange(
+    from: "active" | "archived",
+    to: "active" | "archived",
+  ) {
+    const labels = { active: "Активна", archived: "В архиве" } as const;
+    return {
+      field: "lifecycleState",
+      from: labels[from],
+      to: labels[to],
+      label: "Статус аудитории",
+      valueType: "text",
+      displayMode: "values",
     };
   }
 

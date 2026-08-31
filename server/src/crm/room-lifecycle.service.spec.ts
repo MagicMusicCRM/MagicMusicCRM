@@ -1,3 +1,4 @@
+import { AuditPresentationService } from "../audit/audit-presentation.service";
 import { DatabaseService } from "../db/database.service";
 import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 import { CrmPolicy } from "./crm.policy";
@@ -50,6 +51,25 @@ describe("RoomLifecycleService", () => {
     );
     return { service, query, integrity, policy };
   };
+
+  const presentAudit = (audit: {
+    action: string;
+    metadata?: Record<string, unknown>;
+    beforeRef?: Record<string, unknown>;
+    afterRef?: Record<string, unknown>;
+  }) =>
+    new AuditPresentationService().present({
+      id: "audit-room",
+      actionKey: audit.action,
+      actor: { id: director.userId, name: "Директор", role: director.role },
+      target: { type: "room", id: "room-a", displayName: "Класс 1" },
+      metadata: audit.metadata ?? null,
+      beforeRef: audit.beforeRef ?? null,
+      afterRef: audit.afterRef ?? null,
+      reason: null,
+      reasonText: null,
+      occurredAt: new Date("2026-08-11T12:00:00.000Z"),
+    });
 
   it("returns every live scheduling blocker and preserved history", async () => {
     const { service } = createService([
@@ -171,11 +191,35 @@ describe("RoomLifecycleService", () => {
       audit: { action: "crm.room_archived", reason: "room.archive" },
       outbox: { type: "organization.room.changed" },
     });
+    expect(presentAudit(command.audit).changes).toEqual([
+      {
+        key: "lifecycleState",
+        label: "Статус аудитории",
+        before: "Активна",
+        after: "В архиве",
+      },
+    ]);
+    expect(command.audit).toMatchObject({
+      beforeRef: { name: "Класс 1", capacity: 8, lifecycleState: "active" },
+      afterRef: { name: "Класс 1", capacity: 8, lifecycleState: "archived" },
+    });
+    expect(JSON.stringify([
+      command.audit.beforeRef,
+      command.audit.afterRef,
+    ])).not.toMatch(/room-a|branch-a|Capacity/);
     expect(clientQuery.mock.calls[1][0]).toContain("update app.rooms");
     expect(clientQuery.mock.calls[1][0]).not.toMatch(/delete\s+from/i);
     expect(clientQuery.mock.calls[2][0]).toContain(
       "insert into app.room_lifecycle_history",
     );
+    expect(JSON.parse(clientQuery.mock.calls[2][1][9])).toMatchObject({
+      roomId: "room-a",
+      branchId: "branch-a",
+      roomVersion: 1,
+      archivedAt: null,
+      archiveEffectiveDate: null,
+      impact: expect.any(Object),
+    });
   });
 
   it("blocks restore while the parent branch is archived", async () => {
@@ -215,16 +259,20 @@ describe("RoomLifecycleService", () => {
     });
     const active = row({ version: 3 });
     const { service, integrity } = createService([[archived], [], [active]]);
-    integrity.executeVersionedMutation.mockResolvedValue({
-      resultRef: {
-        roomId: "room-a",
-        lifecycleState: "active",
-        roomVersion: 3,
-      },
-      version: 3,
-      replayed: false,
-      auditId: "audit-b",
-      eventId: "event-b",
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [archived] })
+      .mockResolvedValueOnce({ rows: [{ version: 3 }] })
+      .mockResolvedValueOnce({ rows: [] });
+    integrity.executeVersionedMutation.mockImplementation(async (command) => {
+      const resultRef = await command.mutate({ query: clientQuery }, 3);
+      return {
+        resultRef,
+        version: 3,
+        replayed: false,
+        auditId: "audit-b",
+        eventId: "event-b",
+      };
     });
 
     await expect(
@@ -248,5 +296,22 @@ describe("RoomLifecycleService", () => {
         expectedVersion: 2,
       }),
     );
+    const command = integrity.executeVersionedMutation.mock.calls[0][0];
+    expect(presentAudit(command.audit).changes).toEqual([
+      {
+        key: "lifecycleState",
+        label: "Статус аудитории",
+        before: "В архиве",
+        after: "Активна",
+      },
+    ]);
+    expect(command.audit).toMatchObject({
+      beforeRef: { name: "Класс 1", capacity: 8, lifecycleState: "archived" },
+      afterRef: { name: "Класс 1", capacity: 8, lifecycleState: "active" },
+    });
+    expect(JSON.stringify([
+      command.audit.beforeRef,
+      command.audit.afterRef,
+    ])).not.toMatch(/room-a|branch-a|Capacity/);
   });
 });

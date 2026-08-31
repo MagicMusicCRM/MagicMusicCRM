@@ -567,6 +567,43 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       outbox: 1,
       state: "closed",
     });
+
+    const audit = await pool.query<{
+      before_ref: Record<string, unknown>;
+      after_ref: Record<string, unknown>;
+      metadata: Record<string, unknown>;
+    }>(
+      `select before_ref, after_ref, metadata
+         from app.audit_events
+        where entity_type = 'shared_task'
+          and entity_id = $1::text
+          and action = 'workflow.shared_task_closed'`,
+      [created.id],
+    );
+    expect(audit.rows[0]).toEqual({
+      before_ref: { state: "open" },
+      after_ref: { state: "closed" },
+      metadata: {
+        changes: [
+          {
+            field: "state",
+            from: "Открыта",
+            to: "Закрыта",
+            label: "Статус задачи",
+            valueType: "text",
+            displayMode: "values",
+          },
+        ],
+      },
+    });
+    expect(first).toMatchObject({
+      closeId: expect.any(String),
+      closedBy: expect.any(String),
+      closeRequestId: expect.any(String),
+    });
+    expect(JSON.stringify(audit.rows[0])).not.toMatch(
+      /closedBy|closeId|requestId|[0-9a-f]{8}-[0-9a-f-]{27}/i,
+    );
   });
 });
 

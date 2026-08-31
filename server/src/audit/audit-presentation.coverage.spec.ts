@@ -1,14 +1,80 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import * as ts from 'typescript';
+import { presentAuditFieldChange } from './audit-field-presentation.policy';
 import { AuditPresentationInput } from './audit-presentation.types';
 import { AuditPresentationService } from './audit-presentation.service';
 
 interface AuditContractInventory {
   actions: Set<string>;
   entityTypes: Set<string>;
+  presentedFields: Set<string>;
+  hintedFields: Set<string>;
   unresolvedActions: string[];
 }
+
+interface AuditProducerFixture {
+  source: 'sql' | 'import' | 'dynamic';
+  actions: string[];
+  entityTypes: string[];
+  presentedFields: string[];
+}
+
+const NON_AST_AUDIT_PRODUCER_FIXTURES: AuditProducerFixture[] = [
+  {
+    source: 'sql',
+    actions: ['workflow.shared_task_legacy_status'],
+    entityTypes: ['shared_task'],
+    presentedFields: ['field', 'value', 'assigned_to'],
+  },
+  {
+    source: 'import',
+    actions: ['workflow.shared_task_legacy_status'],
+    entityTypes: ['shared_task'],
+    presentedFields: ['field', 'value'],
+  },
+  {
+    source: 'dynamic',
+    actions: ['task.created'],
+    entityTypes: ['task'],
+    presentedFields: [],
+  },
+  {
+    source: 'dynamic',
+    actions: ['workflow.shared_task_closed', 'crm.lesson_rescheduled'],
+    entityTypes: ['shared_task', 'lesson'],
+    presentedFields: [
+      'taskId', 'taskVersion', 'closeId', 'closedAt', 'closedBy', 'closeRequestId',
+      'lessonId', 'state', 'successorId', 'transitionId', 'clientFinancialFactIds',
+      'teacherFinancialFactId', 'financialDecision', 'transitionFingerprint',
+    ],
+  },
+];
+
+const EXPLICIT_FIELD_CLASSIFICATIONS: Record<
+  string,
+  'technical' | 'changed_only'
+> = {
+  accountEnabled: 'changed_only',
+  amountMinor: 'technical',
+  archiveEffectiveDate: 'technical',
+  archivedAt: 'technical',
+  branchAssignments: 'changed_only',
+  capacity: 'changed_only',
+  closedAt: 'technical',
+  currencyCode: 'technical',
+  entityType: 'technical',
+  field: 'technical',
+  financialDecision: 'changed_only',
+  items: 'changed_only',
+  kind: 'technical',
+  lifecycle: 'changed_only',
+  lifecycleState: 'changed_only',
+  personType: 'changed_only',
+  state: 'changed_only',
+  value: 'changed_only',
+  walletBalanceMinor: 'technical',
+};
 
 type LiteralBindings = Map<ts.Symbol, string[]>;
 type CallSites = Map<ts.SignatureDeclaration | ts.JSDocSignature, ts.CallExpression[]>;
@@ -281,6 +347,73 @@ function auditObjectsForCall(
   return [];
 }
 
+function auditRefFields(
+  audit: ResolvedAuditObject,
+  property: 'beforeRef' | 'afterRef',
+  checker: ts.TypeChecker,
+  callSites: CallSites,
+): string[] {
+  const expression = objectPropertyExpression(audit.node, property, checker);
+  if (!expression) return [];
+  return resolveAuditObjects(
+    expression,
+    checker,
+    callSites,
+    new Set(),
+    audit.bindings,
+  ).flatMap(({ node }) => node.properties.flatMap((candidate) =>
+    ts.isPropertyAssignment(candidate) || ts.isShorthandPropertyAssignment(candidate)
+      ? [propertyName(candidate.name, node.getSourceFile())]
+      : [],
+  ));
+}
+
+function auditMetadataFields(
+  audit: ResolvedAuditObject,
+  checker: ts.TypeChecker,
+  callSites: CallSites,
+): { fields: string[]; hintedFields: string[] } {
+  const metadataExpression = objectPropertyExpression(audit.node, 'metadata', checker);
+  if (!metadataExpression) return { fields: [], hintedFields: [] };
+  const fields: string[] = [];
+  const hintedFields: string[] = [];
+  for (const metadata of resolveAuditObjects(
+    metadataExpression,
+    checker,
+    callSites,
+    new Set(),
+    audit.bindings,
+  )) {
+    const changes = objectPropertyExpression(metadata.node, 'changes', checker);
+    if (!changes || !ts.isArrayLiteralExpression(changes)) continue;
+    for (const element of changes.elements) {
+      if (!ts.isExpression(element)) continue;
+      for (const change of resolveAuditObjects(
+        element,
+        checker,
+        callSites,
+        new Set(),
+        metadata.bindings,
+      )) {
+        const fieldExpression = objectPropertyExpression(change.node, 'field', checker)
+          ?? objectPropertyExpression(change.node, 'key', checker);
+        const expanded = fieldExpression
+          ? expandStringExpression(fieldExpression, checker, change.bindings) ?? []
+          : [];
+        fields.push(...expanded);
+        if (
+          objectPropertyExpression(change.node, 'label', checker)
+          && objectPropertyExpression(change.node, 'valueType', checker)
+          && objectPropertyExpression(change.node, 'displayMode', checker)
+        ) {
+          hintedFields.push(...expanded);
+        }
+      }
+    }
+  }
+  return { fields, hintedFields };
+}
+
 function productionAuditContract(sourceRoot: string): AuditContractInventory {
   const files = productionTypescriptFiles(sourceRoot);
   const productionPaths = new Set(
@@ -314,6 +447,8 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
   }
   const actions = new Set<string>();
   const entityTypes = new Set<string>();
+  const presentedFields = new Set<string>();
+  const hintedFields = new Set<string>();
   const unresolvedActions: string[] = [];
 
   for (const source of program.getSourceFiles()) {
@@ -341,13 +476,27 @@ function productionAuditContract(sourceRoot: string): AuditContractInventory {
             : []) {
             entityTypes.add(entityType);
           }
+          for (const field of [
+            ...auditRefFields(audit, 'beforeRef', checker, callSites),
+            ...auditRefFields(audit, 'afterRef', checker, callSites),
+          ]) {
+            presentedFields.add(field);
+          }
+          const metadata = auditMetadataFields(audit, checker, callSites);
+          for (const field of metadata.fields) presentedFields.add(field);
+          for (const field of metadata.hintedFields) hintedFields.add(field);
         }
       }
       ts.forEachChild(node, visit);
     };
     visit(source);
   }
-  return { actions, entityTypes, unresolvedActions };
+  for (const fixture of NON_AST_AUDIT_PRODUCER_FIXTURES) {
+    fixture.actions.forEach((action) => actions.add(action));
+    fixture.entityTypes.forEach((entityType) => entityTypes.add(entityType));
+    fixture.presentedFields.forEach((field) => presentedFields.add(field));
+  }
+  return { actions, entityTypes, presentedFields, hintedFields, unresolvedActions };
 }
 
 describe('Audit presentation production coverage', () => {
@@ -382,7 +531,8 @@ describe('Audit presentation production coverage', () => {
     expect(inventory.actions).toContain('crm.reference_branch_discipline_unassigned');
     expect(inventory.actions).toContain('crm.client_internal_note_changed');
     expect(inventory.actions).toContain('crm.installment_payment_due');
-    expect(actionTitles).toContain('task.created');
+    expect(inventory.actions).toContain('task.created');
+    expect(inventory.actions).toContain('workflow.shared_task_legacy_status');
     expect(inventory.unresolvedActions).toEqual([]);
     expect(businessActions.filter((action) => !actionTitles.has(action))).toEqual([]);
     for (const actionKey of businessActions) {
@@ -397,5 +547,32 @@ describe('Audit presentation production coverage', () => {
 
     expect(inventory.entityTypes).toContain('access:role-package');
     expect([...inventory.entityTypes].filter((type) => !entityLabels.has(type))).toEqual([]);
+  });
+
+  it('classifies every statically known presented field through policy or immutable hints', () => {
+    const inventory = productionAuditContract(sourceRoot);
+    const compatibilityLabels = registryKeys(presenterSource, 'ACTION_FIELD_LABELS');
+    const unclassified = [...inventory.presentedFields].filter((field) => {
+      if (
+        inventory.hintedFields.has(field)
+        || compatibilityLabels.has(field)
+        || EXPLICIT_FIELD_CLASSIFICATIONS[field]
+      ) return false;
+      const presented = presentAuditFieldChange({ field, from: 'До', to: 'После' });
+      return presented !== null
+        && presented.label === 'Дополнительное поле'
+        && (presented.before !== null || presented.after !== null);
+    });
+
+    const expectedFixtureFields = [
+      'closedBy',
+      'transitionFingerprint',
+      'capacity',
+      'assigned_to',
+      'value',
+    ];
+    expect(expectedFixtureFields.filter((field) => !inventory.presentedFields.has(field)))
+      .toEqual([]);
+    expect(unclassified.sort()).toEqual([]);
   });
 });

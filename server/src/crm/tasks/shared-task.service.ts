@@ -320,7 +320,20 @@ export class SharedTaskService {
             action: "workflow.shared_task_closed",
             entityType: "shared_task",
             entityId: taskId,
-            beforeRef: { taskId, state: "open", version: dto.expectedVersion },
+            beforeRef: { state: "open" },
+            afterRef: { state: "closed" },
+            metadata: {
+              changes: [
+                {
+                  field: "state",
+                  from: "Открыта",
+                  to: "Закрыта",
+                  label: "Статус задачи",
+                  valueType: "text",
+                  displayMode: "values",
+                },
+              ],
+            },
           },
           outbox: {
             type: "workflow.task.closed",

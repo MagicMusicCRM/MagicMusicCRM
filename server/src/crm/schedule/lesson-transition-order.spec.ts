@@ -114,6 +114,7 @@ settlementResult.clientFact = settlementResult.clientFacts[0]!;
 describe("Lesson transition runtime ordering", () => {
   it("preserves commit and post-commit publication order", async () => {
     const events: string[] = [];
+    let committedRef: CommittedTransition | undefined;
     let advisoryRecorded = false;
     const client = {
       query: jest.fn(async (query: string) => {
@@ -209,6 +210,7 @@ describe("Lesson transition runtime ordering", () => {
       const platform = {
         executeVersionedMutation: jest.fn(async (input: MutationInput) => {
           const resultRef = await input.mutate(client, 2);
+          committedRef = resultRef;
           events.push("mutation-resolved");
           return { version: 2, resultRef, replayed: false };
         }),
@@ -257,6 +259,11 @@ describe("Lesson transition runtime ordering", () => {
       );
       expect(result.replayed).toBe(false);
       expect(result.successor?.state).toBe("scheduled");
+      expect(committedRef?.transitionFingerprint).toBe("fingerprint");
+      expect(JSON.stringify(committedRef)).not.toContain(
+        "transitionFingerprint",
+      );
+      expect(JSON.stringify(committedRef)).not.toContain("fingerprint");
     } finally {
       fingerprint.mockRestore();
     }
