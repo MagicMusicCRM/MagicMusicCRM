@@ -12,7 +12,10 @@
  * duplicated and are consolidated here for the same reason.
  */
 
-import { createSafeAuditChange } from "../audit/audit-field-presentation.policy";
+import {
+  createSafeAuditChange,
+  presentAuditFieldChange,
+} from "../audit/audit-field-presentation.policy";
 import type { AuditFieldChangeInput } from "../audit/audit-presentation.types";
 
 export interface LessonRow {
@@ -210,7 +213,11 @@ const createChangedAuditField = (
     !valueless &&
     change.displayMode !== "changed_only" &&
     auditValuesEqual(change.from, change.to)
-  ) return null;
+  ) {
+    return change.displayMode === "count"
+      ? { ...change, from: null, to: null, displayMode: "changed_only" }
+      : null;
+  }
   return change;
 };
 
@@ -250,10 +257,6 @@ export function diffEntityFields(
   return changes;
 }
 
-const auditFieldLabel = (field: string): string =>
-  createSafeAuditChange({ field, from: null, to: null })?.label
-  ?? "Дополнительное поле";
-
 /**
  * Turns an audit row into something a human reads. The timeline hands us
  * metadata as raw JSON text in `body`; rendering that verbatim in the client
@@ -274,10 +277,15 @@ function describeAuditRow(row: TimelineRow): { title: string; body: string | nul
     // drop the empty jsonb so it does not render as "{}".
     return { title: fallbackTitle, body: null };
   }
-  const lines = changes.map((change) => {
-    const label = auditFieldLabel(change.field);
-    if (change.from === null && change.to === null) return `${label}: изменено`;
-    return `${label}: ${change.from ?? "—"} → ${change.to ?? "—"}`;
+  const lines = changes.flatMap((change) => {
+    const presented = presentAuditFieldChange(change);
+    if (!presented) return [];
+    if (presented.before === null && presented.after === null) {
+      return [`${presented.label}: изменено`];
+    }
+    return [
+      `${presented.label}: ${presented.before ?? "—"} → ${presented.after ?? "—"}`,
+    ];
   });
   return { title: "Правка полей", body: lines.join("\n") };
 }

@@ -168,6 +168,35 @@ describe("diffEntityFields", () => {
     });
     expect(JSON.stringify(changes)).not.toContain("+79991234567");
   });
+
+  it("keeps a same-count contact replacement as a changed-only fact", () => {
+    const oldPhone = "+79991234567";
+    const newPhone = "+79997654321";
+    const changes = diffEntityFields(
+      {
+        custom_data: {
+          contactPersons: [{ name: "Анна", phone: oldPhone }],
+        },
+      },
+      {
+        custom_data: {
+          contactPersons: [{ name: "Мария", phone: newPhone }],
+        },
+      },
+      [],
+    );
+
+    expect(changes).toEqual([{
+      field: "custom_data.contactPersons",
+      from: null,
+      to: null,
+      label: "Контактные лица",
+      valueType: "contact_list",
+      displayMode: "changed_only",
+    }]);
+    expect(JSON.stringify(changes)).not.toContain(oldPhone);
+    expect(JSON.stringify(changes)).not.toContain(newPhone);
+  });
 });
 
 describe("toTimelineDto — audit rows", () => {
@@ -208,6 +237,66 @@ describe("toTimelineDto — audit rows", () => {
     );
 
     expect(dto.body).toBe("Электронная почта: изменено");
+  });
+
+  it("sanitizes historical UUID, hash, and contact JSON before rendering", () => {
+    const oldUuid = "11111111-1111-4111-8111-111111111111";
+    const newUuid = "22222222-2222-4222-8222-222222222222";
+    const hash = "sha256:abcdef0123456789";
+    const contactPhone = "+79991234567";
+    const dto = toTimelineDto(
+      auditRow(JSON.stringify({
+        changes: [
+          { field: "assigned_to", from: oldUuid, to: newUuid },
+          { field: "custom_data.level", from: null, to: hash },
+          {
+            field: "custom_data.contactPersons",
+            from: JSON.stringify([{ name: "Анна", phone: contactPhone }]),
+            to: JSON.stringify([
+              { name: "Анна", phone: contactPhone },
+              { name: "Мария", phone: "+79997654321" },
+            ]),
+          },
+        ],
+      })),
+    );
+
+    expect(dto.body).toBe(
+      "Ответственный: изменено\n" +
+      "Уровень: изменено\n" +
+      "Контактные лица: Контактных лиц: 1 → Контактных лиц: 2",
+    );
+    expect(dto.body).not.toContain(oldUuid);
+    expect(dto.body).not.toContain(newUuid);
+    expect(dto.body).not.toContain(hash);
+    expect(dto.body).not.toContain(contactPhone);
+    expect(dto.body).not.toContain("[{");
+  });
+
+  it("formats typed lists, dates, and booleans through shared policy", () => {
+    const dto = toTimelineDto(
+      auditRow(JSON.stringify({
+        changes: [
+          {
+            field: "custom_data.disciplines",
+            from: ["PIANO"],
+            to: ["DRUMS", "Авторское"],
+          },
+          {
+            field: "custom_data.birthday",
+            from: "2000-02-01",
+            to: "2001-03-02",
+          },
+          { field: "custom_data.noEmail", from: false, to: true },
+        ],
+      })),
+    );
+
+    expect(dto.body).toBe(
+      "Направления: PIANO → DRUMS, Авторское\n" +
+      "Дата рождения: 01.02.2000 → 02.03.2001\n" +
+      "Нет email: Нет → Да",
+    );
   });
 
   it("drops the body of an audited action that carries no diff", () => {
