@@ -1,11 +1,25 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-08-30
-> Production: client `1.5.26+206`, server `e5503e51`,
-> image `sha256:d666238e…`, migration `0145`
-> Рабочая ветка: `codex/customer-corrections`
-> Статус: branch-wide schedule и единая история клиента rollout PASS;
-> общий update build `206` опубликован
+> Обновлено: 2026-08-31
+> Production: client `1.5.27+207`, server `f8bafa9a`,
+> image `sha256:ac33cd55…`, migration `0145`
+> Рабочая ветка: `main`
+> Статус: человекочитаемый audit journal rollout PASS;
+> общий update build `207` опубликован
+
+Release `1.5.27+207` объединил историю карточки клиента и журнал Аналитики
+через общий человекочитаемый presenter. Краткие карточки показывают действие,
+сотрудника и связанную сущность; безопасные изменения раскрываются как
+«было → стало», а доступный объект открывается отдельным действием. UUID,
+версии, event codes и чувствительные тексты скрыты. Flutter `1481/1481`,
+backend `274/274` suites / `3482/3482` tests, analyze/typecheck/build,
+production-like/exact-image, security и client package gates PASS. Production
+image `f8bafa9a` healthy/restart `0`, migration `0145`, reconciliation дважды
+`issues=[]`, fresh outbox `0/0`, API/Caddy ошибки `0/0`. Fresh encrypted
+pre/post backup скопированы off-host и оба прошли isolated candidate/rollback
+restore. Оба manifest, четыре public artifacts и GitHub Release `v1.5.27`
+опубликованы. Evidence:
+`docs/audits/v7-production-human-readable-audit-journal-207.md`.
 
 Release `1.5.26+206` исправил «Все филиалы» в расписании для полного
 доступного role scope, добавил DST-safe локальную дату и effective branch для
