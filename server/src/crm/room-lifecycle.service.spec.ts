@@ -195,8 +195,8 @@ describe("RoomLifecycleService", () => {
       {
         key: "lifecycleState",
         label: "Статус аудитории",
-        before: "Активна",
-        after: "В архиве",
+        before: null,
+        after: null,
       },
     ]);
     expect(command.audit).toMatchObject({
@@ -301,8 +301,8 @@ describe("RoomLifecycleService", () => {
       {
         key: "lifecycleState",
         label: "Статус аудитории",
-        before: "В архиве",
-        after: "Активна",
+        before: null,
+        after: null,
       },
     ]);
     expect(command.audit).toMatchObject({

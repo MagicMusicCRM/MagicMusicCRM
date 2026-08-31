@@ -94,6 +94,43 @@ describe('audit field presentation policy', () => {
     });
   });
 
+  it.each([
+    'accountEnabled',
+    'branchAssignments',
+    'capacity',
+    'financialDecision',
+    'items',
+    'lifecycle',
+    'lifecycleState',
+    'personType',
+    'state',
+    'value',
+  ])('keeps the changed-only floor for %s despite a valid values hint', (field) => {
+    const input = {
+      field,
+      from: 'Скрытое прежнее значение',
+      to: 'Скрытое новое значение',
+      label: 'Подтверждённое изменение',
+      valueType: 'text' as const,
+      displayMode: 'values' as const,
+    };
+
+    expect(createSafeAuditChange(input)).toEqual({
+      field,
+      from: null,
+      to: null,
+      label: 'Подтверждённое изменение',
+      valueType: 'text',
+      displayMode: 'changed_only',
+    });
+    expect(presentAuditFieldChange(input)).toEqual({
+      key: field,
+      label: 'Подтверждённое изменение',
+      before: null,
+      after: null,
+    });
+  });
+
   it('summarizes contact people without raw PII or JSON', () => {
     const change = presentAuditFieldChange({
       field: 'custom_data.contactPersons',

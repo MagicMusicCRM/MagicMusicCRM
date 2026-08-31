@@ -238,7 +238,13 @@ function resolveAuditObjects(
     return resolveAuditObjects(expression.expression, checker, callSites, seen, bindings);
   }
   if (ts.isConditionalExpression(expression)) {
-    return [expression.whenTrue, expression.whenFalse].flatMap((branch) =>
+    const condition = staticBooleanValue(expression.condition, checker, bindings);
+    const branches = condition === true
+      ? [expression.whenTrue]
+      : condition === false
+        ? [expression.whenFalse]
+        : [expression.whenTrue, expression.whenFalse];
+    return branches.flatMap((branch) =>
       resolveAuditObjects(branch, checker, callSites, new Set(seen), bindings),
     );
   }
@@ -277,49 +283,115 @@ function resolveAuditObjects(
   return [];
 }
 
-function stringLiteralUnion(
+function staticStringValues(
   checker: ts.TypeChecker,
   expression: ts.Expression,
   bindings: LiteralBindings,
+  seen = new Set<ts.Symbol>(),
 ): string[] | null {
   const symbol = checker.getSymbolAtLocation(expression);
   const bound = symbol ? bindings.get(symbol) : null;
   if (bound) return bound;
-  const type = checker.getTypeAtLocation(expression);
-  const members = type.isUnion() ? type.types : [type];
-  const values = members.flatMap((member) =>
-    member.flags & ts.TypeFlags.StringLiteral
-      ? [(member as ts.StringLiteralType).value]
-      : [],
+  if (!symbol || !ts.isIdentifier(expression) || seen.has(symbol)) return null;
+  seen.add(symbol);
+  const declarations = symbol.declarations ?? [];
+  if (declarations.length === 0) return null;
+  const expanded = declarations.map((declaration) => {
+    if (
+      !ts.isVariableDeclaration(declaration)
+      || !ts.isIdentifier(declaration.name)
+      || !declaration.initializer
+      || !ts.isVariableDeclarationList(declaration.parent)
+      || !(declaration.parent.flags & ts.NodeFlags.Const)
+    ) return null;
+    return expandStringExpression(
+      declaration.initializer,
+      checker,
+      bindings,
+      new Set(seen),
+    );
+  });
+  return expanded.every((values): values is string[] => values !== null)
+    ? expanded.flat()
+    : null;
+}
+
+function staticBooleanValue(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  bindings: LiteralBindings,
+): boolean | null {
+  if (ts.isParenthesizedExpression(expression)) {
+    return staticBooleanValue(expression.expression, checker, bindings);
+  }
+  if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
+    const value = staticBooleanValue(expression.operand, checker, bindings);
+    return value === null ? null : !value;
+  }
+  if (!ts.isBinaryExpression(expression)) return null;
+  const equality = [
+    ts.SyntaxKind.EqualsEqualsToken,
+    ts.SyntaxKind.EqualsEqualsEqualsToken,
+    ts.SyntaxKind.ExclamationEqualsToken,
+    ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ].includes(expression.operatorToken.kind);
+  if (!equality) return null;
+  const left = expandStringExpression(expression.left, checker, bindings);
+  const right = expandStringExpression(expression.right, checker, bindings);
+  if (!left || !right) return null;
+  const negated = expression.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken
+    || expression.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+  const results = left.flatMap((leftValue) =>
+    right.map((rightValue) => negated ? leftValue !== rightValue : leftValue === rightValue),
   );
-  return values.length === members.length && values.length > 0 ? values : null;
+  if (results.every(Boolean)) return true;
+  if (results.every((result) => !result)) return false;
+  return null;
 }
 
 function expandStringExpression(
   expression: ts.Expression,
   checker: ts.TypeChecker,
   bindings: LiteralBindings = new Map(),
+  seen = new Set<ts.Symbol>(),
 ): string[] | null {
   if (ts.isStringLiteralLike(expression)) return [expression.text];
   if (ts.isParenthesizedExpression(expression)) {
-    return expandStringExpression(expression.expression, checker, bindings);
+    return expandStringExpression(expression.expression, checker, bindings, seen);
   }
   if (
     ts.isAsExpression(expression)
     || ts.isTypeAssertionExpression(expression)
     || ts.isNonNullExpression(expression)
   ) {
-    return expandStringExpression(expression.expression, checker, bindings);
+    return expandStringExpression(expression.expression, checker, bindings, seen);
   }
   if (ts.isConditionalExpression(expression)) {
-    const whenTrue = expandStringExpression(expression.whenTrue, checker, bindings);
-    const whenFalse = expandStringExpression(expression.whenFalse, checker, bindings);
-    return whenTrue && whenFalse ? [...whenTrue, ...whenFalse] : null;
+    const condition = staticBooleanValue(expression.condition, checker, bindings);
+    if (condition !== null) {
+      return expandStringExpression(
+        condition ? expression.whenTrue : expression.whenFalse,
+        checker,
+        bindings,
+        new Set(seen),
+      );
+    }
+    const branches = [expression.whenTrue, expression.whenFalse].map((branch) =>
+      expandStringExpression(branch, checker, bindings, new Set(seen)),
+    );
+    return branches.every((values): values is string[] => values !== null)
+      ? branches.flat()
+      : null;
   }
   if (ts.isTemplateExpression(expression)) {
     let expanded = [expression.head.text];
     for (const span of expression.templateSpans) {
-      const values = stringLiteralUnion(checker, span.expression, bindings);
+      const values = expandStringExpression(
+        span.expression,
+        checker,
+        bindings,
+        new Set(seen),
+      );
       if (!values) return null;
       expanded = expanded.flatMap((prefix) =>
         values.map((value) => `${prefix}${value}${span.literal.text}`),
@@ -327,7 +399,7 @@ function expandStringExpression(
     }
     return expanded;
   }
-  return stringLiteralUnion(checker, expression, bindings);
+  return staticStringValues(checker, expression, bindings, seen);
 }
 
 function resolveArrayElements(
@@ -421,18 +493,26 @@ function auditObjectsForCall(
     && method === 'executeVersionedMutation'
     && call.arguments[0]
   ) {
-    return resolveAuditObjects(call.arguments[0], checker, callSites).flatMap((mutation) => {
-      const audit = objectPropertyExpression(
-        mutation.node,
-        'audit',
+    return callSiteBindings(call, checker, callSites).flatMap((bindings) =>
+      resolveAuditObjects(
+        call.arguments[0],
         checker,
         callSites,
-        mutation.bindings,
-      );
-      return audit
-        ? resolveAuditObjects(audit, checker, callSites, new Set(), mutation.bindings)
-        : [];
-    });
+        new Set(),
+        bindings,
+      ).flatMap((mutation) => {
+        const audit = objectPropertyExpression(
+          mutation.node,
+          'audit',
+          checker,
+          callSites,
+          mutation.bindings,
+        );
+        return audit
+          ? resolveAuditObjects(audit, checker, callSites, new Set(), mutation.bindings)
+          : [];
+      }),
+    );
   }
   if (
     receiverSymbol === 'PlatformIntegrityRepository'
@@ -847,6 +927,78 @@ describe('Audit presentation production coverage', () => {
       'emptyLabelField',
       'invalidValueTypeField',
       'invalidDisplayModeField',
+    ].filter((field) => !inventory.presentedFields.has(field))).toEqual([]);
+  });
+
+  it('rejects dynamic or mutable hints whose TypeScript types look literal-safe', () => {
+    const inventory = fixtureAuditContract(`
+      type HintValueType = 'text' | 'date';
+      type HintDisplayMode = 'values' | 'changed_only';
+      declare function runtimeLabel(): string;
+      declare function runtimeValueType(): HintValueType;
+      declare function runtimeDisplayMode(): HintDisplayMode;
+      class AuditService { record(_input: unknown): void {} }
+      const auditService = new AuditService();
+      const staticLabel = 'Статическая подпись' as const;
+      const staticValueType: HintValueType = 'text';
+      const staticDisplayMode: HintDisplayMode = 'values';
+      let mutableDisplayMode: HintDisplayMode = runtimeDisplayMode();
+      const annotatedDisplayMode: HintDisplayMode = runtimeDisplayMode();
+      const assertedLabel = runtimeLabel() as 'Убедительная подпись';
+      const assertedValueType = runtimeValueType() as 'text';
+      auditService.record({
+        action: 'crm.fixture_typed_dynamic_hints',
+        entityType: 'fixture',
+        metadata: {
+          changes: [
+            {
+              field: 'staticControlField',
+              label: staticLabel,
+              valueType: staticValueType,
+              displayMode: staticDisplayMode,
+            },
+            {
+              field: 'dynamicUnionModeField',
+              label: 'Динамический режим',
+              valueType: 'text',
+              displayMode: runtimeDisplayMode(),
+            },
+            {
+              field: 'mutableUnionModeField',
+              label: 'Изменяемый режим',
+              valueType: 'text',
+              displayMode: mutableDisplayMode,
+            },
+            {
+              field: 'annotatedUnionModeField',
+              label: 'Аннотированный режим',
+              valueType: 'text',
+              displayMode: annotatedDisplayMode,
+            },
+            {
+              field: 'assertedLiteralLabelField',
+              label: assertedLabel,
+              valueType: 'text',
+              displayMode: 'values',
+            },
+            {
+              field: 'assertedLiteralValueTypeField',
+              label: 'Заявленный тип',
+              valueType: assertedValueType,
+              displayMode: 'values',
+            },
+          ],
+        },
+      });
+    `);
+
+    expect([...inventory.hintedFields].sort()).toEqual(['staticControlField']);
+    expect([
+      'dynamicUnionModeField',
+      'mutableUnionModeField',
+      'annotatedUnionModeField',
+      'assertedLiteralLabelField',
+      'assertedLiteralValueTypeField',
     ].filter((field) => !inventory.presentedFields.has(field))).toEqual([]);
   });
 

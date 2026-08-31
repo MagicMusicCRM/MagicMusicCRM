@@ -134,6 +134,13 @@ function resolveAuditField(input: AuditFieldChangeInput): AuditFieldPresentation
       : legacyAlias ?? { label: 'Дополнительное поле', valueType: 'text', displayMode: 'values' });
 
   const snapshot = validSnapshot(input) ? input : null;
+  if (classifiedPolicy?.displayMode === 'changed_only') {
+    return {
+      label: snapshot?.label ?? classifiedPolicy.label,
+      valueType: snapshot?.valueType ?? classifiedPolicy.valueType,
+      displayMode: 'changed_only',
+    };
+  }
   if (fallback.valueType === 'contact_list') {
     return {
       label: snapshot?.label ?? fallback.label,
