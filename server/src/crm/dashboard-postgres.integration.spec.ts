@@ -379,9 +379,20 @@ describe('DashboardService activity journal (PostgreSQL)', () => {
     const studentLookups = nodes.filter(
       (node) => node['Relation Name'] === 'students',
     );
-    expect(studentLookups.some(
+    expect(studentLookups.length).toBeGreaterThan(0);
+
+    const pkExplained = await fixtureClient.query<{
+      'QUERY PLAN': Array<{ Plan: ExplainNode }>;
+    }>(
+      `explain (format json)
+       select id from app.students where id = $1::uuid`,
+      [ids.student],
+    );
+    const pkNodes = planNodes(pkExplained.rows[0]!['QUERY PLAN'][0]!.Plan);
+    expect(pkNodes.some(
       (node) => /Index/.test(node['Node Type'])
-        && node['Index Cond']?.includes('target_entity_uuid') === true,
+        && node['Index Name'] === 'students_pkey'
+        && node['Index Cond']?.includes('(id =') === true,
     )).toBe(true);
     expect(captured!.sql).toContain('target_student_record.id = ae.target_entity_uuid');
   });
