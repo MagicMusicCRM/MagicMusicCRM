@@ -61,7 +61,12 @@ const NON_AST_AUDIT_PRODUCER_FIXTURES: AuditProducerFixture[] = [
   },
 ];
 
-type LiteralBindings = Map<ts.Symbol, string[]>;
+interface LiteralBinding {
+  immutableValues: string[] | null;
+  potentialValues: string[] | null;
+}
+
+type LiteralBindings = Map<ts.Symbol, LiteralBinding>;
 type CallSites = Map<ts.SignatureDeclaration | ts.JSDocSignature, ts.CallExpression[]>;
 
 const HINT_VALUE_TYPES = new Set([
@@ -72,6 +77,18 @@ const HINT_DISPLAY_MODES = new Set(['values', 'changed_only', 'count', 'hidden']
 interface ResolvedAuditObject {
   node: ts.ObjectLiteralExpression;
   bindings: LiteralBindings;
+}
+
+function literalBinding(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  bindings: LiteralBindings = new Map(),
+): LiteralBinding | null {
+  const immutableValues = expandStringExpression(expression, checker, bindings);
+  const potentialValues = expandPotentialStringExpression(expression, checker, bindings);
+  return immutableValues || potentialValues
+    ? { immutableValues, potentialValues }
+    : null;
 }
 
 function enclosingSignature(node: ts.Node): ts.SignatureDeclaration | ts.JSDocSignature | null {
@@ -99,8 +116,8 @@ function callSiteBindings(
       if (!ts.isIdentifier(parameter.name)) return;
       const argument = caller.arguments[index];
       const symbol = checker.getSymbolAtLocation(parameter.name);
-      const values = argument ? expandStringExpression(argument, checker) : null;
-      if (symbol && values) bindings.set(symbol, values);
+      const binding = argument ? literalBinding(argument, checker) : null;
+      if (symbol && binding) bindings.set(symbol, binding);
     });
     return bindings;
   });
@@ -273,8 +290,8 @@ function resolveAuditObjects(
       const argument = expression.arguments[index];
       if (!argument || !ts.isIdentifier(parameter.name)) return;
       const symbol = checker.getSymbolAtLocation(parameter.name);
-      const values = expandStringExpression(argument, checker, bindings);
-      if (symbol && values) callBindings.set(symbol, values);
+      const binding = literalBinding(argument, checker, bindings);
+      if (symbol && binding) callBindings.set(symbol, binding);
     });
     return returnedExpressions(declaration).flatMap((returned) =>
       resolveAuditObjects(returned, checker, callSites, seen, callBindings),
@@ -292,7 +309,11 @@ function staticStringValues(
 ): string[] | null {
   const symbol = checker.getSymbolAtLocation(expression);
   const bound = symbol ? bindings.get(symbol) : null;
-  if (bound) return bound;
+  if (bound) {
+    return allowUnresolvedConditionals
+      ? bound.potentialValues
+      : bound.immutableValues;
+  }
   if (!symbol || !ts.isIdentifier(expression) || seen.has(symbol)) return null;
   seen.add(symbol);
   const declarations = symbol.declarations ?? [];
@@ -510,8 +531,8 @@ function resolveArrayElements(
       const argument = expression.arguments[index];
       if (!argument || !ts.isIdentifier(parameter.name)) return;
       const symbol = checker.getSymbolAtLocation(parameter.name);
-      const values = expandStringExpression(argument, checker, bindings);
-      if (symbol && values) callBindings.set(symbol, values);
+      const binding = literalBinding(argument, checker, bindings);
+      if (symbol && binding) callBindings.set(symbol, binding);
     });
     return returnedExpressions(declaration).flatMap((returned) =>
       resolveArrayElements(returned, checker, callSites, seen, callBindings),
@@ -1126,6 +1147,60 @@ describe('Audit presentation production coverage', () => {
     ].filter((field) => !inventory.presentedFields.has(field))).toEqual([]);
     expect(inventory.presentedFields).toContain('correlatedSelectedField');
     expect(inventory.presentedFields).not.toContain('correlatedUnselectedField');
+  });
+
+  it('preserves potential helper argument branches without trusting them as hints', () => {
+    const inventory = fixtureAuditContract(`
+      type HintValueType = 'text' | 'date';
+      type HintDisplayMode = 'values' | 'changed_only';
+      declare const runtimeFlag: boolean;
+      class AuditService { record(_input: unknown): void {} }
+      const auditService = new AuditService();
+      function recordFromArguments(
+        action: string,
+        entityType: string,
+        field: string,
+        label: string,
+        valueType: HintValueType,
+        displayMode: HintDisplayMode,
+      ): void {
+        auditService.record({
+          action: action,
+          entityType: entityType,
+          metadata: {
+            changes: [{
+              field: field,
+              label: label,
+              valueType: valueType,
+              displayMode: displayMode,
+            }],
+          },
+        });
+      }
+      recordFromArguments(
+        runtimeFlag ? 'crm.fixture_potential_a' : 'crm.fixture_potential_b',
+        runtimeFlag ? 'fixture_a' : 'fixture_b',
+        runtimeFlag ? 'potentialFieldA' : 'potentialFieldB',
+        runtimeFlag ? 'Подпись A' : 'Подпись B',
+        runtimeFlag ? 'text' : 'date',
+        runtimeFlag ? 'values' : 'changed_only',
+      );
+    `);
+
+    const potentialActions = [
+      'crm.fixture_potential_a',
+      'crm.fixture_potential_b',
+    ];
+    const potentialEntityTypes = ['fixture_a', 'fixture_b'];
+    const potentialFields = [
+      'potentialFieldA',
+      'potentialFieldB',
+    ];
+    expect(potentialActions.filter((action) => !inventory.actions.has(action))).toEqual([]);
+    expect(potentialEntityTypes.filter((type) => !inventory.entityTypes.has(type))).toEqual([]);
+    expect(potentialFields.filter((field) => !inventory.presentedFields.has(field))).toEqual([]);
+    expect(potentialFields.filter((field) => inventory.hintedFields.has(field))).toEqual([]);
+    expect(inventory.unresolvedActions).toEqual([]);
   });
 
   it('classifies every statically known presented field through policy or immutable hints', () => {
