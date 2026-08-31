@@ -450,11 +450,12 @@ export class AuditPresentationService {
         to: after[key],
       };
       let change = presentAuditFieldChange(input);
+      const legacyLabel = ACTION_FIELD_LABELS[key];
       if (change?.label === 'Дополнительное поле'
-        && !/^(?:custom_data|customData)[._]/.test(key)) {
+        && legacyLabel) {
         change = presentAuditFieldChange({
           ...input,
-          label: ACTION_FIELD_LABELS[key] ?? this.humanizeIdentifier(key),
+          label: legacyLabel,
           valueType: key === 'marketingConsent' || key === 'sharedWithTeacher'
             ? 'boolean'
             : 'text',
@@ -511,12 +512,13 @@ export class AuditPresentationService {
           : undefined,
       };
       let change = presentAuditFieldChange(input);
+      const legacyLabel = ACTION_FIELD_LABELS[key];
       if (!hasSnapshotHint
         && change?.label === 'Дополнительное поле'
-        && !/^(?:custom_data|customData)[._]/.test(key)) {
+        && legacyLabel) {
         change = presentAuditFieldChange({
           ...input,
-          label: ACTION_FIELD_LABELS[key] ?? this.humanizeIdentifier(key),
+          label: legacyLabel,
           valueType: key === 'marketingConsent' || key === 'sharedWithTeacher'
             ? 'boolean'
             : 'text',

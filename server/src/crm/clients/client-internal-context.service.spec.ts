@@ -158,7 +158,7 @@ describe("ClientInternalContextService operational history", () => {
       changes: [
         {
           key: "musicLevel",
-          label: "Music level",
+          label: "Дополнительное поле",
           before: "Начальный",
           after: "Продвинутый",
         },

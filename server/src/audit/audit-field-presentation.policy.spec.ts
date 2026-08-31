@@ -191,6 +191,41 @@ describe('audit field presentation policy', () => {
     '550e8400-e29b-41d4-a716-446655440000',
     'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     'sessionId-550e8400-e29b-41d4-a716-446655440000',
+    'fingerprint:device-session-42',
+  ])('suppresses unsafe unknown text value %s before storage', (value) => {
+    const input = { field: 'owner', from: null, to: value };
+
+    expect(createSafeAuditChange(input)).toEqual({
+      field: 'owner',
+      from: null,
+      to: null,
+      label: 'Дополнительное поле',
+      valueType: 'text',
+      displayMode: 'changed_only',
+    });
+  });
+
+  it.each([
+    '550e8400-e29b-41d4-a716-446655440000',
+    'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    'sessionId-550e8400-e29b-41d4-a716-446655440000',
+    'fingerprint:device-session-42',
+  ])('suppresses unsafe unknown text value %s during presentation', (value) => {
+    const input = { field: 'owner', from: null, to: value };
+
+    expect(presentAuditFieldChange(input)).toEqual({
+      key: 'owner',
+      label: 'Дополнительное поле',
+      before: null,
+      after: null,
+    });
+    expect(JSON.stringify(presentAuditFieldChange(input))).not.toContain(value);
+  });
+
+  it.each([
+    '550e8400-e29b-41d4-a716-446655440000',
+    'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    'sessionId-550e8400-e29b-41d4-a716-446655440000',
   ])('keeps known reference safety despite a malicious text snapshot %s', (value) => {
     const input = {
       field: 'assigned_to',

@@ -179,7 +179,7 @@ function hasUnsupportedValue(value: unknown, valueType: AuditFieldValueType): bo
       || (typeof value === 'string' && /^[{\[]/.test(value.trim()));
 }
 
-function unsafeReferenceValue(value: unknown): boolean {
+function unsafeIdentifierValue(value: unknown): boolean {
   const scalar = scalarValue(value);
   return typeof scalar === 'string'
     && (UUID_VALUE.test(scalar) || HASH_OR_SESSION_VALUE.test(scalar));
@@ -281,8 +281,7 @@ export function createSafeAuditChange(
     };
   }
 
-  if (policy.valueType === 'reference'
-    && (unsafeReferenceValue(input.from) || unsafeReferenceValue(input.to))) {
+  if (unsafeIdentifierValue(input.from) || unsafeIdentifierValue(input.to)) {
     return {
       field: input.field,
       from: null,
@@ -335,8 +334,7 @@ export function presentAuditFieldChange(
     };
   }
 
-  if (policy.valueType === 'reference'
-    && (unsafeReferenceValue(input.from) || unsafeReferenceValue(input.to))) {
+  if (unsafeIdentifierValue(input.from) || unsafeIdentifierValue(input.to)) {
     return { key: input.field, label: policy.label, before: null, after: null };
   }
 

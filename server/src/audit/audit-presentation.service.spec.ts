@@ -196,6 +196,54 @@ describe('AuditPresentationService', () => {
     expect(JSON.stringify(service.present(closedByInput))).not.toContain(uuid);
   });
 
+  it.each([
+    '550e8400-e29b-41d4-a716-446655440000',
+    'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    'sessionId-550e8400-e29b-41d4-a716-446655440000',
+    'fingerprint:device-session-42',
+  ])('suppresses unsafe unknown ref value %s without a Latin label', (value) => {
+    const input: AuditPresentationInput = {
+      ...emailChange,
+      metadata: {},
+      beforeRef: { owner: null },
+      afterRef: { owner: value },
+    };
+
+    const presented = service.present(input);
+    expect(presented.changes).toEqual([{
+      key: 'owner',
+      label: 'Дополнительное поле',
+      before: null,
+      after: null,
+    }]);
+    expect(JSON.stringify(presented)).not.toContain(value);
+    expect(JSON.stringify(presented)).not.toContain('"label":"Owner"');
+  });
+
+  it.each([
+    '550e8400-e29b-41d4-a716-446655440000',
+    'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    'sessionId-550e8400-e29b-41d4-a716-446655440000',
+    'fingerprint:device-session-42',
+  ])('suppresses unsafe unknown metadata value %s without a Latin label', (value) => {
+    const input: AuditPresentationInput = {
+      ...emailChange,
+      metadata: { changes: [{ field: 'owner', from: null, to: value }] },
+      beforeRef: null,
+      afterRef: null,
+    };
+
+    const presented = service.present(input);
+    expect(presented.changes).toEqual([{
+      key: 'owner',
+      label: 'Дополнительное поле',
+      before: null,
+      after: null,
+    }]);
+    expect(JSON.stringify(presented)).not.toContain(value);
+    expect(JSON.stringify(presented)).not.toContain('"label":"Owner"');
+  });
+
   it('preserves director-defined values through the shared presentation policy', () => {
     const directorValueInput: AuditPresentationInput = {
       ...emailChange,
