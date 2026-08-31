@@ -188,6 +188,54 @@ describe('audit field presentation policy', () => {
   });
 
   it.each([
+    '550e8400-e29b-41d4-a716-446655440000',
+    'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    'sessionId-550e8400-e29b-41d4-a716-446655440000',
+  ])('keeps known reference safety despite a malicious text snapshot %s', (value) => {
+    const input = {
+      field: 'assigned_to',
+      from: null,
+      to: value,
+      label: 'Ответственный',
+      valueType: 'text' as const,
+      displayMode: 'values' as const,
+    };
+
+    expect(createSafeAuditChange(input)).toMatchObject({
+      from: null,
+      to: null,
+      valueType: 'reference',
+      displayMode: 'changed_only',
+    });
+    expect(presentAuditFieldChange(input)).toEqual({
+      key: 'assigned_to',
+      label: 'Ответственный',
+      before: null,
+      after: null,
+    });
+  });
+
+  it('preserves JSON-looking primitive list items exactly', () => {
+    const input = {
+      field: 'custom_data.disciplines',
+      from: null,
+      to: ['{director-defined value}', '[director-defined value]', 'PIANO'],
+    };
+
+    expect(createSafeAuditChange(input)).toMatchObject({
+      to: ['{director-defined value}', '[director-defined value]', 'PIANO'],
+      valueType: 'list',
+      displayMode: 'values',
+    });
+    expect(presentAuditFieldChange(input)).toEqual({
+      key: 'custom_data.disciplines',
+      label: 'Направления',
+      before: null,
+      after: '{director-defined value}, [director-defined value], PIANO',
+    });
+  });
+
+  it.each([
     '2026-08-31T17:21:99+03:00',
     '2026-08-31T17:21:00+99:99',
   ])('preserves invalid ISO date-time %s without localized formatting', (value) => {

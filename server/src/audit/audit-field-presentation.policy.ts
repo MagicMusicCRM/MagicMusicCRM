@@ -112,6 +112,13 @@ function resolveAuditField(input: AuditFieldChangeInput): AuditFieldPresentation
       displayMode: 'count',
     };
   }
+  if (fallback.valueType === 'reference') {
+    return {
+      label: snapshot?.label ?? fallback.label,
+      valueType: 'reference',
+      displayMode: snapshot?.displayMode ?? fallback.displayMode,
+    };
+  }
   return snapshot
     ? {
       label: snapshot.label,
@@ -129,9 +136,7 @@ function scalarValue(value: unknown): string | number | boolean | null {
   if (value === null || value === undefined || isRedactionMarker(value)) return null;
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return value === '' || (typeof value === 'string' && /^[{\[]/.test(value.trim()))
-      ? null
-      : value;
+    return value === '' ? null : value;
   }
   return null;
 }
@@ -170,7 +175,8 @@ function hasUnsupportedValue(value: unknown, valueType: AuditFieldValueType): bo
   if (value === null || value === undefined || isRedactionMarker(value)) return false;
   return valueType === 'list'
     ? primitiveList(value) === null
-    : scalarValue(value) === null;
+    : scalarValue(value) === null
+      || (typeof value === 'string' && /^[{\[]/.test(value.trim()));
 }
 
 function unsafeReferenceValue(value: unknown): boolean {
