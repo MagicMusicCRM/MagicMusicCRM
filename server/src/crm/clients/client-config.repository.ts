@@ -1,5 +1,13 @@
 import { Injectable } from "@nestjs/common";
+import { isDeepStrictEqual } from "node:util";
 import { PoolClient } from "pg";
+import {
+  createSafeAuditChange,
+} from "../../audit/audit-field-presentation.policy";
+import type {
+  AuditFieldChangeInput,
+  AuditFieldValueType,
+} from "../../audit/audit-presentation.types";
 import { DatabaseService } from "../../db/database.service";
 import {
   ClientCustomValueType,
@@ -47,6 +55,24 @@ export interface TypedClientCustomValue {
   valueBoolean: boolean | null;
   valueDate: string | null;
   valueJson: unknown | null;
+}
+
+export interface TypedClientCustomFieldWrite extends TypedClientCustomValue {
+  fieldKey: string;
+  label: string;
+  valueType: ClientCustomValueType;
+}
+
+interface StoredTypedClientCustomValueRow {
+  definition_id: string;
+  field_key: string;
+  label: string;
+  value_type: ClientCustomValueType;
+  value_text: string | null;
+  value_number: number | string | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_json: unknown | null;
 }
 
 export async function saveTypedClientValues(
@@ -108,14 +134,28 @@ export async function replaceTypedClientValues(
   client: PoolClient,
   entityType: ClientEntityType,
   entityId: string,
-  values: TypedClientCustomValue[],
-): Promise<void> {
+  values: TypedClientCustomFieldWrite[],
+): Promise<AuditFieldChangeInput[]> {
   const resolved = await client.query<{ client_id: string | null }>(
     `select app.resolve_client_id($1, $2) as client_id`,
     [entityType, entityId],
   );
   const clientId = resolved.rows[0]?.client_id;
   if (!clientId) throw new Error("Canonical Client identity was not found.");
+  const previous = await client.query<StoredTypedClientCustomValueRow>(
+    `select value.definition_id, definition.field_key, definition.label,
+       definition.value_type, value.value_text, value.value_number,
+       value.value_boolean, value.value_date::text as value_date,
+       value.value_json
+     from app.client_custom_field_values value
+     join app.client_custom_field_definitions definition
+       on definition.id = value.definition_id
+     where value.client_id = $1
+       and not definition.is_system
+       and definition.is_active and definition.deleted_at is null
+     order by definition.field_key, definition.id`,
+    [clientId],
+  );
   const definitionIds = values.map((value) => value.definitionId);
   await client.query(
     `delete from app.client_custom_field_values value
@@ -128,6 +168,76 @@ export async function replaceTypedClientValues(
     [clientId, definitionIds],
   );
   await saveTypedClientValues(client, entityType, entityId, values);
+  return diffTypedClientValues(previous.rows, values);
+}
+
+function diffTypedClientValues(
+  previousRows: StoredTypedClientCustomValueRow[],
+  values: TypedClientCustomFieldWrite[],
+): AuditFieldChangeInput[] {
+  const previous = new Map(
+    previousRows.map((row) => [row.definition_id, storedTypedValue(row)]),
+  );
+  const next = new Map(values.map((value) => [value.definitionId, value]));
+  const definitionIds = [
+    ...previous.keys(),
+    ...values
+      .map((value) => value.definitionId)
+      .filter((definitionId) => !previous.has(definitionId)),
+  ];
+
+  return definitionIds.flatMap((definitionId) => {
+    const before = previous.get(definitionId);
+    const after = next.get(definitionId);
+    const from = before ? typedValueForAudit(before) : null;
+    const to = after ? typedValueForAudit(after) : null;
+    if (isDeepStrictEqual(from, to)) return [];
+    const presentation = after ?? before;
+    if (!presentation) return [];
+    const change = createSafeAuditChange({
+      field: `customFields.${presentation.fieldKey}`,
+      label: presentation.label,
+      valueType: auditValueType(presentation.valueType),
+      displayMode: "values",
+      from,
+      to,
+    });
+    return change ? [change] : [];
+  });
+}
+
+function storedTypedValue(
+  row: StoredTypedClientCustomValueRow,
+): TypedClientCustomFieldWrite {
+  return {
+    definitionId: row.definition_id,
+    fieldKey: row.field_key,
+    label: row.label,
+    valueType: row.value_type,
+    valueText: row.value_text,
+    valueNumber: row.value_number === null ? null : Number(row.value_number),
+    valueBoolean: row.value_boolean,
+    valueDate: row.value_date,
+    valueJson: row.value_json,
+  };
+}
+
+function typedValueForAudit(value: TypedClientCustomValue): unknown {
+  if (value.valueNumber !== null) return value.valueNumber;
+  if (value.valueBoolean !== null) return value.valueBoolean;
+  if (value.valueDate !== null) return value.valueDate;
+  if (value.valueJson !== null) return value.valueJson;
+  return value.valueText;
+}
+
+function auditValueType(valueType: ClientCustomValueType): AuditFieldValueType {
+  if (valueType === "date") return "date";
+  if (valueType === "datetime") return "datetime";
+  if (valueType === "boolean" || valueType === "toggle") return "boolean";
+  if (valueType === "multi_select" || valueType === "checkbox_group") {
+    return "list";
+  }
+  return "text";
 }
 
 export async function readTypedClientValueMap(

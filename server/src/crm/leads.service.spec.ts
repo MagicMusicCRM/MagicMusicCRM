@@ -853,10 +853,23 @@ describe("LeadsService", () => {
         action: "crm.lead_updated",
         metadata: expect.objectContaining({
           changes: [
-            { field: "phone", from: "+79161234567", to: "+79990000000" },
-            { field: "custom_data.level", from: "A1", to: "A2" },
+            {
+              field: "phone",
+              from: "+79161234567",
+              to: "+79990000000",
+              label: "Телефон",
+              valueType: "text",
+              displayMode: "values",
+            },
+            {
+              field: "custom_data.level",
+              from: "A1",
+              to: "A2",
+              label: "Уровень",
+              valueType: "text",
+              displayMode: "values",
+            },
           ],
-          customFieldDefinitionIds: [],
         }),
       }),
     );

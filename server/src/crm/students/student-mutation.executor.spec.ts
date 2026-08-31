@@ -137,6 +137,9 @@ describe("StudentMutationExecutor", () => {
       customFields: [
         {
           definitionId,
+          fieldKey: "priority",
+          label: "Приоритет",
+          valueType: "text",
           valueText: "VIP",
           valueNumber: null,
           valueBoolean: null,
@@ -223,6 +226,23 @@ describe("StudentMutationExecutor", () => {
         events.push("typed-resolve");
         return { rows: [{ client_id: "client-a" }] };
       }
+      if (sql.includes("from app.client_custom_field_values value")
+        && sql.includes("join app.client_custom_field_definitions")) {
+        events.push("typed-snapshot");
+        return {
+          rows: [{
+            definition_id: definitionId,
+            field_key: "instrument",
+            label: "Любимый инструмент",
+            value_type: "select",
+            value_text: "PIANO",
+            value_number: null,
+            value_boolean: null,
+            value_date: null,
+            value_json: null,
+          }],
+        };
+      }
       if (sql.includes("delete from app.client_custom_field_values")) {
         events.push("typed-delete");
         expect(params).toEqual(["client-a", []]);
@@ -283,6 +303,14 @@ describe("StudentMutationExecutor", () => {
     await expect(executor.update(command)).resolves.toEqual({
       beforeStudent,
       student,
+      customFieldChanges: [{
+        field: "customFields.instrument",
+        label: "Любимый инструмент",
+        valueType: "text",
+        displayMode: "values",
+        from: "PIANO",
+        to: null,
+      }],
     });
 
     expect(database.transaction).toHaveBeenCalledTimes(1);
@@ -294,6 +322,7 @@ describe("StudentMutationExecutor", () => {
       "responsible-lock",
       "update-student",
       "typed-resolve",
+      "typed-snapshot",
       "typed-delete",
       "typed-resolve",
       "status-history",
@@ -349,6 +378,7 @@ describe("StudentMutationExecutor", () => {
     await expect(executor.update(command)).resolves.toEqual({
       beforeStudent,
       student: unchangedStudent,
+      customFieldChanges: [],
     });
 
     expect(queries.some((sql) => sql.includes("resolve_client_id"))).toBe(false);
@@ -462,6 +492,7 @@ describe("StudentMutationExecutor", () => {
     await expect(executor.update(command)).resolves.toEqual({
       beforeStudent,
       student: updatedStudent,
+      customFieldChanges: [],
     });
     expect(query).toHaveBeenCalledTimes(2);
     expect(String(query.mock.calls[1]?.[0])).toContain("version = s.version + 1");

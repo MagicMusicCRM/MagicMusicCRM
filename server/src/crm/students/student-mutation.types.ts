@@ -1,4 +1,6 @@
-import type { TypedClientCustomValue } from "../clients/client-config.repository";
+import type {
+  TypedClientCustomFieldWrite,
+} from "../clients/client-config.repository";
 
 export interface PreparedStudentCreate {
   readonly firstName: string;
@@ -12,7 +14,7 @@ export interface PreparedStudentCreate {
   readonly requestedResponsibleId: string | undefined;
   readonly branchId: string | null;
   readonly sourceId: string | null;
-  readonly customFields?: ReadonlyArray<TypedClientCustomValue>;
+  readonly customFields?: ReadonlyArray<TypedClientCustomFieldWrite>;
 }
 
 export interface PreparedStudentUpdate {
@@ -29,7 +31,7 @@ export interface PreparedStudentUpdate {
   readonly branchId: string | null;
   readonly clearResponsible: boolean;
   readonly sourceId: string | null;
-  readonly customFields?: ReadonlyArray<TypedClientCustomValue>;
+  readonly customFields?: ReadonlyArray<TypedClientCustomFieldWrite>;
 }
 
 export interface StudentWriteSnapshot {

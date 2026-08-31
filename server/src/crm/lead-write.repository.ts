@@ -4,6 +4,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { PoolClient } from "pg";
+import type { AuditFieldChangeInput } from "../audit/audit-presentation.types";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import {
@@ -28,6 +29,7 @@ export interface LeadWriteResult {
   before: (LeadRow & { branch_id: string | null }) | null;
   lead: LeadRow | null;
   branchId: string | null;
+  customFieldChanges: AuditFieldChangeInput[];
 }
 
 @Injectable()
@@ -110,8 +112,9 @@ export class LeadWriteRepository {
         sourceName,
         customData,
       );
+      let customFieldChanges: AuditFieldChangeInput[] = [];
       if (lead && customFields) {
-        await replaceTypedClientValues(
+        customFieldChanges = await replaceTypedClientValues(
           client,
           "lead",
           leadId,
@@ -119,7 +122,7 @@ export class LeadWriteRepository {
         );
       }
       await this.recordHistory(client, actor, leadId, dto, branchId, before, lead);
-      return { before, lead, branchId };
+      return { before, lead, branchId, customFieldChanges };
     });
   }
 

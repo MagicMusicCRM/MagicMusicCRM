@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
+import type { AuditFieldChangeInput } from "../../audit/audit-presentation.types";
 import { AuditService } from "../../audit/audit.service";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
@@ -89,9 +90,10 @@ export class StudentCommandService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     const command = this.prepareUpdate(studentId, dto, customFields);
-    const { beforeStudent, student } = await this.mutations
-      .update(command)
-      .catch((error: unknown) => rethrowCreatePersonError(error));
+    const { beforeStudent, student, customFieldChanges } =
+      await this.mutations
+        .update(command)
+        .catch((error: unknown) => rethrowCreatePersonError(error));
     if (!student) throw new NotFoundException("Ученик не найден.");
     const claimedVersion = await this.ensureUpdateFallbackResponsible(
       actor,
@@ -105,7 +107,7 @@ export class StudentCommandService {
       student,
       beforeStudent,
       command,
-      customFields,
+      customFieldChanges,
     );
     return {
       ...toStudentDto(student),
@@ -324,7 +326,7 @@ export class StudentCommandService {
     student: StudentRow,
     beforeStudent: StudentWriteSnapshot | null,
     command: PreparedStudentUpdate,
-    customFields?: ValidatedCustomFields,
+    customFieldChanges: AuditFieldChangeInput[],
   ): Promise<void> {
     await this.audit.record({
       actor,
@@ -332,15 +334,16 @@ export class StudentCommandService {
       entityType: "student",
       entityId: student.id,
       metadata: {
-        changes: beforeStudent
-          ? diffEntityFields(
-              beforeStudent as unknown as Record<string, unknown>,
-              student as unknown as Record<string, unknown>,
-              STUDENT_AUDITED_FIELDS,
-            )
-          : [],
-        customFieldDefinitionIds:
-          customFields?.values.map((value) => value.definitionId) ?? [],
+        changes: [
+          ...(beforeStudent
+            ? diffEntityFields(
+                beforeStudent as unknown as Record<string, unknown>,
+                student as unknown as Record<string, unknown>,
+                STUDENT_AUDITED_FIELDS,
+              )
+            : []),
+          ...customFieldChanges,
+        ],
       },
     });
     this.realtime.emitCrmChanged({

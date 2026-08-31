@@ -77,12 +77,8 @@ export class LeadCommandService {
     customFields?: ValidatedCustomFields,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    const { before, lead, branchId } = await this.writes.update(
-      actor,
-      leadId,
-      dto,
-      customFields,
-    );
+    const { before, lead, branchId, customFieldChanges } =
+      await this.writes.update(actor, leadId, dto, customFields);
     if (!lead) throw new NotFoundException("Лид не найден.");
     if (!dto.clearAssignedTo && !dto.assignedTo) {
       const claimedVersion = await ensureResponsibleSafe(
@@ -99,15 +95,16 @@ export class LeadCommandService {
       entityType: "lead",
       entityId: lead.id,
       metadata: {
-        changes: before
-          ? diffEntityFields(
-              before as unknown as Record<string, unknown>,
-              lead as unknown as Record<string, unknown>,
-              LEAD_AUDITED_FIELDS,
-            )
-          : [],
-        customFieldDefinitionIds:
-          customFields?.values.map((value) => value.definitionId) ?? [],
+        changes: [
+          ...(before
+            ? diffEntityFields(
+                before as unknown as Record<string, unknown>,
+                lead as unknown as Record<string, unknown>,
+                LEAD_AUDITED_FIELDS,
+              )
+            : []),
+          ...customFieldChanges,
+        ],
       },
     });
     this.realtime.emitCrmChanged({

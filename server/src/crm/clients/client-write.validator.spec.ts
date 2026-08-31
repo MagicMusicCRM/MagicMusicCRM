@@ -3,6 +3,7 @@ import { ClientCustomValueType } from "../dto/client-config.dto";
 import {
   ClientConfigRepository,
   ClientCustomFieldDefinitionRow,
+  TypedClientCustomValue,
 } from "./client-config.repository";
 import {
   ClientWriteValidator,
@@ -102,12 +103,40 @@ describe("ClientWriteValidator.validateCustomFields", () => {
     ).resolves.toEqual({ values: [], warnings: [] });
   });
 
+  it.each([
+    "DRUMS",
+    "Авторское направление №1",
+    "DrUmS",
+  ])("snapshots exact director-owned select value %s", async (directorValue) => {
+    repository.findDefinitionsByIds.mockResolvedValue([
+      definition("select", [directorValue], {
+        field_key: "instrument",
+        label: "Любимый инструмент",
+      }),
+    ]);
+
+    const result = await validator.validateCustomFields("lead", [
+      { definitionId: "field-1", value: directorValue },
+    ]);
+
+    expect(result.values[0]).toMatchObject({
+      definitionId: "field-1",
+      fieldKey: "instrument",
+      label: "Любимый инструмент",
+      valueType: "select",
+      valueText: directorValue,
+    });
+  });
+
   const successfulConversions: Array<{
     name: string;
     valueType: ClientCustomValueType;
     value: unknown;
     options?: unknown;
-    expected: ValidatedCustomFields;
+    expected: {
+      values: TypedClientCustomValue[];
+      warnings: ValidatedCustomFields["warnings"];
+    };
   }> = [
     {
       name: "number",
@@ -412,7 +441,7 @@ describe("ClientWriteValidator.validateCustomFields", () => {
   it.each(successfulConversions)(
     "converts $name into exactly one typed slot",
     async ({ valueType, value, options, expected }) => {
-      await expect(convert(valueType, value, options)).resolves.toEqual(
+      await expect(convert(valueType, value, options)).resolves.toMatchObject(
         expected,
       );
     },
@@ -437,7 +466,7 @@ describe("ClientWriteValidator.validateCustomFields", () => {
         { definitionId: "field-number", value: 12 },
         { definitionId: "field-phone", value: "8 (999) 000-00-00" },
       ]),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       values: [
         {
           definitionId: "field-number",
@@ -534,7 +563,9 @@ describe("ClientWriteValidator.validateCustomFields", () => {
   });
 
   it("accepts HTTP as well as HTTPS URLs", async () => {
-    await expect(convert("url", "http://example.test/a")).resolves.toEqual({
+    await expect(
+      convert("url", "http://example.test/a"),
+    ).resolves.toMatchObject({
       values: [
         {
           definitionId: "field-1",
@@ -585,7 +616,7 @@ describe("ClientWriteValidator.validateCustomFields", () => {
   it("ignores non-string single-choice definition options", async () => {
     await expect(
       convert("select", "Вокал", [1, null, "Вокал"]),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       values: [
         {
           definitionId: "field-1",
@@ -619,7 +650,7 @@ describe("ClientWriteValidator.validateCustomFields", () => {
   it("ignores non-string list definition options", async () => {
     await expect(
       convert("multi_select", ["Вокал"], [1, null, "Вокал"]),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       values: [
         {
           definitionId: "field-1",
@@ -675,7 +706,7 @@ describe("ClientWriteValidator.validateCustomFields", () => {
     async (valueType) => {
       await expect(
         convert(valueType, [" Вокал ", " Вокал "], [" Вокал "]),
-      ).resolves.toEqual({
+      ).resolves.toMatchObject({
         values: [
           {
             definitionId: "field-1",
@@ -700,7 +731,7 @@ describe("ClientWriteValidator.validateCustomFields", () => {
   );
 
   it("returns no warning for an already canonical phone", async () => {
-    await expect(convert("phone", "+79990000000")).resolves.toEqual({
+    await expect(convert("phone", "+79990000000")).resolves.toMatchObject({
       values: [
         {
           definitionId: "field-1",

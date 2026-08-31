@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type { AuditService } from "../../audit/audit.service";
+import type { AuditFieldChangeInput } from "../../audit/audit-presentation.types";
 import type { ActorContext } from "../../common/security/actor-context";
 import type { DatabaseService } from "../../db/database.service";
 import type { NotificationsService } from "../../notifications/notifications.service";
@@ -92,6 +93,7 @@ describe("StudentCommandService", () => {
             custom_data: {},
           },
           student,
+          customFieldChanges: [] as AuditFieldChangeInput[],
         };
       }),
     };
@@ -322,6 +324,14 @@ describe("StudentCommandService", () => {
           contactPersons: [{ name: "Анна", phone: contactPhone }],
         },
       },
+      customFieldChanges: [{
+        field: "customFields.instrument",
+        from: "PIANO",
+        to: "DrUmS",
+        label: "Любимый инструмент",
+        valueType: "text",
+        displayMode: "values",
+      }],
     });
 
     await service.updateStudent(actor, "student-a", {
@@ -358,8 +368,15 @@ describe("StudentCommandService", () => {
           valueType: "text",
           displayMode: "values",
         },
+        {
+          field: "customFields.instrument",
+          from: "PIANO",
+          to: "DrUmS",
+          label: "Любимый инструмент",
+          valueType: "text",
+          displayMode: "values",
+        },
       ],
-      customFieldDefinitionIds: [],
     });
     const storedChanges = JSON.stringify(metadata?.changes);
     expect(storedChanges).toContain('"to":"DRUMS"');

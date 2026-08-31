@@ -56,7 +56,19 @@ describe("LeadCommandService", () => {
     const policy = { assertCanWriteCrm: jest.fn() };
     const realtime = { emitCrmChanged: jest.fn() };
     const writes = {
-      update: jest.fn(async () => ({ before, lead, branchId: null })),
+      update: jest.fn(async () => ({
+        before,
+        lead,
+        branchId: null,
+        customFieldChanges: [{
+          field: "customFields.instrument",
+          from: "PIANO",
+          to: "DRUMS",
+          label: "Любимый инструмент",
+          valueType: "text" as const,
+          displayMode: "values" as const,
+        }],
+      })),
     };
     const service = new LeadCommandService(
       {} as never,
@@ -111,8 +123,15 @@ describe("LeadCommandService", () => {
           valueType: "text",
           displayMode: "values",
         },
+        {
+          field: "customFields.instrument",
+          from: "PIANO",
+          to: "DRUMS",
+          label: "Любимый инструмент",
+          valueType: "text",
+          displayMode: "values",
+        },
       ],
-      customFieldDefinitionIds: [],
     });
     const storedChanges = JSON.stringify(metadata?.changes);
     expect(storedChanges).not.toContain(oldUuid);

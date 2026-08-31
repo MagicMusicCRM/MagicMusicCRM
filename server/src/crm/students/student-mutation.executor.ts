@@ -4,6 +4,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import type { AuditFieldChangeInput } from "../../audit/audit-presentation.types";
 import { DatabaseService } from "../../db/database.service";
 import {
   replaceTypedClientValues,
@@ -200,9 +201,13 @@ export class StudentMutationExecutor {
       beforeStudent ? command.requestedResponsibleId : undefined,
     );
     const student = await this.updateStudent(client, command, customData);
-    await this.replaceUpdateCustomFields(client, command, student);
+    const customFieldChanges = await this.replaceUpdateCustomFields(
+      client,
+      command,
+      student,
+    );
     await this.appendStatusHistory(client, command, beforeStudent, student);
-    return { beforeStudent, student };
+    return { beforeStudent, student, customFieldChanges };
   }
 
   private async lockStudentSnapshot(
@@ -372,9 +377,9 @@ export class StudentMutationExecutor {
     client: PoolClient,
     command: PreparedStudentUpdate,
     student: StudentRow | undefined,
-  ): Promise<void> {
-    if (!student || command.customFields === undefined) return;
-    await replaceTypedClientValues(client, "student", command.studentId, [
+  ): Promise<AuditFieldChangeInput[]> {
+    if (!student || command.customFields === undefined) return [];
+    return replaceTypedClientValues(client, "student", command.studentId, [
       ...command.customFields,
     ]);
   }

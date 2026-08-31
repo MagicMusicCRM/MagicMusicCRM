@@ -11,7 +11,7 @@ import {
 import {
   ClientConfigRepository,
   ClientCustomFieldDefinitionRow,
-  TypedClientCustomValue,
+  TypedClientCustomFieldWrite,
 } from "./client-config.repository";
 
 export interface ClientValidationWarning {
@@ -29,7 +29,7 @@ export interface ValidatedLeadCreate {
   sourceDisplayName: string;
   branchId?: string;
   status?: string;
-  customFields: TypedClientCustomValue[];
+  customFields: TypedClientCustomFieldWrite[];
   warnings: ClientValidationWarning[];
 }
 
@@ -42,17 +42,17 @@ export interface ValidatedStudentCreate {
   sourceId: string;
   sourceCanonicalName: string;
   sourceDisplayName: string;
-  customFields: TypedClientCustomValue[];
+  customFields: TypedClientCustomFieldWrite[];
   warnings: ClientValidationWarning[];
 }
 
 export interface ValidatedCustomFields {
-  values: TypedClientCustomValue[];
+  values: TypedClientCustomFieldWrite[];
   warnings: ClientValidationWarning[];
 }
 
 type ConvertedCustomValue = {
-  value: TypedClientCustomValue;
+  value: TypedClientCustomFieldWrite;
   warnings: ClientValidationWarning[];
 };
 
@@ -159,7 +159,7 @@ export class ClientWriteValidator {
       }
     }
 
-    const values: TypedClientCustomValue[] = [];
+    const values: TypedClientCustomFieldWrite[] = [];
     const warnings: ClientValidationWarning[] = [];
     for (const input of inputs) {
       const definition = byId.get(input.definitionId);
@@ -196,7 +196,7 @@ export class ClientWriteValidator {
     definition: ClientCustomFieldDefinitionRow,
     raw: unknown,
   ): ConvertedCustomValue {
-    const empty = this.emptyTypedValue(definition.id);
+    const empty = this.emptyTypedValue(definition);
     const field = `customFields.${definition.field_key}`;
     const type = definition.value_type;
     if (this.isNumericValueType(type)) {
@@ -211,9 +211,14 @@ export class ClientWriteValidator {
     return this.convertTextValue(definition, empty, raw, field, type);
   }
 
-  private emptyTypedValue(definitionId: string): TypedClientCustomValue {
+  private emptyTypedValue(
+    definition: ClientCustomFieldDefinitionRow,
+  ): TypedClientCustomFieldWrite {
     return {
-      definitionId,
+      definitionId: definition.id,
+      fieldKey: definition.field_key,
+      label: definition.label,
+      valueType: definition.value_type,
       valueText: null,
       valueNumber: null,
       valueBoolean: null,
@@ -239,7 +244,7 @@ export class ClientWriteValidator {
   }
 
   private convertNumericValue(
-    empty: TypedClientCustomValue,
+    empty: TypedClientCustomFieldWrite,
     raw: unknown,
     field: string,
     type: ClientCustomValueType,
@@ -254,7 +259,7 @@ export class ClientWriteValidator {
   }
 
   private convertBooleanValue(
-    empty: TypedClientCustomValue,
+    empty: TypedClientCustomFieldWrite,
     raw: unknown,
     field: string,
     type: ClientCustomValueType,
@@ -278,7 +283,7 @@ export class ClientWriteValidator {
 
   private convertListOptionValue(
     definition: ClientCustomFieldDefinitionRow,
-    empty: TypedClientCustomValue,
+    empty: TypedClientCustomFieldWrite,
     raw: unknown,
     field: string,
     type: ClientCustomValueType,
@@ -360,7 +365,7 @@ export class ClientWriteValidator {
 
   private convertTextValue(
     definition: ClientCustomFieldDefinitionRow,
-    empty: TypedClientCustomValue,
+    empty: TypedClientCustomFieldWrite,
     raw: unknown,
     field: string,
     type: ClientCustomValueType,
