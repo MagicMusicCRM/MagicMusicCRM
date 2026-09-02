@@ -39,7 +39,10 @@ export class PayrollReadRepository {
           trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
           lp.attendance_kind, lp.charge_share,
           compensation.id as settlement_fact_id,
-          compensation.amount_minor as settled_amount_minor
+          compensation.amount_minor as settled_amount_minor,
+          compensation.compensation_type,
+          compensation.compensation_rule_key,
+          compensation.compensation_rule_label
         from app.lessons l
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
         left join app.students s on s.id = l.student_id and s.deleted_at is null

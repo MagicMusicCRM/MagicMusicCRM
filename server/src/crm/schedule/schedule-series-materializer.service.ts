@@ -33,6 +33,7 @@ interface SeriesConstraintCandidate {
 
 interface ScheduleMaterializationOptions {
   includePast?: boolean;
+  deferPlanReservations?: boolean;
   replaceableLineageDates?: string[];
 }
 
@@ -50,7 +51,7 @@ export class ScheduleSeriesMaterializerService {
 
   /** Горизонт материализации занятий серии, дней вперёд. */
   static readonly MAX_BOOKING_AHEAD_DAYS = 365;
-  private static readonly INDIVIDUAL_SERIES_HORIZON_DAYS = 60;
+  private static readonly OPEN_ENDED_PLAN_HORIZON_DAYS = 365;
   private static readonly GROUP_SERIES_HORIZON_DAYS = 400;
 
   /**
@@ -97,11 +98,7 @@ export class ScheduleSeriesMaterializerService {
           from target s
           cross join lateral generate_series(
             case when $4::boolean then s.valid_from else greatest(s.valid_from, s.local_today) end::timestamp,
-            least(
-              coalesce(s.valid_until, s.local_today
-                + case when s.plan_id is not null or s.group_id is null
-                    then $2::int else $3::int end),
-              s.local_today
+            coalesce(s.valid_until, greatest(s.valid_from, s.local_today)
                 + case when s.plan_id is not null or s.group_id is null
                     then $2::int else $3::int end
             )::timestamp,
@@ -166,7 +163,7 @@ export class ScheduleSeriesMaterializerService {
       `,
       [
         seriesId,
-        ScheduleSeriesMaterializerService.INDIVIDUAL_SERIES_HORIZON_DAYS,
+        ScheduleSeriesMaterializerService.OPEN_ENDED_PLAN_HORIZON_DAYS,
         ScheduleSeriesMaterializerService.GROUP_SERIES_HORIZON_DAYS,
         options.includePast ?? false,
         options.replaceableLineageDates ?? [],
@@ -316,17 +313,10 @@ export class ScheduleSeriesMaterializerService {
               now()
             )::date
           ) end::timestamp,
-          least(
-              coalesce(s.valid_until, timezone(
+          coalesce(s.valid_until, greatest(s.valid_from, timezone(
                 coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
                 now()
-              )::date
-                + case when s.plan_id is not null or s.group_id is null
-                    then $2::int else $3::int end),
-              timezone(
-                coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-                now()
-              )::date
+              )::date)
                 + case when s.plan_id is not null or s.group_id is null
                     then $2::int else $3::int end
           )::timestamp,
@@ -352,7 +342,7 @@ export class ScheduleSeriesMaterializerService {
       `,
       [
         seriesId,
-        ScheduleSeriesMaterializerService.INDIVIDUAL_SERIES_HORIZON_DAYS,
+        ScheduleSeriesMaterializerService.OPEN_ENDED_PLAN_HORIZON_DAYS,
         ScheduleSeriesMaterializerService.GROUP_SERIES_HORIZON_DAYS,
         options.includePast ?? false,
         options.replaceableLineageDates ?? [],
@@ -607,6 +597,24 @@ export class ScheduleSeriesMaterializerService {
       `,
       [lessonIds],
     );
+    if (!options.deferPlanReservations) {
+      await this.allocatePlanReservations(executor, lessonIds);
+    }
+    await executor.query(
+      `update app.schedule_series
+       set occurrence_count = coalesce(occurrence_count, 0) + $2,
+           updated_at = now()
+       where id = $1 and client_type is not null`,
+      [seriesId, lessonIds.length],
+    );
+    return lessonIds.length;
+  }
+
+  async allocatePlanReservations(
+    executor: ScheduleQueryExecutor,
+    lessonIds: string[],
+  ): Promise<void> {
+    if (!lessonIds.length) return;
     const planCharges = await executor.query<{
       lesson_id: string;
       student_id: string;
@@ -615,25 +623,35 @@ export class ScheduleSeriesMaterializerService {
     }>(
       `
         select snapshot.lesson_id, snapshot.client_id as student_id,
+          lesson.scheduled_at,
           snapshot.subscription_id, snapshot.client_charge_value::text as units
         from app.lesson_snapshots snapshot
         join app.lessons lesson on lesson.id = snapshot.lesson_id
         join app.schedule_series series on series.id = lesson.series_id
         where snapshot.lesson_id = any($1::uuid[])
           and series.plan_id is not null
+          and lesson.deleted_at is null and lesson.lifecycle_state = 'scheduled'
+          and not exists (select 1 from app.lesson_reservations existing
+            where existing.lesson_id = lesson.id and existing.subscription_id = snapshot.subscription_id
+              and existing.state in ('reserved', 'consumed'))
           and snapshot.client_charge_type = 'subscription'
           and snapshot.client_charge_value > 0
         union all
         select participant.lesson_id, participant.student_id,
+          lesson.scheduled_at,
           participant.subscription_id, participant.charge_value::text
         from app.lesson_snapshot_participants participant
         join app.lessons lesson on lesson.id = participant.lesson_id
         join app.schedule_series series on series.id = lesson.series_id
         where participant.lesson_id = any($1::uuid[])
           and series.plan_id is not null
+          and lesson.deleted_at is null and lesson.lifecycle_state = 'scheduled'
+          and not exists (select 1 from app.lesson_reservations existing
+            where existing.lesson_id = lesson.id and existing.subscription_id = participant.subscription_id
+              and existing.state in ('reserved', 'consumed'))
           and participant.charge_type = 'subscription'
           and participant.charge_value > 0
-        order by subscription_id, lesson_id
+        order by subscription_id, scheduled_at, lesson_id
       `,
       [lessonIds],
     );
@@ -650,16 +668,9 @@ export class ScheduleSeriesMaterializerService {
         chargeType: "subscription",
         subscriptionId: charge.subscription_id,
         units: Number(charge.units),
+        allowUncovered: true,
       });
     }
-    await executor.query(
-      `update app.schedule_series
-       set occurrence_count = coalesce(occurrence_count, 0) + $2,
-           updated_at = now()
-       where id = $1 and client_type is not null`,
-      [seriesId, lessonIds.length],
-    );
-    return lessonIds.length;
   }
 
   materializePlanSeries(

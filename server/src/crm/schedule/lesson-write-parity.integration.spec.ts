@@ -23,6 +23,8 @@ import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
+import { LessonSettlementCorrectionService } from "./lesson-settlement-correction.service";
+import { ScheduleReadService } from "./schedule-read.service";
 
 const defaultTestDatabaseUrl =
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
@@ -42,6 +44,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
   let pool: Pool;
   let database: DatabaseService;
   let commands: LessonCommandService;
+  let settlement: LessonSettlementService;
+  let corrections: LessonSettlementCorrectionService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: testDatabaseUrl });
@@ -62,7 +66,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       emitCrmChanged: jest.fn(),
       emitFinanceChanged: jest.fn(),
     } as unknown as RealtimeBus);
-    const settlement = new LessonSettlementService(database);
+    settlement = new LessonSettlementService(database);
     const previewTokens = new SubscriptionPreviewTokenService({
       get: (key: string) =>
         key === "COMMERCE_PREVIEW_SECRET"
@@ -70,6 +74,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
           : "",
     } as unknown as ConfigService);
     const repository = new LessonCommandRepository(database);
+    corrections = new LessonSettlementCorrectionService(database, platform, policy,
+      settlement, previewTokens, reservations, constraints);
     commands = new LessonCommandService(
       new LessonConstraintPreviewService(policy, constraints),
       new LessonWriteCommandService(
@@ -91,6 +97,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         settlement,
         previewTokens,
         repository,
+        constraints,
       ),
     );
   });
@@ -1111,14 +1118,92 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     }
   });
 
-  it("atomically previews and replaces a future lesson settlement plan", async () => {
+  it.each([false, true])("edits assigned resources without a successor, completed: %s", async (completed) => {
+    const fixture = await createFixture(pool);
+    const replacement = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const lessonIds: string[] = [];
+    const metadata = () => ({ idempotencyKey: `resource-edit-${randomUUID()}`, requestId: randomUUID() });
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [actor.userId]);
+      await pool.query("insert into app.teacher_rates (teacher_id, rate, effective_from) values ($1, 1200, '2026-01-01')", [replacement.teacherId]);
+      const created = await commands.create(actor, {
+        clientRef: { type: "student", id: fixture.studentId },
+        teacherId: fixture.teacherId, branchId: fixture.branchId, roomId: fixture.roomId,
+        scheduledAt: completed ? "2026-08-31T07:00:00Z" : nextMondayAtTenMoscow(),
+        durationMinutes: 60, isTrial: false, completionType: "standard.success",
+        clientChargeType: "personal_account", clientChargeValue: 1000,
+        teacherCompensationType: "fixed", teacherCompensationValue: 700,
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard" },
+      }, metadata());
+      lessonIds.push(created.id);
+      if (completed) await database.transaction(async (client) => {
+        await client.query("update app.lessons set lifecycle_state = 'successfully_completed' where id = $1", [created.id]);
+        await settlement.settle(client, created.id, { context: "settle",
+          decision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard" } });
+      });
+      const version = Number((await pool.query("select version from app.lessons where id = $1", [created.id])).rows[0].version);
+      const change = {
+        expectedVersion: version, reasonText: "Исправление преподавателя и филиала",
+        resources: { teacherId: replacement.teacherId, branchId: replacement.branchId, roomId: replacement.roomId },
+        financialDecision: { settlementTypeKey: "free_lesson", teacherCompensationRuleKey: "standard" },
+      };
+      // An assigned manager cannot move this lesson to an unassigned branch.
+      await pool.query("update app.users set role = 'manager' where id = $1", [actor.userId]);
+      await expect(commands.previewSettlementPlan({ ...actor, role: "manager" }, created.id,
+        change)).rejects.toMatchObject({ status: completed ? 409 : 404 });
+      await pool.query("update app.users set role = 'director' where id = $1", [actor.userId]);
+      const preview = completed ? await corrections.preview(actor, created.id, change)
+        : await commands.previewSettlementPlan(actor, created.id, change);
+      expect(preview.financialPreview.teacherFact.amountMinor).toBe("120000");
+      expect((await pool.query("select teacher_id from app.lessons where id = $1", [created.id])).rows[0].teacher_id).toBe(fixture.teacherId);
+      const command = { ...change, confirm: true as const, previewToken: preview.previewToken };
+      const key = metadata();
+      const commit = () => completed ? corrections.commit(actor, created.id, command, key)
+        : commands.updateSettlementPlan(actor, created.id, command, key);
+      await expect(commit()).resolves.toMatchObject({ version: version + 1, replayed: false });
+      await expect(commit()).resolves.toMatchObject({ version: version + 1, replayed: true });
+      const row = (await pool.query("select teacher_id, branch_id, room_id, lifecycle_state from app.lessons where id = $1", [created.id])).rows[0];
+      expect(row).toEqual({ teacher_id: replacement.teacherId, branch_id: replacement.branchId,
+        room_id: replacement.roomId, lifecycle_state: completed ? "successfully_completed" : "scheduled" });
+      const reopened = await new ScheduleReadService(database, new CrmPolicy()).listLessons(actor, { lessonId: created.id });
+      expect(reopened.items[0]).toMatchObject({ teacherId: replacement.teacherId,
+        branchId: replacement.branchId, settlementTypeKey: "free_lesson" });
+      expect((await pool.query("select count(*)::int as count from app.lesson_transitions where lesson_id = $1", [created.id])).rows[0].count).toBe(0);
+      if (completed) {
+        const facts = await pool.query("select teacher_id, amount_minor::text, supersedes_fact_id from app.lesson_teacher_compensation_facts where lesson_id = $1 order by created_at, id", [created.id]);
+        expect(facts.rows).toHaveLength(2);
+        expect(facts.rows.find((fact) => fact.teacher_id === fixture.teacherId)).toMatchObject({ amount_minor: "70000", supersedes_fact_id: null });
+        expect(facts.rows.find((fact) => fact.teacher_id === replacement.teacherId)).toMatchObject({ amount_minor: "120000", supersedes_fact_id: expect.any(String) });
+        // A later financial correction retains the replacement teacher's frozen rate.
+        const again = { ...change, expectedVersion: version + 1, resources: undefined };
+        expect((await corrections.preview(actor, created.id, again)).financialPreview.teacherFact.amountMinor).toBe("120000");
+      } else {
+        await database.transaction(async (client) => {
+          await client.query("update app.lessons set lifecycle_state = 'successfully_completed' where id = $1", [created.id]);
+          const plan = await settlement.loadPlan(client, created.id);
+          const result = await settlement.settle(client, created.id, { context: "settle", decision: plan!.decision });
+          expect(result.teacherFact).toMatchObject({ teacherId: replacement.teacherId, amountMinor: "120000" });
+        });
+      }
+      const audits = await pool.query("select after_ref from app.audit_events where entity_id = $1 and after_ref -> 'resourceChanges' is not null", [created.id]);
+      expect(audits.rows).toHaveLength(1);
+      expect(audits.rows[0].after_ref.resourceChanges).toEqual({ before: { teacherId: fixture.teacherId, branchId: fixture.branchId, roomId: fixture.roomId }, after: change.resources });
+    } finally {
+      await cleanupFixture(pool, { ...fixture, actorKey: `user:${fixture.managerId}`, lessonIds });
+      await pool.query("delete from app.teacher_rates where teacher_id = $1", [replacement.teacherId]);
+      await cleanupFixture(pool, { ...replacement, actorKey: `user:${replacement.managerId}`, lessonIds: [] });
+    }
+  });
+
+  it.each([false, true])("atomically replaces a lesson plan, already started: %s", async (started) => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const lessonIds: string[] = [];
     const subscription = await pool.query<{ id: string }>(
       `insert into app.subscriptions (
          student_id, lessons_total, lessons_used, starts_at, expires_at, status
-       ) values ($1, 12, 0, current_date, current_date + 30, 'active')
+       ) values ($1, 12, 0, current_date - 30, current_date + 30, 'active')
        returning id`,
       [fixture.studentId],
     );
@@ -1127,7 +1212,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       idempotencyKey: `planned-settlement-${name}-${randomUUID()}`,
       requestId: `planned-settlement-request-${name}-${randomUUID()}`,
     });
-    const scheduledAt = nextMondayAtTenMoscow();
+    const scheduledAt = started ? "2026-08-31T07:00:00.000Z" : nextMondayAtTenMoscow();
     try {
       const lesson = await commands.create(
         actor,
@@ -1454,6 +1539,9 @@ async function cleanupFixture(
   try {
     await client.query("begin");
     await client.query("set local session_replication_role = replica");
+    for (const table of ["lesson_teacher_compensation_facts", "lesson_client_charge_facts", "lesson_settlement_corrections"]) {
+      await client.query(`delete from app.${table} where lesson_id = any($1::uuid[])`, [fixture.lessonIds]);
+    }
     await client.query(
       "delete from app.idempotency_records where actor_key = any($1::text[])",
       [[fixture.actorKey, ...(fixture.extraActorKeys ?? [])]],

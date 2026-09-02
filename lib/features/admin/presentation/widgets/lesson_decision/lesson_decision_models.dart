@@ -151,6 +151,7 @@ class LessonDecisionRequest {
     required this.lesson,
     this.successor,
     this.initialSettlementTypeKey,
+    this.resources,
     this.initialCompensationRuleKey,
     this.initialCompensationValueMinor,
   });
@@ -159,6 +160,7 @@ class LessonDecisionRequest {
   final Map<String, dynamic> lesson;
   final Map<String, dynamic>? successor;
   final String? initialSettlementTypeKey;
+  final Map<String, dynamic>? resources;
   final String? initialCompensationRuleKey;
   final String? initialCompensationValueMinor;
 }

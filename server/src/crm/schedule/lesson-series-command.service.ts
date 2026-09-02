@@ -50,7 +50,7 @@ export interface SchedulePlanRowConstraintPreview {
 @Injectable()
 export class LessonSeriesCommandService {
   private static readonly MAX_RANGE_DAYS = 365;
-  private static readonly MATERIALIZATION_HORIZON_DAYS = 60;
+  private static readonly OPEN_ENDED_HORIZON_DAYS = 365;
   private static readonly MAX_PLAN_OCCURRENCES = 500;
 
   constructor(
@@ -239,10 +239,10 @@ export class LessonSeriesCommandService {
     for (const row of rows) {
       const today = todayByBranch.get(row.branchId);
       if (today === undefined) continue;
-      const expansionEnd = Math.min(
-        requestedEndDay,
-        today + LessonSeriesCommandService.MATERIALIZATION_HORIZON_DAYS,
-      );
+      const expansionEnd = validUntil
+        ? requestedEndDay
+        : Math.max(startDay, today) +
+          LessonSeriesCommandService.OPEN_ENDED_HORIZON_DAYS;
       const historicalEnd = Math.min(expansionEnd, today - 1);
       if (
         historicalEnd >= startDay &&
@@ -443,12 +443,9 @@ export class LessonSeriesCommandService {
           case when $10::boolean then $2::date else greatest(
             $2::date, timezone(branch.timezone_name, now())::date
           ) end,
-          least(
-            coalesce(
-              $3::date,
-              timezone(branch.timezone_name, now())::date + $8::int
-            ),
-            timezone(branch.timezone_name, now())::date + $8::int
+          coalesce(
+            $3::date,
+            greatest($2::date, timezone(branch.timezone_name, now())::date) + $8::int
           ),
           interval '1 day'
         ) day
@@ -469,7 +466,7 @@ export class LessonSeriesCommandService {
         dto.beginTime,
         dto.durationMinutes ?? 60,
         LessonSeriesCommandService.MAX_RANGE_DAYS,
-        LessonSeriesCommandService.MATERIALIZATION_HORIZON_DAYS,
+        LessonSeriesCommandService.OPEN_ENDED_HORIZON_DAYS,
         options.allowPlanRange ?? false,
         options.includePast ?? false,
       ],

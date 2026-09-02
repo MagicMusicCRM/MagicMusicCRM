@@ -179,7 +179,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     if (change.branchToLoad case final branchId?) {
       unawaited(
         _patch(
-          _data.loadBranch(branchId, draft: _draft, references: _refs),
+          _data.loadBranch(branchId, references: _refs),
           'Не удалось загрузить данные филиала.',
         ),
       );

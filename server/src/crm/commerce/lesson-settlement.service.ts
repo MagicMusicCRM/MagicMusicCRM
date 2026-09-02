@@ -120,14 +120,19 @@ export class LessonSettlementService implements LessonSettlementPort {
     if (!current) {
       throw new ConflictException({ code: "LESSON_SETTLEMENT_PLAN_MISSING" });
     }
+    const correction = await client.query<{ decision: LessonFinancialDecision }>(
+      `select decision from app.lesson_settlement_corrections
+       where lesson_id = $1 order by version desc limit 1`, [lessonId],
+    );
+    const effective = correction.rows[0]?.decision ?? current.decision;
     return {
       ...decision,
-      teacherCompensationRuleKey: current.decision.teacherCompensationRuleKey,
-      ...(current.decision.teacherCompensationValueMinor === undefined
+      teacherCompensationRuleKey: effective.teacherCompensationRuleKey,
+      ...(effective.teacherCompensationValueMinor === undefined
         ? { teacherCompensationValueMinor: undefined }
         : {
             teacherCompensationValueMinor:
-              current.decision.teacherCompensationValueMinor,
+              effective.teacherCompensationValueMinor,
           }),
     };
   }

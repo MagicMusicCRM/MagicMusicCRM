@@ -305,7 +305,7 @@ export class SubscriptionIssueRepository {
       discount: IssueDiscountColumns;
       finalPriceMinor: string;
       startsAt?: string;
-      expiresAt?: string;
+      expiresAt?: string | null;
       conversionLeadId?: string;
       version: number;
     },
@@ -396,7 +396,7 @@ export class SubscriptionIssueRepository {
         input.package.lessons_total,
         input.startsAt ?? null,
         input.expiresAt ?? null,
-        input.package.validity_days,
+        input.expiresAt === null ? null : input.package.validity_days,
         input.package.id,
         JSON.stringify(input.snapshot),
         input.package.version,

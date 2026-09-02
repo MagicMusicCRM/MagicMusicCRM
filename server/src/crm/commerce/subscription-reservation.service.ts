@@ -65,6 +65,7 @@ export class SubscriptionReservationService {
       chargeType: "subscription" | "personal_account" | "none";
       subscriptionId: string | null;
       units: number;
+      allowUncovered?: boolean;
     },
   ): Promise<void> {
     if (input.chargeType !== "subscription") return;
@@ -81,14 +82,22 @@ export class SubscriptionReservationService {
       client,
       input.subscriptionId,
     );
-    if (!subscription || subscription.status !== "active"
-      || subscription.student_id !== (input.payerStudentId ?? input.clientId)
-      || !(await this.coversLesson(
+    if (
+      !subscription ||
+      subscription.student_id !== (input.payerStudentId ?? input.clientId)
+    ) {
+      this.capacityViolation(input.subscriptionId, input.units, "0");
+    }
+    if (
+      subscription.status !== "active" ||
+      !(await this.coversLesson(
         client,
         input.subscriptionId,
         input.lessonId,
         input.clientId,
-      ))) {
+      ))
+    ) {
+      if (input.allowUncovered) return;
       this.capacityViolation(input.subscriptionId, input.units, "0");
     }
 
@@ -125,6 +134,7 @@ export class SubscriptionReservationService {
     const reserved = Number(capacity.rows[0]?.reserved_units ?? 0);
     const available = Number(subscription.lessons_total) - used - reserved;
     if (available + Number.EPSILON < input.units) {
+      if (input.allowUncovered) return;
       this.capacityViolation(
         input.subscriptionId,
         input.units,

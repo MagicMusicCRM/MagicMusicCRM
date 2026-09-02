@@ -225,6 +225,7 @@ class LessonEditorSnapshot {
     required this.initialCompensationRuleKey,
     required this.initialCompensationValueMinor,
     this.compensationBaselineCaptured = true,
+    this.initialSettlementTypeKey,
   });
 
   final String lessonId;
@@ -235,6 +236,7 @@ class LessonEditorSnapshot {
   final String? initialCompensationRuleKey;
   final String? initialCompensationValueMinor;
   final bool compensationBaselineCaptured;
+  final String? initialSettlementTypeKey;
 }
 
 abstract interface class LessonEditorInitialSource {

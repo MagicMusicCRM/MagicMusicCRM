@@ -21,6 +21,48 @@ import 'card_fake_api.dart';
 void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
 
+  testWidgets(
+    'student directions remain selected on reopening despite stale typed values',
+    (tester) async {
+      final api = FakeCardApiClient(
+        student: {
+          'id': 'student-1',
+          'version': 2,
+          'status': 'active',
+          'firstName': 'Анна',
+          'lastName': 'Смирнова',
+          'customData': {
+            'discipline': 'Вокал',
+            'disciplines': ['Вокал', 'Гитара'],
+          },
+        },
+        disciplines: const [
+          {'id': 'vocal', 'name': 'Вокал'},
+          {'id': 'guitar', 'name': 'Гитара'},
+        ],
+        studentCustomFieldValues: const {'discipline': null, 'disciplines': []},
+      );
+      for (var opening = 0; opening < 2; opening++) {
+        await pumpClientCard(
+          tester,
+          api: api,
+          seed: const {'id': 'student-1'},
+          entityType: 'student',
+        );
+        for (final direction in ['Вокал', 'Гитара']) {
+          expect(
+            tester
+                .widget<FilterChip>(find.widgetWithText(FilterChip, direction))
+                .selected,
+            isTrue,
+          );
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+
   test('client card data responsibilities have semantic parts', () {
     final owner = File(
       'lib/features/crm/presentation/client_card/client_card.dart',

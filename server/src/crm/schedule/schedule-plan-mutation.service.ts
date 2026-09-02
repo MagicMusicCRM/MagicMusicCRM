@@ -19,7 +19,7 @@ import {
   type PreparedSchedulePlanUpdate,
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
-import { failSchedulePlan } from "./schedule-plan-definition.service";
+import { assertSchedulePlanMetadata as assertMetadata } from "./schedule-plan-definition.service";
 import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
 import { SchedulePlanRepository } from "./schedule-plan.repository";
 import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
@@ -31,15 +31,6 @@ export interface SchedulePlanMutationResult {
   version: number;
   replayed: boolean;
 }
-
-const assertMetadata = (metadata: LessonCommandMetadata) => {
-  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
-    failSchedulePlan("IDEMPOTENCY_KEY_REQUIRED", ["Idempotency-Key"]);
-  }
-  if (!metadata.requestId || metadata.requestId.length > 160) {
-    failSchedulePlan("REQUEST_ID_REQUIRED", ["X-Request-Id"]);
-  }
-};
 
 interface MutationReference extends Record<string, unknown> {
   planId: string;
@@ -338,10 +329,12 @@ export class SchedulePlanMutationService {
       );
       await this.materializer.materializePlanSeries(client, seriesId, {
         includePast,
+        deferPlanReservations: true,
       });
       seriesIds.push(seriesId);
       lessonIds.push(...(await this.definition.lessonIds(client, seriesId)));
     }
+    await this.materializer.allocatePlanReservations(client, lessonIds);
     return { planId, seriesIds, lessonIds };
   }
 
@@ -492,10 +485,12 @@ export class SchedulePlanMutationService {
       const seriesId = seriesIds[index]!;
       await this.materializer.materializePlanSeries(client, seriesId, {
         includePast,
+        deferPlanReservations: true,
         replaceableLineageDates: replaceableDates.get(seriesId) ?? [],
       });
       lessonIds.push(...(await this.definition.lessonIds(client, seriesId)));
     }
+    await this.materializer.allocatePlanReservations(client, lessonIds);
     return lessonIds;
   }
 

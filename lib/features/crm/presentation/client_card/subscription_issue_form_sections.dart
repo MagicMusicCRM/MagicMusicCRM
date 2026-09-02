@@ -65,6 +65,7 @@ class SubscriptionIssueFormSections extends StatelessWidget {
           selectFundingMode: controller.selectFundingMode,
           setStartsAt: controller.setStartsAt,
           setExpiresAt: controller.setExpiresAt,
+          setIndefinite: controller.setIndefinite,
           setPaymentAmount: controller.setPaymentAmount,
           setPaymentOccurredAt: controller.setPaymentOccurredAt,
           setPaymentComment: controller.setPaymentComment,

@@ -216,6 +216,7 @@ describe("Schedule plan semantic owners", () => {
       ),
     } as unknown as LessonSeriesCommandService;
     const materializer = {
+      allocatePlanReservations: jest.fn(async () => {}),
       materializePlanSeries: jest.fn(async () =>
         updateEvents.push("materialize-new-series"),
       ),

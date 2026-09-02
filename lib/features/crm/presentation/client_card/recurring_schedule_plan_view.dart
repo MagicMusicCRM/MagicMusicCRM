@@ -426,6 +426,12 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
                     'Лента занятий',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                   ),
+                  if (plan.scheduledLessonCount != null)
+                    Text(
+                      'Запланировано: ${plan.scheduledLessonCount}'
+                      '${plan.coveredLessonCount == null ? '' : ' · Покрыто абонементом: ${plan.coveredLessonCount}'}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
                   if (pageRange != null)
                     Text(
                       pageRange,
@@ -588,7 +594,12 @@ class _TrayTile extends StatelessWidget {
       'lifecycle_state': item.state,
     });
     final marker = item.settlementMarkers.firstOrNull;
-    final accent = state.token.accent;
+    final covered =
+        state.token == LessonStateToken.booked &&
+        item.settlementMarkers.any(
+          (marker) => marker['key'] == 'subscription_reserved',
+        );
+    final accent = covered ? AppColor.success : state.token.accent;
     final markerAccent = marker == null
         ? accent
         : _settlementColor(marker['colorToken']?.toString());
@@ -598,7 +609,7 @@ class _TrayTile extends StatelessWidget {
     final relationLabel = _relationMarkerLabel(item.relationMarker);
     final tooltip = [
       '${_date(item.localDate)} ${item.localTime}',
-      state.label,
+      if (!covered) state.label,
       ...markerLabels,
       ?relationLabel,
       ?item.teacherName,
@@ -689,6 +700,14 @@ class _FallbackLessonTray extends StatelessWidget {
                 localTime: DateFormat('HH:mm').format(scheduled.toLocal()),
                 state: projection.state,
                 settlementMarkers: [
+                  if ((lesson['reservation_state'] ??
+                          lesson['reservationState']) ==
+                      'reserved')
+                    {
+                      'key': 'subscription_reserved',
+                      'label': 'Покрыто абонементом',
+                      'colorToken': 'success',
+                    },
                   if ((lesson['paid_amount'] ?? lesson['paidAmount']) != null)
                     {'label': 'Есть платёж', 'colorToken': 'success'},
                   if ((lesson['is_trial'] ?? lesson['isTrial']) == true)

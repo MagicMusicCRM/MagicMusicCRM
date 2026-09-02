@@ -57,16 +57,15 @@ export class SubscriptionPurchaseTermsService {
 
   normalizeDates(dto: PurchaseSubscriptionPreviewDto): {
     startsAt: string;
-    expiresAt: string;
+    expiresAt: string | null;
   } {
     const today = new Date();
     const defaultStart = this.dateOnly(today);
     const startsAt = this.assertDateOnly(dto.startsAt ?? defaultStart, "startsAt");
-    const expiresAt = this.assertDateOnly(
-      dto.expiresAt ?? this.addCalendarMonth(startsAt),
-      "expiresAt",
-    );
-    if (expiresAt < startsAt) {
+    const expiresAt = dto.expiresAt == null
+      ? null
+      : this.assertDateOnly(dto.expiresAt, "expiresAt");
+    if (expiresAt !== null && expiresAt < startsAt) {
       throw new UnprocessableEntityException({
         code: "SUBSCRIPTION_DATE_RANGE_INVALID",
         field: "expiresAt",
@@ -132,29 +131,6 @@ export class SubscriptionPurchaseTermsService {
 
   private dateOnly(value: Date): string {
     return value.toISOString().slice(0, 10);
-  }
-
-  private addCalendarMonth(value: string): string {
-    const source = new Date(`${value}T00:00:00.000Z`);
-    const year = source.getUTCFullYear();
-    const month = source.getUTCMonth();
-    const day = source.getUTCDate();
-    const firstOfTarget = new Date(Date.UTC(year, month + 1, 1));
-    const lastDay = new Date(
-      Date.UTC(
-        firstOfTarget.getUTCFullYear(),
-        firstOfTarget.getUTCMonth() + 1,
-        0,
-      ),
-    ).getUTCDate();
-    const target = new Date(
-      Date.UTC(
-        firstOfTarget.getUTCFullYear(),
-        firstOfTarget.getUTCMonth(),
-        Math.min(day, lastDay),
-      ),
-    );
-    return this.dateOnly(target);
   }
 
   private assertDateOnly(value: string, field: string): string {

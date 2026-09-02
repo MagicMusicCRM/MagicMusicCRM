@@ -20,6 +20,8 @@ import {
   LessonSettlementCorrectionPreviewDto,
 } from "../dto/lesson-settlement-correction.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
+import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import { applyLessonResourceEdit } from "./lesson-resource-edit";
 
 @Injectable()
 export class LessonSettlementCorrectionService {
@@ -30,6 +32,7 @@ export class LessonSettlementCorrectionService {
     private readonly settlement: LessonSettlementService,
     private readonly previewTokens: SubscriptionPreviewTokenService,
     private readonly reservations: SubscriptionReservationService,
+    private readonly constraints: ScheduleConstraintEngine,
   ) {}
 
   async history(actor: ActorContext, lessonId: string) {
@@ -123,7 +126,7 @@ export class LessonSettlementCorrectionService {
         );
       }
     });
-    const correctionFingerprint = this.fingerprint(dto, preview.settled);
+    const correctionFingerprint = this.fingerprint(dto, preview);
     const signed = this.previewTokens.issueLessonTransition({
       kind: "lesson.transition",
       operation: "correct",
@@ -135,6 +138,7 @@ export class LessonSettlementCorrectionService {
     return {
       canConfirm: true,
       financialPreview: this.financialProjection(preview.settled),
+      resourceChanges: preview.resourceChange,
       previewToken: signed.token,
       previewExpiresAt: signed.expiresAt,
     };
@@ -183,7 +187,6 @@ export class LessonSettlementCorrectionService {
         reason: "lesson.settlement.correction",
         reasonText: dto.reasonText.trim(),
         beforeRef: { lessonId, version: dto.expectedVersion },
-        afterRef: { correctionId },
       },
       outbox: {
         type: "schedule.lesson.changed",
@@ -199,20 +202,24 @@ export class LessonSettlementCorrectionService {
           true,
         );
         if (
-          this.fingerprint(dto, applied.settled) !==
+          this.fingerprint(dto, applied) !==
           signed.transitionFingerprint
         ) {
           throw new UnprocessableEntityException({
             code: "LESSON_SETTLEMENT_CORRECTION_PREVIEW_STALE",
           });
         }
-        const updated = await client.query<{ version: number | string }>(
-          `update app.lessons set updated_at = now()
-           where id = $1 and version = $2
-             and lifecycle_state = 'successfully_completed'
-           returning version`,
-          [lessonId, dto.expectedVersion],
-        );
+        const updated = applied.resourceChange
+          ? await client.query<{ version: number | string }>(
+              "select version from app.lessons where id = $1", [lessonId],
+            )
+          : await client.query<{ version: number | string }>(
+              `update app.lessons set updated_at = now()
+               where id = $1 and version = $2
+                 and lifecycle_state = 'successfully_completed'
+               returning version`,
+              [lessonId, dto.expectedVersion],
+            );
         if (
           !updated.rows[0] ||
           Number(updated.rows[0].version) !== nextVersion
@@ -223,6 +230,7 @@ export class LessonSettlementCorrectionService {
           lessonId,
           correctionId,
           correctionVersion: applied.correctionVersion,
+          resourceChanges: applied.resourceChange,
           clientFinancialFactIds: applied.settled.clientFacts.map(
             (fact) => fact.id,
           ),
@@ -268,16 +276,20 @@ export class LessonSettlementCorrectionService {
         code: "LESSON_SETTLEMENT_CORRECTION_NOT_ALLOWED",
       });
     }
-    const decision = this.policy.canManageTeacherCompensation(actor)
+    const resources = await applyLessonResourceEdit(
+      client, actor, lessonId, dto.resources, this.constraints,
+    );
+    const authorizedDecision = this.policy.canManageTeacherCompensation(actor)
       ? dto.financialDecision
       : await this.settlement.reuseStoredTeacherCompensation(
           client,
           lessonId,
           dto.financialDecision,
         );
+    const decision = { ...authorizedDecision, teacherRateSnapshot: resources.teacherRateSnapshot };
     const prepared = await this.settlement.preparePlan(
       client,
-      source.branch_id,
+      resources.branchId,
       decision,
     );
     const previous = await client.query<{
@@ -318,18 +330,19 @@ export class LessonSettlementCorrectionService {
       },
       correction: { id: correctionId },
     });
-    return { correctionVersion, settled };
+    return { correctionVersion, settled, decision, resourceChange: resources.change };
   }
 
   private fingerprint(
     dto: LessonSettlementCorrectionPreviewDto,
-    settled: LessonSettlementResult,
+    applied: Awaited<ReturnType<LessonSettlementCorrectionService["applyCorrection"]>>,
   ) {
     return fingerprintPayload({
       expectedVersion: dto.expectedVersion,
       reasonText: dto.reasonText.trim(),
-      financialDecision: dto.financialDecision,
-      financial: this.financialProjection(settled),
+      financialDecision: applied.decision,
+      resourceChanges: applied.resourceChange,
+      financial: this.financialProjection(applied.settled),
     });
   }
 
@@ -345,6 +358,7 @@ export class LessonSettlementCorrectionService {
         units: fact.units,
       })),
       teacherFact: {
+        teacherId: settled.teacherFact.teacherId,
         compensationRuleKey: settled.teacherFact.compensationRuleKey,
         compensationRuleLabel: settled.teacherFact.compensationRuleLabel,
         amountMinor: settled.teacherFact.amountMinor,

@@ -121,10 +121,10 @@ describe("schedule read contract", () => {
         /coalesce\(\s*l\.teacher_rate,\s*g\.teacher_rate,[\s\S]*app\.teacher_rates[\s\S]*0\s*\)\s*else null::numeric end as applied_teacher_rate/,
       );
       expect(sql).toContain(
-        "plan.decision ->> 'teacherCompensationRuleKey' else null::text end as teacher_compensation_rule_key",
+        "coalesce(correction.decision, plan.decision) ->> 'teacherCompensationRuleKey' else null::text end as teacher_compensation_rule_key",
       );
       expect(sql).toContain(
-        "plan.decision ->> 'teacherCompensationValueMinor' else null::text end as teacher_compensation_value_minor",
+        "coalesce(correction.decision, plan.decision) ->> 'teacherCompensationValueMinor' else null::text end as teacher_compensation_value_minor",
       );
     });
 

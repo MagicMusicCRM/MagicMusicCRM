@@ -497,6 +497,40 @@ Future<void> _openAndFill(
 }
 
 void main() {
+  for (final operation in [
+    LessonDecisionOperation.plannedSettlement,
+    LessonDecisionOperation.correction,
+  ]) {
+    test(
+      'resource edits use ${operation.apiKey} and the target branch catalog',
+      () async {
+        final api = _LessonDecisionApi(
+          operationKey: operation.apiKey,
+          catalogBranchId: _replacementBranchId,
+        );
+        final resources = {
+          'teacherId': 'teacher-new',
+          'branchId': _replacementBranchId,
+          'roomId': 'room-new',
+        };
+        final controller = LessonDecisionController(
+          crm: MagicCrmService(api),
+          operation: operation,
+          lesson: _lesson,
+          resources: resources,
+          canManageTeacherCompensation: true,
+        );
+        await controller.loadCatalog();
+        await controller.preview(
+          settlementTypeKey: 'free_lesson',
+          compensationRuleKey: 'standard',
+          reason: 'Исправление занятия',
+        );
+        expect(api.previews.single['resources'], resources);
+        expect(api.previews.single.containsKey('successor'), isFalse);
+      },
+    );
+  }
   setUpAll(() => initializeDateFormatting('ru'));
 
   testWidgets('completed reschedule section explains forced reversal', (

@@ -23,6 +23,8 @@ import {
 } from "./lesson-command-integrity";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import { LessonCommandRepository } from "./lesson-command.repository";
+import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import { applyLessonResourceEdit } from "./lesson-resource-edit";
 
 @Injectable()
 export class LessonPlannedSettlementCommandService {
@@ -34,6 +36,7 @@ export class LessonPlannedSettlementCommandService {
     private readonly settlement: LessonSettlementService,
     private readonly previewTokens: SubscriptionPreviewTokenService,
     private readonly repository: LessonCommandRepository,
+    private readonly constraints: ScheduleConstraintEngine,
   ) {}
 
   async previewSettlementPlan(
@@ -72,6 +75,7 @@ export class LessonPlannedSettlementCommandService {
       canConfirm: true,
       financialPreview: calculated.financial,
       reservationPreview: calculated.reservations,
+      resourceChanges: calculated.resourceChange,
       previewToken: signed.token,
       previewExpiresAt: signed.expiresAt,
     };
@@ -139,18 +143,24 @@ export class LessonPlannedSettlementCommandService {
           reasonText: dto.reasonText,
           ...calculated.prepared,
         });
-        const updated = await this.repository.touchSettlementPlan(
-          client,
-          lessonId,
-          dto.expectedVersion,
-        );
+        const updated = calculated.resourceChange
+          ? await client.query<{ version: number | string }>(
+              "select version from app.lessons where id = $1", [lessonId],
+            )
+          : await this.repository.touchSettlementPlan(
+              client,
+              lessonId,
+              dto.expectedVersion,
+            );
         if (
           !updated.rows[0] ||
           Number(updated.rows[0].version) !== nextVersion
         ) {
           throw new ConflictException({ code: "LESSON_VERSION_DIVERGED" });
         }
-        return { lessonId, planVersion };
+        return {
+          lessonId, planVersion, resourceChanges: calculated.resourceChange,
+        };
       },
     });
     return { lessonId, version: mutation.version, replayed: mutation.replayed };
@@ -167,32 +177,33 @@ export class LessonPlannedSettlementCommandService {
     if (Number(source.version) !== dto.expectedVersion) {
       throw new ConflictException({ code: "STALE_AGGREGATE_VERSION" });
     }
-    if (
-      source.lifecycle_state !== "scheduled" ||
-      new Date(source.scheduled_at).getTime() <= Date.now()
-    ) {
+    if (!["scheduled", "settlement_pending"].includes(source.lifecycle_state)) {
       throw new ConflictException({
         code: "LESSON_SETTLEMENT_PLAN_CHANGE_CLOSED",
       });
     }
     const current = await this.settlement.loadPlan(client, lessonId, true);
-    if (!current || current.state !== "planned") {
+    if (!current || !["planned", "review_required"].includes(current.state)) {
       throw new ConflictException({ code: "LESSON_SETTLEMENT_PLAN_MISSING" });
     }
     const before = await this.repository.listReservedAllocations(
       client,
       lessonId,
     );
-    const decision = this.policy.canManageTeacherCompensation(actor)
+    const resources = await applyLessonResourceEdit(
+      client, actor, lessonId, dto.resources, this.constraints,
+    );
+    const authorizedDecision = this.policy.canManageTeacherCompensation(actor)
       ? dto.financialDecision
       : await this.settlement.reuseStoredTeacherCompensation(
           client,
           lessonId,
           dto.financialDecision,
         );
+    const decision = { ...authorizedDecision, teacherRateSnapshot: resources.teacherRateSnapshot };
     const prepared = await this.settlement.preparePlan(
       client,
-      source.branch_id,
+      resources.branchId,
       decision,
     );
     const allocations = await this.settlement.plannedSubscriptionAllocations(
@@ -233,6 +244,7 @@ export class LessonPlannedSettlementCommandService {
       compensationRevisionId: prepared.compensationRevisionId,
       reservations,
       financial,
+      resourceChanges: resources.change,
     });
     return {
       currentPlanVersion: current.version,
@@ -240,6 +252,7 @@ export class LessonPlannedSettlementCommandService {
       financial,
       reservations,
       fingerprint,
+      resourceChange: resources.change,
     };
   }
 

@@ -18,7 +18,7 @@ import {
   type NormalizedSchedulePlanEnd,
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
-import { failSchedulePlan } from "./schedule-plan-definition.service";
+import { assertSchedulePlanMetadata as assertMetadata, failSchedulePlan } from "./schedule-plan-definition.service";
 import {
   type LockedSchedulePlan,
   type SchedulePlanEndImpact,
@@ -56,15 +56,6 @@ interface EndMutationReference extends Record<string, unknown> {
   releasedReservations: number;
   preservedTerminalLessons: number;
 }
-
-const assertMetadata = (metadata: LessonCommandMetadata) => {
-  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
-    failSchedulePlan("IDEMPOTENCY_KEY_REQUIRED", ["Idempotency-Key"]);
-  }
-  if (!metadata.requestId || metadata.requestId.length > 160) {
-    failSchedulePlan("REQUEST_ID_REQUIRED", ["X-Request-Id"]);
-  }
-};
 
 @Injectable()
 export class SchedulePlanEndService {

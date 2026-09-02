@@ -102,6 +102,7 @@ describe("lesson compensation service RBAC", () => {
         {} as never,
         {} as never,
         {} as never,
+        {} as never,
       );
       const request = service.preview(actor(role), "lesson-1", {
         expectedVersion: 3,
@@ -142,6 +143,9 @@ describe("lesson compensation service RBAC", () => {
             teacherCompensationValueMinor: "125000",
           };
       const query = jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes("select lesson.teacher_id")) {
+          return { rows: [{ teacher_id: "teacher-1", branch_id: "branch-1", room_id: "room-1" }] };
+        }
         if (sql.includes("select version, lifecycle_state")) {
           return {
             rows: [
@@ -174,6 +178,7 @@ describe("lesson compensation service RBAC", () => {
         {} as PlatformIntegrityService,
         new CrmPolicy(),
         settlement as never,
+        {} as never,
         {} as never,
         {} as never,
       );

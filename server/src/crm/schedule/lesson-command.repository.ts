@@ -261,7 +261,7 @@ export class LessonCommandRepository {
   ) {
     return client.query<{ version: number | string }>(
       `update app.lessons set updated_at = now()
-       where id = $1 and version = $2 and lifecycle_state = 'scheduled'
+       where id = $1 and version = $2 and lifecycle_state in ('scheduled', 'settlement_pending')
        returning version`,
       [lessonId, expectedVersion],
     );

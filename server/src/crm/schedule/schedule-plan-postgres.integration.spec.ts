@@ -251,6 +251,83 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("creates all 13 September-to-December Fridays and reserves only the first 12", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      await pool.query("update app.subscriptions set lessons_total = 12 where id = $1", [fixture.subscriptionIds[0]]);
+      const dto = {
+        kind: "individual" as const, title: "Пятницы сентября — декабря",
+        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: "2026-09-01", activeUntil: "2026-12-01",
+        rows: [row(fixture, 5, "10:00")],
+      };
+      const preview = await plans.previewConstraints(actor, dto);
+      expect(preview.valid).toBe(true);
+      const historical = (preview as unknown as { historical: { confirmRequired: boolean; previewToken?: string } }).historical;
+      const created = await plans.create(actor, {
+        ...dto,
+        ...(historical.confirmRequired ? { confirmHistorical: true, previewToken: historical.previewToken } : {}),
+      } as never, { idempotencyKey: `full-fridays-${randomUUID()}`, requestId: `request-${randomUUID()}` });
+      const lessons = await pool.query<{ day: string; covered: boolean }>(
+        `select lesson.series_date::text as day,
+          exists(select 1 from app.lesson_reservations reservation where reservation.lesson_id = lesson.id and reservation.state = 'reserved') as covered
+         from app.lessons lesson where lesson.id = any($1::uuid[]) order by lesson.scheduled_at`,
+        [created.lessonIds],
+      );
+      expect(lessons.rows.map(item => item.day)).toEqual([
+        "2026-09-04", "2026-09-11", "2026-09-18", "2026-09-25",
+        "2026-10-02", "2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30",
+        "2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27",
+      ]);
+      expect(lessons.rows.map(item => item.covered)).toEqual([
+        true, true, true, true, true, true, true, true, true, true, true, true, false,
+      ]);
+      const listed = await plans.list(actor, { studentId: fixture.studentIds[0] });
+      expect(listed.items.find(item => item.id === created.id)).toMatchObject({
+        scheduledLessonCount: 13, coveredLessonCount: 12,
+      });
+      const tray = await plans.tray(actor, created.id, { limit: 40,
+        cursor: Buffer.from(JSON.stringify({ scheduledAt: '2026-09-01T00:00:00Z', id: randomUUID() })).toString('base64url'),
+        direction: 'next' });
+      expect(tray.items.filter(item => item.settlementMarkers.some(marker => marker.key === 'subscription_reserved'))).toHaveLength(12);
+      expect(await database.transaction(client => materializer.materializePlanSeries(client, created.seriesIds[0]!))).toBe(0);
+    } finally { await cleanup(pool, fixture); }
+  });
+
+  it.each([[182, 26], [365, 53]])("materializes the entire %i-day plan (%i Fridays)", async (days, count) => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const weekday = new Date(`${fixture.today}T00:00:00Z`).getUTCDay();
+      const start = addDays(fixture.today, (5 - weekday + 7) % 7 + 7);
+      const created = await plans.create(actor, {
+        kind: "individual", title: "Длительное расписание",
+        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: start, activeUntil: addDays(start, days - 1),
+        rows: [row(fixture, 5, "10:00")],
+      }, { idempotencyKey: `long-plan-${randomUUID()}`, requestId: `request-${randomUUID()}` });
+      expect(created.lessonIds).toHaveLength(count);
+    } finally { await cleanup(pool, fixture); }
+  });
+
+  it("reserves the earliest lessons across multiple weekdays", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      await pool.query('update app.subscriptions set lessons_total = 3 where id = $1', [fixture.subscriptionIds[0]]);
+      const created = await plans.create(actor, {
+        kind: 'individual', title: 'Два дня недели', studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0], activeFrom: fixture.today,
+        activeUntil: addDays(fixture.today, 27), rows: [row(fixture, 5, '10:00'), row(fixture, 1, '10:00')],
+      }, { idempotencyKey: `two-days-${randomUUID()}`, requestId: `request-${randomUUID()}` });
+      const covered = await pool.query<{ covered: boolean }>(
+        `select exists(select 1 from app.lesson_reservations r where r.lesson_id = l.id and r.state = 'reserved') as covered
+         from app.lessons l where l.id = any($1::uuid[]) order by l.scheduled_at`, [created.lessonIds]);
+      expect(covered.rows.map(item => item.covered)).toEqual([true, true, true, false, false, false, false, false]);
+    } finally { await cleanup(pool, fixture); }
+  });
+
   it("reviews and confirms historical occurrences without directly using subscription units", async () => {
     const fixture = await createFixture(pool);
     let additional:
@@ -1710,7 +1787,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
-  it("rolls a group prefix back on capacity failure and inserts non-overlapping old-start assignments", async () => {
+  it("rolls a group prefix back on reservation failure and inserts non-overlapping old-start assignments", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const sourceRow = row(fixture, 3, "14:00");
@@ -1767,6 +1844,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         [fixture.subscriptionIds[0]],
       );
       const beforeFailure = await planPersistenceShape(pool, created.id);
+      const allocationFailure = jest.spyOn(reservations, 'allocate').mockRejectedValueOnce(new Error('injected reservation failure'));
       await expect(
         plans.update(
           actor,
@@ -1781,13 +1859,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
             requestId: `request-${randomUUID()}`,
           },
         ),
-      ).rejects.toMatchObject({
-        response: {
-          violations: expect.arrayContaining([
-            expect.objectContaining({ code: "SUBSCRIPTION_CAPACITY" }),
-          ]),
-        },
-      });
+      ).rejects.toThrow('injected reservation failure');
+      allocationFailure.mockRestore();
       expect(await planPersistenceShape(pool, created.id)).toEqual(
         beforeFailure,
       );
@@ -2732,13 +2805,13 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       ).toMatchObject({
         relationMarker: "source",
         successorId: successorLessonId,
-        settlementMarkers: [
+        settlementMarkers: expect.arrayContaining([
           {
             key: "paid_absence",
             label: "Оплачиваемый пропуск",
             colorToken: "blue",
           },
-        ],
+        ]),
       });
       expect(
         page.items.find((item) => item.id === successorLessonId),

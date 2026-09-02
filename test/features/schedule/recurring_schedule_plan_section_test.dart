@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/group_schedule_participants_editor.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_section.dart';
 
@@ -379,6 +380,47 @@ class _ExactLessonCardApiClient extends FakeCardApiClient {
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
 
+  testWidgets('reserved lessons are green with coverage label and count', (
+    tester,
+  ) async {
+    final api = _api(
+      plans: [
+        {..._activePlan, 'scheduledLessonCount': 13, 'coveredLessonCount': 12},
+      ],
+    );
+    final item =
+        (api.schedulePlanTrays['plan-active']!['items'] as List).first as Map;
+    item['settlementMarkers'] = [
+      {
+        'key': 'subscription_reserved',
+        'label': 'Покрыто абонементом',
+        'colorToken': 'success',
+      },
+    ];
+    await _pump(tester, api);
+    expect(
+      find.text('Запланировано: 13 · Покрыто абонементом: 12'),
+      findsOneWidget,
+    );
+    final tile = find.byKey(const ValueKey('client-lesson-lesson-active'));
+    final box =
+        tester
+                .widget<Container>(
+                  find
+                      .descendant(of: tile, matching: find.byType(Container))
+                      .first,
+                )
+                .decoration!
+            as BoxDecoration;
+    expect(box.color, AppColor.success.withValues(alpha: 0.12));
+    expect(
+      find.byTooltip(
+        '07.08.2026 16:00\nПокрыто абонементом\nМария Иванова\nКласс 1',
+      ),
+      findsOneWidget,
+    );
+  });
+
   for (final width in const [360.0, 840.0, 1200.0]) {
     testWidgets('plans render active/group/ended at ${width.toInt()}', (
       tester,
@@ -482,7 +524,14 @@ void main() {
     'paged tray hydrates its exact lesson and Back keeps horizontal scroll',
     (tester) async {
       final api = _ExactLessonCardApiClient();
-      await _pump(tester, api, width: 520);
+      await _pump(
+        tester,
+        api,
+        width: 520,
+        fallbackLessons: const [
+          {'id': 'lesson-exact-12', 'scheduled_at': '2026-08-27T13:00:00.000Z'},
+        ],
+      );
 
       final tray = find.byKey(const ValueKey('schedule-plan-tray-plan-active'));
       final trayScroll = find.descendant(
@@ -504,6 +553,14 @@ void main() {
 
       expect(api.exactLessonQuery, {'limit': 1, 'lessonId': 'lesson-exact-12'});
       expect(find.text('Перенести или изменить занятие'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is EditableText &&
+              widget.controller.text == 'Анна Смирнова',
+        ),
+        findsOneWidget,
+      );
 
       await tester.pageBack();
       await tester.pumpAndSettle();

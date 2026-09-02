@@ -92,7 +92,11 @@ export class ClientCardReadService {
               ${branchIdExpr("lead")}
             ) as branch_id,
             branch.name as branch_name,
-            branch.timezone_name
+            branch.timezone_name,
+            jsonb_strip_nulls(jsonb_build_object(
+              'discipline', student.custom_data->'discipline',
+              'disciplines', student.custom_data->'disciplines'
+            )) as catalog_directions
           from target
           left join app.students student
             on target.type = 'student' and student.id = target.id
@@ -309,7 +313,8 @@ export class ClientCardReadService {
               'status', header.status,
               'statusKey', header.status_key,
               'branchId', header.branch_id,
-              'branchName', header.branch_name
+              'branchName', header.branch_name,
+              'customData', header.catalog_directions
             )
             from header_row header
           ) as header,

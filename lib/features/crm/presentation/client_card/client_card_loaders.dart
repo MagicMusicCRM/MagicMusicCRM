@@ -40,7 +40,11 @@ extension _ClientCardLoaders on _ClientCardState {
           : <String, dynamic>{};
       student['custom_data'] = {
         ...Map<String, dynamic>.from(student['custom_data'] as Map? ?? {}),
-        ...Map<String, dynamic>.from(card['custom_field_values'] as Map? ?? {}),
+        for (final entry in Map<String, dynamic>.from(
+          card['custom_field_values'] as Map? ?? {},
+        ).entries)
+          if (entry.key != 'discipline' && entry.key != 'disciplines')
+            entry.key: entry.value,
       };
       StudentFunnelConfiguration? funnel;
       String? funnelError;

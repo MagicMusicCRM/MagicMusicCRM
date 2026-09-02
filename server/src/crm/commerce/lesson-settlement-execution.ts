@@ -55,6 +55,10 @@ export async function settleLesson(
     return existing;
   }
   const source = await loadLessonSettlementSource(client, lessonId);
+  if (input?.decision.teacherRateSnapshot) {
+    source.teacher_compensation_type = input.decision.teacherRateSnapshot.type;
+    source.teacher_compensation_value = input.decision.teacherRateSnapshot.value;
+  }
   assertLessonSettleable(source, input?.context);
   if (input) {
     await insertConfiguredLessonSettlementFacts(client, source, input);

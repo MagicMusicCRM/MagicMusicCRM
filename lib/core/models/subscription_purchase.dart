@@ -147,7 +147,7 @@ class PurchaseSubscriptionInput {
   final String payerStudentId;
   final SubscriptionFundingMode fundingMode;
   final DateTime startsAt;
-  final DateTime expiresAt;
+  final DateTime? expiresAt;
   final BigInt paymentAmountMinor;
   final DateTime? paymentOccurredAt;
   final String? paymentComment;
@@ -158,7 +158,7 @@ class PurchaseSubscriptionInput {
     'payerStudentId': payerStudentId,
     'fundingMode': fundingMode.apiValue,
     'startsAt': _dateOnly(startsAt),
-    'expiresAt': _dateOnly(expiresAt),
+    'expiresAt': expiresAt == null ? null : _dateOnly(expiresAt!),
     'paymentAmountMinor': paymentAmountMinor.toString(),
     if (paymentOccurredAt != null)
       'paymentOccurredAt': paymentOccurredAt!.toUtc().toIso8601String(),

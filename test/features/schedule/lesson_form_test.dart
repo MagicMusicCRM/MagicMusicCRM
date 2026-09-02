@@ -1130,7 +1130,7 @@ void main() {
     expect(body['subscriptionId'], 'subscription-1');
     expect(body['financialDecision'], {
       'settlementTypeKey': 'standard_lesson',
-      'teacherCompensationRuleKey': 'none',
+      'teacherCompensationRuleKey': 'standard',
     });
   });
 
@@ -1208,7 +1208,7 @@ void main() {
       expect(body['subscriptionId'], 'subscription-1');
       expect(body['financialDecision'], {
         'settlementTypeKey': 'standard_lesson',
-        'teacherCompensationRuleKey': 'none',
+        'teacherCompensationRuleKey': 'standard',
       });
     },
   );
@@ -1272,7 +1272,7 @@ void main() {
       expect(body, isNot(contains('subscriptionId')));
       expect(body['financialDecision'], {
         'settlementTypeKey': 'free_lesson',
-        'teacherCompensationRuleKey': 'none',
+        'teacherCompensationRuleKey': 'standard',
       });
     },
   );
@@ -1900,9 +1900,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final body = client.decisionCommits.single;
-      expect(body['successor']['teacherId'], _replacementTeacherId);
-      expect(body['successor']['roomId'], _replacementRoomId);
-      expect(body['successor'], isNot(contains('clientRef')));
+      expect(body['resources']['teacherId'], _replacementTeacherId);
+      expect(body['resources']['roomId'], _replacementRoomId);
+      expect(body['resources'], isNot(contains('clientRef')));
+      expect(body, isNot(contains('successor')));
       expect(body['previewToken'], 'signed-lesson-preview');
       expect(body['confirm'], isTrue);
     },

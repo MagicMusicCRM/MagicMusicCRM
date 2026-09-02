@@ -42,6 +42,9 @@ class LessonEditorDecisionPolicy {
         catalog.compensationRules
             .where((item) => item.mode == legacyMode)
             .firstOrNull ??
+        catalog.compensationRules
+            .where((item) => item.mode == 'standard')
+            .firstOrNull ??
         catalog.compensationRules.firstOrNull;
     final configuredDuration = catalog.defaultDurationMinutes;
     final compensationValue = requiresCompensationValue(rule)
@@ -397,14 +400,18 @@ class LessonEditorDecisionPolicy {
   }) {
     final snapshot = session.snapshot;
     if (snapshot == null) return true;
-    return draft.compensationRuleKey != snapshot.initialCompensationRuleKey ||
+    return draft.settlementTypeKey !=
+            (snapshot.initialSettlementTypeKey ??
+                session.draft.settlementTypeKey) ||
+        draft.compensationRuleKey != snapshot.initialCompensationRuleKey ||
         draft.compensationValueMinor != snapshot.initialCompensationValueMinor;
   }
 
   bool hasNotesChanges({
     required LessonEditorSession session,
     required LessonEditorDraft draft,
-  }) => session.snapshot != null &&
+  }) =>
+      session.snapshot != null &&
       (session.snapshot!.rawLesson['notes']?.toString().trim() ?? '') !=
           draft.notes.trim();
 
@@ -425,12 +432,28 @@ class LessonEditorDecisionPolicy {
       throw StateError('Lesson edit request requires a snapshot');
     }
     final scheduleChanged = hasScheduleChanges(session: session, draft: draft);
+    final schedule = schedulePayload(draft);
+    final timeChanged = hasLessonScheduleChanges(
+      lesson: {
+        ...schedule,
+        'scheduledAt': snapshot.initialSchedulePayload['scheduledAt'],
+        'durationMinutes': snapshot.initialSchedulePayload['durationMinutes'],
+      },
+      successor: schedule,
+    );
     return LessonDecisionRequest(
-      operation: scheduleChanged
+      operation: timeChanged
           ? LessonDecisionOperation.reschedule
           : _financialEditOperation(snapshot.rawLesson),
       lesson: snapshot.rawLesson,
-      successor: scheduleChanged ? schedulePayload(draft) : null,
+      successor: timeChanged ? schedule : null,
+      resources: scheduleChanged && !timeChanged
+          ? {
+              'teacherId': draft.teacherId,
+              'branchId': draft.branchId,
+              'roomId': draft.roomId,
+            }
+          : null,
       initialSettlementTypeKey: draft.settlementTypeKey,
       initialCompensationRuleKey: draft.compensationRuleKey,
       initialCompensationValueMinor: draft.compensationValueMinor,
@@ -606,6 +629,7 @@ LessonEditorSession _normalizeCompensationBaseline({
       initialCompensationRuleKey: draft.compensationRuleKey,
       initialCompensationValueMinor: draft.compensationValueMinor,
       compensationBaselineCaptured: true,
+      initialSettlementTypeKey: draft.settlementTypeKey,
     ),
     seededClient: session.seededClient,
     leadNoteSource: session.leadNoteSource,

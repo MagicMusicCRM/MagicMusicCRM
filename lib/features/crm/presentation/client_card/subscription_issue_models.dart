@@ -37,6 +37,7 @@ class SubscriptionIssueDraft {
     required this.expiresAt,
     required this.paymentOccurredAt,
     this.expiresAtExplicitlySet = false,
+    this.isIndefinite = true,
     this.paymentAmount = '',
     this.paymentComment = '',
     this.paymentMethod = SubscriptionPaymentMethod.cashless,
@@ -85,6 +86,8 @@ class SubscriptionIssueDraft {
   final DateTime expiresAt;
   final DateTime paymentOccurredAt;
   final bool expiresAtExplicitlySet;
+  final bool isIndefinite;
+  DateTime? get purchaseExpiresAt => isIndefinite ? null : expiresAt;
   final String paymentAmount;
   final String paymentComment;
   final SubscriptionPaymentMethod paymentMethod;
@@ -105,6 +108,7 @@ class SubscriptionIssueDraft {
     DateTime? expiresAt,
     DateTime? paymentOccurredAt,
     bool? expiresAtExplicitlySet,
+    bool? isIndefinite,
     String? paymentAmount,
     String? paymentComment,
     SubscriptionPaymentMethod? paymentMethod,
@@ -130,6 +134,7 @@ class SubscriptionIssueDraft {
       paymentOccurredAt: paymentOccurredAt ?? this.paymentOccurredAt,
       expiresAtExplicitlySet:
           expiresAtExplicitlySet ?? this.expiresAtExplicitlySet,
+      isIndefinite: isIndefinite ?? this.isIndefinite,
       paymentAmount: paymentAmount ?? this.paymentAmount,
       paymentComment: paymentComment ?? this.paymentComment,
       paymentMethod: paymentMethod ?? this.paymentMethod,

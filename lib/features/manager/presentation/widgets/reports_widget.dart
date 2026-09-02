@@ -69,13 +69,12 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   bool get _canSeeTeacherRates => crmHasTeacherRatesAccess(widget.role);
 
   int _positionForCanonicalTab(int canonical) => switch (canonical) {
-    1 || 2 || 4 || 5 => 1,
+    1 || 2 || 4 => 1,
     _ => 0,
   };
 
   String _journalForCanonicalTab(int canonical) => switch (canonical) {
     1 when _canSeeFinance => 'finance',
-    5 when _canSeeTeacherRates => 'teachers',
     _ => 'activity',
   };
 
@@ -92,6 +91,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       initialIndex: _positionForCanonicalTab(widget.initialTab),
     );
     _journal = _journalForCanonicalTab(widget.initialTab);
+    if (widget.initialTab == 5 && _canSeeTeacherRates) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _openTeacherAnalytics(),
+      );
+    }
     if (_canSeeStatus) {
       unawaited(_loadBranches());
     } else {
@@ -106,6 +110,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       final nextTab = _positionForCanonicalTab(widget.initialTab);
       if (nextTab != _tabController.index) _tabController.index = nextTab;
       _journal = _journalForCanonicalTab(widget.initialTab);
+      if (widget.initialTab == 5 && _canSeeTeacherRates) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _openTeacherAnalytics(),
+        );
+      }
     }
   }
 
@@ -202,6 +211,15 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             const Tab(text: 'Журналы'),
           ],
         ),
+        if (_canSeeTeacherRates)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _openTeacherAnalytics,
+              icon: const Icon(Icons.people_outline),
+              label: const Text('Преподаватели'),
+            ),
+          ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -227,6 +245,26 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _openTeacherAnalytics() async {
+    if (!mounted || !_canSeeStatus || !_canSeeTeacherRates) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Аналитика преподавателей'),
+            leading: IconButton(
+              tooltip: 'Закрыть',
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          body: const TeacherStatsWidget(),
+        ),
+      ),
     );
   }
 
@@ -342,7 +380,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   List<(String, String)> get _journals => [
     const ('activity', 'Действия'),
     if (_canSeeFinance) const ('finance', 'Финансовые операции'),
-    if (_canSeeTeacherRates) const ('teachers', 'Расчёты преподавателей'),
   ];
 
   Widget _buildOperationalJournal() {
@@ -388,13 +425,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           child: switch (selected) {
             'finance' => FinanceWidget(
               key: const ValueKey('finance-operations'),
-              filterRange: DateTimeRange(
-                start: _dashboardFilter.from,
-                end: _dashboardFilter.to,
-              ),
-              branchId: _dashboardFilter.branchId,
-            ),
-            'teachers' => TeacherStatsWidget(
               filterRange: DateTimeRange(
                 start: _dashboardFilter.from,
                 end: _dashboardFilter.to,

@@ -32,6 +32,7 @@ export class TeacherStatsXlsxService {
         item.hoursTotal,
         "",
         item.accruedTotal,
+        "",
       ]);
     }
     rows.push([
@@ -44,6 +45,7 @@ export class TeacherStatsXlsxService {
       report.totals.hoursTotal,
       "",
       report.totals.accruedTotal,
+      "",
     ]);
     return this.workbook.build({
       sheetName: "Начисления преподавателей",
@@ -57,6 +59,7 @@ export class TeacherStatsXlsxService {
         { key: "hours", header: "Часы", type: "number" },
         { key: "rate", header: "Ставка за астр. час", type: "string" },
         { key: "accrued", header: "Начислено", type: "money" },
+        { key: "compensation", header: "Тип начисления", type: "string", width: 32 },
       ],
       rows,
     });
@@ -67,6 +70,7 @@ export class TeacherStatsXlsxService {
     unit: {
       unitName: string;
       unitType: string;
+      compensationLabel: string;
       days: { date: string; hours: number }[];
       completedLessons: number;
       payableLessons: number;
@@ -85,6 +89,7 @@ export class TeacherStatsXlsxService {
       unit.hoursTotal,
       unit.rate === 0 ? "Входит в оклад" : String(unit.rate),
       unit.accruedTotal,
+      this.excelText(unit.compensationLabel),
     ];
   }
 

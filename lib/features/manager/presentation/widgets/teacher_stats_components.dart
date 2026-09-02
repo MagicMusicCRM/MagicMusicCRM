@@ -42,6 +42,11 @@ extension _TeacherStatsViewSections on TeacherStatsView {
                       ),
                     ),
                   if (meta.settled > 0) _settledText(context, meta.settled),
+                  if (unit['compensationLabel'] != null)
+                    Text(
+                      unit['compensationLabel'].toString(),
+                      style: const TextStyle(fontSize: 12),
+                    ),
                 ],
               ),
             ),
@@ -50,8 +55,10 @@ extension _TeacherStatsViewSections on TeacherStatsView {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${controller.hours(unit['hoursTotal'])} × '
-                  '${controller.rateLabel(unit['rate'])}',
+                  unit['compensationKey'] == null ||
+                          unit['compensationKey'] == 'hourly'
+                      ? '${controller.hours(unit['hoursTotal'])} × ${controller.rateLabel(unit['rate'])}'
+                      : controller.hours(unit['hoursTotal']),
                   style: const TextStyle(fontSize: 12.5),
                 ),
                 Text(

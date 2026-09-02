@@ -144,16 +144,8 @@ class _RecurringSchedulePlanSectionState
 
   Future<void> _openTrayItem(SchedulePlanTrayItem item) async {
     try {
-      var lesson = widget.fallbackLessons
-          .cast<Map<String, dynamic>?>()
-          .firstWhere(
-            (candidate) => candidate?['id']?.toString() == item.id,
-            orElse: () => null,
-          );
-      if (lesson == null) {
-        final exact = await _crm.listLessons(lessonId: item.id, limit: 1);
-        lesson = exact.firstOrNull;
-      }
+      final exact = await _crm.listLessons(lessonId: item.id, limit: 1);
+      final lesson = exact.firstOrNull;
       if (!mounted) return;
       if (lesson == null) {
         ScaffoldMessenger.of(context).showSnackBar(

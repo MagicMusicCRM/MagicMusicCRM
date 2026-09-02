@@ -3,6 +3,7 @@ import {
   Equals,
   IsBoolean,
   IsInt,
+  IsOptional,
   IsString,
   MaxLength,
   Min,
@@ -10,8 +11,14 @@ import {
   ValidateNested,
 } from "class-validator";
 import { ConfiguredLessonFinancialDecisionDto } from "./lesson-financial-decision.dto";
+import { LessonResourcesDto } from "./lesson-resources.dto";
 
 export class LessonSettlementCorrectionPreviewDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LessonResourcesDto)
+  resources?: LessonResourcesDto;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)

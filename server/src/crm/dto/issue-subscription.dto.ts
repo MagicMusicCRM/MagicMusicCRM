@@ -99,7 +99,7 @@ export class PurchaseSubscriptionPreviewDto extends IssueSubscriptionDto {
   @IsOptional()
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
-  expiresAt?: string;
+  expiresAt?: string | null;
 
   @IsOptional()
   @IsString()

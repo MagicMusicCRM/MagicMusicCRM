@@ -35,6 +35,9 @@ export interface PayrollLessonRow {
   charge_share: string | number | null;
   settlement_fact_id: string | null;
   settled_amount_minor: string | number | null;
+  compensation_type?: string | null;
+  compensation_rule_key?: string | null;
+  compensation_rule_label?: string | null;
 }
 
 export interface PayrollLessonAccrual {

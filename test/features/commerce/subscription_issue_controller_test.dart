@@ -58,14 +58,15 @@ SubscriptionIssueController _controller({
 );
 
 void main() {
-  test('purchase defaults to today, one calendar month and full payment', () {
+  test('purchase defaults to today, no expiration and full payment', () {
     final controller = _controller();
     addTearDown(controller.dispose);
 
     final json = controller.buildPurchase().toJson();
 
     expect(json['startsAt'], '2026-01-31');
-    expect(json['expiresAt'], '2026-02-28');
+    expect(json.containsKey('expiresAt'), isTrue);
+    expect(json['expiresAt'], isNull);
     expect(json['paymentAmountMinor'], '800000');
     expect(json['paymentOccurredAt'], '2026-01-31T12:00:00.000Z');
     expect(json['paymentMethod'], 'cashless');
@@ -77,6 +78,7 @@ void main() {
       final commandTimestamp = DateTime(2026, 8, 31, 0, 15);
       final controller = _controller(commandTimestamp: commandTimestamp);
       addTearDown(controller.dispose);
+      controller.setIndefinite(false);
 
       final json = controller.buildPurchase().toJson();
 
@@ -96,6 +98,7 @@ void main() {
     addTearDown(controller.dispose);
 
     controller.setStartsAt(DateTime.utc(2026, 6, 18));
+    controller.setIndefinite(false);
 
     expect(controller.buildPurchase().startsAt, DateTime.utc(2026, 6, 18));
     expect(controller.buildPurchase().expiresAt, DateTime.utc(2026, 7, 18));
@@ -106,6 +109,7 @@ void main() {
     addTearDown(controller.dispose);
 
     controller.setStartsAt(DateTime.utc(2026, 2, 10));
+    controller.setIndefinite(false);
 
     expect(controller.buildPurchase().startsAt, DateTime.utc(2026, 2, 10));
     expect(controller.buildPurchase().expiresAt, DateTime.utc(2026, 3, 10));
@@ -128,7 +132,7 @@ void main() {
     );
   });
 
-  test('package switch restores automatic calendar-month expiry', () {
+  test('package switch restores indefinite validity', () {
     final controller = _controller();
     addTearDown(controller.dispose);
     controller.setExpiresAt(DateTime.utc(2026, 6, 30));
@@ -139,7 +143,7 @@ void main() {
     controller.setStartsAt(DateTime.utc(2026, 3, 18));
 
     expect(controller.buildPurchase().startsAt, DateTime.utc(2026, 3, 18));
-    expect(controller.buildPurchase().expiresAt, DateTime.utc(2026, 4, 18));
+    expect(controller.buildPurchase().expiresAt, isNull);
   });
 
   test('zero payment is allowed and does not claim a payment method', () {

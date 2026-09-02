@@ -18,6 +18,9 @@ import { RealtimeBus } from "../../realtime/realtime-bus";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { LessonSettlementCorrectionService } from "./lesson-settlement-correction.service";
 import { CrmPolicy } from "../crm.policy";
+import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import { ConstraintEngineRepository } from "./constraint-engine.repository";
+import { AvailabilityRepository } from "./availability.repository";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -81,6 +84,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
             : "",
       } as unknown as ConfigService),
       reservations,
+      new ScheduleConstraintEngine(new ConstraintEngineRepository(database, new AvailabilityRepository(database))),
     );
   });
 
@@ -849,10 +853,21 @@ async function createFixture(
       insert into app.profiles (user_id, first_name, last_name)
       values
         ($1, 'Completion', 'Teacher'),
-        ($2, 'Completion', 'Student')
+        ($2, 'Completion', 'Student'),
+        ($3, 'Completion', 'Manager')
       returning id, user_id
     `,
-    [teacherUserId, clientUserId],
+    [teacherUserId, clientUserId, managerId],
+  );
+  await pool.query(
+    `with staff as (
+       insert into app.staff_members (profile_id, role) values ($1, 'manager') returning id
+     ), link as (
+       insert into app.user_crm_links (user_id, entity_type, entity_id, link_source, confirmed_at)
+       select $2, 'staff', id, 'manual_phone', now() from staff
+     ) insert into app.staff_branch_assignments (staff_member_id, branch_id)
+       select id, $3 from staff`,
+    [profiles.rows.find((row) => row.user_id === managerId)!.id, managerId, branchId],
   );
   const teacherProfileId = profiles.rows.find(
     (row) => row.user_id === teacherUserId,
@@ -1255,6 +1270,9 @@ async function cleanupFixture(
     await client.query("delete from app.teachers where id = $1", [
       fixture.teacherId,
     ]);
+    await client.query("delete from app.staff_branch_assignments where branch_id = $1", [fixture.branchId]);
+    await client.query("delete from app.user_crm_links where user_id = $1", [fixture.managerId]);
+    await client.query("delete from app.staff_members where profile_id = any($1::uuid[])", [fixture.profileIds]);
     await client.query("delete from app.profiles where id = any($1::uuid[])", [
       fixture.profileIds,
     ]);

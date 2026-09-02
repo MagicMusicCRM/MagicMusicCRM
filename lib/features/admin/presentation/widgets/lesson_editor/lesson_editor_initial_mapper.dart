@@ -61,6 +61,7 @@ class LessonEditorInitialMapper {
               'durationMinutes': draft.durationMinutes,
             }),
             initialCompensationRuleKey: compensationRuleKey,
+            initialSettlementTypeKey: draft.settlementTypeKey,
             initialCompensationValueMinor: compensationValueMinor,
             compensationBaselineCaptured: false,
           );

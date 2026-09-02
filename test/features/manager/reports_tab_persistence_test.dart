@@ -74,6 +74,38 @@ class _RebuildableState extends State<_Rebuildable> {
 void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
 
+  testWidgets('teacher analytics opens a separate window with period presets', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = _FakeApiClient();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        child: const MaterialApp(
+          home: Scaffold(body: ReportsWidget(role: 'director')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(api.queries.containsKey('/crm/reports/teacher-stats'), isFalse);
+    await tester.tap(find.text('Преподаватели'));
+    await tester.pumpAndSettle();
+    expect(find.text('Аналитика преподавателей'), findsOneWidget);
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.text('Неделя'), findsOneWidget);
+    expect(find.text('Месяц'), findsOneWidget);
+    await tester.tap(find.text('Год'));
+    await tester.pumpAndSettle();
+    final query = api.queries['/crm/reports/teacher-stats']!;
+    final from = DateTime.parse(query['from'] as String).toLocal();
+    final to = DateTime.parse(query['to'] as String).toLocal();
+    expect(from, DateTime(DateTime.now().year));
+    expect(to, DateTime(DateTime.now().year + 1));
+  });
+
   testWidgets('a parent rebuild does not reset the selected reports tab', (
     tester,
   ) async {

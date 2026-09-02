@@ -151,6 +151,31 @@ extension _ClientCardStudent on _ClientCardState {
   }
 
   Future<void> _openClientTrayLesson(Map<String, dynamic> lesson) async {
+    if (lesson['version'] == null ||
+        (lesson['student_id'] == null &&
+            lesson['lead_id'] == null &&
+            lesson['group_id'] == null)) {
+      try {
+        final id = lesson['id']?.toString();
+        if (id == null || id.isEmpty) return;
+        final exact = await ref
+            .read(magicCrmServiceProvider)
+            .listLessons(lessonId: id, limit: 1);
+        if (!mounted) return;
+        if (exact.isEmpty) throw StateError('Lesson unavailable');
+        lesson = exact.first;
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Не удалось открыть занятие. Обновите ленту и повторите.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
     final changed = await CreateLessonDialog.show(context, lesson: lesson);
     if (changed == true && mounted) await _fetchStudentData();
   }

@@ -162,7 +162,7 @@ class SubscriptionIssueController extends ChangeNotifier {
       payerStudentId: _draft.payerStudentId,
       fundingMode: _draft.fundingMode,
       startsAt: _draft.startsAt,
-      expiresAt: _draft.expiresAt,
+      expiresAt: _draft.purchaseExpiresAt,
       paymentAmountMinor: paymentAmountMinor,
       paymentOccurredAt: paymentAmountMinor == BigInt.zero
           ? null
@@ -325,6 +325,10 @@ extension SubscriptionIssuePaymentActions on SubscriptionIssueController {
     );
   }
 
+  void setIndefinite(bool value) {
+    _updateDraft(_draft.copyWith(isIndefinite: value));
+  }
+
   void setStartsAt(DateTime value) {
     final start = DateTime.utc(value.year, value.month, value.day);
     _updateDraft(
@@ -343,6 +347,7 @@ extension SubscriptionIssuePaymentActions on SubscriptionIssueController {
       _draft.copyWith(
         expiresAt: DateTime.utc(value.year, value.month, value.day),
         expiresAtExplicitlySet: true,
+        isIndefinite: false,
       ),
     );
   }
@@ -367,7 +372,8 @@ extension SubscriptionIssuePaymentActions on SubscriptionIssueController {
         : null;
   }
 
-  String? validateExpiresAt() => _draft.expiresAt.isBefore(_draft.startsAt)
+  String? validateExpiresAt() =>
+      !_draft.isIndefinite && _draft.expiresAt.isBefore(_draft.startsAt)
       ? 'Дата окончания не может быть раньше даты начала'
       : null;
 }

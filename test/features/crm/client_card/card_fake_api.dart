@@ -39,6 +39,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.studentMovements = const [],
     this.studentTechnicalHistory = const [],
     this.studentIndicators = const {},
+    this.studentCustomFieldValues = const {},
     this.homeworks = const [],
     this.internalNote,
     this.operationalHistory = const [],
@@ -130,6 +131,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> studentMovements;
   final List<Map<String, dynamic>> studentTechnicalHistory;
   final Map<String, dynamic> studentIndicators;
+  final Map<String, dynamic> studentCustomFieldValues;
   final List<Map<String, dynamic>> homeworks;
   Map<String, dynamic>? internalNote;
   final List<Map<String, dynamic>> operationalHistory;
@@ -284,6 +286,15 @@ class FakeCardApiClient extends MagicApiClient {
                 'order': 0,
               },
             ],
+          }
+          as T;
+    }
+    if (path == '/crm/lessons') {
+      final lessonId = queryParameters?['lessonId'];
+      return <String, dynamic>{
+            'items': studentLessons
+                .where((lesson) => lessonId == null || lesson['id'] == lessonId)
+                .toList(),
           }
           as T;
     }
@@ -495,7 +506,7 @@ class FakeCardApiClient extends MagicApiClient {
             'subscriptions': studentSubscriptions,
             'links': <dynamic>[],
             'timeline': studentTimeline,
-            'customFieldValues': <String, dynamic>{},
+            'customFieldValues': studentCustomFieldValues,
           }
           as T;
     }

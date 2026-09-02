@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -34,12 +35,17 @@ class TeacherStatsView extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (!_state.usesExternalRange) ...[
+          for (final preset in const ['Неделя', 'Месяц', 'Год'])
+            OutlinedButton(
+              onPressed: () => _selectPeriodPreset(preset),
+              child: Text(preset),
+            ),
           OutlinedButton.icon(
             onPressed: () => _pickPeriod(context),
             icon: const Icon(Icons.date_range_rounded, size: 18),
             label: Text(
-              '${controller.dayLabel(query.from)} - '
-              '${controller.dayLabel(query.to.subtract(const Duration(days: 1)))}',
+              '${DateFormat('dd.MM.yyyy').format(query.from)} - '
+              '${DateFormat('dd.MM.yyyy').format(query.to.subtract(const Duration(days: 1)))}',
             ),
           ),
           _dropdown(
@@ -198,6 +204,21 @@ class TeacherStatsView extends StatelessWidget {
         ),
       );
     }
+  }
+
+  void _selectPeriodPreset(String preset) {
+    final now = DateUtils.dateOnly(DateTime.now());
+    final from = switch (preset) {
+      'Неделя' => now.subtract(Duration(days: now.weekday - 1)),
+      'Год' => DateTime(now.year),
+      _ => DateTime(now.year, now.month),
+    };
+    final to = switch (preset) {
+      'Неделя' => from.add(const Duration(days: 7)),
+      'Год' => DateTime(now.year + 1),
+      _ => DateTime(now.year, now.month + 1),
+    };
+    controller.setQuery(_state.query.copyWith(from: from, to: to));
   }
 
   Future<void> _export(BuildContext context) async {
@@ -367,6 +388,15 @@ class TeacherStatsView extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             _moneySummary(item),
+            for (final type
+                in (item['compensationTypes'] as List? ?? const [])
+                    .whereType<Map>())
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '${type['label']} · ${controller.integer(type['completedLessons'])} зан. · ${controller.rub(type['accruedTotal'])}',
+                ),
+              ),
             const SizedBox(height: 8),
             for (final unit in units) _unitRow(context, unit),
           ],

@@ -169,6 +169,23 @@ List<String> _normalizedTexts(WidgetTester tester, Finder parent) => tester
     .toList(growable: false);
 
 void main() {
+  testWidgets('indefinite checkbox hides validity fields and clears expiry', (
+    tester,
+  ) async {
+    await _openSheet(
+      tester,
+      onPreview: (_) async => _preview(),
+      onSubmit: (_) async {},
+    );
+    final checkbox = find.byKey(const ValueKey('subscription-indefinite'));
+    expect(tester.widget<CheckboxListTile>(checkbox).value, isTrue);
+    expect(find.text('Окончание (включительно)'), findsNothing);
+    await _tap(tester, checkbox);
+    expect(tester.widget<CheckboxListTile>(checkbox).value, isFalse);
+    expect(find.text('Окончание (включительно)'), findsOneWidget);
+    await _tap(tester, checkbox);
+    expect(find.text('Окончание (включительно)'), findsNothing);
+  });
   test('paid units preserve PostgreSQL numeric precision before display', () {
     final packageUnits = subscriptionPackageUnitCount(const {'unitCount': 8});
     final hugePartial = subscriptionPaidUnits(
@@ -408,7 +425,7 @@ void main() {
     expect(previewInput?.issue.paymentMethod, SubscriptionPaymentMethod.cash);
     expect(previewInput?.paymentComment, 'Оплата наличными');
     expect(previewInput?.startsAt, DateTime.utc(2026, 8, 26));
-    expect(previewInput?.expiresAt, DateTime.utc(2026, 9, 26));
+    expect(previewInput?.expiresAt, isNull);
     expect(previewInput?.paymentOccurredAt, DateTime.utc(2026, 9, 2));
   });
 

@@ -42,13 +42,13 @@ export class ScheduleReadService {
             case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
               then plan.failure_code else null end as settlement_failure_code,
             case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
-              then plan.decision ->> 'settlementTypeKey' else null end
+              then coalesce(correction.decision, plan.decision) ->> 'settlementTypeKey' else null end
               as settlement_type_key,
             case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
-              then plan.decision ->> 'teacherCompensationRuleKey' else null end
+              then coalesce(correction.decision, plan.decision) ->> 'teacherCompensationRuleKey' else null end
               as teacher_compensation_rule_key,
             case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
-              then plan.decision ->> 'teacherCompensationValueMinor' else null end
+              then coalesce(correction.decision, plan.decision) ->> 'teacherCompensationValueMinor' else null end
               as teacher_compensation_value_minor,
             extract(epoch from (
               timezone(coalesce(b.timezone_name, 'Europe/Moscow'), l.scheduled_at)
@@ -76,6 +76,10 @@ export class ScheduleReadService {
             on b.id = coalesce(l.branch_id, g.branch_id, r.branch_id)
            and b.deleted_at is null
           left join app.lesson_settlement_plans plan on plan.lesson_id = l.id
+          left join lateral (
+            select decision from app.lesson_settlement_corrections
+            where lesson_id = l.id order by version desc limit 1
+          ) correction on true
           where l.deleted_at is null
             and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
             and l.scheduled_at >= $1::timestamptz
@@ -444,11 +448,11 @@ export class ScheduleReadService {
     const settlementFailureSql = `case when ${canSeeRatesSql}
       then plan.failure_code else null::text end`;
     const settlementTypeKeySql = `case when ${canSeePaymentsSql}
-      then plan.decision ->> 'settlementTypeKey' else null::text end`;
+      then coalesce(correction.decision, plan.decision) ->> 'settlementTypeKey' else null::text end`;
     const compensationRuleKeySql = `case when ${canSeeRatesSql}
-      then plan.decision ->> 'teacherCompensationRuleKey' else null::text end`;
+      then coalesce(correction.decision, plan.decision) ->> 'teacherCompensationRuleKey' else null::text end`;
     const compensationValueMinorSql = `case when ${canSeeRatesSql}
-      then plan.decision ->> 'teacherCompensationValueMinor' else null::text end`;
+      then coalesce(correction.decision, plan.decision) ->> 'teacherCompensationValueMinor' else null::text end`;
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.version, l.lifecycle_state,
@@ -490,6 +494,10 @@ export class ScheduleReadService {
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
         left join app.lesson_snapshots snapshot on snapshot.lesson_id = l.id
         left join app.lesson_settlement_plans plan on plan.lesson_id = l.id
+        left join lateral (
+          select decision from app.lesson_settlement_corrections
+          where lesson_id = l.id order by version desc limit 1
+        ) correction on true
         left join lateral (
           select lesson_reservation.state
           from app.lesson_reservations lesson_reservation

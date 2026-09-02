@@ -47,7 +47,7 @@ export interface NormalizedPurchase {
   snapshot: IssuedCommercialSnapshot;
   purchaseReason: string | null;
   startsAt: string;
-  expiresAt: string;
+  expiresAt: string | null;
   payment: {
     amountMinor: string;
     occurredAt: Date | null;

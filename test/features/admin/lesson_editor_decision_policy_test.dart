@@ -9,6 +9,63 @@ void main() {
   const policy = LessonEditorDecisionPolicy();
 
   test(
+    'settlement edits are saved and resource edits preserve lesson identity',
+    () {
+      final draft = _draft();
+      final session = _editSession(draft);
+      expect(
+        policy.hasFinancialChanges(
+          session: session,
+          draft: draft.copyWith(settlementTypeKey: 'free_lesson'),
+        ),
+        isTrue,
+      );
+      for (final state in ['scheduled', 'successfully_completed']) {
+        final request = policy.editRequest(
+          session: _editSession(draft, lifecycleState: state),
+          draft: draft.copyWith(
+            teacherId: 'teacher-b',
+            branchId: 'branch-b',
+            roomId: 'room-b',
+          ),
+        );
+        expect(
+          request.operation,
+          state == 'scheduled'
+              ? LessonDecisionOperation.plannedSettlement
+              : LessonDecisionOperation.correction,
+        );
+        expect(request.successor, isNull);
+      }
+    },
+  );
+
+  test('new lessons select standard pay even when no-pay is ordered first', () {
+    final draft = _draft(compensationRuleKey: null);
+    final references = LessonEditorReferenceState(
+      teachers: const [],
+      clients: const [],
+      branches: const [],
+      rooms: const [],
+      subscriptions: const [],
+      catalog: LessonDecisionCatalog(
+        settlementTypes: [_catalogItem(key: 'visit')],
+        compensationRules: [
+          _catalogItem(key: 'none', mode: 'none'),
+          _catalogItem(key: 'standard', mode: 'standard'),
+        ],
+      ),
+    );
+    final result = policy.applyReferenceDefaults(
+      _createSession(draft),
+      draft,
+      references,
+      false,
+    );
+    expect(result.draft.compensationRuleKey, 'standard');
+  });
+
+  test(
     'reference defaults keep catalog decisions and branch duration typed',
     () {
       final draft = _draft(

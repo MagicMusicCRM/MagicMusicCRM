@@ -3,8 +3,8 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 /// Closed visual vocabulary for operational lesson surfaces.
 ///
-/// Trial is a lesson type and is rendered as a separate badge. Reservation and
-/// settlement configuration are financial details and never change card color.
+/// Trial is a lesson type and is rendered as a separate badge. The client lesson
+/// tray may highlight reserved subscription coverage without changing lifecycle.
 enum LessonStateToken { booked, completed, conflict }
 
 class LessonStateProjection {

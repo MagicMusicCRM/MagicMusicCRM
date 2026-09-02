@@ -177,7 +177,7 @@ class SubscriptionIssuePricing {
   }
 
   static String? _dateRangeError(SubscriptionIssueDraft draft) {
-    return draft.expiresAt.isBefore(draft.startsAt)
+    return !draft.isIndefinite && draft.expiresAt.isBefore(draft.startsAt)
         ? 'Дата окончания не может быть раньше даты начала.'
         : null;
   }

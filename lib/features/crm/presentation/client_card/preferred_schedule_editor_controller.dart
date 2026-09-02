@@ -174,7 +174,11 @@ class PreferredScheduleEditorController extends ChangeNotifier {
           : _firstKey(catalog.settlementTypes),
       teacherCompensationRuleKey: compensationValid
           ? _state.teacherCompensationRuleKey
-          : _firstKey(catalog.compensationRules),
+          : catalog.compensationRules
+                    .where((item) => item.mode == 'standard')
+                    .firstOrNull
+                    ?.key ??
+                _firstKey(catalog.compensationRules),
     );
   }
 

@@ -14,6 +14,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     required this.lesson,
     required this.canManageTeacherCompensation,
     this.successor,
+    this.resources,
     this.initialSettlementTypeKey,
     this.initialCompensationRuleKey,
     this.initialCompensationValueMinor,
@@ -37,6 +38,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   @override
   final String? initialCompensationValueMinor;
   final LessonDecisionCommitted? afterCommit;
+  final Map<String, dynamic>? resources;
 
   @override
   bool get isGroupLesson {
@@ -227,6 +229,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
 
   String? get _effectiveBranchId {
     final value =
+        resources?['branchId'] ??
         successor?['branchId'] ??
         successor?['branch_id'] ??
         lesson['branch_id'] ??
@@ -267,6 +270,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
       },
       if (operation == LessonDecisionOperation.reschedule)
         'successor': successor ?? const <String, dynamic>{},
+      if (resources != null) 'resources': resources,
     };
     final response = await _crm.previewLessonDecision(
       lessonId: lesson['id'].toString(),

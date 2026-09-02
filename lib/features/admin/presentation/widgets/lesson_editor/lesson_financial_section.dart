@@ -162,13 +162,13 @@ class _DecisionFields extends StatelessWidget {
       initialValue: draft.settlementTypeKey,
       decoration: const InputDecoration(
         labelText: 'Тип списания *',
-        helperText: 'Выбирается до назначения занятия',
+        helperText: 'Изменение сохраняется после проверки расчёта',
       ),
       items: [
         for (final item in catalog?.settlementTypes ?? const [])
           DropdownMenuItem(value: item.key, child: Text(item.label)),
       ],
-      onChanged: model.session.isEdit
+      onChanged: model.session.isEdit && model.isSaving
           ? null
           : (value) => actions.edit(
               LessonReferenceEdit(LessonReferenceTarget.settlement, value),

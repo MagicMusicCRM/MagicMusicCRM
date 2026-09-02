@@ -293,7 +293,7 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
     }
   });
 
-  it("stores a future individual series without materializing beyond 60 days", async () => {
+  it("materializes the full explicit range even when it starts beyond 60 days", async () => {
     const boundary = await pool.query<{
       valid_from: string;
       valid_until: string;
@@ -337,7 +337,8 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
         requestId: `request-horizon-${randomUUID()}`,
       });
       seriesId = created.id;
-      expect(created).toMatchObject({ lessonsCreated: 0, lessonIds: [] });
+      expect(created.lessonsCreated).toBe(3);
+      expect(created.lessonIds).toHaveLength(3);
       const persisted = await pool.query<{ occurrence_count: string; lessons: string }>(`
         select series.occurrence_count::text,
           count(lesson.id)::text as lessons
@@ -346,7 +347,7 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
         where series.id = $1
         group by series.id
       `, [seriesId]);
-      expect(persisted.rows[0]).toEqual({ occurrence_count: "0", lessons: "0" });
+      expect(persisted.rows[0]).toEqual({ occurrence_count: "3", lessons: "3" });
     } finally {
       await cleanupFixture(pool, fixture, seriesId);
     }

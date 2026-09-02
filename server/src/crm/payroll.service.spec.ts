@@ -167,6 +167,29 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     ...over,
   });
 
+  it('reports accrued totals by the historical compensation rule, including unpaid lessons', async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [
+        lessonRow({ id: 'l-1', student_id: 's-1', settlement_fact_id: 'f-1', settled_amount_minor: 60000, compensation_type: 'standard', compensation_rule_key: 'standard', compensation_rule_label: 'Полная стандартная ставка' }),
+        lessonRow({ id: 'l-2', student_id: 's-1', settlement_fact_id: 'f-2', settled_amount_minor: 25000, compensation_type: 'fixed', compensation_rule_key: 'special', compensation_rule_label: 'Особая ставка' }),
+        lessonRow({ id: 'l-3', student_id: 's-1', settlement_fact_id: 'f-3', settled_amount_minor: 0, compensation_type: 'none', compensation_rule_key: 'none', compensation_rule_label: 'Не оплачивать' }),
+      ] },
+      { rows: [{ teacher_id: 't-1', rate: '9999', effective_from: '2026-01-01' }] },
+      { rows: [{ id: 't-1', name: 'Преподаватель', salary: null }] },
+    ]);
+    const report = await service.getTeacherStatsReport(directorActor, { from: '2026-01-01', to: '2027-01-01' });
+    expect(report.items[0]).toMatchObject({
+      completedLessons: 3, accruedTotal: 850,
+      compensationTypes: expect.arrayContaining([
+        { key: 'standard', label: 'Полная стандартная ставка', completedLessons: 1, accruedTotal: 600 },
+        { key: 'special', label: 'Особая ставка', completedLessons: 1, accruedTotal: 250 },
+        { key: 'none', label: 'Не оплачивать', completedLessons: 1, accruedTotal: 0 },
+      ]),
+    });
+    expect(report.items[0]!.units).toHaveLength(3);
+    expect(report.totals.accruedTotal).toBe(850);
+  });
+
   it("getTeacherPayroll выбирает ставку по дате занятия из истории", async () => {
     const { service } = createServiceWithQueryResults([
       // Занятие до смены ставки (600) и после (900).
@@ -697,11 +720,13 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       "Часы",
       "Ставка за астр. час",
       "Начислено",
+      "Тип начисления",
     ]);
     expect(sheet.getCell("A2").value).toBe('\'=Иван "Гитарист"; Петров');
     expect(sheet.getCell("D2").value).toBe("2026-07-05 (1 астр.ч.)");
     expect(sheet.getCell("H2").value).toBe("Входит в оклад");
     expect(sheet.getCell("I2").value).toBe(0);
+    expect(sheet.getCell("J2").value).toBe('Почасовая ставка');
     expect(headers.map((value) => String(value))).not.toContain("Оплачено");
     expect(headers.map((value) => String(value))).not.toContain("Доплаты");
     expect(headers.map((value) => String(value))).not.toContain("Вычеты");

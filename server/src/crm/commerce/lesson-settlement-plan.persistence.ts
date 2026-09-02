@@ -331,7 +331,7 @@ export async function replaceLessonSettlementPlan(
          failure_code = null,
          version = version + 1,
          updated_at = now()
-     where lesson_id = $1 and version = $2 and state = 'planned'
+     where lesson_id = $1 and version = $2 and state in ('planned', 'review_required')
      returning version`,
     [
       input.lessonId,

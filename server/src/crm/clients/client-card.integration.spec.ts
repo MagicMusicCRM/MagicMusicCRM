@@ -354,6 +354,17 @@ describe("ClientCardReadService (PostgreSQL)", () => {
 
   afterEach(() => jest.restoreAllMocks());
 
+  it("returns the saved catalog directions when reopening a student card", async () => {
+    await database.query(
+      `update app.students set custom_data = custom_data || $2::jsonb where id = $1`,
+      [studentId, JSON.stringify({ discipline: "Вокал", disciplines: ["Вокал", "Гитара"] })],
+    );
+    const result = await service.load(manager, { type: "student", id: studentId });
+    expect(result.student).toMatchObject({
+      customData: { discipline: "Вокал", disciplines: ["Вокал", "Гитара"] },
+    });
+  });
+
   it("composes the full Manager card in three bounded queries", async () => {
     const query = jest.spyOn(database, "query");
     const result = await service.load(manager, {

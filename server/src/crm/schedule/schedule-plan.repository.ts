@@ -87,6 +87,8 @@ export class SchedulePlanRepository {
       end_reason: string | null;
       series: Record<string, unknown>[];
       participants: Record<string, unknown>[];
+      scheduled_lesson_count: string;
+      covered_lesson_count: string;
     }>(
       `
         with visible_plans as (
@@ -175,8 +177,21 @@ export class SchedulePlanRepository {
             ) order by participant.effective_from, participant.student_id)
             from app.schedule_plan_participants participant
             where participant.plan_id = plan.id
-          ), '[]'::jsonb) as participants
+          ), '[]'::jsonb) as participants,
+          lesson_counts.scheduled as scheduled_lesson_count,
+          lesson_counts.covered as covered_lesson_count
         from visible_plans plan
+        left join lateral (
+          select count(*)::text as scheduled,
+            count(*) filter (where lesson.student_id is not null and exists (
+              select 1 from app.lesson_reservations reservation
+              where reservation.lesson_id = lesson.id and reservation.state = 'reserved'
+            ))::text as covered
+          from app.lessons lesson
+          join app.schedule_series series on series.id = lesson.series_id
+          where series.plan_id = plan.id and lesson.deleted_at is null
+            and lesson.lifecycle_state = 'scheduled'
+        ) lesson_counts on true
         left join app.profiles ended_by_profile
           on ended_by_profile.user_id = plan.ended_by
           and ended_by_profile.deleted_at is null
@@ -211,6 +226,8 @@ export class SchedulePlanRepository {
         endReason: row.end_reason,
         rows: row.series,
         participants: row.participants,
+        scheduledLessonCount: Number(row.scheduled_lesson_count),
+        coveredLessonCount: row.kind === 'individual' ? Number(row.covered_lesson_count) : null,
       })),
     };
   }
@@ -856,6 +873,13 @@ export class SchedulePlanRepository {
            select distinct settlement_type_key, settlement_label, settlement_color_token
            from app.lesson_client_charge_facts_effective fact
            where fact.lesson_id = lesson.id and fact.settlement_type_key is not null
+           union all
+           select 'subscription_reserved', 'Покрыто абонементом', 'success'
+           where lesson.student_id is not null and lesson.lifecycle_state = 'scheduled'
+             and exists (
+               select 1 from app.lesson_reservations reservation
+               where reservation.lesson_id = lesson.id and reservation.state = 'reserved'
+             )
          ) item
        ) marker on true
        where (lesson.scheduled_at, lesson.id) ${comparison}

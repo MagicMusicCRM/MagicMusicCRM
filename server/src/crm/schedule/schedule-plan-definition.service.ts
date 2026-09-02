@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
+import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import type {
   CreateSchedulePlanDto,
   SchedulePlanEndPreviewDto,
@@ -67,6 +68,15 @@ export interface NormalizedSchedulePlanEnd {
 
 export const failSchedulePlan = (code: string, fields: string[]): never => {
   throw new UnprocessableEntityException({ code, fields });
+};
+
+export const assertSchedulePlanMetadata = (metadata: LessonCommandMetadata) => {
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
+    failSchedulePlan("IDEMPOTENCY_KEY_REQUIRED", ["Idempotency-Key"]);
+  }
+  if (!metadata.requestId || metadata.requestId.length > 160) {
+    failSchedulePlan("REQUEST_ID_REQUIRED", ["X-Request-Id"]);
+  }
 };
 
 export const schedulePlanStableId = (seed: string) => {

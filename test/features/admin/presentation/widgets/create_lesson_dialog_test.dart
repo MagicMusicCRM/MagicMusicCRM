@@ -261,12 +261,14 @@ Widget _host(Map<String, dynamic> lesson) {
 Widget _controlledHost(
   _ControlledApiClient client, {
   int? initialDurationMinutes,
+  Map<String, dynamic>? lesson,
 }) {
   return ProviderScope(
     overrides: [magicApiClientProvider.overrideWithValue(client)],
     child: MaterialApp(
       home: Scaffold(
         body: CreateLessonDialog(
+          lesson: lesson,
           key: ValueKey('lesson-$initialDurationMinutes'),
           initialBranchId: _branchAId,
           initialDurationMinutes: initialDurationMinutes,
@@ -335,6 +337,35 @@ Future<void> _selectPickerOption(
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  for (final state in ['scheduled', 'successfully_completed']) {
+    testWidgets('settlement selector remains editable for $state lessons', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _controlledHost(
+          _ControlledApiClient(),
+          lesson: {
+            'id': 'lesson-edit',
+            'version': 2,
+            'lifecycle_state': state,
+            'student_id': _studentAId,
+            'student_name': 'Ученик А',
+            'branch_id': _branchAId,
+            'room_id': _roomAId,
+            'scheduled_at': '2026-08-31T07:00:00Z',
+            'duration_minutes': 60,
+            'settlement_type_key': 'settlement_А',
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      final field = tester.widget<DropdownButtonFormField<String>>(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      expect(field.onChanged, isNotNull);
+    });
+  }
 
   testWidgets(
     'mobile show uses the lesson editor route and returns its result',

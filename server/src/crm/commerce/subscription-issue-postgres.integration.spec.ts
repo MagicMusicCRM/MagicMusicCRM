@@ -1035,14 +1035,14 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     });
   });
 
-  it("persists backdated dates and a partial actual payment in one purchase", async () => {
+  it.each(['2026-07-18', null])("persists backdated dates with expiry %s and a partial actual payment in one purchase", async (expiresAt) => {
     const input = {
       packageId,
       payerStudentId: studentId,
       fundingMode: "personal_account" as const,
       purchaseReason: "Частичная оплата при продаже",
       startsAt: "2026-06-18",
-      expiresAt: "2026-07-18",
+      expiresAt,
       paymentAmountMinor: "300000",
       paymentOccurredAt: "2026-06-18T09:30:00.000Z",
       paymentMethod: "cash" as const,
@@ -1062,12 +1062,12 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       actors.director,
       studentId,
       { ...input, previewToken: preview.previewToken, confirm: true },
-      mutationMetadata("partial-payment-at-sale"),
+      mutationMetadata(`partial-payment-at-sale-${expiresAt ?? 'indefinite'}`),
     );
 
     expect(purchased.subscription).toMatchObject({
       startsAt: "2026-06-18",
-      expiresAt: "2026-07-18",
+      expiresAt,
     });
     expect(purchased.balanceAtIssue).toEqual({
       currencyCode: "RUB",

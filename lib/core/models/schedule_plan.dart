@@ -101,6 +101,8 @@ class SchedulePlanParticipant {
 
 class SchedulePlan {
   const SchedulePlan({
+    this.scheduledLessonCount,
+    this.coveredLessonCount,
     required this.id,
     required this.kind,
     required this.title,
@@ -120,6 +122,8 @@ class SchedulePlan {
   });
 
   factory SchedulePlan.fromMap(Map<String, dynamic> map) => SchedulePlan(
+    scheduledLessonCount: (map['scheduledLessonCount'] as num?)?.toInt(),
+    coveredLessonCount: (map['coveredLessonCount'] as num?)?.toInt(),
     id: map['id']?.toString() ?? '',
     kind: map['kind']?.toString() ?? 'individual',
     title: map['title']?.toString() ?? 'Расписание',
@@ -162,6 +166,8 @@ class SchedulePlan {
   final String? endedBy;
   final String? endedByName;
   final String? endReason;
+  final int? scheduledLessonCount;
+  final int? coveredLessonCount;
   final List<SchedulePlanRow> rows;
   final List<SchedulePlanParticipant> participants;
 

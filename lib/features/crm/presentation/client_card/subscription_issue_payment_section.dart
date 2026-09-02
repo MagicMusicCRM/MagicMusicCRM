@@ -19,6 +19,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
     required this.selectFundingMode,
     required this.setStartsAt,
     required this.setExpiresAt,
+    required this.setIndefinite,
     required this.setPaymentAmount,
     required this.setPaymentOccurredAt,
     required this.setPaymentComment,
@@ -39,6 +40,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
   final ValueChanged<SubscriptionFundingMode> selectFundingMode;
   final ValueChanged<DateTime> setStartsAt;
   final ValueChanged<DateTime> setExpiresAt;
+  final ValueChanged<bool> setIndefinite;
   final ValueChanged<String> setPaymentAmount;
   final ValueChanged<DateTime> setPaymentOccurredAt;
   final ValueChanged<String> setPaymentComment;
@@ -62,14 +64,25 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
         const SizedBox(height: AppSpace.lg),
         const SubscriptionIssueSectionTitle('Оплата абонемента'),
         const SizedBox(height: AppSpace.sm),
-        _SubscriptionPeriodFields(
-          draft: draft,
-          fieldsEnabled: fieldsEnabled,
-          setStartsAt: setStartsAt,
-          setExpiresAt: setExpiresAt,
-          validateExpiresAt: validateExpiresAt,
-          onChanged: onChanged,
+        CheckboxListTile(
+          key: const ValueKey('subscription-indefinite'),
+          title: const Text('Бессрочный'),
+          value: draft.isIndefinite,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          onChanged: fieldsEnabled
+              ? (value) => _change(() => setIndefinite(value ?? true))
+              : null,
         ),
+        if (!draft.isIndefinite)
+          _SubscriptionPeriodFields(
+            draft: draft,
+            fieldsEnabled: fieldsEnabled,
+            setStartsAt: setStartsAt,
+            setExpiresAt: setExpiresAt,
+            validateExpiresAt: validateExpiresAt,
+            onChanged: onChanged,
+          ),
         const SizedBox(height: AppSpace.md),
         TextFormField(
           key: const Key('subscription-accepted-by'),
