@@ -1,11 +1,25 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-08-31
-> Production: client `1.5.27+207`, server `f8bafa9a`,
-> image `sha256:ac33cd55…`, migration `0145`
+> Обновлено: 2026-09-02
+> Production: client `1.5.29+209`, server `229b8a6f`,
+> image `sha256:aee7deaf…`, migration `0145`
 > Рабочая ветка: `main`
-> Статус: человекочитаемый audit journal rollout PASS;
-> общий update build `207` опубликован
+> Статус: абонементы, расписание и аналитика преподавателей rollout PASS;
+> общий update build `209` опубликован
+
+Release `1.5.29+209` включает бессрочную продажу по умолчанию, полный явный
+диапазон постоянного расписания, зелёное покрытие абонементом, точное открытие
+занятия с учеником и редактирование ресурсов/списания для будущих и прошедших
+занятий через существующие финансовые команды. Стандартная ставка выбрана
+по умолчанию; статистика начислений преподавателей открывается отдельным
+окном Аналитики. Направление обучения восстанавливается в карточке клиента.
+Flutter `1492/1492`, backend `277/277` suites / `3657/3657` tests, анализ,
+сборки, security и exact-image gates PASS. Production healthy/restart `0`,
+reconciliation повторно `issues=[]`, очереди `0`, monitor PASS. Pre/post
+encrypted off-host backup прошли isolated candidate/rollback restore.
+Оба manifest, четыре artifacts и GitHub Release `v1.5.29` опубликованы и
+проверены по SHA-256. Rollback: `1.5.28+208`, server `6f5c146bc250`, без down
+migration. Evidence: `docs/audits/v7-production-subscriptions-schedule-teachers-209.md`.
 
 Release `1.5.27+207` объединил историю карточки клиента и журнал Аналитики
 через общий человекочитаемый presenter. Краткие карточки показывают действие,
