@@ -39,6 +39,34 @@ describe("lesson financial decision HTTP contract", () => {
     await expect(validate({ ...payload({}), teacherRateSnapshot: { type: "hourly", value: "9999" } })).rejects.toMatchObject({ status: 400 });
   });
 
+  it("accepts exact client and teacher partial durations", async () => {
+    await expect(validate({
+      settlementTypeKey: "partially_paid_lesson",
+      teacherCompensationRuleKey: "percent",
+      teacherCreditedDurationMinutes: 45,
+      teacherCompensationSource: "manual",
+      clientDecisions: [{ clientId, chargeDurationMinutes: 30 }],
+    })).resolves.toMatchObject({
+      teacherCreditedDurationMinutes: 45,
+      teacherCompensationSource: "manual",
+      clientDecisions: [{ clientId, chargeDurationMinutes: 30 }],
+    });
+  });
+
+  it.each([
+    { teacherCreditedDurationMinutes: -1 },
+    { teacherCreditedDurationMinutes: 1.5 },
+    { teacherCompensationSource: "inferred" },
+    { clientDecisions: [{ clientId, chargeDurationMinutes: -1 }] },
+    { clientDecisions: [{ clientId, chargeDurationMinutes: 1.5 }] },
+  ])("rejects invalid partial duration shape: %j", async (invalid) => {
+    await expect(validate({
+      settlementTypeKey: "partially_paid_lesson",
+      teacherCompensationRuleKey: "percent",
+      ...invalid,
+    })).rejects.toMatchObject({ status: 400 });
+  });
+
   it("does not interpret an explicit null price as the old subscription snapshot value", async () => {
     const dto = await validate(payload({ basePriceMinor: null }));
     expect(() => resolveLessonFunding({ client_id: clientId, client_type: "student", charge_type: "subscription", charge_value: "1", subscription_id: clientId }, dto.clientDecisions?.[0])).toThrow();

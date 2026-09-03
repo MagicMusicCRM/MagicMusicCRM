@@ -47,6 +47,18 @@ describe("lesson compensation service RBAC", () => {
     }
   });
 
+  it("routes user-supplied planned decisions through the central resolver", () => {
+    for (const file of [
+      "lesson-write-command.service.ts",
+      "lesson-planned-settlement-command.service.ts",
+      "lesson-settlement-correction.service.ts",
+    ]) {
+      expect(readFileSync(resolve(__dirname, file), "utf8")).toContain(
+        "resolvePlannedDecision",
+      );
+    }
+  });
+
   it.each(roles)(
     "keeps lesson creation available without granting rate changes for %s",
     async (role) => {
@@ -164,6 +176,7 @@ describe("lesson compensation service RBAC", () => {
         reuseStoredTeacherCompensation: jest
           .fn()
           .mockResolvedValue(effectiveDecision),
+        resolvePlannedDecision: jest.fn().mockResolvedValue(effectiveDecision),
         preparePlan: jest.fn().mockResolvedValue({
           settlementRevisionId: "settlement-revision-1",
           compensationRevisionId: "compensation-revision-1",

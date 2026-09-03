@@ -378,7 +378,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       teacherCompensationValue: 0,
       financialDecision: {
         settlementTypeKey: "lesson",
-        teacherCompensationRuleKey: "none",
+        teacherCompensationRuleKey: "standard",
       },
     };
     try {
@@ -644,7 +644,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         compensation_value: "900.00",
         validation_state: "valid",
         settlement_key: "free_lesson",
-        pay_rule_key: "standard",
+        pay_rule_key: "none",
         plan_revisions: "1",
       });
     } finally {
@@ -658,6 +658,87 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       });
     }
   });
+
+  it.each([
+    ["lesson", "standard", "standard", 60],
+    ["paid_miss", "standard", "standard", 60],
+    ["free_lesson", "standard", "none", 0],
+    ["unpaid_miss", "standard", "none", 0],
+  ] as const)(
+    "normalizes stale automatic defaults on %s creation and edit",
+    async (settlementTypeKey, staleRule, expectedRule, expectedMinutes) => {
+      const fixture = await createFixture(pool);
+      const actor = { userId: fixture.managerId, role: "manager" as const };
+      const lessonIds: string[] = [];
+      const metadata = (phase: string) => ({
+        idempotencyKey: `automatic-policy-${settlementTypeKey}-${phase}-${randomUUID()}`,
+        requestId: randomUUID(),
+      });
+      try {
+        const lesson = await commands.create(actor, {
+          clientRef: { type: "student", id: fixture.studentId },
+          teacherId: fixture.teacherId,
+          branchId: fixture.branchId,
+          roomId: fixture.roomId,
+          scheduledAt: nextMondayAtTenMoscow(),
+          durationMinutes: 60,
+          isTrial: false,
+          completionType: "standard.success",
+          clientChargeType: "personal_account",
+          clientChargeValue: 1000,
+          teacherCompensationType: "fixed",
+          teacherCompensationValue: 700,
+          financialDecision: {
+            settlementTypeKey,
+            teacherCompensationRuleKey: staleRule,
+          },
+        }, metadata("create"));
+        lessonIds.push(lesson.id);
+
+        const createdPlan = await database.transaction((client) =>
+          settlement.loadPlan(client, lesson.id)
+        );
+        expect(createdPlan?.decision).toMatchObject({
+          teacherCompensationRuleKey: expectedRule,
+          teacherCreditedDurationMinutes: expectedMinutes,
+          teacherCompensationSource: "automatic",
+        });
+
+        const change = {
+          expectedVersion: lesson.version,
+          reasonText: "Проверка автоматического правила расчёта",
+          financialDecision: {
+            settlementTypeKey,
+            teacherCompensationRuleKey: staleRule,
+          },
+        };
+        const preview = await commands.previewSettlementPlan(
+          actor,
+          lesson.id,
+          change,
+        );
+        await commands.updateSettlementPlan(actor, lesson.id, {
+          ...change,
+          confirm: true,
+          previewToken: preview.previewToken,
+        }, metadata("edit"));
+        const editedPlan = await database.transaction((client) =>
+          settlement.loadPlan(client, lesson.id)
+        );
+        expect(editedPlan?.decision).toMatchObject({
+          teacherCompensationRuleKey: expectedRule,
+          teacherCreditedDurationMinutes: expectedMinutes,
+          teacherCompensationSource: "automatic",
+        });
+      } finally {
+        await cleanupFixture(pool, {
+          ...fixture,
+          actorKey: `user:${fixture.managerId}`,
+          lessonIds,
+        });
+      }
+    },
+  );
 
   it("clears a null notes-only PATCH through the canonical command path", async () => {
     const fixture = await createFixture(pool);
@@ -1233,7 +1314,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       const change = {
         expectedVersion: version, reasonText: "Исправление преподавателя и филиала",
         resources: { teacherId: replacement.teacherId, branchId: replacement.branchId, roomId: replacement.roomId },
-        financialDecision: { settlementTypeKey: "free_lesson", teacherCompensationRuleKey: "standard" },
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard" },
       };
       // An assigned manager cannot move this lesson to an unassigned branch.
       await pool.query("update app.users set role = 'manager' where id = $1", [actor.userId]);
@@ -1255,7 +1336,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         room_id: replacement.roomId, lifecycle_state: completed ? "successfully_completed" : "scheduled" });
       const reopened = await new ScheduleReadService(database, new CrmPolicy()).listLessons(actor, { lessonId: created.id });
       expect(reopened.items[0]).toMatchObject({ teacherId: replacement.teacherId,
-        branchId: replacement.branchId, settlementTypeKey: "free_lesson" });
+        branchId: replacement.branchId, settlementTypeKey: "lesson" });
       expect((await pool.query("select count(*)::int as count from app.lesson_transitions where lesson_id = $1", [created.id])).rows[0].count).toBe(0);
       if (completed) {
         const facts = await pool.query("select teacher_id, amount_minor::text, supersedes_fact_id from app.lesson_teacher_compensation_facts where lesson_id = $1 order by created_at, id", [created.id]);
@@ -1307,10 +1388,10 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         completionType: "standard.success", clientChargeType: "subscription",
         clientChargeValue: 1, subscriptionId: first,
         teacherCompensationType: "fixed", teacherCompensationValue: 700,
-        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "none" },
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard" },
       }, metadata());
       lessonIds.push(lesson.id);
-      expect((await database.transaction((client) => settlement.loadPlan(client, lesson.id)))?.decision.teacherCompensationRuleKey).toBe("none");
+      expect((await database.transaction((client) => settlement.loadPlan(client, lesson.id)))?.decision.teacherCompensationRuleKey).toBe("standard");
       const history = async () => (await pool.query(
         "select id, state, units::text, version::text from app.lesson_reservations where lesson_id=$1 order by id",
         [lesson.id],
@@ -1401,7 +1482,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         completionType: "standard.success", clientChargeType: "subscription",
         clientChargeValue: 1, subscriptionId,
         teacherCompensationType: "fixed", teacherCompensationValue: 700,
-        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "none" },
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard" },
       }, metadata());
       lessonIds.push(lesson.id);
       // The materializer can leave future occurrences uncovered after capacity runs out.
@@ -1463,7 +1544,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
           teacherCompensationValue: 700,
           financialDecision: {
             settlementTypeKey: "lesson",
-            teacherCompensationRuleKey: "none",
+            teacherCompensationRuleKey: "standard",
           },
         },
         metadata("create"),

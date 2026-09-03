@@ -1,6 +1,7 @@
 import {
   calculateClientSettlement,
   calculateTeacherCompensation,
+  durationShareBasisPoints,
   LessonSettlementCalculationError,
 } from "./lesson-settlement.calculation";
 
@@ -15,6 +16,32 @@ describe("Lesson settlement calculation", () => {
     mode: "fixed",
     configuredValue: "50000",
   };
+
+  it.each([
+    [0, 30, 0],
+    [30, 30, 10_000],
+    [15, 30, 5_000],
+    [45, 60, 7_500],
+    [30, 90, 3_333],
+  ])("converts %i of %i minutes to %i basis points", (
+    selectedMinutes,
+    durationMinutes,
+    expected,
+  ) => {
+    expect(durationShareBasisPoints(selectedMinutes, durationMinutes)).toBe(
+      expected,
+    );
+  });
+
+  it.each([
+    [-1, 60, "INVALID_PARTIAL_DURATION"],
+    [1.5, 60, "INVALID_PARTIAL_DURATION"],
+    [61, 60, "PARTIAL_DURATION_EXCEEDS_LESSON"],
+  ])("rejects partial duration %s/%s", (selected, duration, code) => {
+    expect(() => durationShareBasisPoints(selected, duration)).toThrow(
+      expect.objectContaining({ code }),
+    );
+  });
 
   it.each([
     [0, "0.00", "250"],

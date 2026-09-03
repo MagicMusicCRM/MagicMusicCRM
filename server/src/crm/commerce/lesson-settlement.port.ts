@@ -23,22 +23,27 @@ export type TeacherCompensationFactType =
 
 export type LessonSettlementContext = "settle" | "reschedule" | "cancel";
 
+export interface LessonClientFinancialDecision {
+  clientId: string;
+  settlementTypeKey?: string;
+  chargeDurationMinutes?: number;
+  subscriptionId?: string;
+  payerStudentId?: string;
+  chargeType?: ClientChargeFactType;
+  basePriceMinor?: string;
+  discount?: IssueSubscriptionDiscountDto;
+  surcharge?: IssueSubscriptionSurchargeDto;
+}
+
 export interface LessonFinancialDecision {
   /** Server-owned rate frozen when the assigned teacher is corrected. Never accepted by the command DTO. */
   teacherRateSnapshot?: { type: "hourly"; value: string };
   settlementTypeKey: string;
-  clientDecisions?: Array<{
-    clientId: string;
-    settlementTypeKey?: string;
-    subscriptionId?: string;
-    payerStudentId?: string;
-    chargeType?: ClientChargeFactType;
-    basePriceMinor?: string;
-    discount?: IssueSubscriptionDiscountDto;
-    surcharge?: IssueSubscriptionSurchargeDto;
-  }>;
+  clientDecisions?: LessonClientFinancialDecision[];
   teacherCompensationRuleKey: string;
   teacherCompensationValueMinor?: string;
+  teacherCreditedDurationMinutes?: number;
+  teacherCompensationSource?: "automatic" | "manual";
 }
 
 export interface PreparedLessonSettlementPlan {

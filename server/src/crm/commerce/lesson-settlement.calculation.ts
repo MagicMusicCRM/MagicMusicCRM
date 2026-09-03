@@ -8,6 +8,27 @@ export class LessonSettlementCalculationError extends Error {
   }
 }
 
+export function durationShareBasisPoints(
+  selectedMinutes: number,
+  durationMinutes: number,
+): number {
+  if (!Number.isInteger(selectedMinutes) || selectedMinutes < 0) {
+    throw new LessonSettlementCalculationError("INVALID_PARTIAL_DURATION");
+  }
+  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+    throw new LessonSettlementCalculationError("INVALID_LESSON_DURATION");
+  }
+  if (selectedMinutes > durationMinutes) {
+    throw new LessonSettlementCalculationError(
+      "PARTIAL_DURATION_EXCEEDS_LESSON",
+    );
+  }
+  const duration = BigInt(durationMinutes);
+  return Number(
+    (BigInt(selectedMinutes) * 10_000n + duration / 2n) / duration,
+  );
+}
+
 function roundRatio(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator / 2n) / denominator;
 }

@@ -193,14 +193,43 @@ export class LessonPlannedSettlementCommandService {
     const resources = await applyLessonResourceEdit(
       client, actor, lessonId, dto.resources, this.constraints,
     );
-    const authorizedDecision = this.policy.canManageTeacherCompensation(actor)
-      ? dto.financialDecision
+    const storedTeacherDecision = this.policy.canManageTeacherCompensation(actor)
+      ? undefined
       : await this.settlement.reuseStoredTeacherCompensation(
           client,
           lessonId,
           dto.financialDecision,
         );
-    const decision = { ...authorizedDecision, teacherRateSnapshot: resources.teacherRateSnapshot };
+    const duration = await client.query<{ duration_minutes: number }>(
+      "select duration_minutes from app.lessons where id = $1",
+      [lessonId],
+    );
+    const decision = await this.settlement.resolvePlannedDecision(client, {
+      branchId: resources.branchId,
+      durationMinutes: duration.rows[0]!.duration_minutes,
+      decision: {
+        ...dto.financialDecision,
+        teacherRateSnapshot: resources.teacherRateSnapshot,
+      },
+      actorUserId: actor.userId,
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
+      reasonText: dto.reasonText,
+      ...(storedTeacherDecision
+        ? {
+            preservedTeacherDecision: {
+              teacherCompensationRuleKey:
+                storedTeacherDecision.teacherCompensationRuleKey,
+              teacherCompensationValueMinor:
+                storedTeacherDecision.teacherCompensationValueMinor,
+              teacherCreditedDurationMinutes:
+                storedTeacherDecision.teacherCreditedDurationMinutes,
+              teacherCompensationSource:
+                storedTeacherDecision.teacherCompensationSource,
+            },
+          }
+        : {}),
+    });
     const prepared = await this.settlement.preparePlan(
       client,
       resources.branchId,

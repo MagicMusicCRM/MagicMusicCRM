@@ -4,6 +4,7 @@ import { ConflictException, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import {
   calculateClientSettlement,
+  durationShareBasisPoints,
 } from "./lesson-settlement.calculation";
 import {
   assertPlannedLessonSettlementDecision,
@@ -19,6 +20,7 @@ import type {
   PreparedLessonSettlementPlan,
   StoredLessonSettlementPlan,
 } from "./lesson-settlement.port";
+import { resolveSettlementPolicy } from "./lesson-settlement-policy";
 
 interface PlanChargeSource {
   client_type: "lead" | "student";
@@ -251,16 +253,13 @@ function calculatePlanAllocations(
   const decisions = new Map(
     (plan.decision.clientDecisions ?? []).map((item) => [item.clientId, item]),
   );
-  const settlementTypes = new Map(
-    catalog.settlement_types.map((item) => [item.stableKey, item]),
-  );
   return charges.flatMap((charge) =>
     calculatePlanAllocation(
       charge,
       durationMinutes,
       plan.decision,
       decisions.get(charge.client_id),
-      settlementTypes,
+      catalog,
     ),
   );
 }
@@ -271,12 +270,14 @@ function calculatePlanAllocation(
   decision: LessonFinancialDecision,
   selected: NonNullable<LessonFinancialDecision["clientDecisions"]>[number]
     | undefined,
-  settlementTypes: Map<string, LessonSettlementCatalog["settlement_types"][number]>,
+  catalog: LessonSettlementCatalog,
 ): PlannedSubscriptionAllocation[] {
   const funding = resolveLessonFunding(charge, selected);
   const { chargeType, subscriptionId } = funding;
-  const settlement = settlementTypes.get(
-    selected?.settlementTypeKey ?? decision.settlementTypeKey,
+  const settlementKey = selected?.settlementTypeKey ??
+    decision.settlementTypeKey;
+  const settlement = catalog.settlement_types.find(
+    (item) => item.stableKey === settlementKey,
   );
   if (!settlement) {
     invalidLessonSettlementDecision(
@@ -284,11 +285,27 @@ function calculatePlanAllocation(
       "settlementTypeKey",
     );
   }
+  const policy = resolveSettlementPolicy(catalog, settlementKey);
+  if (
+    policy.clientDurationMode === "manual" &&
+    selected?.chargeDurationMinutes === undefined &&
+    decision.teacherCompensationSource !== undefined
+  ) {
+    invalidLessonSettlementDecision(
+      "CLIENT_PARTIAL_DURATION_REQUIRED",
+      `clientDecisions.${charge.client_id}.chargeDurationMinutes`,
+    );
+  }
   let calculated;
   try {
     calculated = calculateClientSettlement({
       durationMinutes,
-      hourShareBasisPoints: settlement.hourShareBasisPoints,
+      hourShareBasisPoints: selected?.chargeDurationMinutes === undefined
+        ? settlement.hourShareBasisPoints
+        : durationShareBasisPoints(
+            selected.chargeDurationMinutes,
+            durationMinutes,
+          ),
       fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
       chargeType,
       baseChargeMinor: funding.baseChargeMinor,

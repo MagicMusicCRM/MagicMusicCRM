@@ -95,13 +95,18 @@ export class LessonWriteCommandService {
         const effectiveDraft = canManageTeacherCompensation
           ? draft
           : await this.withEffectiveTeacherRate(client, draft);
-        const financialDecision = canManageTeacherCompensation
-          ? dto.financialDecision!
-          : await this.settlement.applyDefaultTeacherCompensation(
-              client,
-              effectiveDraft.branchId,
-              dto.financialDecision!,
-            );
+        const financialDecision = await this.settlement.resolvePlannedDecision(
+          client,
+          {
+            branchId: effectiveDraft.branchId,
+            durationMinutes: effectiveDraft.durationMinutes,
+            decision: dto.financialDecision!,
+            actorUserId: actor.userId,
+            authorization:
+              this.policy.teacherCompensationMutationAuthorization(actor),
+            reasonText: dto.plannedSettlementReason,
+          },
+        );
         await this.acquireLocks(client, effectiveDraft);
         await this.assertConstraints(effectiveDraft, client);
         await this.assertLeadNotConverted(client, effectiveDraft);

@@ -54,6 +54,90 @@ function errorResponse(action: () => unknown): unknown {
 }
 
 describe("lesson settlement execution", () => {
+  it("uses independent exact client and teacher partial durations", async () => {
+    const client = {
+      query: async (sql: string) => {
+        if (sql.includes("from app.lessons lesson")) {
+          return queryResult([source({
+            client_charge_type: "personal_account",
+            client_charge_value: "1000.00",
+            subscription_id: null,
+            reservation_subscription_id: null,
+            reservation_state: null,
+          })]);
+        }
+        if (sql.includes("from app.crm_configuration_revisions")) {
+          return queryResult([{
+            settlement_revision_id: "settlement-revision",
+            compensation_revision_id: "compensation-revision",
+            settlement_types: [{
+              stableKey: "partially_paid_lesson",
+              label: "Частично",
+              active: true,
+              order: 0,
+              allowedContexts: ["settle"],
+              hourShareBasisPoints: 2_500,
+              clientDurationMode: "manual",
+              teacherDurationMode: "manual",
+              defaultTeacherCompensationRuleKey: "percent",
+              fixedPenaltyMinor: "0",
+              colorToken: "warning",
+            }],
+            compensation_rules: [{
+              stableKey: "percent",
+              label: "Процент",
+              active: true,
+              order: 0,
+              mode: "percent",
+              value: "5000",
+            }],
+          }]);
+        }
+        if (sql.includes("select snapshot.client_type, snapshot.client_id")) {
+          return queryResult([{
+            client_type: "student",
+            client_id: "student-a",
+            charge_type: "personal_account",
+            charge_value: "1000.00",
+            subscription_id: null,
+          }]);
+        }
+        if (sql.includes("from app.lesson_participant_exclusions")) {
+          return queryResult([]);
+        }
+        throw new Error(`Unexpected partial preview query: ${sql}`);
+      },
+    } as unknown as PoolClient;
+
+    await expect(previewLessonSettlement(client, "lesson-a", {
+      context: "settle",
+      reasonText: "Согласована частичная оплата",
+      decision: {
+        settlementTypeKey: "partially_paid_lesson",
+        teacherCompensationRuleKey: "percent",
+        teacherCompensationValueMinor: "7500",
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: "manual",
+        clientDecisions: [{
+          clientId: "student-a",
+          chargeType: "personal_account",
+          basePriceMinor: "100000",
+          chargeDurationMinutes: 30,
+        }],
+      },
+      configurationRevisionIds: {
+        settlementRevisionId: "settlement-revision",
+        compensationRevisionId: "compensation-revision",
+      },
+    })).resolves.toMatchObject({
+      clientFacts: [{ units: "0.50", amountMinor: "50000" }],
+      teacherFact: {
+        compensationActualValue: "7500",
+        amountMinor: "75000",
+      },
+    });
+  });
+
   it.each([
     ["duplicate subscriptions", true, "DUPLICATE_SUBSCRIPTION_SELECTION"],
     ["a subscription owned by another payer", false, "SUBSCRIPTION_CAPACITY"],

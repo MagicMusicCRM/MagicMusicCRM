@@ -4,11 +4,13 @@ import {
   ArrayUnique,
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  Min,
   ValidateNested,
 } from "class-validator";
 import { IssueSubscriptionDiscountDto, IssueSubscriptionSurchargeDto } from "./issue-subscription.dto";
@@ -23,6 +25,11 @@ export class LessonClientFinancialDecisionDto {
   @IsString()
   @Matches(stableKey)
   settlementTypeKey?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  chargeDurationMinutes?: number;
 
   @IsOptional()
   @IsUUID()
@@ -66,6 +73,15 @@ export class ConfiguredLessonFinancialDecisionDto {
   @ValidateNested({ each: true })
   @Type(() => LessonClientFinancialDecisionDto)
   clientDecisions?: LessonClientFinancialDecisionDto[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  teacherCreditedDurationMinutes?: number;
+
+  @IsOptional()
+  @IsIn(["automatic", "manual"])
+  teacherCompensationSource?: "automatic" | "manual";
 
   @IsOptional()
   @IsString()

@@ -8,6 +8,7 @@ import type { PoolClient } from "pg";
 import {
   calculateClientSettlement,
   calculateTeacherCompensation,
+  durationShareBasisPoints,
   minorToRubles,
 } from "./lesson-settlement.calculation";
 import {
@@ -37,6 +38,7 @@ import type {
   LessonSettlementResult,
   LessonSettlementPreview,
 } from "./lesson-settlement.port";
+import { resolveSettlementPolicy } from "./lesson-settlement-policy";
 import {
   assertCorrectionSubscriptionCapacity,
   assertLessonSubscriptionSelection,
@@ -223,18 +225,13 @@ function calculateConfiguredClientFacts(
   charges: LessonSettlementChargeSource[],
   decisions: Map<string, ClientDecision>,
 ): CalculatedLessonClientFact[] {
-  const settlementTypes = new Map(
-    catalog.settlement_types
-      .filter((type) => type.active)
-      .map((type) => [type.stableKey, type]),
-  );
   return charges.map((charge) =>
     calculateConfiguredClientFact(
       source,
       input,
       charge,
       decisions.get(charge.client_id),
-      settlementTypes,
+      catalog,
     ),
   );
 }
@@ -244,18 +241,28 @@ function calculateConfiguredClientFact(
   input: LessonSettlementInput,
   charge: LessonSettlementChargeSource,
   decision: ClientDecision | undefined,
-  settlementTypes: Map<
-    string,
-    LessonSettlementCatalog["settlement_types"][number]
-  >,
+  catalog: LessonSettlementCatalog,
 ): CalculatedLessonClientFact {
   const settlementKey =
     decision?.settlementTypeKey ?? input.decision.settlementTypeKey;
-  const settlement = settlementTypes.get(settlementKey);
+  const settlement = catalog.settlement_types.find(
+    (item) => item.active && item.stableKey === settlementKey,
+  );
   if (!settlement || !settlement.allowedContexts.includes(input.context)) {
     invalidLessonSettlementDecision(
       "SETTLEMENT_TYPE_NOT_ALLOWED",
       "settlementTypeKey",
+    );
+  }
+  const policy = resolveSettlementPolicy(catalog, settlementKey);
+  if (
+    policy.clientDurationMode === "manual" &&
+    decision?.chargeDurationMinutes === undefined &&
+    input.decision.teacherCompensationSource !== undefined
+  ) {
+    invalidLessonSettlementDecision(
+      "CLIENT_PARTIAL_DURATION_REQUIRED",
+      `clientDecisions.${charge.client_id}.chargeDurationMinutes`,
     );
   }
   const funding = resolveLessonFunding(charge, decision);
@@ -264,7 +271,12 @@ function calculateConfiguredClientFact(
   try {
     calculation = calculateClientSettlement({
       durationMinutes: source.duration_minutes!,
-      hourShareBasisPoints: settlement.hourShareBasisPoints,
+      hourShareBasisPoints: decision?.chargeDurationMinutes === undefined
+        ? settlement.hourShareBasisPoints
+        : durationShareBasisPoints(
+            decision.chargeDurationMinutes,
+            source.duration_minutes!,
+          ),
       fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
       chargeType,
       baseChargeMinor: funding.baseChargeMinor,
@@ -320,7 +332,14 @@ function calculateConfiguredTeacherFact(
       legacyRateRubles: source.teacher_compensation_value!,
       mode: rule.mode,
       configuredValue: rule.value,
-      overrideValue: input.decision.teacherCompensationValueMinor,
+      overrideValue:
+        rule.mode === "percent" &&
+          input.decision.teacherCreditedDurationMinutes !== undefined
+          ? durationShareBasisPoints(
+              input.decision.teacherCreditedDurationMinutes,
+              source.duration_minutes!,
+            ).toString()
+          : input.decision.teacherCompensationValueMinor,
       overrideReason: input.reasonText,
     });
   } catch (error) {
