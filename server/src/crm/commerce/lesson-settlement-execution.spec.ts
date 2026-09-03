@@ -54,16 +54,34 @@ function errorResponse(action: () => unknown): unknown {
 }
 
 describe("lesson settlement execution", () => {
-  it("uses independent exact client and teacher partial durations", async () => {
+  it.each([
+    [30, 0, 30, "0.00", "0", "10000", "100000"],
+    [45, 45, 0, "0.75", "100000", "0", "0"],
+    [60, 30, 45, "0.50", "50000", "7500", "75000"],
+    [90, 90, 45, "1.50", "100000", "5000", "50000"],
+  ] as const)(
+    "uses independent exact client/teacher minutes for %i-minute funding",
+    async (
+      durationMinutes,
+      clientMinutes,
+      teacherMinutes,
+      expectedUnits,
+      expectedPersonalAmount,
+      expectedTeacherBasisPoints,
+      expectedTeacherAmount,
+    ) => {
+    for (const funding of ["subscription", "personal_account"] as const) {
     const client = {
       query: async (sql: string) => {
         if (sql.includes("from app.lessons lesson")) {
           return queryResult([source({
-            client_charge_type: "personal_account",
-            client_charge_value: "1000.00",
-            subscription_id: null,
-            reservation_subscription_id: null,
-            reservation_state: null,
+            duration_minutes: durationMinutes,
+            client_charge_type: funding,
+            client_charge_value: funding === "subscription" ? "1" : "1000.00",
+            subscription_id: funding === "subscription" ? "subscription-a" : null,
+            reservation_subscription_id:
+              funding === "subscription" ? "subscription-a" : null,
+            reservation_state: funding === "subscription" ? "reserved" : null,
           })]);
         }
         if (sql.includes("from app.crm_configuration_revisions")) {
@@ -97,13 +115,23 @@ describe("lesson settlement execution", () => {
           return queryResult([{
             client_type: "student",
             client_id: "student-a",
-            charge_type: "personal_account",
-            charge_value: "1000.00",
-            subscription_id: null,
+            charge_type: funding,
+            charge_value: funding === "subscription" ? "1" : "1000.00",
+            subscription_id:
+              funding === "subscription" ? "subscription-a" : null,
           }]);
         }
         if (sql.includes("from app.lesson_participant_exclusions")) {
           return queryResult([]);
+        }
+        if (sql.includes("where id = any")) {
+          return queryResult([{
+            id: "subscription-a",
+            student_id: "student-a",
+          }]);
+        }
+        if (sql.includes("where id = $1 for key share")) {
+          return queryResult([{ student_id: "student-a" }]);
         }
         throw new Error(`Unexpected partial preview query: ${sql}`);
       },
@@ -115,14 +143,18 @@ describe("lesson settlement execution", () => {
       decision: {
         settlementTypeKey: "partially_paid_lesson",
         teacherCompensationRuleKey: "percent",
-        teacherCompensationValueMinor: "7500",
-        teacherCreditedDurationMinutes: 45,
+        teacherCompensationValueMinor: Math.round(
+          teacherMinutes * 10_000 / durationMinutes,
+        ).toString(),
+        teacherCreditedDurationMinutes: teacherMinutes,
         teacherCompensationSource: "manual",
         clientDecisions: [{
           clientId: "student-a",
-          chargeType: "personal_account",
-          basePriceMinor: "100000",
-          chargeDurationMinutes: 30,
+          chargeType: funding,
+          ...(funding === "personal_account"
+            ? { basePriceMinor: "100000" }
+            : { subscriptionId: "subscription-a" }),
+          chargeDurationMinutes: clientMinutes,
         }],
       },
       configurationRevisionIds: {
@@ -130,12 +162,18 @@ describe("lesson settlement execution", () => {
         compensationRevisionId: "compensation-revision",
       },
     })).resolves.toMatchObject({
-      clientFacts: [{ units: "0.50", amountMinor: "50000" }],
+      clientFacts: [{
+        units: expectedUnits,
+        amountMinor: funding === "personal_account"
+          ? expectedPersonalAmount
+          : "0",
+      }],
       teacherFact: {
-        compensationActualValue: "7500",
-        amountMinor: "75000",
+        compensationActualValue: expectedTeacherBasisPoints,
+        amountMinor: expectedTeacherAmount,
       },
     });
+    }
   });
 
   it.each([

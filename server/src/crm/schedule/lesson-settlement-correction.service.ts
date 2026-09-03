@@ -200,6 +200,7 @@ export class LessonSettlementCorrectionService {
       canConfirm: true,
       financialPreview: this.financialProjection(preview.settled),
       resourceChanges: preview.resourceChange,
+      warnings: preview.warnings,
       previewToken: signed.token,
       previewExpiresAt: signed.expiresAt,
     };
@@ -380,6 +381,15 @@ export class LessonSettlementCorrectionService {
       decision,
       actor.userId,
     );
+    const warnings = await this.settlement.partialDurationWarnings(client, {
+      branchId: resources.branchId,
+      durationMinutes: source.duration_minutes,
+      decision: dto.financialDecision,
+      configurationRevisionIds: {
+        settlementRevisionId: prepared.settlementRevisionId,
+        compensationRevisionId: prepared.compensationRevisionId,
+      },
+    });
     const previous = await client.query<{
       id: string;
       version: number | string;
@@ -418,7 +428,13 @@ export class LessonSettlementCorrectionService {
       },
       correction: { id: correctionId },
     });
-    return { correctionVersion, settled, decision, resourceChange: resources.change };
+    return {
+      correctionVersion,
+      settled,
+      decision,
+      warnings,
+      resourceChange: resources.change,
+    };
   }
 
   private fingerprint(
@@ -429,6 +445,7 @@ export class LessonSettlementCorrectionService {
       expectedVersion: dto.expectedVersion,
       reasonText: dto.reasonText.trim(),
       financialDecision: applied.decision,
+      warnings: applied.warnings,
       resourceChanges: applied.resourceChange,
       financial: this.financialProjection(applied.settled),
     });

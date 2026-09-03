@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, UnprocessableEntityException } from "@nestjs/common";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ActorContext } from "../../common/security/actor-context";
@@ -7,6 +7,7 @@ import type { PlatformIntegrityService } from "../../platform/platform-integrity
 import { CrmPolicy } from "../crm.policy";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
 import { LessonSettlementCorrectionService } from "./lesson-settlement-correction.service";
+import { LessonPlannedSettlementCommandService } from "./lesson-planned-settlement-command.service";
 import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
 import type { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
 import { LessonWriteCommandService } from "./lesson-write-command.service";
@@ -47,16 +48,221 @@ describe("lesson compensation service RBAC", () => {
     }
   });
 
-  it("routes user-supplied planned decisions through the central resolver", () => {
-    for (const file of [
-      "lesson-write-command.service.ts",
-      "lesson-planned-settlement-command.service.ts",
-      "lesson-settlement-correction.service.ts",
-    ]) {
-      expect(readFileSync(resolve(__dirname, file), "utf8")).toContain(
-        "resolvePlannedDecision",
+  describe("central planned-decision rejection order", () => {
+    const rejection = () => new UnprocessableEntityException({
+      code: "TEACHER_PARTIAL_DURATION_REQUIRED",
+      field: "teacherCreditedDurationMinutes",
+    });
+
+    it("rejects create before lesson, snapshot, or plan persistence", async () => {
+      const client = { query: jest.fn() };
+      const settlement = {
+        resolvePlannedDecision: jest.fn().mockRejectedValue(rejection()),
+        assignPlan: jest.fn(),
+      };
+      const repository = {
+        insertLesson: jest.fn(),
+        response: jest.fn(),
+      };
+      const lifecycle = { createSnapshot: jest.fn() };
+      const platform = {
+        executeVersionedMutation: jest.fn(async (input) => input.mutate(client)),
+      };
+      const service = new LessonWriteCommandService(
+        platform as never,
+        new CrmPolicy(),
+        { resolve: jest.fn().mockResolvedValue({ tombstone: false }) } as never,
+        {
+          create: jest.fn().mockReturnValue({
+            clientRef: { type: "student", id: "student-a" },
+            teacherId: "teacher-a",
+            branchId: "branch-a",
+            roomId: "room-a",
+            scheduledAt: "2026-09-04T10:00:00.000Z",
+            endAt: "2026-09-04T11:00:00.000Z",
+            durationMinutes: 60,
+          }),
+        } as never,
+        {} as never,
+        lifecycle as never,
+        {} as never,
+        settlement as never,
+        repository as never,
       );
-    }
+
+      await expect(service.create(actor("director"), {
+        financialDecision: {
+          settlementTypeKey: "partially_paid_lesson",
+          teacherCompensationRuleKey: "percent",
+        },
+      }, {
+        idempotencyKey: "central-resolver-create-001",
+        requestId: "central-resolver-create-request-001",
+      })).rejects.toMatchObject({
+        status: 422,
+        response: { code: "TEACHER_PARTIAL_DURATION_REQUIRED" },
+      });
+      expect(settlement.resolvePlannedDecision).toHaveBeenCalledTimes(1);
+      expect(repository.insertLesson).not.toHaveBeenCalled();
+      expect(lifecycle.createSnapshot).not.toHaveBeenCalled();
+      expect(settlement.assignPlan).not.toHaveBeenCalled();
+    });
+
+    it("rejects planned edit before plan preparation or reservation mutation", async () => {
+      const client = {
+        query: jest.fn(async (sql: string) => {
+          if (sql.includes("select lesson.teacher_id")) {
+            return { rows: [{
+              teacher_id: "teacher-a",
+              branch_id: "branch-a",
+              room_id: "room-a",
+              scheduled_at: "2026-09-04T10:00:00.000Z",
+              duration_minutes: 60,
+              teacher_rate_snapshot: null,
+            }] };
+          }
+          if (sql.includes("select duration_minutes")) {
+            return { rows: [{ duration_minutes: 60 }] };
+          }
+          return { rows: [] };
+        }),
+      };
+      const settlement = {
+        loadPlan: jest.fn().mockResolvedValue({
+          version: 1,
+          state: "planned",
+          decision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "standard",
+          },
+        }),
+        plannedSubscriptionAllocations: jest.fn().mockResolvedValue([]),
+        resolvePlannedDecision: jest.fn().mockRejectedValue(rejection()),
+        preparePlan: jest.fn(),
+        replacePlan: jest.fn(),
+      };
+      const reservations = {
+        releaseForLessons: jest.fn(),
+        allocate: jest.fn(),
+      };
+      const repository = {
+        loadSettlementSource: jest.fn().mockResolvedValue({
+          version: 1,
+          lifecycle_state: "scheduled",
+        }),
+        listReservedAllocations: jest.fn().mockResolvedValue([]),
+      };
+      const service = new LessonPlannedSettlementCommandService(
+        {} as never,
+        {} as never,
+        new CrmPolicy(),
+        reservations as never,
+        settlement as never,
+        {} as never,
+        repository as never,
+        {} as never,
+      );
+
+      await expect((service as unknown as {
+        calculateSettlementPlanChange(
+          client: unknown,
+          actor: ActorContext,
+          lessonId: string,
+          dto: unknown,
+        ): Promise<unknown>;
+      }).calculateSettlementPlanChange(
+        client,
+        actor("director"),
+        "lesson-a",
+        {
+          expectedVersion: 1,
+          reasonText: "Частичный расчёт",
+          financialDecision: {
+            settlementTypeKey: "partially_paid_lesson",
+            teacherCompensationRuleKey: "percent",
+          },
+        },
+      )).rejects.toMatchObject({
+        status: 422,
+        response: { code: "TEACHER_PARTIAL_DURATION_REQUIRED" },
+      });
+      expect(settlement.resolvePlannedDecision).toHaveBeenCalledTimes(1);
+      expect(settlement.preparePlan).not.toHaveBeenCalled();
+      expect(settlement.replacePlan).not.toHaveBeenCalled();
+      expect(reservations.releaseForLessons).not.toHaveBeenCalled();
+    });
+
+    it("rejects correction before correction history or facts persistence", async () => {
+      const query = jest.fn(async (sql: string) => {
+        if (sql.includes("select version, lifecycle_state")) {
+          return { rows: [{
+            version: 3,
+            lifecycle_state: "successfully_completed",
+            branch_id: "branch-a",
+            duration_minutes: 60,
+          }] };
+        }
+        if (sql.includes("select lesson.teacher_id")) {
+          return { rows: [{
+            teacher_id: "teacher-a",
+            branch_id: "branch-a",
+            room_id: "room-a",
+            scheduled_at: "2026-09-04T10:00:00.000Z",
+            duration_minutes: 60,
+            teacher_rate_snapshot: null,
+          }] };
+        }
+        return { rows: [] };
+      });
+      const settlement = {
+        resolvePlannedDecision: jest.fn().mockRejectedValue(rejection()),
+        preparePlan: jest.fn(),
+        settle: jest.fn(),
+      };
+      const service = new LessonSettlementCorrectionService(
+        {} as never,
+        {} as never,
+        new CrmPolicy(),
+        settlement as never,
+        {} as never,
+        {} as never,
+        {} as never,
+      );
+
+      await expect((service as unknown as {
+        applyCorrection(
+          client: unknown,
+          actor: ActorContext,
+          lessonId: string,
+          dto: unknown,
+          correctionId: string,
+          lock: boolean,
+        ): Promise<unknown>;
+      }).applyCorrection(
+        { query },
+        actor("director"),
+        "lesson-a",
+        {
+          expectedVersion: 3,
+          reasonText: "Частичный расчёт",
+          financialDecision: {
+            settlementTypeKey: "partially_paid_lesson",
+            teacherCompensationRuleKey: "percent",
+          },
+        },
+        "correction-a",
+        true,
+      )).rejects.toMatchObject({
+        status: 422,
+        response: { code: "TEACHER_PARTIAL_DURATION_REQUIRED" },
+      });
+      expect(settlement.resolvePlannedDecision).toHaveBeenCalledTimes(1);
+      expect(settlement.preparePlan).not.toHaveBeenCalled();
+      expect(settlement.settle).not.toHaveBeenCalled();
+      expect(query.mock.calls.some(([sql]) =>
+        sql.includes("insert into app.lesson_settlement_corrections"),
+      )).toBe(false);
+    });
   });
 
   it.each(roles)(
@@ -181,6 +387,7 @@ describe("lesson compensation service RBAC", () => {
           settlementRevisionId: "settlement-revision-1",
           compensationRevisionId: "compensation-revision-1",
         }),
+        partialDurationWarnings: jest.fn().mockResolvedValue([]),
         settle: jest.fn().mockResolvedValue({
           clientFacts: [],
           teacherFact: { id: "teacher-fact-1" },

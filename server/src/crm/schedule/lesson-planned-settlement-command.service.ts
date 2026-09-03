@@ -75,6 +75,7 @@ export class LessonPlannedSettlementCommandService {
       financialPreview: calculated.financial,
       reservationPreview: calculated.reservations,
       resourceChanges: calculated.resourceChange,
+      warnings: calculated.warnings,
       previewToken: signed.token,
       previewExpiresAt: signed.expiresAt,
     };
@@ -236,6 +237,15 @@ export class LessonPlannedSettlementCommandService {
       decision,
       actor.userId,
     );
+    const warnings = await this.settlement.partialDurationWarnings(client, {
+      branchId: resources.branchId,
+      durationMinutes: duration.rows[0]!.duration_minutes,
+      decision: dto.financialDecision,
+      configurationRevisionIds: {
+        settlementRevisionId: prepared.settlementRevisionId,
+        compensationRevisionId: prepared.compensationRevisionId,
+      },
+    });
     const allocations = await this.settlement.plannedSubscriptionAllocations(
       client,
       lessonId,
@@ -282,6 +292,7 @@ export class LessonPlannedSettlementCommandService {
       compensationRevisionId: prepared.compensationRevisionId,
       reservations,
       financial,
+      warnings,
       resourceChanges: resources.change,
     });
     return {
@@ -289,6 +300,7 @@ export class LessonPlannedSettlementCommandService {
       prepared,
       financial,
       reservations,
+      warnings,
       fingerprint,
       resourceChange: resources.change,
     };

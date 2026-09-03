@@ -139,6 +139,56 @@ export class LessonSettlementService implements LessonSettlementPort {
     return this.resolveTeacherDecision(catalog, input, decision);
   }
 
+  async partialDurationWarnings(
+    client: PoolClient,
+    input: {
+      branchId: string;
+      durationMinutes: number;
+      decision: LessonFinancialDecision;
+      configurationRevisionIds?: NonNullable<
+        LessonSettlementInput["configurationRevisionIds"]
+      >;
+    },
+  ): Promise<string[]> {
+    const catalog = await loadLessonSettlementCatalog(
+      client,
+      input.branchId,
+      input.configurationRevisionIds,
+    );
+    const warnings = new Set<string>();
+    for (const decision of input.decision.clientDecisions ?? []) {
+      const policy = resolveSettlementPolicy(
+        catalog,
+        decision.settlementTypeKey ?? input.decision.settlementTypeKey,
+      );
+      if (policy.clientDurationMode === "manual") {
+        addDurationBoundaryWarning(
+          warnings,
+          "CLIENT",
+          decision.chargeDurationMinutes,
+          input.durationMinutes,
+        );
+      }
+    }
+    const teacherPolicy = resolveSettlementPolicy(
+      catalog,
+      input.decision.settlementTypeKey,
+    );
+    if (
+      input.decision.teacherCreditedDurationMinutes !== undefined &&
+      (teacherPolicy.teacherDurationMode === "manual" ||
+        input.decision.teacherCompensationSource !== "automatic")
+    ) {
+      addDurationBoundaryWarning(
+        warnings,
+        "TEACHER",
+        input.decision.teacherCreditedDurationMinutes,
+        input.durationMinutes,
+      );
+    }
+    return [...warnings];
+  }
+
   private resolveTeacherDecision(
     catalog: Awaited<ReturnType<typeof loadLessonSettlementCatalog>>,
     input: {
@@ -426,4 +476,17 @@ function creditedMinutesForRule(
     return durationMinutes;
   }
   return undefined;
+}
+
+function addDurationBoundaryWarning(
+  warnings: Set<string>,
+  subject: "CLIENT" | "TEACHER",
+  selectedMinutes: number | undefined,
+  durationMinutes: number,
+): void {
+  if (selectedMinutes === 0) {
+    warnings.add(`${subject}_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED`);
+  } else if (selectedMinutes === durationMinutes) {
+    warnings.add(`${subject}_FULL_DURATION_SETTLEMENT_TYPE_RECOMMENDED`);
+  }
 }

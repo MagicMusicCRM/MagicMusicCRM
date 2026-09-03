@@ -126,6 +126,21 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
     },
   );
 
+  it("recommends a clearer type for an explicit manual teacher boundary override", async () => {
+    await expect(service.partialDurationWarnings(catalogClient(), {
+      branchId: "branch-a",
+      durationMinutes: 60,
+      decision: {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "percent",
+        teacherCreditedDurationMinutes: 0,
+        teacherCompensationSource: "manual",
+      },
+    })).resolves.toEqual([
+      "TEACHER_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED",
+    ]);
+  });
+
   it.each([
     {
       name: "manual source",
@@ -242,4 +257,76 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
       teacherCompensationSource: "manual",
     });
   });
+
+  it.each([
+    [0, 60, [
+      "CLIENT_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED",
+      "TEACHER_FULL_DURATION_SETTLEMENT_TYPE_RECOMMENDED",
+    ]],
+    [60, 0, [
+      "CLIENT_FULL_DURATION_SETTLEMENT_TYPE_RECOMMENDED",
+      "TEACHER_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED",
+    ]],
+    [30, 45, []],
+  ] as const)(
+    "recommends clearer settlement types for manual boundary %i/%i without rewriting",
+    async (clientMinutes, teacherMinutes, expectedWarnings) => {
+      const decision = {
+        settlementTypeKey: "partially_paid_lesson",
+        teacherCompensationRuleKey: "percent",
+        teacherCreditedDurationMinutes: teacherMinutes,
+        teacherCompensationSource: "manual" as const,
+        clientDecisions: [{
+          clientId: "student-a",
+          chargeDurationMinutes: clientMinutes,
+        }],
+      };
+      const warnings = await (
+        service as unknown as {
+          partialDurationWarnings(
+            client: PoolClient,
+            input: {
+              branchId: string;
+              durationMinutes: number;
+              decision: typeof decision;
+            },
+          ): Promise<string[]>;
+        }
+      ).partialDurationWarnings(catalogClient(), {
+        branchId: "branch-a",
+        durationMinutes: 60,
+        decision,
+      });
+
+      expect(warnings).toEqual(expectedWarnings);
+      expect(decision.clientDecisions[0]!.chargeDurationMinutes).toBe(
+        clientMinutes,
+      );
+      expect(decision.teacherCreditedDurationMinutes).toBe(teacherMinutes);
+    },
+  );
+
+  it.each([
+    ["lesson", 60],
+    ["free_lesson", 0],
+  ] as const)(
+    "does not recommend replacing an automatic %s decision",
+    async (settlementTypeKey, minutes) => {
+      await expect(service.partialDurationWarnings(catalogClient(), {
+        branchId: "branch-a",
+        durationMinutes: 60,
+        decision: {
+          settlementTypeKey,
+          teacherCompensationRuleKey:
+            settlementTypeKey === "lesson" ? "standard" : "none",
+          teacherCreditedDurationMinutes: minutes,
+          teacherCompensationSource: "automatic",
+          clientDecisions: [{
+            clientId: "student-a",
+            chargeDurationMinutes: minutes,
+          }],
+        },
+      })).resolves.toEqual([]);
+    },
+  );
 });
