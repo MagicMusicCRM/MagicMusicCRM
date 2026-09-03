@@ -1,11 +1,38 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-09-03
-> Production: client `1.5.30+210`, server `b5994969`,
-> image `sha256:c507e60e…`, migration `0146_lesson_funding_payer`
+> Production: client `1.5.30+210`, server hotfix `89c3c36f`,
+> image `sha256:70b52633…`, migration `0147_lesson_reservation_history`
 > Рабочая ветка: `main`
-> Статус: единый редактор занятия и адаптивные окна rollout PASS;
-> общий update build `210` опубликован
+> Статус: сохранение занятий исправлено; 14 старых правил оплаты и один
+> шаблон исправлены через существующие audited/versioned commands
+
+Server `1.5.30+210-hotfix.1`: устранён production 500 при повторной броне
+того же абонемента. Неизменное покрытие сохраняется, новая бронь добавляет
+историческую запись вместо оживления закрытой. Плановый preview использует
+общий калькулятор без списания и допускает редактирование занятия без покрытия;
+при завершении остаток проверяется. Проверки владельца и уникальности выбора
+абонемента действуют также для нулевого списания. Активный резерв имеет
+приоритет в календарной проекции при нескольких исторических записях.
+
+В production проверены HTTP preview/PUT всех 14 занятий и idempotent replay.
+Правило `standard` у 14 scheduled lessons и одного активного шаблона; `none`
+у scheduled lessons/активных шаблонов — 0. Резервов по-прежнему 12;
+8 отменённых исторических занятий сохранены. Frozen snapshots/reservations
+и финансовые факты не изменились, новых начислений/списаний нет.
+Backend 279 suites / 3694 tests PASS (одна suite отдельно на БД с разрешённым
+test-name), exact images, security и isolated repair/rollback rehearsal PASS.
+Pre/post encrypted backups сохранены off-host и восстановлены в isolated drill.
+Readiness `ok`, reconciliation `issues=[]`, очереди/poison `0`, monitor PASS.
+
+**Совместимый rollback runtime теперь только `2ce1f16f`**, image
+`magicmusiccrm-server:1.5.30-210-hotfix1-bridge-2ce1f16f`.
+Автоматический cutover rollback сохраняет migration 0147. Старые `b5994969`,
+`bf25d357` и 209 используют несовместимый conflict target и не подходят.
+Bridge и final имеют одинаковый runtime: общий дефект требует forward fix.
+Не запускать старый bridge cutover и не переставлять его параметры для
+ручного rollback: deploy guard сопоставляет migration head с содержимым image.
+Evidence: `docs/audits/v7-production-lesson-save-hotfix-210.md`.
 
 Release `1.5.30+210`: общие центральные окна на native desktop и нижние sheets
 на телефонах, единый редактор занятия с плательщиком/источником средств/ценой,
@@ -21,11 +48,8 @@ reconciliation дважды `issues=[]`, очереди `0`, monitor PASS. Pre/p
 off-host backups прошли isolated restore. Manifests, четыре artifacts и GitHub
 `v1.5.30` опубликованы и проверены по SHA-256.
 
-**Rollback только на payer-aware bridge `bf25d357`**, image
-`magicmusiccrm-server:1.5.30-210-bridge-bf25d357e257`, без down migration.
-209 несовместим с новыми финансовыми решениями; deploy guard запрещает такой
-откат после их появления. Bridge и final имеют одинаковый backend: общий
-дефект требует forward fix. Evidence и полный rollback contract:
+Исторические параметры rollback исходного 210 заменены hotfix-контрактом
+выше. Evidence исходного клиентского выпуска:
 `docs/audits/v7-production-normalized-lessons-windows-210.md`.
 
 Release `1.5.29+209` включает бессрочную продажу по умолчанию, полный явный
