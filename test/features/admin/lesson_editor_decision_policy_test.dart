@@ -322,6 +322,68 @@ void main() {
     },
   );
 
+  test('common full and zero settlements replace only inherited minutes', () {
+    final references = _references(
+      settlements: [
+        _catalogItem(
+          key: 'partial',
+          clientDurationMode: 'manual',
+          teacherDurationMode: 'manual',
+          defaultTeacherCompensationRuleKey: 'standard',
+        ),
+        _catalogItem(
+          key: 'full',
+          clientDurationMode: 'full',
+          teacherDurationMode: 'full',
+          defaultTeacherCompensationRuleKey: 'standard',
+        ),
+        _catalogItem(
+          key: 'zero',
+          clientDurationMode: 'zero',
+          teacherDurationMode: 'zero',
+          defaultTeacherCompensationRuleKey: 'none',
+        ),
+      ],
+      compensationRules: [
+        _catalogItem(key: 'standard', mode: 'standard'),
+        _catalogItem(key: 'none', mode: 'none'),
+      ],
+    );
+    final partial = _draft(settlementTypeKey: 'partial').copyWith(
+      clientDecisions: const [
+        {
+          'clientId': 'inherits-common',
+          'chargeType': 'personal_account',
+          'basePriceMinor': '100000',
+          'chargeDurationMinutes': 30,
+        },
+        {
+          'clientId': 'explicit-partial',
+          'settlementTypeKey': 'partial',
+          'chargeType': 'personal_account',
+          'basePriceMinor': '100000',
+          'chargeDurationMinutes': 30,
+        },
+      ],
+    );
+
+    for (final entry in [('full', 60), ('zero', 0)]) {
+      final changed = policy.settlementSelection(partial, references, entry.$1);
+
+      expect(
+        changed.clientDecisions.first['chargeDurationMinutes'],
+        entry.$2,
+        reason: entry.$1,
+      );
+      expect(
+        changed.clientDecisions.last['chargeDurationMinutes'],
+        30,
+        reason: '${entry.$1} explicit override',
+      );
+      expect(changed.clientDecisions.last['settlementTypeKey'], 'partial');
+    }
+  });
+
   test(
     'reference defaults keep catalog decisions and branch duration typed',
     () {
@@ -561,6 +623,42 @@ void main() {
         );
       },
     );
+
+    test('rejects fractional minute values without serializing them', () {
+      final settlement = _catalogItem(
+        key: 'partial',
+        clientDurationMode: 'manual',
+        teacherDurationMode: 'manual',
+        defaultTeacherCompensationRuleKey: 'standard',
+      );
+      final references = _references(settlements: [settlement]);
+      final draft = _draft(settlementTypeKey: settlement.key).copyWith(
+        teacherCreditedDurationMinutes: 45,
+        clientDecisions: const [
+          {
+            'clientId': 'student-a',
+            'chargeType': 'personal_account',
+            'basePriceMinor': '100000',
+            'chargeDurationMinutes': 30.5,
+          },
+        ],
+      );
+
+      expect(
+        policy
+            .validate(
+              session: _createSession(draft),
+              draft: draft,
+              references: references,
+            )
+            .message,
+        'Укажите длительность списания с клиента',
+      );
+      expect(
+        lessonClientDecisionsPayload(draft.clientDecisions).single,
+        isNot(contains('chargeDurationMinutes')),
+      );
+    });
   });
 
   group('funding defaults', () {

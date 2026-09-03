@@ -253,8 +253,9 @@ List<Map<String, dynamic>> lessonClientDecisionsPayload(
       'clientId': row['clientId'],
       if (row['settlementTypeKey'] != null)
         'settlementTypeKey': row['settlementTypeKey'],
-      if (row['chargeDurationMinutes'] != null)
-        'chargeDurationMinutes': row['chargeDurationMinutes'],
+      if (lessonDecisionIntegerMinutes(row['chargeDurationMinutes'])
+          case final int minutes)
+        'chargeDurationMinutes': minutes,
       if (row['chargeType'] != null) 'chargeType': row['chargeType'],
       if (row['chargeType'] != 'none' && row['payerStudentId'] != null)
         'payerStudentId': row['payerStudentId'],
@@ -287,3 +288,11 @@ List<Map<String, dynamic>> lessonClientDecisionsPayload(
       },
     },
 ];
+
+int? lessonDecisionIntegerMinutes(Object? value) => switch (value) {
+  int value => value,
+  num value when value.isFinite && value == value.roundToDouble() =>
+    value.toInt(),
+  String value => int.tryParse(value),
+  _ => null,
+};

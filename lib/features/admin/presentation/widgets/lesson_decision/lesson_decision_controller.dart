@@ -47,7 +47,9 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
 
   @override
   int? get initialTeacherCreditedDurationMinutes =>
-      _integer(_initialFinancialDecision?['teacherCreditedDurationMinutes']);
+      lessonDecisionIntegerMinutes(
+        _initialFinancialDecision?['teacherCreditedDurationMinutes'],
+      );
 
   @override
   String? get initialTeacherCompensationSource =>
@@ -334,10 +336,3 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
 String _formatUnits(num value) => value == value.roundToDouble()
     ? value.toInt().toString()
     : value.toString();
-
-int? _integer(Object? value) => switch (value) {
-  int value => value,
-  num value => value.toInt(),
-  String value => int.tryParse(value),
-  _ => null,
-};

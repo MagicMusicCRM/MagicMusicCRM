@@ -53,7 +53,7 @@ class LessonEditorDecisionPolicy {
     final storedDecision = _storedFinancialDecision(session);
     final storedSource = storedDecision?['teacherCompensationSource']
         ?.toString();
-    final storedMinutes = _integer(
+    final storedMinutes = lessonDecisionIntegerMinutes(
       storedDecision?['teacherCreditedDurationMinutes'],
     );
     final compensationTouched =
@@ -342,8 +342,14 @@ class LessonEditorDecisionPolicy {
       references.catalog?.settlementTypes,
       settlementKey,
     );
+    final clientDecisions = settlement == null
+        ? draft.clientDecisions
+        : _commonClientDurationSelection(draft, settlement);
     if (settlement?.defaultTeacherCompensationRuleKey == null) {
-      return draft.copyWith(settlementTypeKey: settlementKey);
+      return draft.copyWith(
+        settlementTypeKey: settlementKey,
+        clientDecisions: clientDecisions,
+      );
     }
     final recommendation = _autofill.apply(
       settlement: settlement!,
@@ -367,6 +373,7 @@ class LessonEditorDecisionPolicy {
       teacherCreditedDurationMinutes:
           recommendation.teacherCreditedDurationMinutes,
       teacherCompensationSource: recommendation.source,
+      clientDecisions: clientDecisions,
     );
   }
 
@@ -395,6 +402,7 @@ class LessonEditorDecisionPolicy {
       teacherCreditedDurationMinutes: restored.teacherCreditedDurationMinutes,
       teacherCompensationSource: restored.source,
       compensationTouched: false,
+      recommendationRevision: draft.recommendationRevision + 1,
     );
   }
 
@@ -428,6 +436,27 @@ class LessonEditorDecisionPolicy {
       decisions.add({'clientId': clientId, 'chargeDurationMinutes': ?minutes});
     }
     return draft.copyWith(clientDecisions: decisions);
+  }
+
+  List<Map<String, dynamic>> _commonClientDurationSelection(
+    LessonEditorDraft draft,
+    LessonDecisionCatalogItem settlement,
+  ) {
+    final minutes = _autofill.recommendedClientMinutes(
+      settlement: settlement,
+      durationMinutes: draft.durationMinutes,
+    );
+    return [
+      for (final decision in draft.clientDecisions)
+        if (decision['settlementTypeKey'] != null)
+          decision
+        else
+          {
+            for (final entry in decision.entries)
+              if (entry.key != 'chargeDurationMinutes') entry.key: entry.value,
+            'chargeDurationMinutes': ?minutes,
+          },
+    ];
   }
 
   LessonEditorDraft compensationValueChange(
@@ -830,7 +859,9 @@ class LessonEditorDecisionPolicy {
       final settlement = participantSettlement ?? commonSettlement;
       if (settlement?.clientDurationMode != 'manual') continue;
       checkedClientDecision = true;
-      final minutes = _integer(decision['chargeDurationMinutes']);
+      final minutes = lessonDecisionIntegerMinutes(
+        decision['chargeDurationMinutes'],
+      );
       if (minutes == null) return 'Укажите длительность списания с клиента';
       if (minutes < 0 || minutes > draft.durationMinutes) {
         return 'Списание с клиента не может быть больше '
@@ -914,13 +945,6 @@ Map<String, dynamic>? _storedFinancialDecision(LessonEditorSession session) {
   final value = raw?['financial_decision'] ?? raw?['financialDecision'];
   return value is Map ? Map<String, dynamic>.from(value) : null;
 }
-
-int? _integer(Object? value) => switch (value) {
-  int value => value,
-  num value => value.toInt(),
-  String value => int.tryParse(value),
-  _ => null,
-};
 
 LessonEditorSession _normalizeCompensationBaseline({
   required LessonEditorSession session,

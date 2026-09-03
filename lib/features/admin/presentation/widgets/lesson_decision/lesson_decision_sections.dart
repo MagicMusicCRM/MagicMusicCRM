@@ -581,27 +581,35 @@ class LessonDecisionClientOverrides extends StatelessWidget {
                 selectedKeys[participants[index].id] ?? commonSettlementKey,
               )?.clientDurationMode ==
               'manual') ...[
-            TextFormField(
-              key: Key(
-                'lesson-decision-client-duration-${participants[index].id}',
+            KeyedSubtree(
+              key: ValueKey(
+                'lesson-decision-client-duration-state-'
+                '${participants[index].id}-'
+                '${selectedKeys[participants[index].id] ?? commonSettlementKey}',
               ),
-              initialValue: selectedMinutes[participants[index].id]?.toString(),
-              enabled: enabled,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                labelText: 'Списать с клиента, мин *',
-                helperText: _durationHelperText(
-                  selectedMinutes[participants[index].id],
-                  durationMinutes,
+              child: TextFormField(
+                key: Key(
+                  'lesson-decision-client-duration-${participants[index].id}',
                 ),
+                initialValue: selectedMinutes[participants[index].id]
+                    ?.toString(),
+                enabled: enabled,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: 'Списать с клиента, мин *',
+                  helperText: _durationHelperText(
+                    selectedMinutes[participants[index].id],
+                    durationMinutes,
+                  ),
+                ),
+                validator: (value) => partialDurationError(
+                  value,
+                  lessonDurationMinutes: durationMinutes,
+                ),
+                onChanged: (value) =>
+                    onDurationChanged(participants[index].id, value),
               ),
-              validator: (value) => partialDurationError(
-                value,
-                lessonDurationMinutes: durationMinutes,
-              ),
-              onChanged: (value) =>
-                  onDurationChanged(participants[index].id, value),
             ),
             const SizedBox(height: AppSpace.sm),
           ],

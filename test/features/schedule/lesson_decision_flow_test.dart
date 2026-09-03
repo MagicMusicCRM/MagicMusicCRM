@@ -305,6 +305,17 @@ class _GroupLessonDecisionApi extends MagicApiClient {
               'active': true,
               'order': 1,
             },
+            {
+              'stableKey': 'partially_paid_lesson_alt',
+              'label': 'Частично оплачено по соглашению',
+              'colorToken': 'warning',
+              'clientDurationMode': 'manual',
+              'teacherDurationMode': 'manual',
+              'defaultTeacherCompensationRuleKey': 'percent',
+              'allowedContexts': ['settle'],
+              'active': true,
+              'order': 2,
+            },
           ],
           'teacherCompensationRules': const [
             {
@@ -1251,9 +1262,34 @@ void main() {
             .text,
         '30',
       );
+      final secondOverride = find.byKey(
+        const Key('lesson-decision-client-$_secondGroupStudentId'),
+      );
+      await tester.ensureVisible(secondOverride);
+      await tester.tap(secondOverride);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Частично оплачено по соглашению').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: secondDuration,
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        isEmpty,
+      );
       await tester.ensureVisible(
         find.byKey(const Key('lesson-decision-submit')),
       );
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+      expect(find.text('Укажите длительность в минутах'), findsOneWidget);
+      expect(api.previews, isEmpty);
+      await tester.enterText(secondDuration, '25');
       await tester.tap(find.byKey(const Key('lesson-decision-submit')));
       await tester.pumpAndSettle();
 
@@ -1261,7 +1297,11 @@ void main() {
         'settlementTypeKey': 'partially_paid_lesson',
         'clientDecisions': [
           {'clientId': _firstGroupStudentId, 'settlementTypeKey': 'lesson'},
-          {'clientId': _secondGroupStudentId, 'chargeDurationMinutes': 30},
+          {
+            'clientId': _secondGroupStudentId,
+            'settlementTypeKey': 'partially_paid_lesson_alt',
+            'chargeDurationMinutes': 25,
+          },
         ],
         'teacherCompensationRuleKey': 'percent',
         'teacherCompensationValueMinor': '10000',

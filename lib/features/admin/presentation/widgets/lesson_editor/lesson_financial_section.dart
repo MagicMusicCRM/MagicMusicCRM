@@ -199,13 +199,16 @@ class _PartialDurationControls extends StatelessWidget {
         decision?['settlementTypeKey']?.toString() ?? draft.settlementTypeKey,
       );
       if (settlement?.clientDurationMode != 'manual') continue;
-      final minutes = _minutes(decision?['chargeDurationMinutes']);
+      final minutes = lessonDecisionIntegerMinutes(
+        decision?['chargeDurationMinutes'],
+      );
       clientFields.add(
         Padding(
           padding: const EdgeInsets.only(top: 16),
           child: KeyedSubtree(
             key: ValueKey(
-              'lesson-client-duration-model-${participant.id}-$minutes',
+              'lesson-client-duration-model-${participant.id}-'
+              '${settlement?.key}-${draft.recommendationRevision}',
             ),
             child: TextFormField(
               key: ValueKey('lesson-client-duration-${participant.id}'),
@@ -244,7 +247,10 @@ class _PartialDurationControls extends StatelessWidget {
         if (teacherManual) ...[
           const SizedBox(height: 16),
           KeyedSubtree(
-            key: ValueKey('teacher-duration-model-$teacherMinutes'),
+            key: ValueKey(
+              'teacher-duration-model-${commonSettlement?.key}-'
+              '${draft.recommendationRevision}',
+            ),
             child: TextFormField(
               key: const ValueKey('teacher-credited-duration-minutes'),
               initialValue: teacherMinutes?.toString() ?? '',
@@ -527,11 +533,4 @@ String _compensationInputLabel(String? mode) => switch (mode) {
   'percent' => 'Процент от стандартной ставки, % *',
   'hourly' => 'Почасовая ставка, ₽ *',
   _ => 'Фиксированная сумма за занятие, ₽ *',
-};
-
-int? _minutes(Object? value) => switch (value) {
-  int value => value,
-  num value => value.toInt(),
-  String value => int.tryParse(value),
-  _ => null,
 };

@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_feedback.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_decision_policy.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_financial_section.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_participant_section.dart';
@@ -1013,6 +1014,16 @@ void main() {
       expect(find.text('30 мин'), findsOneWidget);
       expect(find.text('45 мин'), findsOneWidget);
       expect(find.text('Применить рекомендуемое правило'), findsOneWidget);
+      if (size.width == 320) {
+        expect(tester.getSize(clientField).width, greaterThan(250));
+        expect(tester.getSize(teacherField).width, greaterThan(250));
+        final clientLabel = find.text('Списать с клиента, мин *');
+        final teacherLabel = find.text('Засчитать преподавателю, мин *');
+        expect(tester.getSize(clientLabel).height, lessThan(32));
+        expect(tester.getSize(teacherLabel).height, lessThan(32));
+        expect(tester.getSize(clientLabel).width, greaterThan(130));
+        expect(tester.getSize(teacherLabel).width, greaterThan(160));
+      }
       await tester.enterText(clientField, '20');
       await tester.enterText(teacherField, '40');
       final restore = find.text('Применить рекомендуемое правило');
@@ -1026,6 +1037,139 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('teacher minutes keep focus across sequential draft rebuilds', (
+    tester,
+  ) async {
+    final policy = LessonEditorDecisionPolicy();
+    final base = _financialReferences();
+    final references = LessonEditorReferenceState(
+      teachers: base.teachers,
+      clients: base.clients,
+      branches: base.branches,
+      rooms: base.rooms,
+      subscriptions: base.subscriptions,
+      catalog: const LessonDecisionCatalog(
+        settlementTypes: [
+          LessonDecisionCatalogItem(
+            key: 'partial',
+            label: 'Частично оплачиваемое занятие',
+            order: 0,
+            clientDurationMode: 'manual',
+            teacherDurationMode: 'manual',
+            defaultTeacherCompensationRuleKey: 'percent',
+          ),
+        ],
+        compensationRules: [
+          LessonDecisionCatalogItem(
+            key: 'percent',
+            label: 'Процент',
+            order: 0,
+            mode: 'percent',
+            value: '10000',
+          ),
+        ],
+      ),
+    );
+    var draft = _financialDraft().copyWith(
+      settlementTypeKey: 'partial',
+      compensationRuleKey: 'percent',
+      compensationValueMinor: '10000',
+      teacherCreditedDurationMinutes: null,
+      clientDecisions: const [
+        {
+          'clientId': 'student-a',
+          'chargeType': 'subscription',
+          'subscriptionId': 'subscription-a',
+          'chargeDurationMinutes': 30,
+        },
+      ],
+    );
+    StateSetter? rebuild;
+    late final _RecordingActions actions;
+    actions = _RecordingActions(
+      onEdit: (edit) => rebuild?.call(() {
+        draft = policy.applyEdit(draft, references, edit).draft;
+      }),
+    );
+
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return SingleChildScrollView(
+              child: LessonFinancialSection(
+                model: LessonFinancialSectionModel(
+                  session: _session(draft: draft),
+                  draft: draft,
+                  references: references,
+                  isSaving: false,
+                  requiresCompensationValue: true,
+                  compensationNeedsReason: false,
+                  canManageTeacherCompensation: true,
+                ),
+                actions: actions,
+                fundingFields: const SizedBox.shrink(),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    final field = find.byKey(
+      const ValueKey('teacher-credited-duration-minutes'),
+    );
+    await tester.tap(field);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '4',
+        selection: TextSelection.collapsed(offset: 1),
+      ),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '45',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump();
+
+    expect(draft.teacherCreditedDurationMinutes, 45);
+    expect(
+      policy.createPayload(
+        session: _session(draft: draft),
+        draft: draft,
+        references: references,
+        canManageTeacherCompensation: true,
+      )['financialDecision'],
+      containsPair('teacherCreditedDurationMinutes', 45),
+    );
+    final restore = find.text('Применить рекомендуемое правило');
+    await tester.ensureVisible(restore);
+    await tester.tap(restore);
+    await tester.pump();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .controller
+          .text,
+      isEmpty,
+    );
+  });
 
   testWidgets(
     'funding cache preserves the historical selection and skips depleted defaults',
@@ -1742,9 +1886,10 @@ void main() {
 }
 
 class _RecordingActions implements LessonEditorActions {
-  _RecordingActions({this.searchResults = const []});
+  _RecordingActions({this.searchResults = const [], this.onEdit});
 
   final List<LessonClientRef> searchResults;
+  final ValueChanged<LessonEditorEdit>? onEdit;
   final List<String> searchedQueries = [];
   bool? trial;
   String? completion;
@@ -1779,6 +1924,7 @@ class _RecordingActions implements LessonEditorActions {
 
   @override
   void edit(LessonEditorEdit edit) {
+    onEdit?.call(edit);
     switch (edit) {
       case LessonClientDecisionsEdit():
         break;

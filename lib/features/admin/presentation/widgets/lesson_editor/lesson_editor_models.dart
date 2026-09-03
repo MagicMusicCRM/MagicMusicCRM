@@ -54,6 +54,7 @@ class LessonEditorDraft {
     this.teacherCreditedDurationMinutes,
     this.teacherCompensationSource,
     this.compensationTouched = false,
+    this.recommendationRevision = 0,
     this.plannedSettlementReason = '',
     this.notes = '',
     this.clientDecisions = const [],
@@ -75,6 +76,7 @@ class LessonEditorDraft {
   final int? teacherCreditedDurationMinutes;
   final String? teacherCompensationSource;
   final bool compensationTouched;
+  final int recommendationRevision;
   final String plannedSettlementReason;
   final String notes;
   final List<Map<String, dynamic>> clientDecisions;
@@ -96,6 +98,7 @@ class LessonEditorDraft {
     Object? teacherCreditedDurationMinutes = _lessonEditorAbsent,
     Object? teacherCompensationSource = _lessonEditorAbsent,
     bool? compensationTouched,
+    int? recommendationRevision,
     String? plannedSettlementReason,
     String? notes,
     List<Map<String, dynamic>>? clientDecisions,
@@ -139,6 +142,8 @@ class LessonEditorDraft {
         ? this.teacherCompensationSource
         : teacherCompensationSource as String?,
     compensationTouched: compensationTouched ?? this.compensationTouched,
+    recommendationRevision:
+        recommendationRevision ?? this.recommendationRevision,
     plannedSettlementReason:
         plannedSettlementReason ?? this.plannedSettlementReason,
     notes: notes ?? this.notes,
