@@ -2,6 +2,7 @@ import 'dart:convert';
 import '../lesson_decision/lesson_decision_models.dart';
 import '../lesson_form_rules.dart';
 import 'lesson_editor_models.dart';
+import 'lesson_financial_autofill.dart';
 
 class LessonEditorValidation {
   const LessonEditorValidation.valid() : message = null;
@@ -15,6 +16,8 @@ class LessonEditorValidation {
 
 class LessonEditorDecisionPolicy {
   const LessonEditorDecisionPolicy();
+
+  static const _autofill = LessonFinancialAutofill();
 
   ({LessonEditorSession session, LessonEditorDraft draft})
   applyReferenceDefaults(
@@ -35,7 +38,7 @@ class LessonEditorDecisionPolicy {
         catalog.settlementTypes.firstOrNull;
     final legacyMode = session.snapshot?.rawLesson['teacher_compensation_type']
         ?.toString();
-    final rule =
+    final fallbackRule =
         _catalogItemByKey(
           catalog.compensationRules,
           draft.compensationRuleKey,
@@ -47,6 +50,30 @@ class LessonEditorDecisionPolicy {
             .where((item) => item.mode == 'standard')
             .firstOrNull ??
         catalog.compensationRules.firstOrNull;
+    final storedDecision = _storedFinancialDecision(session);
+    final storedSource = storedDecision?['teacherCompensationSource']
+        ?.toString();
+    final storedMinutes = _integer(
+      storedDecision?['teacherCreditedDurationMinutes'],
+    );
+    final compensationTouched =
+        draft.compensationTouched || storedSource == 'manual';
+    final recommendation = settlement?.defaultTeacherCompensationRuleKey == null
+        ? null
+        : _autofill.apply(
+            settlement: settlement!,
+            durationMinutes: draft.durationMinutes,
+            compensationTouched: compensationTouched,
+            currentRuleKey: draft.compensationRuleKey ?? fallbackRule?.key,
+            currentTeacherMinutes:
+                draft.teacherCreditedDurationMinutes ?? storedMinutes,
+          );
+    final rule =
+        _catalogItemByKey(
+          catalog.compensationRules,
+          recommendation?.compensationRuleKey,
+        ) ??
+        fallbackRule;
     final configuredDuration = catalog.defaultDurationMinutes;
     final compensationValue = requiresCompensationValue(rule)
         ? draft.compensationValueMinor ??
@@ -64,6 +91,10 @@ class LessonEditorDecisionPolicy {
       settlementTypeKey: settlement?.key,
       compensationRuleKey: rule?.key,
       compensationValueMinor: compensationValue,
+      teacherCreditedDurationMinutes:
+          recommendation?.teacherCreditedDurationMinutes ?? storedMinutes,
+      teacherCompensationSource: recommendation?.source ?? storedSource,
+      compensationTouched: compensationTouched,
     );
     if (next.clientDecisions.isEmpty &&
         (!session.isEdit || next.clientChargeType == 'none')) {
@@ -162,8 +193,27 @@ class LessonEditorDecisionPolicy {
       value,
     ),
     LessonDurationEdit(:final value) => (
-      draft: draft.copyWith(durationMinutes: value),
+      draft: _durationSelection(draft, references, value),
       scheduleChanged: true,
+      branchToLoad: null,
+    ),
+    LessonTeacherDurationEdit(:final value) => (
+      draft: draft.copyWith(
+        teacherCreditedDurationMinutes: value,
+        teacherCompensationSource: 'manual',
+        compensationTouched: true,
+      ),
+      scheduleChanged: false,
+      branchToLoad: null,
+    ),
+    LessonClientDurationEdit(:final clientId, :final value) => (
+      draft: _clientDurationSelection(draft, clientId, value),
+      scheduleChanged: false,
+      branchToLoad: null,
+    ),
+    LessonRestoreRecommendationEdit() => (
+      draft: restoreRecommendation(draft, references),
+      scheduleChanged: false,
       branchToLoad: null,
     ),
     LessonNotesEdit(:final value) => (
@@ -201,7 +251,7 @@ class LessonEditorDecisionPolicy {
       branchToLoad: null,
     ),
     LessonReferenceTarget.settlement => (
-      draft: draft.copyWith(settlementTypeKey: value),
+      draft: settlementSelection(draft, references, value),
       scheduleChanged: false,
       branchToLoad: null,
     ),
@@ -258,6 +308,9 @@ class LessonEditorDecisionPolicy {
       settlementTypeKey: null,
       compensationRuleKey: null,
       compensationValueMinor: null,
+      teacherCreditedDurationMinutes: null,
+      teacherCompensationSource: null,
+      compensationTouched: false,
     );
   }
 
@@ -275,7 +328,106 @@ class LessonEditorDecisionPolicy {
       compensationValueMinor: requiresCompensationValue(rule)
           ? rule?.value
           : null,
+      teacherCompensationSource: 'manual',
+      compensationTouched: true,
     );
+  }
+
+  LessonEditorDraft settlementSelection(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    String? settlementKey,
+  ) {
+    final settlement = _catalogItemByKey(
+      references.catalog?.settlementTypes,
+      settlementKey,
+    );
+    if (settlement?.defaultTeacherCompensationRuleKey == null) {
+      return draft.copyWith(settlementTypeKey: settlementKey);
+    }
+    final recommendation = _autofill.apply(
+      settlement: settlement!,
+      durationMinutes: draft.durationMinutes,
+      compensationTouched: draft.compensationTouched,
+      currentRuleKey: draft.compensationRuleKey,
+      currentTeacherMinutes: draft.teacherCreditedDurationMinutes,
+    );
+    final rule = _catalogItemByKey(
+      references.catalog?.compensationRules,
+      recommendation.compensationRuleKey,
+    );
+    return draft.copyWith(
+      settlementTypeKey: settlementKey,
+      compensationRuleKey: recommendation.compensationRuleKey,
+      compensationValueMinor: draft.compensationTouched
+          ? draft.compensationValueMinor
+          : requiresCompensationValue(rule)
+          ? rule?.value
+          : null,
+      teacherCreditedDurationMinutes:
+          recommendation.teacherCreditedDurationMinutes,
+      teacherCompensationSource: recommendation.source,
+    );
+  }
+
+  LessonEditorDraft restoreRecommendation(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+  ) {
+    final settlement = _catalogItemByKey(
+      references.catalog?.settlementTypes,
+      draft.settlementTypeKey,
+    );
+    if (settlement?.defaultTeacherCompensationRuleKey == null) return draft;
+    final restored = _autofill.restoreRecommendation(
+      settlement: settlement!,
+      durationMinutes: draft.durationMinutes,
+    );
+    final rule = _catalogItemByKey(
+      references.catalog?.compensationRules,
+      restored.compensationRuleKey,
+    );
+    return draft.copyWith(
+      compensationRuleKey: restored.compensationRuleKey,
+      compensationValueMinor: requiresCompensationValue(rule)
+          ? rule?.value
+          : null,
+      teacherCreditedDurationMinutes: restored.teacherCreditedDurationMinutes,
+      teacherCompensationSource: restored.source,
+      compensationTouched: false,
+    );
+  }
+
+  LessonEditorDraft _durationSelection(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    int durationMinutes,
+  ) {
+    final changed = draft.copyWith(durationMinutes: durationMinutes);
+    if (draft.compensationTouched) return changed;
+    return restoreRecommendation(changed, references);
+  }
+
+  LessonEditorDraft _clientDurationSelection(
+    LessonEditorDraft draft,
+    String clientId,
+    int? minutes,
+  ) {
+    final decisions = [
+      for (final decision in draft.clientDecisions)
+        if (decision['clientId'] == clientId)
+          {
+            for (final entry in decision.entries)
+              if (entry.key != 'chargeDurationMinutes') entry.key: entry.value,
+            'chargeDurationMinutes': ?minutes,
+          }
+        else
+          decision,
+    ];
+    if (!decisions.any((decision) => decision['clientId'] == clientId)) {
+      decisions.add({'clientId': clientId, 'chargeDurationMinutes': ?minutes});
+    }
+    return draft.copyWith(clientDecisions: decisions);
   }
 
   LessonEditorDraft compensationValueChange(
@@ -292,6 +444,8 @@ class LessonEditorDecisionPolicy {
         mode: rule?.mode,
         rawValue: rawValue,
       ),
+      teacherCompensationSource: 'manual',
+      compensationTouched: true,
     );
   }
 
@@ -309,6 +463,7 @@ class LessonEditorDecisionPolicy {
           references: references,
         ) ??
         _createDecisionMessage(session: session, draft: draft) ??
+        _partialDurationMessage(draft: draft, references: references) ??
         _compensationMessage(
           session: session,
           draft: draft,
@@ -399,6 +554,8 @@ class LessonEditorDecisionPolicy {
       if (canManageTeacherCompensation) ...{
         'teacherCompensationRuleKey': draft.compensationRuleKey,
         'teacherCompensationValueMinor': ?draft.compensationValueMinor,
+        'teacherCreditedDurationMinutes': ?draft.teacherCreditedDurationMinutes,
+        'teacherCompensationSource': ?draft.teacherCompensationSource,
       },
     };
     return {
@@ -448,6 +605,10 @@ class LessonEditorDecisionPolicy {
         draft.compensationRuleKey != snapshot.initialCompensationRuleKey ||
         draft.compensationValueMinor !=
             snapshot.initialCompensationValueMinor ||
+        draft.teacherCreditedDurationMinutes !=
+            session.draft.teacherCreditedDurationMinutes ||
+        draft.teacherCompensationSource !=
+            session.draft.teacherCompensationSource ||
         jsonEncode(draft.clientDecisions) !=
             jsonEncode(session.draft.clientDecisions);
   }
@@ -651,6 +812,48 @@ class LessonEditorDecisionPolicy {
     return null;
   }
 
+  String? _partialDurationMessage({
+    required LessonEditorDraft draft,
+    required LessonEditorReferenceState references,
+  }) {
+    final settlementTypes = references.catalog?.settlementTypes;
+    final commonSettlement = _catalogItemByKey(
+      settlementTypes,
+      draft.settlementTypeKey,
+    );
+    var checkedClientDecision = false;
+    for (final decision in draft.clientDecisions) {
+      final participantSettlement = _catalogItemByKey(
+        settlementTypes,
+        decision['settlementTypeKey']?.toString(),
+      );
+      final settlement = participantSettlement ?? commonSettlement;
+      if (settlement?.clientDurationMode != 'manual') continue;
+      checkedClientDecision = true;
+      final minutes = _integer(decision['chargeDurationMinutes']);
+      if (minutes == null) return 'Укажите длительность списания с клиента';
+      if (minutes < 0 || minutes > draft.durationMinutes) {
+        return 'Списание с клиента не может быть больше '
+            '${draft.durationMinutes} мин';
+      }
+    }
+    if (commonSettlement?.clientDurationMode == 'manual' &&
+        !checkedClientDecision &&
+        draft.client?.type != 'group') {
+      return 'Укажите длительность списания с клиента';
+    }
+    if (commonSettlement?.teacherDurationMode != 'manual') return null;
+    final teacherMinutes = draft.teacherCreditedDurationMinutes;
+    if (teacherMinutes == null) {
+      return 'Укажите длительность зачёта преподавателю';
+    }
+    if (teacherMinutes < 0 || teacherMinutes > draft.durationMinutes) {
+      return 'Зачёт преподавателю не может быть больше '
+          '${draft.durationMinutes} мин';
+    }
+    return null;
+  }
+
   String? _editMessage({
     required LessonEditorSession session,
     required LessonEditorDraft draft,
@@ -705,6 +908,19 @@ class LessonEditorDecisionPolicy {
     return rate is num && rate > 0 ? ('hourly', rate) : ('none', 0);
   }
 }
+
+Map<String, dynamic>? _storedFinancialDecision(LessonEditorSession session) {
+  final raw = session.snapshot?.rawLesson;
+  final value = raw?['financial_decision'] ?? raw?['financialDecision'];
+  return value is Map ? Map<String, dynamic>.from(value) : null;
+}
+
+int? _integer(Object? value) => switch (value) {
+  int value => value,
+  num value => value.toInt(),
+  String value => int.tryParse(value),
+  _ => null,
+};
 
 LessonEditorSession _normalizeCompensationBaseline({
   required LessonEditorSession session,

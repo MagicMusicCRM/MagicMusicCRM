@@ -40,6 +40,19 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   final LessonDecisionCommitted? afterCommit;
   final Map<String, dynamic>? resources;
 
+  Map<String, dynamic>? get _initialFinancialDecision {
+    final value = lesson['financial_decision'] ?? lesson['financialDecision'];
+    return value is Map ? Map<String, dynamic>.from(value) : null;
+  }
+
+  @override
+  int? get initialTeacherCreditedDurationMinutes =>
+      _integer(_initialFinancialDecision?['teacherCreditedDurationMinutes']);
+
+  @override
+  String? get initialTeacherCompensationSource =>
+      _initialFinancialDecision?['teacherCompensationSource']?.toString();
+
   @override
   bool get isGroupLesson {
     final groupId = lesson['group_id'] ?? lesson['groupId'];
@@ -253,6 +266,8 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     required String settlementTypeKey,
     required String compensationRuleKey,
     String? compensationValueMinor,
+    int? teacherCreditedDurationMinutes,
+    String? teacherCompensationSource,
     List<Map<String, dynamic>> clientDecisions = const [],
   }) async {
     final expectedVersion = _expectedVersion;
@@ -272,6 +287,8 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
         if (canManageTeacherCompensation) ...{
           'teacherCompensationRuleKey': compensationRuleKey,
           'teacherCompensationValueMinor': ?compensationValueMinor,
+          'teacherCreditedDurationMinutes': ?teacherCreditedDurationMinutes,
+          'teacherCompensationSource': ?teacherCompensationSource,
         },
       },
       if (operation == LessonDecisionOperation.reschedule)
@@ -317,3 +334,10 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
 String _formatUnits(num value) => value == value.roundToDouble()
     ? value.toInt().toString()
     : value.toString();
+
+int? _integer(Object? value) => switch (value) {
+  int value => value,
+  num value => value.toInt(),
+  String value => int.tryParse(value),
+  _ => null,
+};

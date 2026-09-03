@@ -7,6 +7,7 @@ import '../lesson_form_rules.dart';
 import 'lesson_client_funding_fields.dart';
 import 'lesson_editor_feedback.dart';
 import 'lesson_editor_models.dart';
+import 'lesson_financial_autofill.dart';
 
 class LessonFinancialSectionModel {
   const LessonFinancialSectionModel({
@@ -74,6 +75,21 @@ class LessonFinancialSection extends StatelessWidget {
     );
   }
 
+  List<LessonDecisionParticipant> _participants() {
+    final client = model.draft.client;
+    if (client == null) return const [];
+    if (model.session.isGroupEdit) {
+      return funding?.groupParticipants ?? const [];
+    }
+    return [
+      LessonDecisionParticipant(
+        id: client.id,
+        name: client.label,
+        isStudent: client.type == 'student',
+      ),
+    ];
+  }
+
   Map<String, List<LessonDecisionSubscription>> _subscriptionCache(
     LessonClientRef client,
   ) {
@@ -118,6 +134,11 @@ class LessonFinancialSection extends StatelessWidget {
           _CompensationOverride(model: model, actions: actions),
         const SizedBox(height: 16),
         ?fundingFields ?? _fundingFields(),
+        _PartialDurationControls(
+          model: model,
+          participants: _participants(),
+          actions: actions,
+        ),
         if (model.session.isEdit) ...[
           const SizedBox(height: 16),
           TextFormField(
@@ -141,6 +162,124 @@ class LessonFinancialSection extends StatelessWidget {
             preview: preview,
             participantNames: funding?.participantNames ?? const {},
           ),
+      ],
+    );
+  }
+}
+
+class _PartialDurationControls extends StatelessWidget {
+  const _PartialDurationControls({
+    required this.model,
+    required this.participants,
+    required this.actions,
+  });
+
+  final LessonFinancialSectionModel model;
+  final List<LessonDecisionParticipant> participants;
+  final LessonEditorActions actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final draft = model.draft;
+    final catalog = model.references.catalog;
+    final commonSettlement = _catalogItem(
+      catalog?.settlementTypes,
+      draft.settlementTypeKey,
+    );
+    final teacherManual =
+        model.canManageTeacherCompensation &&
+        commonSettlement?.teacherDurationMode == 'manual';
+    final clientFields = <Widget>[];
+    for (final participant in participants) {
+      final decision = draft.clientDecisions
+          .where((row) => row['clientId'] == participant.id)
+          .firstOrNull;
+      final settlement = _catalogItem(
+        catalog?.settlementTypes,
+        decision?['settlementTypeKey']?.toString() ?? draft.settlementTypeKey,
+      );
+      if (settlement?.clientDurationMode != 'manual') continue;
+      final minutes = _minutes(decision?['chargeDurationMinutes']);
+      clientFields.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: KeyedSubtree(
+            key: ValueKey(
+              'lesson-client-duration-model-${participant.id}-$minutes',
+            ),
+            child: TextFormField(
+              key: ValueKey('lesson-client-duration-${participant.id}'),
+              initialValue: minutes?.toString() ?? '',
+              enabled: !model.isSaving,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: participants.length > 1
+                    ? 'Списать с клиента ${participant.name}, мин *'
+                    : 'Списать с клиента, мин *',
+                helperText: minutes == null
+                    ? 'Укажите от 0 до ${draft.durationMinutes} мин'
+                    : formatLessonMinutes(minutes),
+              ),
+              validator: (value) => partialDurationError(
+                value,
+                lessonDurationMinutes: draft.durationMinutes,
+              ),
+              onChanged: (value) => actions.edit(
+                LessonClientDurationEdit(participant.id, int.tryParse(value)),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (clientFields.isEmpty && !teacherManual && !draft.compensationTouched) {
+      return const SizedBox.shrink();
+    }
+    final teacherMinutes = draft.teacherCreditedDurationMinutes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...clientFields,
+        if (teacherManual) ...[
+          const SizedBox(height: 16),
+          KeyedSubtree(
+            key: ValueKey('teacher-duration-model-$teacherMinutes'),
+            child: TextFormField(
+              key: const ValueKey('teacher-credited-duration-minutes'),
+              initialValue: teacherMinutes?.toString() ?? '',
+              enabled: !model.isSaving,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: 'Засчитать преподавателю, мин *',
+                helperText: teacherMinutes == null
+                    ? 'Укажите от 0 до ${draft.durationMinutes} мин'
+                    : formatLessonMinutes(teacherMinutes),
+              ),
+              validator: (value) => partialDurationError(
+                value,
+                lessonDurationMinutes: draft.durationMinutes,
+              ),
+              onChanged: (value) =>
+                  actions.edit(LessonTeacherDurationEdit(int.tryParse(value))),
+            ),
+          ),
+        ],
+        if (draft.compensationTouched) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('lesson-restore-financial-recommendation'),
+              onPressed: model.isSaving
+                  ? null
+                  : () => actions.edit(const LessonRestoreRecommendationEdit()),
+              icon: const Icon(Icons.restart_alt_rounded),
+              label: const Text('Применить рекомендуемое правило'),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -388,4 +527,11 @@ String _compensationInputLabel(String? mode) => switch (mode) {
   'percent' => 'Процент от стандартной ставки, % *',
   'hourly' => 'Почасовая ставка, ₽ *',
   _ => 'Фиксированная сумма за занятие, ₽ *',
+};
+
+int? _minutes(Object? value) => switch (value) {
+  int value => value,
+  num value => value.toInt(),
+  String value => int.tryParse(value),
+  _ => null,
 };

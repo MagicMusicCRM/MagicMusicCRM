@@ -929,6 +929,104 @@ void main() {
     expect(find.text('Результат и расчёты'), findsOneWidget);
   });
 
+  for (final size in const [Size(320, 900), Size(1200, 900)]) {
+    testWidgets('partial duration controls fit ${size.width} and emit edits', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.reset);
+      final actions = _RecordingActions();
+      final draft = _financialDraft().copyWith(
+        settlementTypeKey: 'partial',
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: 'manual',
+        compensationTouched: true,
+        clientDecisions: const [
+          {
+            'clientId': 'student-a',
+            'chargeType': 'subscription',
+            'subscriptionId': 'subscription-a',
+            'chargeDurationMinutes': 30,
+          },
+        ],
+      );
+      final base = _financialReferences();
+      final references = LessonEditorReferenceState(
+        teachers: base.teachers,
+        clients: base.clients,
+        branches: base.branches,
+        rooms: base.rooms,
+        subscriptions: base.subscriptions,
+        catalog: const LessonDecisionCatalog(
+          settlementTypes: [
+            LessonDecisionCatalogItem(
+              key: 'partial',
+              label: 'Частично оплачиваемое занятие',
+              order: 0,
+              clientDurationMode: 'manual',
+              teacherDurationMode: 'manual',
+              defaultTeacherCompensationRuleKey: 'percent',
+            ),
+          ],
+          compensationRules: [
+            LessonDecisionCatalogItem(
+              key: 'percent',
+              label: 'Процент',
+              order: 0,
+              mode: 'percent',
+              value: '10000',
+            ),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(
+        _host(
+          SingleChildScrollView(
+            child: LessonFinancialSection(
+              model: LessonFinancialSectionModel(
+                session: _session(draft: draft),
+                draft: draft,
+                references: references,
+                isSaving: false,
+                requiresCompensationValue: true,
+                compensationNeedsReason: true,
+                canManageTeacherCompensation: true,
+              ),
+              actions: actions,
+              funding: _FundingLookup(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final clientField = find.byKey(
+        const ValueKey('lesson-client-duration-student-a'),
+      );
+      final teacherField = find.byKey(
+        const ValueKey('teacher-credited-duration-minutes'),
+      );
+      expect(clientField, findsOneWidget);
+      expect(teacherField, findsOneWidget);
+      expect(find.text('30 мин'), findsOneWidget);
+      expect(find.text('45 мин'), findsOneWidget);
+      expect(find.text('Применить рекомендуемое правило'), findsOneWidget);
+      await tester.enterText(clientField, '20');
+      await tester.enterText(teacherField, '40');
+      final restore = find.text('Применить рекомендуемое правило');
+      await tester.ensureVisible(restore);
+      await tester.pump();
+      await tester.tap(restore);
+
+      expect(actions.clientDuration, ('student-a', 20));
+      expect(actions.teacherDuration, 40);
+      expect(actions.restoreRecommendationCount, 1);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'funding cache preserves the historical selection and skips depleted defaults',
     (tester) async {
@@ -1576,6 +1674,7 @@ void main() {
             'lesson_client_funding_fields.dart',
             'lesson_editor_feedback.dart',
             'lesson_editor_models.dart',
+            'lesson_financial_autofill.dart',
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_editor_feedback.dart':
           {
@@ -1663,6 +1762,9 @@ class _RecordingActions implements LessonEditorActions {
   int dateRequests = 0;
   int timeRequests = 0;
   int? duration;
+  (String, int?)? clientDuration;
+  int? teacherDuration;
+  int restoreRecommendationCount = 0;
   int saveCount = 0;
   int cancelCount = 0;
 
@@ -1708,6 +1810,12 @@ class _RecordingActions implements LessonEditorActions {
         }
       case LessonDurationEdit(:final value):
         duration = value;
+      case LessonClientDurationEdit(:final clientId, :final value):
+        clientDuration = (clientId, value);
+      case LessonTeacherDurationEdit(:final value):
+        teacherDuration = value;
+      case LessonRestoreRecommendationEdit():
+        restoreRecommendationCount++;
       case LessonNotesEdit(:final value):
         notes = value;
       case LessonTrialEdit(:final value):

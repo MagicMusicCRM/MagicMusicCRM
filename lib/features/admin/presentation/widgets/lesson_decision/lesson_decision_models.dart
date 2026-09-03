@@ -49,6 +49,9 @@ class LessonDecisionCatalogItem {
     this.value = '0',
     this.hourShareBasisPoints = 0,
     this.fixedPenaltyMinor = '0',
+    this.clientDurationMode,
+    this.teacherDurationMode,
+    this.defaultTeacherCompensationRuleKey,
   });
 
   final String key;
@@ -60,6 +63,9 @@ class LessonDecisionCatalogItem {
   final String value;
   final int hourShareBasisPoints;
   final String fixedPenaltyMinor;
+  final String? clientDurationMode;
+  final String? teacherDurationMode;
+  final String? defaultTeacherCompensationRuleKey;
 
   factory LessonDecisionCatalogItem.fromJson(Map<String, dynamic> json) {
     return LessonDecisionCatalogItem(
@@ -76,6 +82,10 @@ class LessonDecisionCatalogItem {
       hourShareBasisPoints:
           (json['hourShareBasisPoints'] as num?)?.toInt() ?? 0,
       fixedPenaltyMinor: json['fixedPenaltyMinor']?.toString() ?? '0',
+      clientDurationMode: json['clientDurationMode']?.toString(),
+      teacherDurationMode: json['teacherDurationMode']?.toString(),
+      defaultTeacherCompensationRuleKey:
+          json['defaultTeacherCompensationRuleKey']?.toString(),
     );
   }
 }
@@ -177,6 +187,8 @@ abstract interface class LessonDecisionFormLifecycle {
   String? get initialSettlementTypeKey;
   String? get initialCompensationRuleKey;
   String? get initialCompensationValueMinor;
+  int? get initialTeacherCreditedDurationMinutes;
+  String? get initialTeacherCompensationSource;
   bool get isGroupLesson;
   List<LessonDecisionParticipant> get groupParticipants;
   List<LessonDecisionParticipant> get settlementClients;
@@ -193,6 +205,8 @@ abstract interface class LessonDecisionFormLifecycle {
     required String settlementTypeKey,
     required String compensationRuleKey,
     String? compensationValueMinor,
+    int? teacherCreditedDurationMinutes,
+    String? teacherCompensationSource,
     List<Map<String, dynamic>> clientDecisions = const [],
   });
 
@@ -239,6 +253,8 @@ List<Map<String, dynamic>> lessonClientDecisionsPayload(
       'clientId': row['clientId'],
       if (row['settlementTypeKey'] != null)
         'settlementTypeKey': row['settlementTypeKey'],
+      if (row['chargeDurationMinutes'] != null)
+        'chargeDurationMinutes': row['chargeDurationMinutes'],
       if (row['chargeType'] != null) 'chargeType': row['chargeType'],
       if (row['chargeType'] != 'none' && row['payerStudentId'] != null)
         'payerStudentId': row['payerStudentId'],

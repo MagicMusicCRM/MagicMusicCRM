@@ -3,6 +3,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 import 'lesson_decision_models.dart';
 import 'lesson_decision_sections.dart';
+import '../lesson_editor/lesson_financial_autofill.dart';
 
 class LessonDecisionForm extends StatefulWidget {
   const LessonDecisionForm({required this.controller, super.key});
@@ -17,7 +18,9 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   final _formKey = GlobalKey<FormState>();
   final _reasonController = TextEditingController();
   final _compensationValueController = TextEditingController();
+  final _teacherDurationController = TextEditingController();
   final Map<String, String?> _clientSettlementKeys = {};
+  final Map<String, int?> _clientDurationMinutes = {};
   final Map<String, String?> _payerIds = {};
   final Map<String, String?> _payerNames = {};
   final Map<String, String?> _subscriptionIds = {};
@@ -32,6 +35,8 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   bool _loading = true;
   bool _busy = false;
   bool _commitAttempted = false;
+  bool _compensationTouched = false;
+  String? _teacherCompensationSource;
 
   @override
   void initState() {
@@ -43,6 +48,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   void dispose() {
     _reasonController.dispose();
     _compensationValueController.dispose();
+    _teacherDurationController.dispose();
     super.dispose();
   }
 
@@ -55,6 +61,21 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     return null;
   }
 
+  LessonDecisionCatalogItem? get _settlement {
+    final key = _settlementKey;
+    if (key == null) return null;
+    return _catalogItem(_catalog?.settlementTypes ?? const [], key);
+  }
+
+  int get _lessonDurationMinutes {
+    final value =
+        widget.controller.successor?['durationMinutes'] ??
+        widget.controller.lesson['duration_minutes'] ??
+        widget.controller.lesson['durationMinutes'] ??
+        _catalog?.defaultDurationMinutes;
+    return value is num && value > 0 ? value.toInt() : 60;
+  }
+
   Future<void> _loadCatalog() async {
     setState(() {
       _loading = true;
@@ -63,12 +84,38 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     try {
       final catalog = await widget.controller.loadCatalog();
       final defaults = _resolveDefaults(widget.controller, catalog);
+      final settlement = _catalogItem(
+        catalog.settlementTypes,
+        defaults.settlementKey ?? '',
+      );
+      final initialSource = widget.controller.initialTeacherCompensationSource;
+      final recommendation =
+          settlement?.defaultTeacherCompensationRuleKey == null
+          ? null
+          : const LessonFinancialAutofill().apply(
+              settlement: settlement!,
+              durationMinutes: _lessonDurationMinutes,
+              compensationTouched: initialSource == 'manual',
+              currentRuleKey: defaults.compensationKey,
+              currentTeacherMinutes:
+                  widget.controller.initialTeacherCreditedDurationMinutes,
+            );
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
         _settlementKey = defaults.settlementKey;
-        _compensationKey = defaults.compensationKey;
-        _compensationValueController.text = defaults.compensationValue;
+        _compensationKey =
+            recommendation?.compensationRuleKey ?? defaults.compensationKey;
+        _compensationValueController.text = recommendation == null
+            ? defaults.compensationValue
+            : _recommendedCompensationInput(catalog, recommendation);
+        _teacherDurationController.text =
+            recommendation?.teacherCreditedDurationMinutes?.toString() ??
+            widget.controller.initialTeacherCreditedDurationMinutes
+                ?.toString() ??
+            '';
+        _teacherCompensationSource = recommendation?.source ?? initialSource;
+        _compensationTouched = initialSource == 'manual';
         _loading = false;
       });
     } catch (error) {
@@ -90,8 +137,34 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _selectSettlement(String? value) {
-    setState(() => _settlementKey = value);
-    _invalidatePreview();
+    setState(() {
+      _settlementKey = value;
+      final settlement = _settlement;
+      if (settlement?.defaultTeacherCompensationRuleKey != null) {
+        final recommendation = const LessonFinancialAutofill().apply(
+          settlement: settlement!,
+          durationMinutes: _lessonDurationMinutes,
+          compensationTouched: _compensationTouched,
+          currentRuleKey: _compensationKey,
+          currentTeacherMinutes: int.tryParse(_teacherDurationController.text),
+        );
+        _applyRecommendation(
+          recommendation,
+          preserveCompensationValue: _compensationTouched,
+        );
+        final clientMinutes = const LessonFinancialAutofill()
+            .recommendedClientMinutes(
+              settlement: settlement,
+              durationMinutes: _lessonDurationMinutes,
+            );
+        for (final participant in widget.controller.settlementClients) {
+          if (_clientSettlementKeys[participant.id] == null) {
+            _clientDurationMinutes[participant.id] = clientMinutes;
+          }
+        }
+      }
+      _clearPreview();
+    });
   }
 
   void _selectCompensation(String? key) {
@@ -100,14 +173,90 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       _preview = null;
       _error = null;
       _commitAttempted = false;
+      _compensationTouched = true;
+      _teacherCompensationSource = 'manual';
       final rule = _compensationRule;
       _compensationValueController.text = rule == null ? '' : _valueInput(rule);
     });
   }
 
   void _selectClientSettlement(String clientId, String? settlementKey) {
-    setState(() => _clientSettlementKeys[clientId] = settlementKey);
-    _invalidatePreview();
+    setState(() {
+      _clientSettlementKeys[clientId] = settlementKey;
+      final settlement = _catalogItem(
+        _catalog?.settlementTypes ?? const [],
+        settlementKey ?? _settlementKey ?? '',
+      );
+      if (settlement != null) {
+        _clientDurationMinutes[clientId] = const LessonFinancialAutofill()
+            .recommendedClientMinutes(
+              settlement: settlement,
+              durationMinutes: _lessonDurationMinutes,
+            );
+      }
+      _clearPreview();
+    });
+  }
+
+  void _selectClientDuration(String clientId, String value) {
+    setState(() {
+      _clientDurationMinutes[clientId] = int.tryParse(value);
+      _clearPreview();
+    });
+  }
+
+  void _selectTeacherDuration(String value) {
+    setState(() {
+      _compensationTouched = true;
+      _teacherCompensationSource = 'manual';
+      _clearPreview();
+    });
+  }
+
+  void _changeCompensationValue(String _) {
+    setState(() {
+      _compensationTouched = true;
+      _teacherCompensationSource = 'manual';
+      _clearPreview();
+    });
+  }
+
+  void _restoreRecommendation() {
+    final settlement = _settlement;
+    if (settlement == null) return;
+    setState(() {
+      _compensationTouched = false;
+      _applyRecommendation(
+        const LessonFinancialAutofill().restoreRecommendation(
+          settlement: settlement,
+          durationMinutes: _lessonDurationMinutes,
+        ),
+      );
+      _clearPreview();
+    });
+  }
+
+  void _applyRecommendation(
+    LessonFinancialRecommendation recommendation, {
+    bool preserveCompensationValue = false,
+  }) {
+    _compensationKey = recommendation.compensationRuleKey;
+    _teacherDurationController.text =
+        recommendation.teacherCreditedDurationMinutes?.toString() ?? '';
+    _teacherCompensationSource = recommendation.source;
+    final catalog = _catalog;
+    if (catalog != null && !preserveCompensationValue) {
+      _compensationValueController.text = _recommendedCompensationInput(
+        catalog,
+        recommendation,
+      );
+    }
+  }
+
+  void _clearPreview() {
+    _preview = null;
+    _error = null;
+    _commitAttempted = false;
   }
 
   Future<void> _selectPayer(
@@ -167,11 +316,20 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
           _compensationRule,
           _compensationValueController.text,
         ),
+        teacherCreditedDurationMinutes:
+            widget.controller.canManageTeacherCompensation
+            ? int.tryParse(_teacherDurationController.text)
+            : null,
+        teacherCompensationSource:
+            widget.controller.canManageTeacherCompensation
+            ? _teacherCompensationSource
+            : null,
         clientDecisions: _clientDecisions(
           widget.controller.settlementClients,
           _clientSettlementKeys,
           _payerIds,
           _subscriptionIds,
+          _clientDurationMinutes,
         ),
       );
       if (!mounted) return;
@@ -238,6 +396,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       completedSuccessorScheduledAt: _requiredLessonTime(successorScheduledAt),
       reasonController: _reasonController,
       compensationValueController: _compensationValueController,
+      teacherDurationController: _teacherDurationController,
       catalog: catalog,
       settlementKey: _settlementKey,
       compensationKey: _compensationKey,
@@ -245,6 +404,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       participants: widget.controller.settlementClients,
       participantNames: widget.controller.participantNames,
       clientSettlementKeys: _clientSettlementKeys,
+      clientDurationMinutes: _clientDurationMinutes,
       payerIds: _payerIds,
       payerNames: _payerNames,
       subscriptionIds: _subscriptionIds,
@@ -261,8 +421,11 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       onReasonChanged: (_) => _invalidatePreview(),
       onSettlementChanged: _selectSettlement,
       onCompensationChanged: _selectCompensation,
-      onCompensationValueChanged: (_) => _invalidatePreview(),
+      onCompensationValueChanged: _changeCompensationValue,
+      onTeacherDurationChanged: _selectTeacherDuration,
+      onRestoreRecommendation: _restoreRecommendation,
       onClientSettlementChanged: _selectClientSettlement,
+      onClientDurationChanged: _selectClientDuration,
       searchPayers: widget.controller.searchPayers,
       onPayerChanged: _selectPayer,
       onSubscriptionChanged: _selectSubscription,
@@ -275,6 +438,8 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
                   null
           ? 'Введите корректное значение'
           : null,
+      durationMinutes: _lessonDurationMinutes,
+      compensationTouched: _compensationTouched,
       onClose: () => Navigator.pop(context, false),
       onSubmit: _preview?.canConfirm == true ? _commit : _calculate,
     );
@@ -352,17 +517,31 @@ List<Map<String, dynamic>> _clientDecisions(
   Map<String, String?> selectedKeys,
   Map<String, String?> payerIds,
   Map<String, String?> subscriptionIds,
+  Map<String, int?> durationMinutes,
 ) => [
   for (final participant in participants)
     if (selectedKeys[participant.id] != null ||
-        payerIds[participant.id] != null)
+        payerIds[participant.id] != null ||
+        durationMinutes[participant.id] != null)
       {
         'clientId': participant.id,
         'settlementTypeKey': ?selectedKeys[participant.id],
         'payerStudentId': ?payerIds[participant.id],
         'subscriptionId': ?subscriptionIds[participant.id],
+        'chargeDurationMinutes': ?durationMinutes[participant.id],
       },
 ];
+
+String _recommendedCompensationInput(
+  LessonDecisionCatalog catalog,
+  LessonFinancialRecommendation recommendation,
+) {
+  final rule = _catalogItem(
+    catalog.compensationRules,
+    recommendation.compensationRuleKey ?? '',
+  );
+  return rule == null ? '' : _valueInput(rule);
+}
 
 LessonDecisionCatalogItem? _catalogItem(
   List<LessonDecisionCatalogItem> items,

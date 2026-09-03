@@ -69,6 +69,9 @@ class _LessonDecisionApi extends MagicApiClient {
               'stableKey': 'lesson',
               'label': 'Занятие',
               'colorToken': 'success',
+              'clientDurationMode': 'full',
+              'teacherDurationMode': 'full',
+              'defaultTeacherCompensationRuleKey': 'standard',
               'allowedContexts': ['settle'],
               'active': true,
               'order': 0,
@@ -295,6 +298,9 @@ class _GroupLessonDecisionApi extends MagicApiClient {
               'stableKey': 'partially_paid_lesson',
               'label': 'Частично оплачено',
               'colorToken': 'warning',
+              'clientDurationMode': 'manual',
+              'teacherDurationMode': 'manual',
+              'defaultTeacherCompensationRuleKey': 'percent',
               'allowedContexts': ['settle'],
               'active': true,
               'order': 1,
@@ -308,6 +314,14 @@ class _GroupLessonDecisionApi extends MagicApiClient {
               'value': '0',
               'active': true,
               'order': 0,
+            },
+            {
+              'stableKey': 'percent',
+              'label': 'Процент ставки',
+              'mode': 'percent',
+              'value': '10000',
+              'active': true,
+              'order': 1,
             },
           ],
         }
@@ -765,6 +779,7 @@ void main() {
       'settlementTypeKey': 'free_lesson',
       'teacherCompensationRuleKey': 'fixed',
       'teacherCompensationValueMinor': '125000',
+      'teacherCompensationSource': 'manual',
     });
     expect(body['previewToken'], 'signed-preview');
     expect(body['confirm'], isTrue);
@@ -987,6 +1002,7 @@ void main() {
       'settlementTypeKey': 'free_lesson',
       'teacherCompensationRuleKey': 'hourly',
       'teacherCompensationValueMinor': '125000',
+      'teacherCompensationSource': 'manual',
     });
   });
 
@@ -1093,6 +1109,7 @@ void main() {
           },
         ],
         'teacherCompensationRuleKey': 'standard',
+        'teacherCompensationSource': 'manual',
       });
       expect(find.textContaining('Преподаватель:'), findsOneWidget);
     },
@@ -1159,6 +1176,43 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Частично оплачено').last);
       await tester.pumpAndSettle();
+      final teacherDuration = find.byKey(
+        const Key('teacher-credited-duration-minutes'),
+      );
+      expect(teacherDuration, findsOneWidget);
+      expect(
+        find.byKey(
+          const Key('lesson-decision-client-duration-$_firstGroupStudentId'),
+        ),
+        findsOneWidget,
+      );
+      final secondDuration = find.byKey(
+        const Key('lesson-decision-client-duration-$_secondGroupStudentId'),
+      );
+      expect(secondDuration, findsOneWidget);
+      await tester.enterText(teacherDuration, '45');
+      await tester.enterText(secondDuration, '30');
+      final restoreRecommendation = find.byKey(
+        const Key('lesson-decision-restore-recommendation'),
+      );
+      expect(restoreRecommendation, findsOneWidget);
+      await tester.ensureVisible(restoreRecommendation);
+      await tester.tap(restoreRecommendation);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: teacherDuration,
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        isEmpty,
+      );
+      expect(restoreRecommendation, findsNothing);
+      await tester.enterText(teacherDuration, '45');
       final firstOverride = find.byKey(
         const Key('lesson-decision-client-$_firstGroupStudentId'),
       );
@@ -1167,13 +1221,36 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Занятие').last);
       await tester.pumpAndSettle();
-      await tester.ensureVisible(
-        find.byKey(const Key('lesson-decision-compensation')),
+      expect(
+        find.byKey(
+          const Key('lesson-decision-client-duration-$_firstGroupStudentId'),
+        ),
+        findsNothing,
       );
-      await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Полная стандартная ставка').last);
-      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: teacherDuration,
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        '45',
+      );
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: secondDuration,
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        '30',
+      );
       await tester.ensureVisible(
         find.byKey(const Key('lesson-decision-submit')),
       );
@@ -1184,8 +1261,12 @@ void main() {
         'settlementTypeKey': 'partially_paid_lesson',
         'clientDecisions': [
           {'clientId': _firstGroupStudentId, 'settlementTypeKey': 'lesson'},
+          {'clientId': _secondGroupStudentId, 'chargeDurationMinutes': 30},
         ],
-        'teacherCompensationRuleKey': 'standard',
+        'teacherCompensationRuleKey': 'percent',
+        'teacherCompensationValueMinor': '10000',
+        'teacherCreditedDurationMinutes': 45,
+        'teacherCompensationSource': 'manual',
       });
       expect(find.textContaining('Анна Иванова: Занятие'), findsOneWidget);
       expect(
