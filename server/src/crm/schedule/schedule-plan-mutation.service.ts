@@ -391,6 +391,7 @@ export class SchedulePlanMutationService {
       client,
       input.row.branchId,
       financialDecision,
+      actor.userId,
     );
     await this.repository.insertSeries(client, {
       ...input,

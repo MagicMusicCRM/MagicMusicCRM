@@ -363,14 +363,13 @@ export class SubscriptionReservationService {
           select distinct
             target.student_id,
             fact.subscription_id
-          from app.lesson_client_charge_facts_effective fact
+          from app.lesson_client_charge_facts fact
           left join app.subscriptions subscription
             on subscription.id = fact.subscription_id
           cross join lateral (
-            values (fact.client_id), (subscription.student_id)
+            values (case when fact.client_type = 'student' then fact.client_id end), (fact.payer_student_id), (subscription.student_id)
           ) as target(student_id)
           where fact.lesson_id = $1
-            and fact.client_type = 'student'
             and target.student_id is not null
         `,
         [lessonId],

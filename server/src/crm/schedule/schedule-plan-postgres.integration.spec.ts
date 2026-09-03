@@ -135,6 +135,40 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("materializes canonical completion and hourly teacher snapshot, preserving a lesson's edited personal-account funding", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      await pool.query("insert into app.teacher_rates (teacher_id, rate, effective_from) values ($1, 1200, '2020-01-01')", [fixture.teacherId]);
+      const dto = { kind: "individual" as const, title: "Оплата занятия", studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0], activeFrom: fixture.today, activeUntil: null, rows: [{ ...row(fixture, 1, "10:00"), durationMinutes: 45 }] };
+      const created = await plans.create(actor, dto, { idempotencyKey: `funding-plan-${randomUUID()}`, requestId: randomUUID() });
+      const lessonId = created.lessonIds[0]!;
+      const snapshots = await pool.query("select completion_type, teacher_compensation_type, teacher_compensation_value::text from app.lesson_snapshots where lesson_id=$1", [lessonId]);
+      expect(snapshots.rows[0]).toMatchObject({ completion_type: "standard.success", teacher_compensation_type: "hourly", teacher_compensation_value: "1200.00" });
+      await database.transaction(async (client) => {
+        const service = new LessonSettlementService(database);
+        const current = (await service.loadPlan(client, lessonId))!;
+        const decision = { ...current.decision, clientDecisions: [{ clientId: fixture.studentIds[0]!, payerStudentId: fixture.studentIds[0]!, chargeType: "personal_account" as const, basePriceMinor: "60000" }] };
+        const prepared = await service.preparePlan(client, fixture.branchId, decision);
+        await service.replacePlan(client, { ...prepared, lessonId, expectedVersion: current.version, selectedBy: actor.userId, reasonText: "Личный счёт" });
+        await reservations.releaseForLessons(client, [lessonId]);
+        await materializer.allocatePlanReservations(client, [lessonId]);
+        const reserved = await client.query("select count(*)::int as count from app.lesson_reservations where lesson_id=$1 and state='reserved'", [lessonId]);
+        expect(reserved.rows[0].count).toBe(0);
+        await client.query("savepoint priced_plan_preview");
+        try {
+          await client.query("update app.lessons set lifecycle_state='successfully_completed' where id=$1", [lessonId]);
+          const settled = await service.settle(client, lessonId, { context: "settle", decision });
+          expect(settled.clientFact.amountMinor).toBe("60000");
+          expect(settled.teacherFact.amountMinor).toBe("90000");
+        } finally { await client.query("rollback to savepoint priced_plan_preview"); }
+      });
+    } finally {
+      await pool.query("delete from app.teacher_rates where teacher_id=$1", [fixture.teacherId]);
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("creates one open-ended individual plan with N series and idempotent unique lessons", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
@@ -1105,6 +1139,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         fixture.subscriptionIds[0],
       );
       expect(await new MigrationRunner(pool).down()).toBe(
+        "0146_lesson_funding_payer",
+      );
+      expect(await new MigrationRunner(pool).down()).toBe(
         "0145_student_contact_email",
       );
       expect(await new MigrationRunner(pool).down()).toBe(
@@ -1127,6 +1164,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           "0143_payment_record_link_permission",
           "0144_direct_subscription_payment_isolation",
           "0145_student_contact_email",
+          "0146_lesson_funding_payer",
         ]);
       }
     } finally {

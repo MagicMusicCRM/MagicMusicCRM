@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { minorToRubles } from "./lesson-settlement.calculation";
 import type {
   LessonSettlementTypeConfig,
   TeacherCompensationRuleConfig,
@@ -7,6 +8,7 @@ import type {
 import type {
   ClientChargeFactType,
   LessonSettlementResult,
+  LessonPriceSnapshot,
   TeacherCompensationFactType,
 } from "./lesson-settlement.port";
 
@@ -43,6 +45,7 @@ export interface CalculatedLessonClientFact {
   chargeType: ClientChargeFactType;
   subscriptionId: string | null;
   payerStudentId: string | null;
+  pricingSnapshot?: LessonPriceSnapshot | null;
   settlement: LessonSettlementTypeConfig;
   calculation: { units: string; amountMinor: string };
 }
@@ -69,6 +72,8 @@ interface EffectiveClientFactRow {
   client_amount_minor: string | null;
   units: string | null;
   client_currency_code: string | null;
+  payer_student_id: string | null;
+  pricing_snapshot: LessonPriceSnapshot | null;
   settlement_type_key: string | null;
   settlement_label: string | null;
   settlement_color_token: string | null;
@@ -180,6 +185,8 @@ async function loadEffectiveClientFacts(
         client_fact.charge_type,
         client_fact.snapshot_value as client_snapshot_value,
         client_fact.subscription_id,
+        client_fact.payer_student_id,
+        client_fact.pricing_snapshot,
         client_fact.amount_minor as client_amount_minor,
         client_fact.units,
         client_fact.currency_code as client_currency_code,
@@ -241,6 +248,8 @@ function mapEffectiveClientFact(
     chargeType: row.charge_type!,
     snapshotValue: row.client_snapshot_value!,
     subscriptionId: row.subscription_id,
+    payerStudentId: row.payer_student_id ?? null,
+    pricingSnapshot: row.pricing_snapshot ?? null,
     amountMinor: row.client_amount_minor!,
     units: row.units!,
     currencyCode: row.client_currency_code!,
@@ -497,10 +506,11 @@ export async function insertConfiguredLessonClientFacts(
           subscription_id, amount_minor, units, settlement_type_key,
           settlement_label, settlement_color_token,
           hour_share_basis_points, fixed_penalty_minor,
-          configuration_revision_id, correction_id, supersedes_fact_id
+          configuration_revision_id, correction_id, supersedes_fact_id,
+          payer_student_id, pricing_snapshot
         ) values (
           $1, $2, $3, $4, $5::numeric, $6, $7::bigint, $8::numeric,
-          $9, $10, $11, $12, $13::bigint, $14, $15, $16
+          $9, $10, $11, $12, $13::bigint, $14, $15, $16, $17, $18::jsonb
         )
       `,
       [
@@ -520,6 +530,8 @@ export async function insertConfiguredLessonClientFacts(
         input.configurationRevisionId,
         input.correctionId,
         input.supersededFactIds.get(fact.charge.client_id) ?? null,
+        fact.payerStudentId,
+        fact.pricingSnapshot ? JSON.stringify(fact.pricingSnapshot) : null,
       ],
     );
   }
@@ -527,7 +539,10 @@ export async function insertConfiguredLessonClientFacts(
 
 function snapshotFactValue(fact: CalculatedLessonClientFact): string {
   if (fact.chargeType === "subscription") return fact.calculation.units;
-  if (fact.chargeType === "personal_account") return fact.charge.charge_value;
+  if (fact.chargeType === "personal_account") {
+    if (!fact.pricingSnapshot) return fact.charge.charge_value;
+    return minorToRubles(BigInt(fact.pricingSnapshot.finalPriceMinor));
+  }
   return "0";
 }
 

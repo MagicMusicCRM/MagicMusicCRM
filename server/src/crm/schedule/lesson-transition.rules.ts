@@ -189,6 +189,10 @@ export const normalizedTransitionDecision = (dto: TransitionPreviewDto) => ({
       settlementTypeKey: decision.settlementTypeKey ?? null,
       subscriptionId: decision.subscriptionId ?? null,
       payerStudentId: decision.payerStudentId ?? null,
+      ...(decision.chargeType === undefined ? {} : { chargeType: decision.chargeType }),
+      ...(decision.basePriceMinor === undefined ? {} : { basePriceMinor: decision.basePriceMinor }),
+      ...(decision.discount === undefined ? {} : { discount: decision.discount }),
+      ...(decision.surcharge === undefined ? {} : { surcharge: decision.surcharge }),
     })),
   teacherCompensationRuleKey:
     dto.financialDecision.teacherCompensationRuleKey,

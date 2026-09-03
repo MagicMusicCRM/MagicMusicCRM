@@ -1,6 +1,6 @@
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 import type { CalculatedLessonClientFact } from "./lesson-settlement-facts.persistence";
-import { reserveLessonSettlementSubscriptions } from "./lesson-settlement-subscription-capacity";
+import { assertCorrectionSubscriptionCapacity, reserveLessonSettlementSubscriptions } from "./lesson-settlement-subscription-capacity";
 
 function queryResult<T extends QueryResultRow>(rows: T[]): QueryResult<T> {
   return {
@@ -50,6 +50,12 @@ function errorResponse(error: unknown): unknown {
 }
 
 describe("lesson settlement subscription capacity", () => {
+  it("checks the payer owner even when a correction consumes zero subscription units", async () => {
+    const client = { query: async () => queryResult([{ student_id: "owner" }]) } as unknown as PoolClient;
+    await expect(assertCorrectionSubscriptionCapacity(client, "lesson", [fact("subscription", "recipient", "0.00", "wrong-payer")])).rejects.toMatchObject({ response: { code: "SUBSCRIPTION_CAPACITY" } });
+    await expect(assertCorrectionSubscriptionCapacity(client, "lesson", [fact("subscription", "recipient", "0.00", "owner")])).resolves.toBeUndefined();
+  });
+
   it("rejects duplicate subscription selection before taking a row lock", async () => {
     let queryCount = 0;
     const client = {

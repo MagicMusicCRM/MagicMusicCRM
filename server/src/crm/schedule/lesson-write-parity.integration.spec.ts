@@ -107,6 +107,93 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     await pool.end();
   });
 
+  it("creates and edits personal-account lesson funding through signed previews and rejects an out-of-scope payer", async () => {
+    const fixture = await createFixture(pool);
+    const payer = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const lessonIds: string[] = [];
+    const metadata = () => ({ idempotencyKey: `lesson-funding-${randomUUID()}`, requestId: randomUUID() });
+    const financialDecision = { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard", clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId, chargeType: "personal_account" as const, basePriceMinor: "100000", discount: { type: "fixed" as const, fixedMinor: "10000", reason: "Скидка" } }] };
+    try {
+      const created = await commands.create(actor, {
+        clientRef: { type: "student", id: fixture.studentId }, teacherId: fixture.teacherId, branchId: fixture.branchId,
+        roomId: fixture.roomId, scheduledAt: "2026-07-27T07:00:00.000Z", durationMinutes: 60, isTrial: false,
+        completionType: "standard.success", clientChargeType: "none", clientChargeValue: 0,
+        teacherCompensationType: "none", teacherCompensationValue: 0, financialDecision,
+      }, metadata());
+      lessonIds.push(created.id);
+      const dto = { expectedVersion: created.version, financialDecision: { ...financialDecision, clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId, chargeType: "personal_account" as const, basePriceMinor: "75000" }] }, reasonText: "Изменена стоимость занятия" };
+      await expect(commands.previewSettlementPlan(actor, created.id, { ...dto, financialDecision: { ...dto.financialDecision, clientDecisions: [{ ...dto.financialDecision.clientDecisions[0]!, payerStudentId: payer.studentId }] } })).rejects.toMatchObject({ status: 404 });
+      const preview = await commands.previewSettlementPlan(actor, created.id, dto);
+      expect(preview.financialPreview.clientFacts[0]).toMatchObject({ chargeType: "personal_account", payerStudentId: fixture.studentId, amountMinor: "75000", pricingSnapshot: { basePriceMinor: "75000", finalPriceMinor: "75000" } });
+      const unchanged = await pool.query("select count(*)::int as count from app.lesson_client_charge_facts where lesson_id=$1", [created.id]);
+      expect(unchanged.rows[0].count).toBe(0);
+      const key = metadata();
+      const command = { ...dto, previewToken: preview.previewToken, confirm: true as const };
+      expect(await commands.updateSettlementPlan(actor, created.id, command, key)).toMatchObject({ version: created.version + 1, replayed: false });
+      expect(await commands.updateSettlementPlan(actor, created.id, command, key)).toMatchObject({ version: created.version + 1, replayed: true });
+      const plan = await database.transaction((client) => settlement.loadPlan(client, created.id));
+      expect(plan?.decision.clientDecisions?.[0]).toMatchObject({ chargeType: "personal_account", basePriceMinor: "75000" });
+    } finally {
+      await cleanupFixture(pool, { ...payer, actorKey: `user:${payer.managerId}`, lessonIds: [] });
+      await cleanupFixture(pool, { ...fixture, actorKey: `user:${fixture.managerId}`, lessonIds });
+    }
+  });
+
+  it("creates free Lead lessons and charges only an explicit accessible student payer for a paid Lead", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const lessonIds: string[] = [];
+    const metadata = () => ({ idempotencyKey: `lead-funding-${randomUUID()}`, requestId: randomUUID() });
+    const draft: UpsertLessonDto = {
+      clientRef: { type: "lead", id: fixture.leadId }, teacherId: fixture.teacherId,
+      branchId: fixture.branchId, roomId: fixture.roomId, durationMinutes: 60,
+      scheduledAt: "2026-07-27T07:00:00.000Z", isTrial: true,
+      completionType: "standard.success", clientChargeType: "none", clientChargeValue: 0,
+      teacherCompensationType: "none", teacherCompensationValue: 0,
+    };
+    const choice = { clientId: fixture.leadId, chargeType: "personal_account" as const, basePriceMinor: "15000" };
+    const decision = { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard", clientDecisions: [choice] };
+    try {
+      await expect(commands.create(actor, { ...draft, financialDecision: decision }, metadata()))
+        .rejects.toMatchObject({ response: { code: "PAYER_STUDENT_REQUIRED" } });
+      await expect(commands.create(actor, { ...draft, financialDecision: { ...decision,
+        clientDecisions: [{ ...choice, payerStudentId: fixture.leadId }] } }, metadata()))
+        .rejects.toMatchObject({ status: 404 });
+      const free = await commands.create(actor, { ...draft, financialDecision: {
+        ...decision, settlementTypeKey: "free_lesson",
+        clientDecisions: [{ clientId: fixture.leadId, chargeType: "none" }],
+      } }, metadata());
+      lessonIds.push(free.id);
+      const paidDecision = { ...decision, clientDecisions: [{ ...choice, payerStudentId: fixture.studentId }] };
+      const paid = await commands.create(actor, { ...draft,
+        scheduledAt: "2026-07-27T08:00:00.000Z", financialDecision: paidDecision,
+      }, metadata());
+      lessonIds.push(paid.id);
+      const preview = await commands.previewSettlementPlan(actor, paid.id, {
+        expectedVersion: paid.version, financialDecision: paidDecision, reasonText: "Проверка плательщика",
+      });
+      expect(preview.financialPreview.clientFacts[0])
+        .toMatchObject({ clientId: fixture.leadId, payerStudentId: fixture.studentId, amountMinor: "15000" });
+      await database.transaction(async (client) => {
+        await client.query("update app.lessons set lifecycle_state = 'successfully_completed' where id = $1", [paid.id]);
+        const plan = (await settlement.loadPlan(client, paid.id))!;
+        const settled = await settlement.settle(client, paid.id, {
+          context: "settle", decision: plan.decision, configurationRevisionIds: plan,
+        });
+        expect(settled.clientFact).toMatchObject({ clientType: "lead", clientId: fixture.leadId,
+          payerStudentId: fixture.studentId, amountMinor: "15000" });
+        const balance = await client.query(
+          "select balance_minor::text from app.commerce_student_account_projection where student_id = $1 and currency_code = 'RUB'",
+          [fixture.studentId],
+        );
+        expect(balance.rows[0]).toMatchObject({ balance_minor: "-15000" });
+      });
+    } finally {
+      await cleanupFixture(pool, { ...fixture, actorKey: `user:${fixture.managerId}`, lessonIds });
+    }
+  });
+
   it("keeps create constraint parity and rejects direct edit/drag bypasses", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
@@ -1131,7 +1218,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         clientRef: { type: "student", id: fixture.studentId },
         teacherId: fixture.teacherId, branchId: fixture.branchId, roomId: fixture.roomId,
         scheduledAt: completed ? "2026-08-31T07:00:00Z" : nextMondayAtTenMoscow(),
-        durationMinutes: 60, isTrial: false, completionType: "standard.success",
+        durationMinutes: 45, isTrial: false, completionType: "standard.success",
         clientChargeType: "personal_account", clientChargeValue: 1000,
         teacherCompensationType: "fixed", teacherCompensationValue: 700,
         financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard" },
@@ -1155,7 +1242,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       await pool.query("update app.users set role = 'director' where id = $1", [actor.userId]);
       const preview = completed ? await corrections.preview(actor, created.id, change)
         : await commands.previewSettlementPlan(actor, created.id, change);
-      expect(preview.financialPreview.teacherFact.amountMinor).toBe("120000");
+      expect(preview.financialPreview.teacherFact.amountMinor).toBe("90000");
       expect((await pool.query("select teacher_id from app.lessons where id = $1", [created.id])).rows[0].teacher_id).toBe(fixture.teacherId);
       const command = { ...change, confirm: true as const, previewToken: preview.previewToken };
       const key = metadata();
@@ -1174,16 +1261,16 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         const facts = await pool.query("select teacher_id, amount_minor::text, supersedes_fact_id from app.lesson_teacher_compensation_facts where lesson_id = $1 order by created_at, id", [created.id]);
         expect(facts.rows).toHaveLength(2);
         expect(facts.rows.find((fact) => fact.teacher_id === fixture.teacherId)).toMatchObject({ amount_minor: "70000", supersedes_fact_id: null });
-        expect(facts.rows.find((fact) => fact.teacher_id === replacement.teacherId)).toMatchObject({ amount_minor: "120000", supersedes_fact_id: expect.any(String) });
+        expect(facts.rows.find((fact) => fact.teacher_id === replacement.teacherId)).toMatchObject({ amount_minor: "90000", supersedes_fact_id: expect.any(String) });
         // A later financial correction retains the replacement teacher's frozen rate.
         const again = { ...change, expectedVersion: version + 1, resources: undefined };
-        expect((await corrections.preview(actor, created.id, again)).financialPreview.teacherFact.amountMinor).toBe("120000");
+        expect((await corrections.preview(actor, created.id, again)).financialPreview.teacherFact.amountMinor).toBe("90000");
       } else {
         await database.transaction(async (client) => {
           await client.query("update app.lessons set lifecycle_state = 'successfully_completed' where id = $1", [created.id]);
           const plan = await settlement.loadPlan(client, created.id);
           const result = await settlement.settle(client, created.id, { context: "settle", decision: plan!.decision });
-          expect(result.teacherFact).toMatchObject({ teacherId: replacement.teacherId, amountMinor: "120000" });
+          expect(result.teacherFact).toMatchObject({ teacherId: replacement.teacherId, amountMinor: "90000" });
         });
       }
       const audits = await pool.query("select after_ref from app.audit_events where entity_id = $1 and after_ref -> 'resourceChanges' is not null", [created.id]);

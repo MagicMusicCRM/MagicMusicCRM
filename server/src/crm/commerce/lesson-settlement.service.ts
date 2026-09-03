@@ -45,8 +45,9 @@ export class LessonSettlementService implements LessonSettlementPort {
     client: PoolClient,
     branchId: string,
     decision: LessonFinancialDecision,
+    actorUserId?: string,
   ): Promise<PreparedLessonSettlementPlan> {
-    return prepareLessonSettlementPlan(client, branchId, decision);
+    return prepareLessonSettlementPlan(client, branchId, decision, actorUserId);
   }
 
   assignPlan(

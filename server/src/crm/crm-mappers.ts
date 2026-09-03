@@ -61,6 +61,13 @@ export interface LessonRow {
   snapshot_validation_state?: string | null;
   reservation_state?: string | null;
   settlement_failure_code?: string | null;
+  financial_decision?: Record<string, unknown> | null;
+  client_financial_baseline?: Array<Record<string, unknown>> | null;
+  financial_decision_is_plan?: boolean;
+  group_participants?: Array<{
+    clientId: string;
+    clientName: string | null;
+  }> | null;
 }
 
 export interface TimelineRow {
@@ -92,6 +99,103 @@ export interface PaymentRow {
   created_at: Date | string;
   /** Занятие, за которое пришёл платёж. NULL — платёж не разнесён по занятиям. */
   lesson_id?: string | null;
+}
+
+const lessonDecisionFields = [
+  "settlementTypeKey", "clientDecisions", "teacherCompensationRuleKey",
+  "teacherCompensationValueMinor",
+] as const;
+
+const lessonClientDecisionFields = [
+  "clientId", "settlementTypeKey", "subscriptionId", "payerStudentId",
+  "chargeType", "basePriceMinor", "discount", "surcharge",
+] as const;
+
+function pickLessonDecisionFields(
+  source: Record<string, unknown>,
+  fields: readonly string[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    fields.filter((field) => source[field] !== undefined)
+      .map((field) => [field, source[field]]),
+  );
+}
+
+function lessonDecisionObjects(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> =>
+    item !== null && typeof item === "object" && !Array.isArray(item)) : [];
+}
+
+function lessonDiscountInput(value: unknown): Record<string, unknown> | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const discount = value as Record<string, unknown>;
+  if (discount.type === "percent") {
+    return {
+      type: "percent",
+      percent: discount.percent ?? Number(discount.percentBasisPoints) / 100,
+      reason: discount.reason,
+    };
+  }
+  return discount.type === "fixed"
+    ? pickLessonDecisionFields(discount, ["type", "fixedMinor", "reason"])
+    : undefined;
+}
+
+function lessonSurchargeInput(value: unknown): Record<string, unknown> | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const surcharge = value as Record<string, unknown>;
+  return surcharge.type === "none" || surcharge.amountMinor === undefined
+    ? undefined
+    : pickLessonDecisionFields(surcharge, ["amountMinor", "reason"]);
+}
+
+function lessonClientDecisionInput(source: Record<string, unknown>) {
+  const decision = pickLessonDecisionFields(source, lessonClientDecisionFields);
+  const discount = lessonDiscountInput(decision.discount);
+  const surcharge = lessonSurchargeInput(decision.surcharge);
+  delete decision.discount;
+  delete decision.surcharge;
+  if (discount !== undefined) decision.discount = discount;
+  if (surcharge !== undefined) decision.surcharge = surcharge;
+  if (decision.chargeType === "personal_account" || decision.chargeType === "none") {
+    delete decision.subscriptionId;
+  }
+  if (decision.chargeType === "none") {
+    delete decision.payerStudentId;
+  }
+  if (decision.chargeType === "none" || decision.chargeType === "subscription") {
+    delete decision.basePriceMinor;
+    delete decision.discount;
+    delete decision.surcharge;
+  }
+  return decision;
+}
+
+/** Only editor inputs are public; server-owned rate snapshots stay internal. */
+function toLessonFinancialDecision(
+  source: Record<string, unknown> | null,
+  baseline: Array<Record<string, unknown>> | null | undefined,
+  isOriginalPlan = false,
+  allowedClientIds?: Set<string>,
+) {
+  if (source === null && !baseline?.length) return null;
+  const decision = pickLessonDecisionFields(source ?? {}, lessonDecisionFields);
+  const clients = new Map<string, Record<string, unknown>>();
+  for (const item of baseline ?? []) clients.set(String(item.clientId), item);
+  for (const override of lessonDecisionObjects(source?.clientDecisions)) {
+    const key = String(override.clientId);
+    if (allowedClientIds && !allowedClientIds.has(key)) continue;
+    if (isOriginalPlan && clients.get(key)?._effectiveFact === true) continue;
+    const merged = { ...clients.get(key), ...override };
+    if (override.chargeType === undefined && override.subscriptionId != null) {
+      merged.chargeType = "subscription";
+    }
+    clients.set(key, merged);
+  }
+  if (clients.size || source?.clientDecisions !== undefined) {
+    decision.clientDecisions = [...clients.values()].map(lessonClientDecisionInput);
+  }
+  return decision;
 }
 
 export function toLessonDto(row: LessonRow) {
@@ -162,6 +266,18 @@ export function toLessonDto(row: LessonRow) {
     snapshotValidationState: row.snapshot_validation_state ?? null,
     reservationState: row.reservation_state ?? null,
     settlementFailureCode: row.settlement_failure_code ?? null,
+    ...(row.financial_decision === undefined ? {} : {
+      financialDecision: toLessonFinancialDecision(
+        row.financial_decision, row.client_financial_baseline,
+        row.financial_decision_is_plan,
+        row.group_id && row.group_participants
+          ? new Set(row.group_participants.map((participant) => participant.clientId))
+          : undefined,
+      ),
+    }),
+    ...(row.group_participants === undefined ? {} : {
+      groupParticipants: row.group_participants ?? [],
+    }),
   };
 }
 

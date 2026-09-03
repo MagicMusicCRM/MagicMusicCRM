@@ -87,20 +87,15 @@ export class SchedulePlanQueryService {
       scheduledAt: new Date().toISOString(),
       id: "00000000-0000-0000-0000-000000000000",
     };
-    const previousLimit = Math.floor(limit / 2);
-    const nextLimit = limit - previousLimit;
     const [previousRows, nextRows] = await Promise.all([
-      previousLimit > 0
-        ? this.repository.trayPage(
-            actor,
-            planId,
-            "previous",
-            anchor,
-            previousLimit,
-          )
-        : Promise.resolve([]),
-      this.repository.trayPage(actor, planId, "next", anchor, nextLimit, true),
+      this.repository.trayPage(actor, planId, "previous", anchor, limit),
+      this.repository.trayPage(actor, planId, "next", anchor, limit, true),
     ]);
+    const previousLimit = Math.min(
+      previousRows.length,
+      Math.max(Math.floor(limit / 2), limit - nextRows.length),
+    );
+    const nextLimit = limit - previousLimit;
     const hasPrevious = previousRows.length > previousLimit;
     const hasNext = nextRows.length > nextLimit;
     const page = [

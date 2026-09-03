@@ -1,8 +1,9 @@
+import { loadExcludedLessonParticipantIds } from "./lesson-settlement-facts.persistence";
+import { assertLessonPayers, resolveLessonFunding } from "./lesson-funding";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import {
   calculateClientSettlement,
-  rublesToMinor,
 } from "./lesson-settlement.calculation";
 import {
   assertPlannedLessonSettlementDecision,
@@ -31,7 +32,9 @@ export async function prepareLessonSettlementPlan(
   client: PoolClient,
   branchId: string,
   decision: LessonFinancialDecision,
+  actorUserId?: string,
 ): Promise<PreparedLessonSettlementPlan> {
+  await assertLessonPayers(client, decision, actorUserId);
   const catalog = await loadLessonSettlementCatalog(client, branchId);
   assertPlannedLessonSettlementDecision(catalog, decision);
   return {
@@ -55,6 +58,7 @@ export async function assignLessonSettlementPlan(
     client,
     input.branchId,
     input.decision,
+    input.selectedBy,
   );
   await insertPreparedLessonSettlementPlan(client, {
     lessonId: input.lessonId,
@@ -95,7 +99,9 @@ export async function cloneLessonSettlementPlan(
         client,
         input.fallback!.branchId,
         input.fallback!.decision,
+        input.selectedBy,
       );
+  await assertLessonPayers(client, prepared.decision, input.selectedBy);
   await insertPreparedLessonSettlementPlan(client, {
     lessonId: input.targetLessonId,
     selectedBy: input.selectedBy,
@@ -190,6 +196,12 @@ export async function plannedLessonSubscriptionAllocations(
     client,
     lessonId,
   );
+  await assertLessonPayers(client, plan.decision);
+  const excludedIds = await loadExcludedLessonParticipantIds(client, lessonId);
+  const knownIds = new Set([...charges.map((charge) => charge.client_id), ...excludedIds]);
+  if ((plan.decision.clientDecisions ?? []).some((item) => !knownIds.has(item.clientId))) {
+    invalidLessonSettlementDecision("UNKNOWN_LESSON_CLIENT", "clientDecisions");
+  }
   return calculatePlanAllocations(charges, durationMinutes, plan, catalog);
 }
 
@@ -261,13 +273,8 @@ function calculatePlanAllocation(
     | undefined,
   settlementTypes: Map<string, LessonSettlementCatalog["settlement_types"][number]>,
 ): PlannedSubscriptionAllocation[] {
-  const subscriptionId = selected?.subscriptionId ?? charge.subscription_id;
-  if (selected?.payerStudentId && !selected.subscriptionId) {
-    invalidLessonSettlementDecision(
-      "PAYER_SUBSCRIPTION_REQUIRED",
-      "clientDecisions",
-    );
-  }
+  const funding = resolveLessonFunding(charge, selected);
+  const { chargeType, subscriptionId } = funding;
   const settlement = settlementTypes.get(
     selected?.settlementTypeKey ?? decision.settlementTypeKey,
   );
@@ -277,9 +284,6 @@ function calculatePlanAllocation(
       "settlementTypeKey",
     );
   }
-  const chargeType: ClientChargeFactType = subscriptionId
-    ? "subscription"
-    : charge.charge_type;
   let calculated;
   try {
     calculated = calculateClientSettlement({
@@ -287,10 +291,7 @@ function calculatePlanAllocation(
       hourShareBasisPoints: settlement.hourShareBasisPoints,
       fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
       chargeType,
-      baseChargeMinor:
-        chargeType === "personal_account"
-          ? rublesToMinor(charge.charge_value)
-          : 0n,
+      baseChargeMinor: funding.baseChargeMinor,
     });
   } catch (error) {
     rethrowLessonSettlementCalculation(error);

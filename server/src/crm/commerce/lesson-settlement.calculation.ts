@@ -18,7 +18,7 @@ export function rublesToMinor(value: string): bigint {
   return BigInt(match[1]!) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"));
 }
 
-function minorToRubles(value: bigint): string {
+export function minorToRubles(value: bigint): string {
   return `${value / 100n}.${(value % 100n).toString().padStart(2, "0")}`;
 }
 

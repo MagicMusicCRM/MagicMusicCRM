@@ -133,7 +133,8 @@ const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [
              (select count(*) from target) as target_count,
              (select count(*) from source
                where lifecycle_state not in (
-                 'scheduled','successfully_completed','cancelled','rescheduled'
+                 'scheduled','settlement_pending','successfully_completed',
+                 'cancelled','rescheduled'
                ))
              + ((select count(*) from source) - (select count(*) from target))
                as violations`,

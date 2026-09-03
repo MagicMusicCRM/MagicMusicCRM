@@ -11,7 +11,7 @@ describe("SubscriptionReservationService post-commit invalidation", () => {
     subscription_id: string | null;
   }>) {
     const query = jest.fn(async (sql: string, params?: unknown[]) => {
-      if (String(sql).includes("lesson_client_charge_facts_effective")) {
+      if (String(sql).includes("from app.lesson_client_charge_facts")) {
         return { rows };
       }
       const studentId = String(params?.[0]);
@@ -70,5 +70,21 @@ describe("SubscriptionReservationService post-commit invalidation", () => {
       affectedUserIds: ["user-same"],
     });
     expect(realtime.emitFinanceChanged).toHaveBeenCalledWith(["user-same"]);
+  });
+
+  it("refreshes both old and new personal-account payers after an append-only correction", async () => {
+    const { service, query, realtime } = createService([
+      { student_id: "recipient", subscription_id: null },
+      { student_id: "old-payer", subscription_id: null },
+      { student_id: "new-payer", subscription_id: null },
+    ]);
+    await service.publishLessonSettlementPostCommit(lessonId);
+    const projectionSql = String(query.mock.calls[0]?.[0]);
+    expect(projectionSql).toContain("fact.payer_student_id");
+    expect(projectionSql).not.toContain("lesson_client_charge_facts_effective");
+    expect(realtime.emitFinanceChanged).toHaveBeenCalledWith([
+      "user-recipient", "user-old-payer", "user-new-payer",
+    ]);
+    expect(realtime.emitCrmChanged).toHaveBeenCalledTimes(1);
   });
 });

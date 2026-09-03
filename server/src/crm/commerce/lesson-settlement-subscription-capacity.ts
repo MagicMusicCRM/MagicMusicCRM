@@ -171,6 +171,24 @@ export async function assertCorrectionSubscriptionCapacity(
   lessonId: string,
   facts: CalculatedLessonClientFact[],
 ): Promise<void> {
+  // Zero-unit corrections still retain a funding source and must bind its owner.
+  for (const fact of facts.filter((item) => item.subscriptionId && Number(item.calculation.units) === 0)) {
+    const owner = await client.query<{ student_id: string }>(
+      "select student_id from app.subscriptions where id = $1 for key share",
+      [fact.subscriptionId],
+    );
+    if (fact.charge.client_type !== "student" ||
+        owner.rows[0]?.student_id !== (fact.payerStudentId ?? fact.charge.client_id)) {
+      throw new UnprocessableEntityException({
+        code: "SUBSCRIPTION_CAPACITY",
+        subscriptionId: fact.subscriptionId,
+        clientId: fact.charge.client_id,
+        payerStudentId: fact.payerStudentId,
+        requestedUnits: fact.calculation.units,
+        availableUnits: "0",
+      });
+    }
+  }
   const selected = facts.filter(
     (fact) => fact.subscriptionId && Number(fact.calculation.units) > 0,
   );

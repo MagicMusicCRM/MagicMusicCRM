@@ -123,16 +123,16 @@ describe("schedule read branch scope (PostgreSQL)", () => {
   ])("preserves school-wide reads for %s", async (_, actor) => {
     const current = actor();
     await expect(matrix(current)).resolves.toMatchObject({
-      items: [
+      items: expect.arrayContaining([
         expect.objectContaining({ branchId: assignedBranchId }),
         expect.objectContaining({ branchId: outsideBranchId }),
-      ],
+      ]),
     });
     await expect(availability(current)).resolves.toMatchObject({
-      items: [
+      items: expect.arrayContaining([
         expect.objectContaining({ roomId: assignedRoomId }),
         expect.objectContaining({ roomId: outsideRoomId }),
-      ],
+      ]),
     });
   });
 
@@ -184,6 +184,7 @@ describe("schedule read branch scope (PostgreSQL)", () => {
           teacherCompensationType: null,
           teacherCompensationValue: null,
           settlementFailureCode: null,
+          financialDecision: null,
         }),
       ],
     });
@@ -200,6 +201,8 @@ describe("schedule read branch scope (PostgreSQL)", () => {
           teacherCompensationType: null,
           teacherCompensationValue: null,
           settlementFailureCode: null,
+          financialDecision: null,
+          groupParticipants: [],
         }),
       ],
     });
@@ -213,9 +216,147 @@ describe("schedule read branch scope (PostgreSQL)", () => {
           appliedTeacherRate: 777,
           clientChargeValue: 700,
           teacherCompensationValue: 500,
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "fixed",
+            teacherCompensationValueMinor: "50000",
+            clientDecisions: [{
+              clientId: assignedStudentId, payerStudentId: assignedStudentId,
+              chargeType: "personal_account", basePriceMinor: "70000",
+            }],
+          },
         }),
       ],
     });
+  });
+
+  it("projects actual reservation state in the matrix without widening role or branch scope", async () => {
+    await client.query("savepoint reservation_read");
+    try {
+      const subscription = await client.query<{ id: string }>(
+        `insert into app.subscriptions (student_id, lessons_total, lessons_used, status)
+         values ($1, 4, 0, 'active') returning id`,
+        [assignedStudentId],
+      );
+      const subscriptionId = subscription.rows[0]!.id;
+      // An active subscription alone must not claim actual coverage.
+      expect((await matrix(manager)).items[0].reservationState).toBeNull();
+
+      await client.query(
+        `insert into app.lesson_reservations (lesson_id, subscription_id, units)
+         values ($1, $2, 1)`,
+        [assignedLessonId, subscriptionId],
+      );
+      for (const actor of [manager, teacher, { ...teacher, role: "manager" as const }]) {
+        const calendar = await matrix(actor);
+        const lesson = calendar.items.find((item) => item.id === assignedLessonId)!;
+        expect(lesson).toMatchObject({
+          reservationState: "reserved", lifecycleState: "scheduled",
+        });
+        const groupLesson = calendar.groups.flatMap((group) => group.items)
+          .find((item) => item.id === assignedLessonId)!;
+        expect(groupLesson.reservationState).toBe("reserved");
+        const exact = await schedule.listLessons(actor, { lessonId: assignedLessonId });
+        expect(exact.items[0].reservationState).toBe(lesson.reservationState);
+        if (actor.userId === teacher.userId) {
+          expect(lesson.financialDecision).toBeNull();
+          expect(lesson.subscriptionId).toBeNull();
+        }
+      }
+      await expect(matrix(manager, outsideBranchId)).resolves.toMatchObject({ items: [] });
+      await expect(matrix(unassignedAdmin)).resolves.toMatchObject({ items: [] });
+      const staleDirectorClient = { userId: assignedStudentUserId, role: "director" as const };
+      await expect(matrix(staleDirectorClient)).resolves.toMatchObject({ items: [] });
+
+      await client.query(
+        `update app.lesson_reservations set state = 'released', terminal_at = now(),
+           version = version + 1 where lesson_id = $1`,
+        [assignedLessonId],
+      );
+      expect((await matrix(manager)).items[0].reservationState).toBe("released");
+    } finally {
+      await client.query("rollback to savepoint reservation_read");
+    }
+  });
+
+  it("returns frozen participants and the latest public decision in both views", async () => {
+    const read = async () => {
+      const exact = await schedule.listLessons(manager, { lessonId: assignedLessonId });
+      const calendar = await matrix(manager);
+      return [exact.items[0], calendar.items.find((item) => item.id === assignedLessonId)!];
+    };
+    for (const item of await read()) {
+      expect(item.groupParticipants).toEqual([
+        expect.objectContaining({ clientId: assignedStudentId }),
+      ]);
+      expect(item.financialDecision?.teacherCompensationRuleKey).toBe("fixed");
+      expect(JSON.stringify(item.financialDecision)).not.toContain("teacherRateSnapshot");
+    }
+    const staleManagerTeacher = { userId: teacher.userId, role: "manager" as const };
+    expect((await matrix(staleManagerTeacher)).items.every((item) =>
+      item.financialDecision === null)).toBe(true);
+
+    await client.query("savepoint financial_read_correction");
+    try {
+      const payer = await client.query<{ student_id: string }>(
+        "select student_id from app.lesson_participant_exclusions where lesson_id = $1",
+        [assignedLessonId],
+      );
+      const actualPayerId = payer.rows[0]!.student_id;
+      await client.query(
+        `insert into app.lesson_client_charge_facts (
+           lesson_id, client_type, client_id, charge_type, snapshot_value,
+           amount_minor, units, payer_student_id, pricing_snapshot
+         ) values ($1, 'student', $2, 'personal_account', 1800, 180000, 0, $3, $4::jsonb)`,
+        [assignedLessonId, assignedStudentId, actualPayerId, JSON.stringify({
+          basePriceMinor: "200000", finalPriceMinor: "180000",
+          discount: { type: "percent", percentBasisPoints: 1250, reason: "Льгота" },
+          surcharge: { type: "fixed", amountMinor: "5000", reason: "Доплата" },
+        })],
+      );
+      await client.query(
+        `insert into app.lesson_transitions (
+           lesson_id, from_state, to_state, reason_code, actor_user_id, financial_decision
+         ) values ($1, 'scheduled', 'successfully_completed', 'test.settle', $2, $3::jsonb)`,
+        [assignedLessonId, director.userId, JSON.stringify({
+          settlementTypeKey: "lesson", teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "120000",
+          clientDecisions: [{ clientId: assignedStudentId, settlementTypeKey: "lesson" }],
+        })],
+      );
+      for (const item of await read()) {
+        expect(item.teacherCompensationValueMinor).toBe("120000");
+        expect(item.financialDecision?.clientDecisions).toEqual([{
+          clientId: assignedStudentId, payerStudentId: actualPayerId,
+          settlementTypeKey: "lesson", chargeType: "personal_account", basePriceMinor: "200000",
+          discount: { type: "percent", percent: 12.5, reason: "Льгота" },
+          surcharge: { amountMinor: "5000", reason: "Доплата" },
+        }]);
+      }
+      await client.query(
+        `insert into app.lesson_settlement_corrections (
+           lesson_id, version, decision, settlement_revision_id,
+           compensation_revision_id, reason_text, actor_user_id
+         ) select lesson_id, 1, $2::jsonb, settlement_revision_id,
+           compensation_revision_id, 'Read projection fixture', $3
+         from app.lesson_settlement_plans where lesson_id = $1`,
+        [assignedLessonId, JSON.stringify({
+          settlementTypeKey: "free_lesson", teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: assignedStudentId, chargeType: "none", settlementTypeKey: "free_lesson" }],
+          teacherRateSnapshot: { type: "hourly", value: "9999" },
+        }), director.userId],
+      );
+      for (const item of await read()) {
+        expect(item.financialDecision).toEqual({
+          settlementTypeKey: "free_lesson", teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: assignedStudentId, chargeType: "none", settlementTypeKey: "free_lesson" }],
+        });
+        expect(item.settlementTypeKey).toBe("free_lesson");
+        expect(item.teacherCompensationRuleKey).toBe("none");
+      }
+    } finally {
+      await client.query("rollback to savepoint financial_read_correction");
+    }
   });
 
   it("uses IANA timezone days for DST and legacy room-scoped lessons", async () => {
@@ -460,6 +601,40 @@ async function createFixture(client: PoolClient) {
        'personal_account', 700, 'fixed', 500, false, 60
      )`,
     [assignedLessonId, assignedStudentId],
+  );
+
+  const revision = await client.query<{ id: string }>(
+    `insert into app.crm_configuration_revisions (
+       branch_id, version, patch, effective_snapshot, reason, created_by
+     ) values ($1, 1, '{}'::jsonb, '{}'::jsonb, 'Read projection fixture', $2)
+     returning id`,
+    [assignedBranchId, actors.director.userId],
+  );
+  await client.query(
+    `insert into app.lesson_settlement_plans (
+       lesson_id, decision, settlement_revision_id, compensation_revision_id, selected_by
+     ) values ($1, $2::jsonb, $3, $3, $4)`,
+    [assignedLessonId, JSON.stringify({
+      settlementTypeKey: "lesson", teacherCompensationRuleKey: "fixed",
+      teacherCompensationValueMinor: "50000",
+      teacherRateSnapshot: { type: "hourly", value: "9999" },
+      clientDecisions: [{
+        clientId: assignedStudentId, payerStudentId: assignedStudentId,
+        chargeType: "personal_account", basePriceMinor: "70000",
+      }],
+    }), revision.rows[0]!.id, actors.director.userId],
+  );
+  await client.query(
+    `insert into app.lesson_snapshot_participants (
+       lesson_id, student_id, charge_type, charge_value
+     ) values ($1, $2, 'personal_account', 700), ($1, $3, 'none', 0)`,
+    [assignedLessonId, assignedStudentId, outsideStudentId],
+  );
+  await client.query(
+    `insert into app.lesson_participant_exclusions (
+       lesson_id, student_id, reason_code, actor_user_id
+     ) values ($1, $2, 'test.excluded', $3)`,
+    [assignedLessonId, outsideStudentId, actors.director.userId],
   );
 
   return {

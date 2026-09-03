@@ -1,4 +1,119 @@
-import { diffEntityFields, toTimelineDto } from "./crm-mappers";
+import { diffEntityFields, LessonRow, toLessonDto, toTimelineDto } from "./crm-mappers";
+
+describe("lesson editor projection", () => {
+  it("keeps funding inputs and removes internal decision fields", () => {
+    const dto = toLessonDto({
+      id: "lesson-1",
+      financial_decision: {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "150000",
+        teacherRateSnapshot: { type: "hourly", value: "9000" },
+        privateMetadata: "internal",
+        clientDecisions: [{
+          clientId: "recipient-1", payerStudentId: "payer-1",
+          chargeType: "personal_account",
+          settlementTypeKey: "lesson", basePriceMinor: "220000",
+          discount: { type: "percent", percent: 10, reason: "Скидка" },
+          surcharge: { amountMinor: "5000", reason: "Доплата" },
+          teacherRateSnapshot: { type: "hourly", value: "9000" },
+        }],
+      },
+    } as unknown as LessonRow);
+
+    expect(dto.financialDecision).toEqual({
+      settlementTypeKey: "lesson",
+      teacherCompensationRuleKey: "fixed",
+      teacherCompensationValueMinor: "150000",
+      clientDecisions: [{
+        clientId: "recipient-1", payerStudentId: "payer-1",
+        chargeType: "personal_account",
+        settlementTypeKey: "lesson", basePriceMinor: "220000",
+        discount: { type: "percent", percent: 10, reason: "Скидка" },
+        surcharge: { amountMinor: "5000", reason: "Доплата" },
+      }],
+    });
+    expect(JSON.stringify(dto)).not.toContain("teacherRateSnapshot");
+    expect(JSON.stringify(dto)).not.toContain("privateMetadata");
+  });
+
+  it("keeps withheld finance and authoritative empty membership distinct", () => {
+    const dto = toLessonDto({
+      id: "lesson-1", financial_decision: null, group_participants: [],
+    } as unknown as LessonRow);
+    expect(dto.financialDecision).toBeNull();
+    expect(dto.groupParticipants).toEqual([]);
+    expect(toLessonDto({ id: "lesson-1" } as LessonRow))
+      .not.toHaveProperty("groupParticipants");
+  });
+
+  it("merges sparse group decisions without converting personal funding to a subscription", () => {
+    const dto = toLessonDto({
+      id: "lesson-1", group_id: "group-1",
+      group_participants: [{ clientId: "student-a" }, { clientId: "student-b" }],
+      client_financial_baseline: [
+        { clientId: "student-a", chargeType: "subscription", subscriptionId: "old-sub" },
+        { clientId: "student-b", chargeType: "personal_account", basePriceMinor: "70000" },
+      ],
+      financial_decision: {
+        settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+        clientDecisions: [
+          { clientId: "student-a", chargeType: "personal_account", basePriceMinor: "30000" },
+          { clientId: "excluded-student", chargeType: "subscription", subscriptionId: "excluded-sub" },
+        ],
+      },
+    } as unknown as LessonRow);
+    expect(dto.financialDecision?.clientDecisions).toEqual([
+      { clientId: "student-a", chargeType: "personal_account", basePriceMinor: "30000" },
+      { clientId: "student-b", chargeType: "personal_account", basePriceMinor: "70000" },
+    ]);
+  });
+
+  it("reopens actual payer and normalized pricing instead of an older original plan", () => {
+    const dto = toLessonDto({
+      id: "lesson-1", financial_decision_is_plan: true,
+      client_financial_baseline: [{
+        clientId: "recipient", payerStudentId: "actual-payer", _effectiveFact: true,
+        chargeType: "personal_account", basePriceMinor: "200000",
+        discount: { type: "percent", percentBasisPoints: 1250, reason: "Льгота" },
+        surcharge: { type: "fixed", amountMinor: "5000", reason: "Доплата" },
+      }],
+      financial_decision: {
+        settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+        clientDecisions: [{ clientId: "recipient", payerStudentId: "old-payer", subscriptionId: "old-sub" }],
+      },
+    } as unknown as LessonRow);
+    expect(dto.financialDecision?.clientDecisions).toEqual([{
+      clientId: "recipient", payerStudentId: "actual-payer",
+      chargeType: "personal_account", basePriceMinor: "200000",
+      discount: { type: "percent", percent: 12.5, reason: "Льгота" },
+      surcharge: { amountMinor: "5000", reason: "Доплата" },
+    }]);
+  });
+
+  it.each([
+    { chargeType: "subscription", subscriptionId: "new-sub" },
+    { subscriptionId: "new-sub" },
+  ])("clears inherited personal pricing when a plan switches to subscription: %j", (override) => {
+    const dto = toLessonDto({
+      id: "lesson-1",
+      client_financial_baseline: [{
+        clientId: "recipient", payerStudentId: "payer",
+        chargeType: "personal_account", basePriceMinor: "200000",
+        discount: { type: "percent", percentBasisPoints: 1250, reason: "Льгота" },
+        surcharge: { type: "fixed", amountMinor: "5000", reason: "Доплата" },
+      }],
+      financial_decision: {
+        clientDecisions: [{ clientId: "recipient", ...override }],
+      },
+    } as unknown as LessonRow);
+
+    expect(dto.financialDecision?.clientDecisions).toEqual([{
+      clientId: "recipient", payerStudentId: "payer",
+      chargeType: "subscription", subscriptionId: "new-sub",
+    }]);
+  });
+});
 
 describe("diffEntityFields", () => {
   const FIELDS = ["first_name", "phone", "email", "status"];

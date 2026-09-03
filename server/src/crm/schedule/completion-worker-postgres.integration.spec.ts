@@ -93,6 +93,28 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
     if (pool) await pool.end();
   });
 
+  it("worker settles stored explicit personal-account price and signed correction preserves old facts", async () => {
+    const fixture = await createFixture(pool, database, settlement, "valid", { explicitPrice: true });
+    try {
+      const worker = new LessonCompletionWorker(repository, completion);
+      expect(await worker.runOnce({ workerId: "priced-completion" })).toMatchObject({ completed: 1 });
+      const original = await pool.query("select amount_minor::text, payer_student_id, pricing_snapshot from app.lesson_client_charge_facts_effective where lesson_id=$1", [fixture.lessonId]);
+      expect(original.rows[0]).toMatchObject({ amount_minor: "92000", payer_student_id: fixture.studentId, pricing_snapshot: { finalPriceMinor: "92000" } });
+      const dto = { expectedVersion: 2, financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard", clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId, chargeType: "personal_account" as const, basePriceMinor: "50000" }] }, reasonText: "Уточнена стоимость занятия" };
+      const actor = { userId: fixture.managerId, role: "manager" as const };
+      const preview = await correction.preview(actor, fixture.lessonId, dto);
+      expect(preview.financialPreview.clientFacts[0]).toMatchObject({ payerStudentId: fixture.studentId, amountMinor: "50000" });
+      const untouched = await pool.query("select count(*)::int as count from app.lesson_client_charge_facts where lesson_id=$1", [fixture.lessonId]);
+      expect(untouched.rows[0].count).toBe(1);
+      const command = { ...dto, previewToken: preview.previewToken, confirm: true as const };
+      const metadata = { idempotencyKey: `priced-correction-${randomUUID()}`, requestId: randomUUID() };
+      expect(await correction.commit(actor, fixture.lessonId, command, metadata)).toMatchObject({ version: 3, replayed: false });
+      expect(await correction.commit(actor, fixture.lessonId, command, metadata)).toMatchObject({ version: 3, replayed: true });
+      const facts = await pool.query("select amount_minor::text from app.lesson_client_charge_facts where lesson_id=$1 order by created_at, id", [fixture.lessonId]);
+      expect(facts.rows.map((row) => row.amount_minor).sort()).toEqual(["50000", "92000"]);
+    } finally { await cleanupFixture(pool, fixture); }
+  });
+
   it("does not claim legacy lessons without an explicit settlement plan", async () => {
     const fixture = await createFixture(pool, database, settlement, "valid");
     try {
@@ -790,6 +812,11 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
             }),
             effective: true,
           }),
+          expect.objectContaining({ kind: "transition", effective: false,
+            actorName: "Автоматический расчёт",
+            settlementTypeLabel: expect.stringMatching(/[А-Яа-я]/),
+            teacherCompensationRuleLabel: expect.stringMatching(/[А-Яа-я]/),
+          }),
           expect.objectContaining({ kind: "planned", effective: false }),
         ]),
       );
@@ -799,6 +826,8 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
           fixture.lessonId,
         ),
       ).rejects.toMatchObject({ status: 403 });
+      await pool.query("update app.staff_branch_assignments set deleted_at = now() where branch_id = $1", [fixture.branchId]);
+      await expect(correction.history(actor, fixture.lessonId)).rejects.toMatchObject({ status: 404 });
     } finally {
       await cleanupFixture(pool, fixture);
     }
@@ -812,6 +841,7 @@ async function createFixture(
   snapshotState: "valid" | "legacy-incomplete",
   options: {
     trial?: boolean;
+    explicitPrice?: boolean;
     chargeType?: "subscription" | "personal_account" | "none";
     settlementTypeKey?: "lesson" | "free_lesson";
     scheduledEndOffsetSeconds?: number;
@@ -969,6 +999,7 @@ async function createFixture(
         decision: {
           settlementTypeKey,
           teacherCompensationRuleKey: "standard",
+          ...(options.explicitPrice ? { clientDecisions: [{ clientId: studentId, payerStudentId: studentId, chargeType: "personal_account" as const, basePriceMinor: "100001", discount: { type: "percent" as const, percent: 10, reason: "Скидка" }, surcharge: { amountMinor: "1999", reason: "Доплата" } }] } : {}),
         },
         selectedBy: managerId,
       }),

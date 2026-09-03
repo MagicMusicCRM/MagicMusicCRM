@@ -1,3 +1,4 @@
+import { assertLessonPayers } from "../commerce/lesson-funding";
 import {
   ConflictException,
   Inject,
@@ -264,6 +265,7 @@ export class LessonTransitionPreparationService {
     source: TransitionSource,
     dto: TransitionPreviewDto,
   ): Promise<TransitionPreviewDto> {
+    await assertLessonPayers(client, dto.financialDecision, actor.userId);
     if (this.policy.canManageTeacherCompensation(actor)) return dto;
     const current = await this.settlement.loadPlan(client, source.id, true);
     const snapshot = source.groupId ? source.groupSnapshot : source.snapshot;

@@ -11,10 +11,6 @@ import { currentActorRoleSql, managerBranchScopeSql } from "../branch-scope";
 interface ScheduleLessonRow extends LessonRow {
   scheduled_utc_offset_minutes?: number | string | null;
   conflict_types: string[] | null;
-  group_participants?: Array<{
-    clientId: string;
-    clientName: string | null;
-  }> | null;
   // Partner lesson ids this lesson overlaps with, per conflict type. Used to
   // deduplicate the aggregated conflicts list to one entry per pair (KVA-166).
   room_overlap_ids?: string[] | null;
@@ -39,16 +35,25 @@ export class ScheduleReadService {
           select l.id, l.version, l.lifecycle_state, l.student_id, l.group_id, l.lead_id, l.teacher_id,
             l.branch_id, l.room_id, l.scheduled_at, l.duration_minutes,
             l.status, l.is_trial, l.notes,
+            reservation.state as reservation_state,
+            (correction.decision is null and transition.financial_decision is null)
+              as financial_decision_is_plan,
+            case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
+              then coalesce(correction.decision, transition.financial_decision, plan.decision)
+              else null::jsonb end as financial_decision,
+            case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
+              then ${this.lessonClientFinancialBaselineSql("l.id")}
+              else null::jsonb end as client_financial_baseline,
             case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
               then plan.failure_code else null end as settlement_failure_code,
             case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
-              then coalesce(correction.decision, plan.decision) ->> 'settlementTypeKey' else null end
+              then coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'settlementTypeKey' else null end
               as settlement_type_key,
             case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
-              then coalesce(correction.decision, plan.decision) ->> 'teacherCompensationRuleKey' else null end
+              then coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'teacherCompensationRuleKey' else null end
               as teacher_compensation_rule_key,
             case when ${managerAdminRolesSql(currentActorRoleSql("$11"))}
-              then coalesce(correction.decision, plan.decision) ->> 'teacherCompensationValueMinor' else null end
+              then coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'teacherCompensationValueMinor' else null end
               as teacher_compensation_value_minor,
             extract(epoch from (
               timezone(coalesce(b.timezone_name, 'Europe/Moscow'), l.scheduled_at)
@@ -80,6 +85,18 @@ export class ScheduleReadService {
             select decision from app.lesson_settlement_corrections
             where lesson_id = l.id order by version desc limit 1
           ) correction on true
+          left join lateral (
+            select financial_decision from app.lesson_transitions
+            where lesson_id = l.id and financial_decision <> '{}'::jsonb
+            order by created_at desc, id desc limit 1
+          ) transition on true
+          left join lateral (
+            select lesson_reservation.state
+            from app.lesson_reservations lesson_reservation
+            where lesson_reservation.lesson_id = l.id
+            order by lesson_reservation.updated_at desc, lesson_reservation.id desc
+            limit 1
+          ) reservation on true
           where l.deleted_at is null
             and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
             and l.scheduled_at >= $1::timestamptz
@@ -119,31 +136,10 @@ export class ScheduleReadService {
           scoped.group_price_per_lesson,
           scoped.settlement_type_key, scoped.teacher_compensation_rule_key,
           scoped.teacher_compensation_value_minor,
-          coalesce((
-            select jsonb_agg(
-              jsonb_build_object(
-                'clientId', participant.student_id,
-                'clientName', nullif(trim(
-                  coalesce(participant_profile.first_name, '') || ' ' ||
-                  coalesce(participant_profile.last_name, '')
-                ), '')
-              )
-              order by participant_profile.last_name,
-                participant_profile.first_name, participant.student_id
-            )
-            from app.lesson_snapshot_participants participant
-            join app.students participant_student
-              on participant_student.id = participant.student_id
-            left join app.profiles participant_profile
-              on participant_profile.id = participant_student.profile_id
-            where participant.lesson_id = scoped.id
-              and not exists (
-                select 1
-                from app.lesson_participant_exclusions exclusion
-                where exclusion.lesson_id = participant.lesson_id
-                  and exclusion.student_id = participant.student_id
-              )
-          ), '[]'::jsonb) as group_participants,
+          scoped.reservation_state, scoped.financial_decision,
+          scoped.client_financial_baseline,
+          scoped.financial_decision_is_plan,
+          ${this.lessonParticipantsSql("scoped.id")} as group_participants,
           array_remove(array[
             case when scoped.teacher_id is null then 'missing_teacher' end,
             case when scoped.room_id is not null and scoped.branch_id is not null
@@ -448,11 +444,11 @@ export class ScheduleReadService {
     const settlementFailureSql = `case when ${canSeeRatesSql}
       then plan.failure_code else null::text end`;
     const settlementTypeKeySql = `case when ${canSeePaymentsSql}
-      then coalesce(correction.decision, plan.decision) ->> 'settlementTypeKey' else null::text end`;
+      then coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'settlementTypeKey' else null::text end`;
     const compensationRuleKeySql = `case when ${canSeeRatesSql}
-      then coalesce(correction.decision, plan.decision) ->> 'teacherCompensationRuleKey' else null::text end`;
+      then coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'teacherCompensationRuleKey' else null::text end`;
     const compensationValueMinorSql = `case when ${canSeeRatesSql}
-      then coalesce(correction.decision, plan.decision) ->> 'teacherCompensationValueMinor' else null::text end`;
+      then coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'teacherCompensationValueMinor' else null::text end`;
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.version, l.lifecycle_state,
@@ -469,6 +465,17 @@ export class ScheduleReadService {
           ${settlementTypeKeySql} as settlement_type_key,
           ${compensationRuleKeySql} as teacher_compensation_rule_key,
           ${compensationValueMinorSql} as teacher_compensation_value_minor,
+          (correction.decision is null and transition.financial_decision is null)
+            as financial_decision_is_plan,
+          case when ${canSeeRatesSql}
+            then coalesce(correction.decision, transition.financial_decision, plan.decision)
+            else null::jsonb end as financial_decision,
+          case when ${canSeeRatesSql}
+            then ${this.lessonClientFinancialBaselineSql("l.id")}
+            else null::jsonb end as client_financial_baseline,
+          case when ${canSeeRatesSql} or ${currentRoleExpression} = 'teacher'
+            then ${this.lessonParticipantsSql("l.id")}
+            else '[]'::jsonb end as group_participants,
           snapshot.trial as snapshot_trial,
           snapshot.validation_state as snapshot_validation_state,
           reservation.state as reservation_state,
@@ -498,6 +505,11 @@ export class ScheduleReadService {
           select decision from app.lesson_settlement_corrections
           where lesson_id = l.id order by version desc limit 1
         ) correction on true
+        left join lateral (
+          select financial_decision from app.lesson_transitions
+          where lesson_id = l.id and financial_decision <> '{}'::jsonb
+          order by created_at desc, id desc limit 1
+        ) transition on true
         left join lateral (
           select lesson_reservation.state
           from app.lesson_reservations lesson_reservation
@@ -597,6 +609,84 @@ export class ScheduleReadService {
       [studentIds],
     );
     return (result?.rows ?? []).map((row) => toLessonDto(row));
+  }
+
+  private lessonClientFinancialBaselineSql(lessonIdExpression: string): string {
+    return `(
+      select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+        'clientId', selected.client_id, 'chargeType', selected.charge_type,
+        'subscriptionId', selected.subscription_id,
+        'payerStudentId', selected.payer_student_id,
+        'basePriceMinor', selected.base_price_minor,
+        'discount', selected.pricing_snapshot->'discount',
+        'surcharge', selected.pricing_snapshot->'surcharge',
+        'settlementTypeKey', selected.settlement_type_key,
+        '_effectiveFact', selected.priority = 0
+      )) order by selected.client_id), '[]'::jsonb)
+      from (
+        select distinct on (source.client_id) source.* from (
+          select fact.client_id, fact.charge_type, fact.subscription_id,
+            coalesce(fact.payer_student_id,
+              case when fact.client_type = 'student' then fact.client_id end) as payer_student_id,
+            coalesce(fact.pricing_snapshot->>'basePriceMinor',
+              case when fact.charge_type = 'personal_account'
+                then round(fact.snapshot_value * 100)::bigint::text end) as base_price_minor,
+            fact.pricing_snapshot, fact.settlement_type_key, 0 as priority
+          from app.lesson_client_charge_facts_effective fact
+          where fact.lesson_id = ${lessonIdExpression}
+          union all
+          select participant.student_id, participant.charge_type, participant.subscription_id,
+            participant.student_id,
+            case when participant.charge_type = 'personal_account'
+              then round(participant.charge_value * 100)::bigint::text end,
+            null::jsonb, null::text, 1
+          from app.lesson_snapshot_participants participant
+          where participant.lesson_id = ${lessonIdExpression}
+          union all
+          select snapshot.client_id, snapshot.client_charge_type, snapshot.subscription_id,
+            case when snapshot.client_type = 'student' then snapshot.client_id end,
+            case when snapshot.client_charge_type = 'personal_account'
+              then round(snapshot.client_charge_value * 100)::bigint::text end,
+            null::jsonb, null::text, 2
+          from app.lesson_snapshots snapshot
+          where snapshot.lesson_id = ${lessonIdExpression}
+            and snapshot.client_type in ('student', 'lead')
+        ) source
+        where not exists (
+          select 1 from app.lesson_participant_exclusions exclusion
+          where exclusion.lesson_id = ${lessonIdExpression}
+            and exclusion.student_id = source.client_id
+        )
+        order by source.client_id, source.priority
+      ) selected
+    )`;
+  }
+
+  private lessonParticipantsSql(lessonIdExpression: string): string {
+    return `coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'clientId', participant.student_id,
+          'clientName', nullif(trim(
+            coalesce(participant_profile.first_name, '') || ' ' ||
+            coalesce(participant_profile.last_name, '')
+          ), '')
+        )
+        order by participant_profile.last_name,
+          participant_profile.first_name, participant.student_id
+      )
+      from app.lesson_snapshot_participants participant
+      join app.students participant_student
+        on participant_student.id = participant.student_id
+      left join app.profiles participant_profile
+        on participant_profile.id = participant_student.profile_id
+      where participant.lesson_id = ${lessonIdExpression}
+        and not exists (
+          select 1 from app.lesson_participant_exclusions exclusion
+          where exclusion.lesson_id = participant.lesson_id
+            and exclusion.student_id = participant.student_id
+        )
+    ), '[]'::jsonb)`;
   }
 
   private clientLessonAccessSql(userIdExpression: string): string {

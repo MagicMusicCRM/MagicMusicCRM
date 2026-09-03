@@ -1,4 +1,13 @@
 import { PoolClient } from "pg";
+import type { IssueSubscriptionDiscountDto, IssueSubscriptionSurchargeDto } from "../dto/issue-subscription.dto";
+import type { NormalizedDiscount, NormalizedSurcharge } from "./subscription-issue.contracts";
+
+export interface LessonPriceSnapshot {
+  basePriceMinor: string;
+  discount: NormalizedDiscount["snapshot"];
+  surcharge: NormalizedSurcharge["snapshot"];
+  finalPriceMinor: string;
+}
 
 export type ClientChargeFactType =
   | "subscription"
@@ -23,6 +32,10 @@ export interface LessonFinancialDecision {
     settlementTypeKey?: string;
     subscriptionId?: string;
     payerStudentId?: string;
+    chargeType?: ClientChargeFactType;
+    basePriceMinor?: string;
+    discount?: IssueSubscriptionDiscountDto;
+    surcharge?: IssueSubscriptionSurchargeDto;
   }>;
   teacherCompensationRuleKey: string;
   teacherCompensationValueMinor?: string;
@@ -72,6 +85,8 @@ export interface LessonSettlementResult {
     chargeType: ClientChargeFactType;
     snapshotValue: string;
     subscriptionId: string | null;
+    payerStudentId?: string | null;
+    pricingSnapshot?: LessonPriceSnapshot | null;
     amountMinor: string;
     units: string;
     currencyCode: string;
@@ -113,6 +128,7 @@ export interface LessonSettlementPort {
     client: PoolClient,
     branchId: string,
     decision: LessonFinancialDecision,
+    actorUserId?: string,
   ): Promise<PreparedLessonSettlementPlan>;
   assignPlan(
     client: PoolClient,

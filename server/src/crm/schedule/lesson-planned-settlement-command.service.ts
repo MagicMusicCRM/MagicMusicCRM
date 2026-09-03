@@ -205,6 +205,7 @@ export class LessonPlannedSettlementCommandService {
       client,
       resources.branchId,
       decision,
+      actor.userId,
     );
     const allocations = await this.settlement.plannedSubscriptionAllocations(
       client,

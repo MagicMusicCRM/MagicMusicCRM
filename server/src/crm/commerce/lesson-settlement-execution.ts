@@ -1,3 +1,5 @@
+import { fingerprintPayload } from "../../platform/platform-integrity.util";
+import { assertLessonPayers, resolveLessonFunding } from "./lesson-funding";
 import {
   ConflictException,
   UnprocessableEntityException,
@@ -6,7 +8,7 @@ import type { PoolClient } from "pg";
 import {
   calculateClientSettlement,
   calculateTeacherCompensation,
-  rublesToMinor,
+  minorToRubles,
 } from "./lesson-settlement.calculation";
 import {
   invalidLessonSettlementDecision,
@@ -29,7 +31,6 @@ import {
   type LessonSettlementSource,
 } from "./lesson-settlement-facts.persistence";
 import type {
-  ClientChargeFactType,
   LessonSettlementInput,
   LessonSettlementResult,
 } from "./lesson-settlement.port";
@@ -92,6 +93,7 @@ async function insertConfiguredLessonSettlementFacts(
     input.configurationRevisionIds,
   );
   const clientDecisions = mapUniqueClientDecisions(input);
+  await assertLessonPayers(client, input.decision);
   const charges = await loadLessonSettlementCharges(client, source.lesson_id);
   await assertKnownLessonClients(
     client,
@@ -224,16 +226,8 @@ function calculateConfiguredClientFact(
       "settlementTypeKey",
     );
   }
-  const subscriptionId = decision?.subscriptionId ?? charge.subscription_id;
-  if (decision?.payerStudentId && !decision.subscriptionId) {
-    invalidLessonSettlementDecision(
-      "PAYER_SUBSCRIPTION_REQUIRED",
-      "clientDecisions",
-    );
-  }
-  const chargeType: ClientChargeFactType = subscriptionId
-    ? "subscription"
-    : charge.charge_type;
+  const funding = resolveLessonFunding(charge, decision);
+  const { chargeType, subscriptionId } = funding;
   let calculation;
   try {
     calculation = calculateClientSettlement({
@@ -241,10 +235,7 @@ function calculateConfiguredClientFact(
       hourShareBasisPoints: settlement.hourShareBasisPoints,
       fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
       chargeType,
-      baseChargeMinor:
-        chargeType === "personal_account"
-          ? rublesToMinor(charge.charge_value)
-          : 0n,
+      baseChargeMinor: funding.baseChargeMinor,
     });
   } catch (error) {
     rethrowLessonSettlementCalculation(error);
@@ -253,7 +244,8 @@ function calculateConfiguredClientFact(
     charge,
     chargeType,
     subscriptionId: chargeType === "subscription" ? subscriptionId : null,
-    payerStudentId: decision?.payerStudentId ?? null,
+    payerStudentId: funding.payerStudentId,
+    pricingSnapshot: funding.pricingSnapshot,
     settlement,
     calculation,
   };
@@ -319,14 +311,6 @@ async function assertExistingLessonSettlementDecision(
       .filter((decision) => !excludedClients.has(decision.clientId))
       .map((decision) => [decision.clientId, decision]),
   );
-  for (const decision of clients.values()) {
-    if (decision.payerStudentId && !decision.subscriptionId) {
-      invalidLessonSettlementDecision(
-        "PAYER_SUBSCRIPTION_REQUIRED",
-        "clientDecisions",
-      );
-    }
-  }
   const ownerBySubscription = await loadExistingSubscriptionOwners(
     client,
     existing,
@@ -345,7 +329,23 @@ async function assertExistingLessonSettlementDecision(
         : undefined;
       const requiresExplicitPayer =
         fact.subscriptionId !== null && subscriptionOwner !== fact.clientId;
+      const funding = resolveLessonFunding({
+        client_type: fact.clientType,
+        client_id: fact.clientId,
+        charge_type: fact.chargeType,
+        charge_value: fact.pricingSnapshot
+          ? minorToRubles(BigInt(fact.pricingSnapshot.basePriceMinor))
+          : fact.snapshotValue,
+        subscription_id: fact.subscriptionId,
+      }, decision);
+      const pricingMatches = !decision ||
+        (decision.basePriceMinor === undefined && !decision.discount && !decision.surcharge) ||
+        fingerprintPayload(funding.pricingSnapshot) === fingerprintPayload(fact.pricingSnapshot);
       return (
+        funding.chargeType === fact.chargeType &&
+        funding.subscriptionId === fact.subscriptionId &&
+        (funding.payerStudentId ?? fact.clientId) === (fact.payerStudentId ?? subscriptionOwner ?? fact.clientId) &&
+        pricingMatches &&
         fact.settlementTypeKey ===
           (decision?.settlementTypeKey ?? input.decision.settlementTypeKey) &&
         (requiresExplicitPayer

@@ -31,6 +31,7 @@ import { LessonTransitionFinancialService } from "./lesson-transition-financial.
 import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
 import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
 import { LessonTransitionService } from "./lesson-transition.service";
+import { LessonSettlementCorrectionService } from "./lesson-settlement-correction.service";
 
 const url =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -48,6 +49,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
   let failingService: LessonTransitionService;
   let settlement: LessonSettlementService;
   let completionWorker: LessonCompletionWorker;
+  let corrections: LessonSettlementCorrectionService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
@@ -77,6 +79,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     const policy = new CrmPolicy();
     const validator = new LessonRequiredFieldValidator();
     settlement = new LessonSettlementService(database);
+    corrections = new LessonSettlementCorrectionService(database, platform, policy,
+      settlement, tokens, reservations, constraints);
     const buildTransitionGraph = (settlementPort: LessonSettlementPort) => {
       const financial = new LessonTransitionFinancialService(
         settlementPort,
@@ -650,7 +654,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         await settlement.assignPlan(client, {
           lessonId: fixture.settleId,
           branchId: fixture.branchId,
-          decision: settleDecision,
+          decision: { ...settleDecision, settlementTypeKey: "free_lesson" },
           selectedBy: fixture.managerId,
           reasonText: "Автоматический расчёт требует проверки",
         });
@@ -665,6 +669,12 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           [fixture.settleId],
         );
       });
+      const plannedHistory = await corrections.history(actor, fixture.settleId);
+      expect(plannedHistory.items.filter((item) => item.effective)).toEqual([
+        expect.objectContaining({ kind: "planned",
+          settlementTypeLabel: "Бесплатное занятие",
+          decision: expect.objectContaining({ settlementTypeKey: "free_lesson" }) }),
+      ]);
       const beforeSettle = await pool.query<{ count: number }>(
         `
           select (
@@ -704,6 +714,31 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         state: "successfully_completed",
         version: 3,
       });
+
+      const settledHistory = await corrections.history(actor, fixture.settleId);
+      expect(settledHistory.items).toHaveLength(2);
+      expect(settledHistory.items.filter((item) => item.effective)).toEqual([
+        expect.objectContaining({ kind: "transition",
+          settlementTypeLabel: expect.stringMatching(/[А-Яа-я]/),
+          teacherCompensationRuleLabel: expect.stringMatching(/[А-Яа-я]/),
+          decision: expect.objectContaining({ settlementTypeKey: "lesson" }) }),
+      ]);
+      expect(settledHistory.items.find((item) => item.kind === "planned"))
+        .toMatchObject({ effective: false, settlementTypeLabel: "Бесплатное занятие" });
+      // New catalog labels must not change the meaning of old history entries.
+      await pool.query(
+        `insert into app.crm_configuration_revisions
+           (branch_id, version, patch, effective_snapshot, reason)
+         select $1, 1,
+           jsonb_build_object('lessonSettlementTypes', '[{"stableKey":"lesson","label":"Новое название"}]'::jsonb),
+           jsonb_set(effective_snapshot, '{lessonSettlementTypes}',
+             '[{"stableKey":"lesson","label":"Новое название"}]'::jsonb),
+           'History label regression'
+         from app.crm_configuration_revisions where branch_id is null
+         order by version desc limit 1`, [fixture.branchId],
+      );
+      expect((await corrections.history(actor, fixture.settleId)).items)
+        .toEqual(settledHistory.items);
 
       const persisted = await pool.query<{
         transitions: number;
@@ -1898,9 +1933,20 @@ async function createFixture(pool: Pool, lifecycle: LessonLifecycleRepository) {
   const clientUserId = users.rows.find((row) => row.role === "client")!.id;
   const profiles = await pool.query<{ id: string; user_id: string }>(
     `insert into app.profiles (user_id, first_name, last_name) values
-      ($1, 'Transition', 'Teacher'), ($2, 'Transition', 'Student')
+      ($1, 'Transition', 'Teacher'), ($2, 'Transition', 'Student'),
+      ($3, 'Transition', 'Manager')
       returning id, user_id`,
-    [teacherUserId, clientUserId],
+    [teacherUserId, clientUserId, managerId],
+  );
+  await pool.query(
+    `with staff as (
+       insert into app.staff_members (profile_id, role) values ($1, 'manager') returning id
+     ), link as (
+       insert into app.user_crm_links (user_id, entity_type, entity_id, link_source, confirmed_at)
+       select $2, 'staff', id, 'manual_phone', now() from staff
+     ) insert into app.staff_branch_assignments (staff_member_id, branch_id)
+       select id, $3 from staff`,
+    [profiles.rows.find((row) => row.user_id === managerId)!.id, managerId, branchId],
   );
   const teacherProfileId = profiles.rows.find(
     (row) => row.user_id === teacherUserId,
@@ -2256,6 +2302,9 @@ async function cleanup(
     await client.query("delete from app.rooms where id = any($1::uuid[])", [
       [fixture.roomId, fixture.replacementRoomId],
     ]);
+    await client.query("delete from app.staff_branch_assignments where branch_id = $1", [fixture.branchId]);
+    await client.query("delete from app.user_crm_links where user_id = any($1::uuid[])", [fixture.userIds]);
+    await client.query("delete from app.staff_members where profile_id = any($1::uuid[])", [fixture.profileIds]);
     await client.query("delete from app.profiles where id = any($1::uuid[])", [
       fixture.profileIds,
     ]);
@@ -2265,6 +2314,7 @@ async function cleanup(
     await client.query("delete from app.branch_hours where branch_id = $1", [
       fixture.branchId,
     ]);
+    await client.query("delete from app.crm_configuration_revisions where branch_id = $1", [fixture.branchId]);
     await client.query("delete from app.branches where id = $1", [
       fixture.branchId,
     ]);

@@ -340,7 +340,7 @@ export class CommerceProjectionRepository {
             from app.lesson_client_charge_facts_effective charge
             where charge.subscription_id = issued.id
               and charge.client_type = 'student'
-              and charge.client_id = selected.student_id
+              and coalesce(charge.payer_student_id, charge.client_id) = selected.student_id
               and charge.charge_type = 'subscription'
           ) usage on true
           left join lateral (
@@ -639,8 +639,8 @@ export class CommerceProjectionRepository {
               from app.lesson_client_charge_facts_effective charge
               left join app.subscriptions subscription
                 on subscription.id = charge.subscription_id
-              where charge.client_type = 'student'
-                and charge.client_id = selected.student_id
+              where (charge.payer_student_id is not null or charge.client_type = 'student')
+                and coalesce(charge.payer_student_id, charge.client_id) = selected.student_id
               union all
               select
                 adjustment.id,

@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -10,6 +11,7 @@ import {
   MaxLength,
   ValidateNested,
 } from "class-validator";
+import { IssueSubscriptionDiscountDto, IssueSubscriptionSurchargeDto } from "./issue-subscription.dto";
 
 const stableKey = /^[A-Za-z0-9._:-]{1,120}$/;
 
@@ -29,6 +31,25 @@ export class LessonClientFinancialDecisionDto {
   @IsOptional()
   @IsUUID()
   payerStudentId?: string;
+
+  @IsOptional()
+  @IsIn(["subscription", "personal_account", "none"])
+  chargeType?: "subscription" | "personal_account" | "none";
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^(0|[1-9]\d{0,11})$/)
+  basePriceMinor?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IssueSubscriptionDiscountDto)
+  discount?: IssueSubscriptionDiscountDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IssueSubscriptionSurchargeDto)
+  surcharge?: IssueSubscriptionSurchargeDto;
 }
 
 export class ConfiguredLessonFinancialDecisionDto {

@@ -1,9 +1,8 @@
+import { normalizeCommercialPrice } from "./commercial-price";
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
 import {
-  IssueSubscriptionDiscountDto,
   IssueSubscriptionDto,
   IssueSubscriptionInstallmentDto,
-  IssueSubscriptionSurchargeDto,
   PurchaseSubscriptionPreviewDto,
 } from "../dto/issue-subscription.dto";
 import { IssuedCommercialSnapshot } from "./commerce-schema.types";
@@ -156,132 +155,7 @@ export class SubscriptionCommercialTermsService {
     dto: IssueSubscriptionDto,
     packageRow: IssuePackageRow,
   ): Pick<NormalizedIssue, "discount" | "surcharge" | "finalPriceMinor"> {
-    const discount = this.normalizeDiscount(
-      dto.discount,
-      packageRow.base_price_minor,
-    );
-    const surcharge = this.normalizeSurcharge(dto.surcharge);
-    return {
-      discount,
-      surcharge,
-      finalPriceMinor: (
-        BigInt(discount.finalPriceMinor) + BigInt(surcharge.amountMinor)
-      ).toString(),
-    };
-  }
-
-  private normalizeDiscount(
-    dto: IssueSubscriptionDiscountDto | undefined,
-    rawBasePriceMinor: string,
-  ): NormalizedDiscount {
-    if (!dto) return this.normalizeNoDiscount(rawBasePriceMinor);
-    const reason = this.discountReason(dto);
-    if (dto.type === "percent") {
-      return this.normalizePercentDiscount(dto, rawBasePriceMinor, reason);
-    }
-    return this.normalizeFixedDiscount(dto, rawBasePriceMinor, reason);
-  }
-
-  private normalizeNoDiscount(rawBasePriceMinor: string): NormalizedDiscount {
-    return {
-      snapshot: { type: "none" },
-      columns: {
-        type: "none",
-        percentBasisPoints: null,
-        fixedMinor: null,
-        reason: null,
-      },
-      finalPriceMinor: rawBasePriceMinor,
-    };
-  }
-
-  private discountReason(dto: IssueSubscriptionDiscountDto): string {
-    const reason = dto.reason?.trim();
-    if (!reason || reason.length > 500) {
-      throw new UnprocessableEntityException({
-        code: "DISCOUNT_REASON_REQUIRED",
-        field: "discount.reason",
-        message: "Для скидки обязательно укажите причину.",
-      });
-    }
-    return reason;
-  }
-
-  private normalizePercentDiscount(
-    dto: IssueSubscriptionDiscountDto,
-    rawBasePriceMinor: string,
-    reason: string,
-  ): NormalizedDiscount {
-    if (dto.percent === undefined || dto.fixedMinor !== undefined) {
-      this.throwDiscountShape();
-    }
-    const percent = dto.percent!;
-    const basisPoints = Math.round(percent * 100);
-    if (!this.isValidPercent(percent, basisPoints)) {
-      throw new UnprocessableEntityException({
-        code: "DISCOUNT_PERCENT_INVALID",
-        field: "discount.percent",
-        message: "Процент скидки должен быть от 0,01 до 100.",
-      });
-    }
-    const basePriceMinor = BigInt(rawBasePriceMinor);
-    const discountMinor =
-      (basePriceMinor * BigInt(basisPoints) + 5_000n) / 10_000n;
-    return {
-      snapshot: { type: "percent", percentBasisPoints: basisPoints, reason },
-      columns: {
-        type: "percent",
-        percentBasisPoints: basisPoints,
-        fixedMinor: null,
-        reason,
-      },
-      finalPriceMinor: (basePriceMinor - discountMinor).toString(),
-    };
-  }
-
-  private isValidPercent(percent: number, basisPoints: number): boolean {
-    return (
-      Number.isFinite(percent) &&
-      percent > 0 &&
-      percent <= 100 &&
-      basisPoints >= 1 &&
-      basisPoints <= 10_000 &&
-      Math.abs(percent * 100 - basisPoints) <= 1e-8
-    );
-  }
-
-  private normalizeFixedDiscount(
-    dto: IssueSubscriptionDiscountDto,
-    rawBasePriceMinor: string,
-    reason: string,
-  ): NormalizedDiscount {
-    if (
-      dto.type !== "fixed" ||
-      dto.fixedMinor === undefined ||
-      dto.percent !== undefined ||
-      !/^[1-9]\d*$/.test(dto.fixedMinor)
-    ) {
-      this.throwDiscountShape();
-    }
-    const basePriceMinor = BigInt(rawBasePriceMinor);
-    const fixedMinor = BigInt(dto.fixedMinor!);
-    if (fixedMinor > basePriceMinor) {
-      throw new UnprocessableEntityException({
-        code: "DISCOUNT_EXCEEDS_BASE_PRICE",
-        field: "discount.fixedMinor",
-        message: "Фиксированная скидка не может превышать базовую стоимость.",
-      });
-    }
-    return {
-      snapshot: { type: "fixed", fixedMinor: fixedMinor.toString(), reason },
-      columns: {
-        type: "fixed",
-        percentBasisPoints: null,
-        fixedMinor: fixedMinor.toString(),
-        reason,
-      },
-      finalPriceMinor: (basePriceMinor - fixedMinor).toString(),
-    };
+    return normalizeCommercialPrice(packageRow.base_price_minor, dto);
   }
 
   private normalizeInstallments(
@@ -341,39 +215,6 @@ export class SubscriptionCommercialTermsService {
     };
   }
 
-  private normalizeSurcharge(
-    dto: IssueSubscriptionSurchargeDto | undefined,
-  ): NormalizedSurcharge {
-    if (!dto) return { snapshot: { type: "none" }, amountMinor: "0" };
-    const reason = dto.reason?.trim();
-    if (!reason || reason.length > 500) {
-      throw new UnprocessableEntityException({
-        code: "SURCHARGE_REASON_REQUIRED",
-        field: "surcharge.reason",
-        message: "Для доплаты обязательно укажите причину.",
-      });
-    }
-    if (!/^[1-9]\d*$/.test(dto.amountMinor)) {
-      throw new UnprocessableEntityException({
-        code: "SURCHARGE_AMOUNT_INVALID",
-        field: "surcharge.amountMinor",
-        message: "Доплата должна быть положительной суммой.",
-      });
-    }
-    const amount = BigInt(dto.amountMinor);
-    if (amount > 999_999_999_999n) {
-      throw new UnprocessableEntityException({
-        code: "SURCHARGE_AMOUNT_OUT_OF_RANGE",
-        field: "surcharge.amountMinor",
-        message: "Доплата выходит за допустимый диапазон.",
-      });
-    }
-    return {
-      snapshot: { type: "fixed", amountMinor: amount.toString(), reason },
-      amountMinor: amount.toString(),
-    };
-  }
-
   private createSnapshot(
     packageRow: IssuePackageRow,
     discount: NormalizedDiscount,
@@ -403,11 +244,5 @@ export class SubscriptionCommercialTermsService {
     };
   }
 
-  private throwDiscountShape(): never {
-    throw new UnprocessableEntityException({
-      code: "DISCOUNT_SHAPE_INVALID",
-      field: "discount",
-      message: "Укажите либо процентную, либо фиксированную скидку, но не обе.",
-    });
-  }
+
 }

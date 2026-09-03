@@ -26,6 +26,32 @@ describe("schedule read contract", () => {
     ).toEqual([DatabaseService, CrmPolicy]);
   });
 
+  it("reads exact lesson finance and frozen membership with current-role gates", async () => {
+    const { service, query } = createService([{
+      id: "lesson-1", reservation_state: "reserved",
+      financial_decision: {
+        settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+        clientDecisions: [{ clientId: "student-1", payerStudentId: "payer-1" }],
+      },
+      group_participants: [{ clientId: "student-1", clientName: "Анна" }],
+    }]);
+    const result = await service.listLessons(actor, { lessonId: "lesson-1" });
+    expect(result.items[0]).toMatchObject({
+      reservationState: "reserved",
+      financialDecision: {
+        settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+        clientDecisions: [{ clientId: "student-1", payerStudentId: "payer-1" }],
+      },
+      groupParticipants: [{ clientId: "student-1", clientName: "Анна" }],
+    });
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("else null::jsonb end as financial_decision");
+    expect(sql).toContain("coalesce(correction.decision, transition.financial_decision, plan.decision)");
+    expect(sql).toContain("from app.users scope_actor");
+    expect(sql).toContain("where participant.lesson_id = l.id");
+    expect(sql).toContain("app.lesson_participant_exclusions exclusion");
+  });
+
   describe("«оплаты по дням» (✔ владелец 17.07)", () => {
     it("sums the payments tied to each lesson", async () => {
       const { service, query, policy } = createService([]);
@@ -121,10 +147,10 @@ describe("schedule read contract", () => {
         /coalesce\(\s*l\.teacher_rate,\s*g\.teacher_rate,[\s\S]*app\.teacher_rates[\s\S]*0\s*\)\s*else null::numeric end as applied_teacher_rate/,
       );
       expect(sql).toContain(
-        "coalesce(correction.decision, plan.decision) ->> 'teacherCompensationRuleKey' else null::text end as teacher_compensation_rule_key",
+        "coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'teacherCompensationRuleKey' else null::text end as teacher_compensation_rule_key",
       );
       expect(sql).toContain(
-        "coalesce(correction.decision, plan.decision) ->> 'teacherCompensationValueMinor' else null::text end as teacher_compensation_value_minor",
+        "coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'teacherCompensationValueMinor' else null::text end as teacher_compensation_value_minor",
       );
     });
 
@@ -353,6 +379,7 @@ describe("schedule read contract", () => {
         settlement_type_key: "free_lesson",
         teacher_compensation_rule_key: "fixed",
         teacher_compensation_value_minor: "150000",
+        reservation_state: "reserved",
         student_id: "student-a",
         group_id: null,
         lead_id: null,
@@ -421,6 +448,7 @@ describe("schedule read contract", () => {
       settlementTypeKey: "free_lesson",
       teacherCompensationRuleKey: "fixed",
       teacherCompensationValueMinor: "150000",
+      reservationState: "reserved",
       groupParticipants: [
         { clientId: "student-a", clientName: "Анна Иванова" },
       ],
@@ -435,6 +463,8 @@ describe("schedule read contract", () => {
     );
     expect(sql).toContain("select l.id, l.version, l.lifecycle_state");
     expect(sql).toContain("app.lesson_settlement_plans plan");
+    expect(sql).toContain("app.lesson_reservations lesson_reservation");
+    expect(sql).toContain("scoped.reservation_state, scoped.financial_decision");
     expect(sql).toContain("app.lesson_snapshot_participants participant");
     expect(sql).toContain("app.lesson_participant_exclusions exclusion");
     expect(sql).toContain("then plan.failure_code else null end");

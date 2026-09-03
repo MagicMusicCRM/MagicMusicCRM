@@ -443,13 +443,13 @@ export class ScheduleSeriesMaterializerService {
           teacher_compensation_type, teacher_compensation_value,
           subscription_id, trial, duration_minutes
         )
-        select lesson.id, 'student', plan.student_id, 'scheduled',
+        select lesson.id, 'student', plan.student_id, 'standard.success',
           'subscription',
           round(
             lesson.duration_minutes::numeric
               * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
           ) / 100,
-          case when rate.value > 0 then 'fixed' else 'none' end,
+          case when rate.value > 0 then 'hourly' else 'none' end,
           rate.value, coalesce(series.subscription_id, plan.subscription_id),
           false, lesson.duration_minutes
         from app.lessons lesson
@@ -490,8 +490,9 @@ export class ScheduleSeriesMaterializerService {
           teacher_compensation_type, teacher_compensation_value,
           trial, duration_minutes
         )
-        select lesson.id, plan.group_id, 'scheduled', 'none', 0,
-          case when rate.value > 0 then 'fixed' else 'none' end,
+        select lesson.id, plan.group_id, 'standard.success', 'none', 0,
+          case when rate.value <= 0 then 'none'
+            when lesson_group.teacher_rate is not null then 'fixed' else 'hourly' end,
           rate.value, false, lesson.duration_minutes
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
@@ -634,6 +635,13 @@ export class ScheduleSeriesMaterializerService {
           and not exists (select 1 from app.lesson_reservations existing
             where existing.lesson_id = lesson.id and existing.subscription_id = snapshot.subscription_id
               and existing.state in ('reserved', 'consumed'))
+          and not exists (
+            select 1 from app.lesson_settlement_plans funding_plan,
+              jsonb_array_elements(coalesce(funding_plan.decision->'clientDecisions', '[]'::jsonb)) choice
+            where funding_plan.lesson_id = lesson.id and choice->>'clientId' = snapshot.client_id::text
+              and (choice->>'chargeType' in ('personal_account', 'none')
+                or (choice->>'subscriptionId' is not null and choice->>'subscriptionId' <> snapshot.subscription_id::text))
+          )
           and snapshot.client_charge_type = 'subscription'
           and snapshot.client_charge_value > 0
         union all
@@ -649,6 +657,13 @@ export class ScheduleSeriesMaterializerService {
           and not exists (select 1 from app.lesson_reservations existing
             where existing.lesson_id = lesson.id and existing.subscription_id = participant.subscription_id
               and existing.state in ('reserved', 'consumed'))
+          and not exists (
+            select 1 from app.lesson_settlement_plans funding_plan,
+              jsonb_array_elements(coalesce(funding_plan.decision->'clientDecisions', '[]'::jsonb)) choice
+            where funding_plan.lesson_id = lesson.id and choice->>'clientId' = participant.student_id::text
+              and (choice->>'chargeType' in ('personal_account', 'none')
+                or (choice->>'subscriptionId' is not null and choice->>'subscriptionId' <> participant.subscription_id::text))
+          )
           and participant.charge_type = 'subscription'
           and participant.charge_value > 0
         order by subscription_id, scheduled_at, lesson_id
