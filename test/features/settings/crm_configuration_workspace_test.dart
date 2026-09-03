@@ -601,143 +601,30 @@ void main() {
     expect(field['placements'], ['edit', 'card', 'table']);
   });
 
-  testWidgets(
-    'director configures independent lesson and teacher catalogs and publishes impact',
-    (tester) async {
-      final api = ConfigurationTestApi(
-        role: 'director',
-        capabilities: const [
-          'config.crm.read',
-          'config.crm.edit',
-          'config.crm.publish',
-        ],
-      );
-      await _pump(tester, api);
+  testWidgets('director cannot navigate to the system-owned lesson policy', (
+    tester,
+  ) async {
+    final api = ConfigurationTestApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+    );
+    await _pump(tester, api);
 
-      await tester.tap(find.text('Занятия и оплата'));
-      await tester.pumpAndSettle();
-      expect(find.text('Типы списания занятия'), findsOneWidget);
-      expect(find.text('Типы оплаты преподавателю'), findsOneWidget);
-
-      await tester.tap(find.text('Бесплатное занятие'));
-      await tester.pumpAndSettle();
-      expect(find.text('Так метка выглядит в занятии'), findsOneWidget);
-      await tester.tap(
-        find.byKey(const ValueKey('edit-commerce-catalog-item')),
-      );
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Название *'),
-        'Бесплатное занятие без списания',
-      );
-      await tester.tap(find.widgetWithText(SwitchListTile, 'Активно'));
-      await tester.tap(find.text('Сохранить'));
-      await tester.pumpAndSettle();
-      final freeLessonTile = find
-          .ancestor(
-            of: find.text('Бесплатное занятие без списания').first,
-            matching: find.byType(ListTile),
-          )
-          .first;
-      await tester.ensureVisible(freeLessonTile);
-      await tester.tap(
-        find.descendant(of: freeLessonTile, matching: find.byTooltip('Выше')),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.ensureVisible(find.text('Полная стандартная ставка'));
-      await tester.tap(find.text('Полная стандартная ставка'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('edit-commerce-catalog-item')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('commerce-compensation-mode')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Фиксированная сумма').last);
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Сумма, ₽ *'),
-        '1500,50',
-      );
-      await tester.tap(find.text('Сохранить'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('configuration-publish')));
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Типов списания изменено: 1 · типов оплаты преподавателю: 1'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('• Новые правила применятся только к будущим решениям.'),
-        findsOneWidget,
-      );
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Причина публикации *'),
-        'Обновили правила занятия и оплаты',
-      );
-      await tester.tap(find.text('Опубликовать'));
-      await tester.pumpAndSettle();
-
-      final submitted = api.submittedSnapshot!;
-      final settlements = submitted['lessonSettlementTypes'] as List;
-      expect((settlements.first as Map)['stableKey'], 'free_lesson');
-      expect((settlements.first as Map)['active'], isFalse);
-      final compensation = (submitted['teacherCompensationRules'] as List)
-          .cast<Map>()
-          .singleWhere((item) => item['stableKey'] == 'standard');
-      expect(compensation['mode'], 'fixed');
-      expect(compensation['value'], '150050');
-      expect(api.publishes, 1);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'local catalog changes are guarded by Save Discard Cancel back flow',
-    (tester) async {
-      final api = ConfigurationTestApi(
-        role: 'director',
-        capabilities: const [
-          'config.crm.read',
-          'config.crm.edit',
-          'config.crm.publish',
-        ],
-      );
-      await _pump(tester, api);
-      await tester.tap(find.text('Занятия и оплата'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Занятие'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('edit-commerce-catalog-item')),
-      );
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Название *'),
-        'Обычное занятие',
-      );
-      await tester.tap(find.text('Сохранить'));
-      await tester.pumpAndSettle();
-
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.text('Сохранить изменения?'), findsOneWidget);
-      expect(find.text('Остаться'), findsOneWidget);
-      expect(find.text('Не сохранять'), findsOneWidget);
-      await tester.tap(find.text('Сохранить').last);
-      await tester.pumpAndSettle();
-      expect(api.draftSaves, 1);
-      expect(
-        ((api.submittedSnapshot!['lessonSettlementTypes'] as List).first
-            as Map)['label'],
-        'Обычное занятие',
-      );
-    },
-  );
+    expect(find.text('Занятия и оплата преподавателю'), findsNothing);
+    expect(find.text('Занятия и оплата'), findsNothing);
+    expect(find.byKey(const ValueKey('add-settlement-type')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('edit-commerce-catalog-item')),
+      findsNothing,
+    );
+    expect(api.draftSaves, 0);
+    expect(api.publishes, 0);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('director can publish rollback as a new configuration revision', (
     tester,

@@ -7,6 +7,47 @@ import { CrmConfigurationService } from "./crm-configuration.service";
 import { CrmPolicy } from "./crm.policy";
 
 describe("CrmConfigurationService", () => {
+  it("rejects a preview that changes the system-owned settlement catalog", async () => {
+    const snapshot = buildCrmConfigurationBaseline([]);
+    const requested = structuredClone(snapshot);
+    requested.lessonSettlementTypes[0].label = "Изменённое занятие";
+    const database = {
+      query: jest.fn().mockResolvedValue({
+        rows: [
+          {
+            id: "revision-1",
+            branch_id: null,
+            version: 4,
+            patch: snapshot,
+            effective_snapshot: snapshot,
+            impact: {},
+            reason: "Тестовая конфигурация",
+            rollback_from_version: null,
+            created_by: "director-1",
+            created_at: "2026-08-25T00:00:00.000Z",
+          },
+        ],
+      }),
+    } as unknown as DatabaseService;
+    const service = new CrmConfigurationService(
+      database,
+      new CrmPolicy(),
+      { record: jest.fn() } as unknown as AuditService,
+      { emitSettingChanged: jest.fn() } as unknown as RealtimeBus,
+    );
+    const director: ActorContext = { userId: "director-1", role: "director" };
+
+    await expect(
+      service.preview(director, {
+        baseVersion: 4,
+        snapshot: requested as unknown as Record<string, unknown>,
+      }),
+    ).rejects.toMatchObject({
+      status: 403,
+      response: { code: "SYSTEM_SETTLEMENT_POLICY_READ_ONLY" },
+    });
+  });
+
   it("projects only active lesson decisions with the configured duration", async () => {
     const snapshot = buildCrmConfigurationBaseline([]);
     snapshot.businessSettings[0].value = 45;
@@ -48,7 +89,6 @@ describe("CrmConfigurationService", () => {
       "paid_miss",
       "partially_paid_miss",
       "unpaid_miss",
-      "penalty_lesson",
     ]);
     expect(
       result.teacherCompensationRules.map((rule) => rule.stableKey),

@@ -6,7 +6,6 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
-import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -24,7 +23,6 @@ import { buildCrmConfigurationImpact } from "./crm-configuration-impact.policy";
 import {
   assertCrmConfigurationBranch,
   crmConfigurationRevisionDto,
-  type CrmConfigurationQueryable,
   type CrmConfigurationRevisionRow,
   hasStoredCrmClientFieldValues,
   resolveEffectiveCrmConfiguration,
@@ -150,12 +148,7 @@ export class CrmConfigurationService {
         currentVersion,
       });
     }
-    await this.assertCommerceCatalogAccess(
-      this.database,
-      actor,
-      snapshot,
-      current.snapshot,
-    );
+    this.assertSystemOwnedCatalogUnchanged(current.snapshot, snapshot);
     const conflictTarget = dto.branchId
       ? "(user_id, branch_id) where branch_id is not null"
       : "(user_id) where branch_id is null";
@@ -190,12 +183,7 @@ export class CrmConfigurationService {
       this.database,
       dto.branchId,
     );
-    await this.assertCommerceCatalogAccess(
-      this.database,
-      actor,
-      snapshot,
-      effective.snapshot,
-    );
+    this.assertSystemOwnedCatalogUnchanged(effective.snapshot, snapshot);
     return buildCrmConfigurationImpact({
       next: snapshot,
       current: effective.snapshot,
@@ -289,13 +277,7 @@ export class CrmConfigurationService {
           currentVersion,
         });
       }
-      await this.assertCommerceCatalogAccess(
-        client,
-        actor,
-        requested,
-        effective.snapshot,
-        true,
-      );
+      this.assertSystemOwnedCatalogUnchanged(effective.snapshot, requested);
       const impact = await buildCrmConfigurationImpact({
         next: requested,
         current: effective.snapshot,
@@ -395,31 +377,25 @@ export class CrmConfigurationService {
     }
   }
 
-  private async assertCommerceCatalogAccess(
-    queryable: CrmConfigurationQueryable,
-    actor: ActorContext,
-    next: ConfigSnapshot,
+  private assertSystemOwnedCatalogUnchanged(
     current: ConfigSnapshot,
-    lockForCommit = false,
-  ): Promise<void> {
+    next: ConfigSnapshot,
+  ): void {
     if (
       sameCrmConfigurationValue(
-        next.lessonSettlementTypes,
         current.lessonSettlementTypes,
+        next.lessonSettlementTypes,
       ) &&
       sameCrmConfigurationValue(
-        next.teacherCompensationRules,
         current.teacherCompensationRules,
+        next.teacherCompensationRules,
       )
     ) {
       return;
     }
-    await authorizeCurrentCapability(
-      queryable,
-      actor,
-      "config.commerce.manage",
-      lockForCommit,
-    );
+    throw new ForbiddenException({
+      code: "SYSTEM_SETTLEMENT_POLICY_READ_ONLY",
+    });
   }
 
 }

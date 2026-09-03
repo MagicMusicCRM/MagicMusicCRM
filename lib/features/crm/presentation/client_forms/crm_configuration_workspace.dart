@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/student_funnel_editor.dart';
 
@@ -14,7 +13,6 @@ import 'client_sources_editor.dart';
 import 'crm_configuration_snapshot.dart';
 
 part 'crm_configuration_workspace_schema.dart';
-part 'crm_configuration_workspace_commerce.dart';
 part 'crm_configuration_workspace_shell.dart';
 
 class CrmConfigurationRouteScreen extends ConsumerWidget {
@@ -80,16 +78,9 @@ class _CrmConfigurationWorkspaceState
   bool get _canEdit => _access?.allows('config.crm.edit') == true;
   bool get _canPublish => _access?.allows('config.crm.publish') == true;
   bool get _isManager => _access?.role == 'manager';
-  bool get _canSeeCommerceCatalogs =>
-      const {'director', 'system_admin'}.contains(_access?.role) &&
-      _access?.allows('config.crm.read') == true;
-  bool get _canManageCommerceCatalogs =>
-      _canSeeCommerceCatalogs && _canEdit && _canPublish;
   bool get _isInitialSchoolSetup => _branchId == null && _baseVersion == 0;
   List<(String, String, IconData)> get _areas => [
     ..._commonAreas,
-    if (_canSeeCommerceCatalogs)
-      ('commerce', 'Занятия и оплата', Icons.price_change_outlined),
     ('history', 'История версий', Icons.history_rounded),
   ];
 
@@ -319,15 +310,6 @@ class _CrmConfigurationWorkspaceState
         initialBranchId: _branchId,
       ),
     ),
-    'commerce' => _CrmCommerceCatalogList(
-      settlementTypes: _items('lessonSettlementTypes'),
-      compensationRules: _items('teacherCompensationRules'),
-      selectedKey: _selectedKey,
-      canManage: _canManageCommerceCatalogs,
-      onSelect: _selectItem,
-      onAdd: (listKey) => _editCommerceCatalog(listKey, null),
-      onReorder: _reorderCommerceCatalog,
-    ),
     'history' => _CrmConfigurationHistoryList(
       revisions: _revisions,
       canPublish: _canPublish,
@@ -372,49 +354,6 @@ class _CrmConfigurationWorkspaceState
     selectedKey: _selectedKey,
     onSelect: _selectItem,
   );
-  Future<void> _editCommerceCatalog(
-    String listKey,
-    Map<String, dynamic>? current,
-  ) async {
-    if (!_canManageCommerceCatalogs) return;
-    final items = _items(listKey)
-      ..sort(CrmConfigurationSnapshotOps.compareCatalogOrder);
-    final result = await showMagicDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => _CommerceCatalogEditorDialog(
-        settlement: listKey == 'lessonSettlementTypes',
-        item: current,
-        nextOrder: items.length,
-      ),
-    );
-    if (result == null) return;
-    final index = current == null
-        ? -1
-        : items.indexWhere((item) => item['stableKey'] == current['stableKey']);
-    if (index < 0) {
-      items.add(result);
-    } else {
-      items[index] = result;
-    }
-    _replaceItems(listKey, items);
-    final prefix = listKey == 'lessonSettlementTypes'
-        ? 'settlement'
-        : 'compensation';
-    setState(() => _selectedKey = '$prefix:${result['stableKey']}');
-  }
-
-  void _reorderCommerceCatalog(String listKey, String stableKey, int delta) {
-    final items = _items(listKey)
-      ..sort(CrmConfigurationSnapshotOps.compareCatalogOrder);
-    final from = items.indexWhere((item) => item['stableKey'] == stableKey);
-    final reordered = CrmConfigurationSnapshotOps.reorderItems(
-      items,
-      from: from,
-      delta: delta,
-    );
-    if (reordered != null) _replaceItems(listKey, reordered);
-  }
-
   Widget _editorPane() {
     if (_selectedKey == null) {
       return const Center(
@@ -425,13 +364,6 @@ class _CrmConfigurationWorkspaceState
       'fields' => _selectedFieldPreview(),
       'options' => _selectedOptionSetPreview(),
       'settings' => _selectedBusinessSettingEditor(),
-      'commerce' => _CrmCommerceCatalogPreview(
-        selection: _selectedKey,
-        settlementTypes: _items('lessonSettlementTypes'),
-        compensationRules: _items('teacherCompensationRules'),
-        canManage: _canManageCommerceCatalogs,
-        onEdit: _editCommerceCatalog,
-      ),
       _ => const SizedBox.shrink(),
     };
   }
