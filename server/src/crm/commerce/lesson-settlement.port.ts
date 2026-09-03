@@ -118,6 +118,11 @@ export interface LessonSettlementResult {
   };
 }
 
+export interface LessonSettlementPreview {
+  clientFacts: Array<Omit<LessonSettlementResult["clientFacts"][number], "id">>;
+  teacherFact: Omit<LessonSettlementResult["teacherFact"], "id">;
+}
+
 export interface LessonSettlementPort {
   settle(
     client: PoolClient,

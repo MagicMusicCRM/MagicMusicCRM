@@ -94,7 +94,8 @@ export class ScheduleReadService {
             select lesson_reservation.state
             from app.lesson_reservations lesson_reservation
             where lesson_reservation.lesson_id = l.id
-            order by lesson_reservation.updated_at desc, lesson_reservation.id desc
+            order by (lesson_reservation.state = 'reserved') desc,
+              lesson_reservation.updated_at desc, lesson_reservation.id desc
             limit 1
           ) reservation on true
           where l.deleted_at is null
@@ -514,7 +515,8 @@ export class ScheduleReadService {
           select lesson_reservation.state
           from app.lesson_reservations lesson_reservation
           where lesson_reservation.lesson_id = l.id
-          order by lesson_reservation.updated_at desc, lesson_reservation.id desc
+          order by (lesson_reservation.state = 'reserved') desc,
+            lesson_reservation.updated_at desc, lesson_reservation.id desc
           limit 1
         ) reservation on true
         where l.deleted_at is null

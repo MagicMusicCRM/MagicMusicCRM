@@ -150,14 +150,7 @@ export class SubscriptionReservationService {
           units
         )
         values ($1, $2, $3)
-        on conflict (lesson_id, subscription_id) do update
-          set units = excluded.units,
-              state = 'reserved',
-              financial_fact_id = null,
-              terminal_at = null,
-              version = app.lesson_reservations.version + 1,
-              updated_at = now()
-          where app.lesson_reservations.state = 'released'
+        on conflict do nothing
         returning id
       `,
       [input.lessonId, input.subscriptionId, input.units],

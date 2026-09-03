@@ -548,7 +548,7 @@ async function applySnapshotPlans(
         `
           insert into app.lesson_reservations (lesson_id, subscription_id, units)
           values ($1, $2, $3)
-          on conflict (lesson_id, subscription_id) do nothing
+          on conflict do nothing
         `,
         [plan.lessonId, participant.subscriptionId, participant.chargeValue],
       );

@@ -8,7 +8,7 @@ import {
   LessonSettlementResult,
   PreparedLessonSettlementPlan,
 } from "./lesson-settlement.port";
-import { settleLesson } from "./lesson-settlement-execution";
+import { previewLessonSettlement, settleLesson } from "./lesson-settlement-execution";
 import { loadLessonSettlementCatalog } from "./lesson-settlement-catalog";
 import {
   assignLessonSettlementPlan,
@@ -23,6 +23,10 @@ import {
 @Injectable()
 export class LessonSettlementService implements LessonSettlementPort {
   constructor(private readonly database: DatabaseService) {}
+
+  preview(client: PoolClient, lessonId: string, input: LessonSettlementInput) {
+    return previewLessonSettlement(client, lessonId, input);
+  }
 
   settle(
     client: PoolClient,

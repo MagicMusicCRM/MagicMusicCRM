@@ -25,6 +25,8 @@ import {
   loadLessonSettlementFacts,
   loadLessonSettlementSource,
   loadSupersededLessonFacts,
+  projectConfiguredLessonClientFact,
+  projectConfiguredLessonTeacherFact,
   type CalculatedLessonClientFact,
   type CalculatedLessonTeacherFact,
   type LessonSettlementChargeSource,
@@ -33,9 +35,11 @@ import {
 import type {
   LessonSettlementInput,
   LessonSettlementResult,
+  LessonSettlementPreview,
 } from "./lesson-settlement.port";
 import {
   assertCorrectionSubscriptionCapacity,
+  assertLessonSubscriptionSelection,
   reserveLessonSettlementSubscriptions,
 } from "./lesson-settlement-subscription-capacity";
 
@@ -81,11 +85,31 @@ async function requireCompleteLessonSettlement(
   });
 }
 
-async function insertConfiguredLessonSettlementFacts(
+/** Calculates a planned settlement without reserving capacity or writing financial facts. */
+export async function previewLessonSettlement(
+  client: PoolClient,
+  lessonId: string,
+  input: LessonSettlementInput,
+): Promise<LessonSettlementPreview> {
+  const source = await loadLessonSettlementSource(client, lessonId);
+  if (input.decision.teacherRateSnapshot) {
+    source.teacher_compensation_type = input.decision.teacherRateSnapshot.type;
+    source.teacher_compensation_value = input.decision.teacherRateSnapshot.value;
+  }
+  assertLessonSettleable(source, input.context);
+  const { catalog, clientFacts, teacherFact } = await calculateConfiguredLessonSettlement(client, source, input);
+  await assertLessonSubscriptionSelection(client, clientFacts);
+  return {
+    clientFacts: clientFacts.map((fact) => projectConfiguredLessonClientFact(fact, catalog.settlement_revision_id)),
+    teacherFact: projectConfiguredLessonTeacherFact(source, teacherFact, catalog.compensation_revision_id),
+  };
+}
+
+async function calculateConfiguredLessonSettlement(
   client: PoolClient,
   source: LessonSettlementSource,
   input: LessonSettlementInput,
-): Promise<void> {
+) {
   assertLessonSettlementReason(input.reasonText);
   const catalog = await loadLessonSettlementCatalog(
     client,
@@ -108,6 +132,15 @@ async function insertConfiguredLessonSettlementFacts(
     charges,
     clientDecisions,
   );
+  return { catalog, clientFacts, teacherFact: calculateConfiguredTeacherFact(source, input, catalog) };
+}
+
+async function insertConfiguredLessonSettlementFacts(
+  client: PoolClient,
+  source: LessonSettlementSource,
+  input: LessonSettlementInput,
+): Promise<void> {
+  const { catalog, clientFacts, teacherFact } = await calculateConfiguredLessonSettlement(client, source, input);
   const superseded = await loadSupersededLessonFacts(
     client,
     source.lesson_id,
@@ -126,7 +159,6 @@ async function insertConfiguredLessonSettlementFacts(
     correctionId: input.correction?.id ?? null,
     supersededFactIds: superseded.clientFactIds,
   });
-  const teacherFact = calculateConfiguredTeacherFact(source, input, catalog);
   await insertConfiguredLessonTeacherFact(client, {
     source,
     fact: teacherFact,

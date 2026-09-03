@@ -8,6 +8,7 @@ import type {
 import type {
   ClientChargeFactType,
   LessonSettlementResult,
+  LessonSettlementPreview,
   LessonPriceSnapshot,
   TeacherCompensationFactType,
 } from "./lesson-settlement.port";
@@ -499,6 +500,7 @@ export async function insertConfiguredLessonClientFacts(
   },
 ): Promise<void> {
   for (const fact of input.facts) {
+    const projected = projectConfiguredLessonClientFact(fact, input.configurationRevisionId);
     await client.query(
       `
         insert into app.lesson_client_charge_facts (
@@ -515,26 +517,43 @@ export async function insertConfiguredLessonClientFacts(
       `,
       [
         input.lessonId,
-        fact.charge.client_type,
-        fact.charge.client_id,
-        fact.chargeType,
-        snapshotFactValue(fact),
-        fact.subscriptionId,
-        fact.calculation.amountMinor,
-        fact.calculation.units,
-        fact.settlement.stableKey,
-        fact.settlement.label,
-        fact.settlement.colorToken,
-        fact.settlement.hourShareBasisPoints,
-        fact.settlement.fixedPenaltyMinor ?? "0",
-        input.configurationRevisionId,
+        projected.clientType,
+        projected.clientId,
+        projected.chargeType,
+        projected.snapshotValue,
+        projected.subscriptionId,
+        projected.amountMinor,
+        projected.units,
+        projected.settlementTypeKey,
+        projected.settlementLabel,
+        projected.settlementColorToken,
+        projected.hourShareBasisPoints,
+        projected.fixedPenaltyMinor,
+        projected.configurationRevisionId,
         input.correctionId,
         input.supersededFactIds.get(fact.charge.client_id) ?? null,
-        fact.payerStudentId,
-        fact.pricingSnapshot ? JSON.stringify(fact.pricingSnapshot) : null,
+        projected.payerStudentId,
+        projected.pricingSnapshot ? JSON.stringify(projected.pricingSnapshot) : null,
       ],
     );
   }
+}
+
+export function projectConfiguredLessonClientFact(
+  fact: CalculatedLessonClientFact,
+  configurationRevisionId: string,
+): LessonSettlementPreview["clientFacts"][number] {
+  return {
+    clientType: fact.charge.client_type, clientId: fact.charge.client_id,
+    chargeType: fact.chargeType, snapshotValue: snapshotFactValue(fact),
+    subscriptionId: fact.subscriptionId, payerStudentId: fact.payerStudentId,
+    pricingSnapshot: fact.pricingSnapshot ?? null,
+    amountMinor: fact.calculation.amountMinor, units: fact.calculation.units,
+    currencyCode: "RUB", settlementTypeKey: fact.settlement.stableKey,
+    settlementLabel: fact.settlement.label, settlementColorToken: fact.settlement.colorToken,
+    hourShareBasisPoints: fact.settlement.hourShareBasisPoints,
+    fixedPenaltyMinor: fact.settlement.fixedPenaltyMinor ?? "0", configurationRevisionId,
+  };
 }
 
 function snapshotFactValue(fact: CalculatedLessonClientFact): string {
@@ -543,7 +562,24 @@ function snapshotFactValue(fact: CalculatedLessonClientFact): string {
     if (!fact.pricingSnapshot) return fact.charge.charge_value;
     return minorToRubles(BigInt(fact.pricingSnapshot.finalPriceMinor));
   }
-  return "0";
+  return "0.00";
+}
+
+export function projectConfiguredLessonTeacherFact(
+  source: LessonSettlementSource,
+  fact: CalculatedLessonTeacherFact,
+  configurationRevisionId: string,
+): LessonSettlementPreview["teacherFact"] {
+  return {
+    teacherId: source.teacher_id!, compensationType: fact.rule.mode,
+    snapshotRate: fact.calculation.snapshotRate, rateMinor: fact.calculation.rateMinor,
+    durationMinutes: source.duration_minutes!, amountMinor: fact.calculation.amountMinor,
+    currencyCode: "RUB", compensationRuleKey: fact.rule.stableKey,
+    compensationRuleLabel: fact.rule.label, compensationMode: fact.rule.mode,
+    compensationDefaultValue: fact.calculation.defaultValue,
+    compensationActualValue: fact.calculation.actualValue,
+    compensationOverrideReason: fact.calculation.overrideReason, configurationRevisionId,
+  };
 }
 
 export async function insertConfiguredLessonTeacherFact(
@@ -556,6 +592,7 @@ export async function insertConfiguredLessonTeacherFact(
     supersededFactId: string | null;
   },
 ): Promise<void> {
+  const projected = projectConfiguredLessonTeacherFact(input.source, input.fact, input.configurationRevisionId);
   await client.query(
     `
       insert into app.lesson_teacher_compensation_facts (
@@ -572,18 +609,18 @@ export async function insertConfiguredLessonTeacherFact(
     `,
     [
       input.source.lesson_id,
-      input.source.teacher_id,
-      input.fact.rule.mode,
-      input.fact.calculation.snapshotRate,
-      input.fact.calculation.rateMinor,
-      input.source.duration_minutes,
-      input.fact.calculation.amountMinor,
-      input.fact.rule.stableKey,
-      input.fact.rule.label,
-      input.fact.calculation.defaultValue,
-      input.fact.calculation.actualValue,
-      input.fact.calculation.overrideReason,
-      input.configurationRevisionId,
+      projected.teacherId,
+      projected.compensationType,
+      projected.snapshotRate,
+      projected.rateMinor,
+      projected.durationMinutes,
+      projected.amountMinor,
+      projected.compensationRuleKey,
+      projected.compensationRuleLabel,
+      projected.compensationDefaultValue,
+      projected.compensationActualValue,
+      projected.compensationOverrideReason,
+      projected.configurationRevisionId,
       input.correctionId,
       input.supersededFactId,
     ],

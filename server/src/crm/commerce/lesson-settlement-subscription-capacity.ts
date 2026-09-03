@@ -6,6 +6,21 @@ import type { PoolClient } from "pg";
 import { invalidLessonSettlementDecision } from "./lesson-settlement-catalog";
 import type { CalculatedLessonClientFact } from "./lesson-settlement-facts.persistence";
 
+/** Validate the selected owners even for free or not-yet-covered planned lessons. */
+export async function assertLessonSubscriptionSelection(
+  client: PoolClient,
+  facts: CalculatedLessonClientFact[],
+): Promise<void> {
+  const selected = uniqueFactsBySubscription(facts.filter((fact) => fact.subscriptionId));
+  for (const subscriptionId of [...selected.keys()].sort()) {
+    const fact = selected.get(subscriptionId)!;
+    const owner = await client.query<{ student_id: string }>(
+      "select student_id from app.subscriptions where id = $1 for key share", [subscriptionId],
+    );
+    assertSubscriptionOwner(owner.rows[0]?.student_id, subscriptionId, fact, "0");
+  }
+}
+
 export async function reserveLessonSettlementSubscriptions(
   client: PoolClient,
   lessonId: string,
@@ -117,17 +132,25 @@ async function reserveLessonSubscription(
     consumesUnits,
   );
   if (!consumesUnits) return;
-  const reservation = await client.query(
+  let reservation = await client.query(
     `
       insert into app.lesson_reservations (lesson_id, subscription_id, units)
       values ($1, $2, $3::numeric)
-      on conflict (lesson_id, subscription_id) do update
-        set units = excluded.units
-        where app.lesson_reservations.state = 'reserved'
+      on conflict do nothing
       returning id
     `,
     [lessonId, subscriptionId, fact.calculation.units],
   );
+  if (!reservation.rows[0]) {
+    // The subscription lock serializes allocation. Only a live reservation
+    // can be adjusted; released/consumed records remain historical facts.
+    reservation = await client.query(
+      `update app.lesson_reservations set units = $3::numeric
+       where lesson_id = $1 and subscription_id = $2 and state = 'reserved'
+       returning id`,
+      [lessonId, subscriptionId, fact.calculation.units],
+    );
+  }
   if (!reservation.rows[0]) {
     throw new ConflictException({
       code: "SUBSCRIPTION_RESERVATION_TERMINAL",
@@ -148,14 +171,11 @@ function assertSubscriptionCanCover(
   fact: CalculatedLessonClientFact,
   consumesUnits: boolean,
 ): void {
-  const matchesStudent =
-    fact.charge.client_type === "student" &&
-    subscription?.student_id ===
-      (fact.payerStudentId ?? fact.charge.client_id);
+  assertSubscriptionOwner(subscription?.student_id, subscriptionId, fact, subscription?.available_units ?? "0");
   const hasCapacity =
     !consumesUnits ||
     (subscription?.is_usable === true && subscription.has_capacity === true);
-  if (subscription && matchesStudent && hasCapacity) return;
+  if (subscription && hasCapacity) return;
   throw new UnprocessableEntityException({
     code: "SUBSCRIPTION_CAPACITY",
     subscriptionId,
@@ -163,6 +183,21 @@ function assertSubscriptionCanCover(
     payerStudentId: fact.payerStudentId,
     requestedUnits: fact.calculation.units,
     availableUnits: subscription?.available_units ?? "0",
+  });
+}
+
+function assertSubscriptionOwner(
+  ownerStudentId: string | undefined,
+  subscriptionId: string,
+  fact: CalculatedLessonClientFact,
+  availableUnits: string,
+): void {
+  if (fact.charge.client_type === "student" &&
+      ownerStudentId === (fact.payerStudentId ?? fact.charge.client_id)) return;
+  throw new UnprocessableEntityException({
+    code: "SUBSCRIPTION_CAPACITY", subscriptionId, clientId: fact.charge.client_id,
+    payerStudentId: fact.payerStudentId, requestedUnits: fact.calculation.units,
+    availableUnits,
   });
 }
 

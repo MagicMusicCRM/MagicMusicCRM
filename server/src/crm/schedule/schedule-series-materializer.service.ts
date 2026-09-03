@@ -594,7 +594,7 @@ export class ScheduleSeriesMaterializerService {
          where snapshot.lesson_id = any($1::uuid[])
            and snapshot.client_charge_type = 'subscription'
            and series.plan_id is null
-        on conflict (lesson_id, subscription_id) do nothing
+        on conflict do nothing
       `,
       [lessonIds],
     );

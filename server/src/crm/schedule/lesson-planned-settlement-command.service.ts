@@ -19,7 +19,6 @@ import {
 } from "../dto/lesson-settlement-plan.dto";
 import {
   assertLessonCommandMetadata,
-  lessonFinancialProjection,
 } from "./lesson-command-integrity";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import { LessonCommandRepository } from "./lesson-command.repository";
@@ -190,6 +189,7 @@ export class LessonPlannedSettlementCommandService {
       client,
       lessonId,
     );
+    const previousAllocations = await this.settlement.plannedSubscriptionAllocations(client, lessonId, current);
     const resources = await applyLessonResourceEdit(
       client, actor, lessonId, dto.resources, this.constraints,
     );
@@ -212,28 +212,36 @@ export class LessonPlannedSettlementCommandService {
       lessonId,
       prepared,
     );
-    await this.reservations.releaseForLessons(client, [lessonId]);
-    for (const allocation of allocations) {
-      await this.reservations.allocate(client, {
-        lessonId,
-        chargeType: "subscription",
-        ...allocation,
-      });
+    const fundingKey = (items: typeof allocations) => fingerprintPayload(items.map((item) => ({
+      ...item, payerStudentId: item.payerStudentId ?? item.clientId,
+    })).sort((left, right) => left.subscriptionId.localeCompare(right.subscriptionId)));
+    const branchChanged = resources.change && resources.change.before.branchId !== resources.change.after.branchId;
+    if (branchChanged || fundingKey(previousAllocations) !== fundingKey(allocations)) {
+      await this.reservations.releaseForLessons(client, [lessonId]);
+      for (const allocation of allocations) {
+        await this.reservations.allocate(client, {
+          lessonId,
+          chargeType: "subscription",
+          ...allocation,
+        });
+      }
     }
-    const financial = lessonFinancialProjection(
-      await this.previewPlannedFinancial(client, lessonId, dto, prepared),
-    );
+    const financial = await this.previewPlannedFinancial(client, lessonId, dto, prepared);
+    const after = await this.repository.listReservedAllocations(client, lessonId);
     const reservations = {
       before: before.map((row) => ({
         subscriptionId: row.subscription_id,
         units: row.units,
       })),
-      after: allocations.map((item) => ({
-        subscriptionId: item.subscriptionId,
-        clientId: item.clientId,
-        ...(item.payerStudentId ? { payerStudentId: item.payerStudentId } : {}),
-        units: item.units.toFixed(2),
-      })),
+      after: after.map((row) => {
+        const allocation = allocations.find((item) => item.subscriptionId === row.subscription_id);
+        if (!allocation) throw new ConflictException({ code: "LESSON_RESERVATION_PLAN_MISMATCH" });
+        return {
+          subscriptionId: row.subscription_id, clientId: allocation.clientId,
+          ...(allocation.payerStudentId ? { payerStudentId: allocation.payerStudentId } : {}),
+          units: row.units,
+        };
+      }),
     };
     const fingerprint = fingerprintPayload({
       lessonId,
@@ -266,7 +274,7 @@ export class LessonPlannedSettlementCommandService {
     await client.query("savepoint lesson_planned_financial_preview");
     try {
       await this.repository.markCompletedForFinancialPreview(client, lessonId);
-      const settled = await this.settlement.settle(client, lessonId, {
+      return await this.settlement.preview(client, lessonId, {
         context: "settle",
         decision: prepared.decision,
         reasonText: dto.reasonText.trim(),
@@ -275,8 +283,6 @@ export class LessonPlannedSettlementCommandService {
           compensationRevisionId: prepared.compensationRevisionId,
         },
       });
-      await this.reservations.terminalize(client, settled);
-      return settled;
     } finally {
       await client.query(
         "rollback to savepoint lesson_planned_financial_preview",
