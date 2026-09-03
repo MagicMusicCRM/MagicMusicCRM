@@ -123,4 +123,6 @@ idempotency, audit и outbox остаются в каноническом пут
 из пяти Windows UI-сценариев, все пять прошли. Синтаксис runner и
 `git diff --check` проверены без ошибок.
 
-Production deploy в рамках исправления не выполнялся.
+03.09.2026 исправление выпущено в production как server
+`1.5.30+210-hotfix.2`, revision `61937d47`; клиент остаётся `1.5.30+210`.
+Release evidence: `docs/audits/v7-production-patch-validation-hotfix-210.md`.

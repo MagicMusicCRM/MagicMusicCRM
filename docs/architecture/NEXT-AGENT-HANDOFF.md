@@ -1,11 +1,31 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-09-03
-> Production: client `1.5.30+210`, server hotfix `89c3c36f`,
-> image `sha256:70b52633…`, migration `0147_lesson_reservation_history`
+> Production: client `1.5.30+210`, server hotfix `61937d47`,
+> image `sha256:2d3c369d…`, migration `0147_lesson_reservation_history`
 > Рабочая ветка: `main`
-> Статус: сохранение занятий исправлено; 14 старых правил оплаты и один
-> шаблон исправлены через существующие audited/versioned commands
+> Статус: hotfix.2 выпущен; исправлены null → 500 в настройках клиентов
+> и ложный запрет сохранения заметки занятия
+
+Server `1.5.30+210-hotfix.2`: обязательные имена в PATCH источника клиента
+и дополнительного поля допускают отсутствие, но отклоняют явный `null`
+с HTTP 400. Guard заметки занятия игнорирует только `undefined`-поля DTO;
+явные защищённые значения по-прежнему требуют канонической команды.
+Backend 280 suites / 3708 tests PASS; 22 HTTP-сценария и Windows/API/БД
+прошли, 43 HTTP-запроса без 5xx. Готовый image прошёл healthy/degraded 503,
+invalid production flags и проверки исправлений через реальный ValidationPipe.
+Trivy HIGH/CRITICAL и secrets 0, strict security gate PASS. Расширенный
+Semgrep p/default: 17 прежних findings, 0 новых; разбор в release evidence.
+Guarded cutover PASS; readiness `ok`, reconciliation `issues=[]`, API/Caddy
+ошибки после переключения 0. Read-only сверка: 14 standard, 0 scheduled none,
+12 резервов, исторические 8 cancelled none сохранены; очереди/poison 0.
+Pre/post encrypted backups сверены off-host и восстановлены с обоими images
+в isolated drill. Повторная production reconciliation и monitor PASS.
+
+Текущий rollback: `89c3c36f8f0696df771d6934c6c2f5b0ba050d9f`, image
+`magicmusiccrm-server:1.5.30-210-hotfix1-89c3c36f`, migration 0147 сохраняется.
+В hotfix.2 нет изменения схемы или исправления production-данных.
+Evidence: `docs/audits/v7-production-patch-validation-hotfix-210.md`.
 
 Server `1.5.30+210-hotfix.1`: устранён production 500 при повторной броне
 того же абонемента. Неизменное покрытие сохраняется, новая бронь добавляет
@@ -25,7 +45,7 @@ test-name), exact images, security и isolated repair/rollback rehearsal PASS.
 Pre/post encrypted backups сохранены off-host и восстановлены в isolated drill.
 Readiness `ok`, reconciliation `issues=[]`, очереди/poison `0`, monitor PASS.
 
-**Совместимый rollback runtime теперь только `2ce1f16f`**, image
+Для предыдущего hotfix.1 совместимый rollback runtime был `2ce1f16f`, image
 `magicmusiccrm-server:1.5.30-210-hotfix1-bridge-2ce1f16f`.
 Автоматический cutover rollback сохраняет migration 0147. Старые `b5994969`,
 `bf25d357` и 209 используют несовместимый conflict target и не подходят.
