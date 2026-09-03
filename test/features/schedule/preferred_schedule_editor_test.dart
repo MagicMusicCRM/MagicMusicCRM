@@ -190,7 +190,80 @@ void main() {
       findsNothing,
     );
   });
+
+  for (final width in const [360.0, 840.0]) {
+    testWidgets(
+      'partial recurring controls fit ${width.toInt()} without overflow',
+      (tester) async {
+        await _openEditor(
+          tester,
+          width: width,
+          editor: PreferredScheduleEditor(
+            branches: _branches,
+            teachers: _teachers,
+            rooms: _rooms,
+            defaultBranchId: 'branch-a',
+            planMode: true,
+            initialTitle: 'Частичное занятие',
+            canManageTeacherCompensation: true,
+            decisionCatalogs: _partialCatalogs,
+            initialDraft: PreferredScheduleDraft(
+              branchId: 'branch-a',
+              weekdays: const {DateTime.monday},
+              beginTime: '10:00',
+              durationMinutes: 60,
+              lessonsPerDay: 1,
+              validFrom: DateTime(2026, 9, 1),
+              validUntil: DateTime(2026, 12, 1),
+              teacherId: 'teacher-a',
+              roomId: 'room-a',
+              notes: '',
+              settlementTypeKey: 'partial',
+              teacherCompensationRuleKey: 'percent',
+              teacherCreditedDurationMinutes: 45,
+              teacherCompensationSource: 'manual',
+              clientDecisions: const [
+                {'clientId': 'student-a', 'chargeDurationMinutes': 30},
+              ],
+            ),
+          ),
+        );
+
+        expect(
+          find.byKey(const ValueKey('schedule-plan-teacher-minutes')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('schedule-plan-client-minutes-student-a')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('schedule-plan-apply-recommendation')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
+
+const _partialCatalogs = {
+  'branch-a': LessonDecisionCatalog(
+    settlementTypes: [
+      LessonDecisionCatalogItem(
+        key: 'partial',
+        label: 'Частично',
+        order: 0,
+        clientDurationMode: 'manual',
+        teacherDurationMode: 'manual',
+        defaultTeacherCompensationRuleKey: 'percent',
+      ),
+    ],
+    compensationRules: [
+      LessonDecisionCatalogItem(key: 'percent', label: 'Процент', order: 0),
+    ],
+  ),
+};
 
 Future<void> _choose(WidgetTester tester, Key field, String option) async {
   await tester.tap(find.byKey(field));

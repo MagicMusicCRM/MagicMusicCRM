@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_financial_autofill.dart';
 
 import 'preferred_schedule_draft.dart';
 import 'preferred_schedule_editor_state.dart';
@@ -22,6 +23,7 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     this.decisionCatalogs = const {},
     this.requireFinancialDecision = false,
     this.canManageTeacherCompensation = false,
+    this.initialClientDecisions = const [],
   });
 
   final List<Map<String, dynamic>> branches;
@@ -38,6 +40,9 @@ class PreferredScheduleEditorController extends ChangeNotifier {
   final Map<String, LessonDecisionCatalog> decisionCatalogs;
   final bool requireFinancialDecision;
   final bool canManageTeacherCompensation;
+  final List<Map<String, dynamic>> initialClientDecisions;
+
+  static const _autofill = LessonFinancialAutofill();
 
   late PreferredScheduleEditorState _state;
 
@@ -98,6 +103,17 @@ class PreferredScheduleEditorController extends ChangeNotifier {
       teacherCompensationRuleKey:
           seriesDecision['teacherCompensationRuleKey']?.toString() ??
           initialDraft?.teacherCompensationRuleKey,
+      teacherCreditedDurationInput:
+          seriesDecision['teacherCreditedDurationMinutes']?.toString() ??
+          initialDraft?.teacherCreditedDurationMinutes?.toString(),
+      teacherCompensationSource:
+          seriesDecision['teacherCompensationSource']?.toString() ??
+          initialDraft?.teacherCompensationSource,
+      compensationTouched:
+          (seriesDecision['teacherCompensationSource']?.toString() ??
+              initialDraft?.teacherCompensationSource) ==
+          'manual',
+      clientDecisions: _initialClientDecisions(seriesDecision),
       openEnded:
           allowOpenEnded &&
           (series == null
@@ -107,6 +123,16 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     _syncDecisionForBranch();
     _clearInvalidResources();
   }
+
+  List<Map<String, dynamic>> _initialClientDecisions(
+    Map<String, dynamic> seriesDecision,
+  ) => [
+    for (final item
+        in (seriesDecision['clientDecisions'] as List? ??
+            initialDraft?.clientDecisions ??
+            initialClientDecisions))
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
 
   String _initialBranchId() {
     final ids = branches
@@ -168,19 +194,60 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     final compensationValid = catalog.compensationRules.any(
       (item) => item.key == _state.teacherCompensationRuleKey,
     );
+    final settlementKey = settlementValid
+        ? _state.settlementTypeKey
+        : _firstKey(catalog.settlementTypes);
+    final settlement = _settlement(settlementKey);
+    final fallbackRule =
+        catalog.compensationRules
+            .where((item) => item.mode == 'standard')
+            .firstOrNull
+            ?.key ??
+        _firstKey(catalog.compensationRules);
+    if (settlement == null) {
+      _state = _state.copyWith(
+        settlementTypeKey: settlementKey,
+        teacherCompensationRuleKey: compensationValid
+            ? _state.teacherCompensationRuleKey
+            : fallbackRule,
+      );
+      return;
+    }
+    final hasAutofillMetadata =
+        settlement.defaultTeacherCompensationRuleKey != null ||
+        settlement.teacherDurationMode != null;
+    final shouldRecommend =
+        hasAutofillMetadata && (!settlementValid || !compensationValid);
+    final recommendation = shouldRecommend
+        ? _autofill.apply(
+            settlement: settlement,
+            durationMinutes: _state.durationMinutes,
+            compensationTouched: _state.compensationTouched,
+            currentRuleKey: _state.teacherCompensationRuleKey,
+            currentTeacherMinutes: int.tryParse(
+              _state.teacherCreditedDurationInput ?? '',
+            ),
+          )
+        : null;
     _state = _state.copyWith(
-      settlementTypeKey: settlementValid
-          ? _state.settlementTypeKey
-          : _firstKey(catalog.settlementTypes),
-      teacherCompensationRuleKey: compensationValid
-          ? _state.teacherCompensationRuleKey
-          : catalog.compensationRules
-                    .where((item) => item.mode == 'standard')
-                    .firstOrNull
-                    ?.key ??
-                _firstKey(catalog.compensationRules),
+      settlementTypeKey: settlementKey,
+      teacherCompensationRuleKey:
+          recommendation?.compensationRuleKey ??
+          (compensationValid
+              ? _state.teacherCompensationRuleKey
+              : fallbackRule),
+      teacherCreditedDurationInput:
+          recommendation?.teacherCreditedDurationMinutes?.toString() ??
+          _state.teacherCreditedDurationInput,
+      teacherCompensationSource:
+          recommendation?.source ?? _state.teacherCompensationSource,
     );
   }
+
+  LessonDecisionCatalogItem? _settlement(String? key) => decisionCatalog
+      ?.settlementTypes
+      .where((item) => item.key == key)
+      .firstOrNull;
 
   String? _firstKey(List<LessonDecisionCatalogItem> items) =>
       items.isEmpty ? null : items.first.key;
@@ -203,8 +270,38 @@ class PreferredScheduleEditorController extends ChangeNotifier {
   }
 
   void setBeginTime(String value) => _update(_state.copyWith(beginTime: value));
-  void selectDurationMinutes(int value) =>
-      _update(_state.copyWith(durationMinutes: value));
+  void selectDurationMinutes(int value) {
+    var next = _state.copyWith(durationMinutes: value);
+    final settlement = _settlement(next.settlementTypeKey);
+    if (settlement != null && !next.compensationTouched) {
+      final recommendation = _autofill.apply(
+        settlement: settlement,
+        durationMinutes: value,
+        compensationTouched: false,
+        currentRuleKey: next.teacherCompensationRuleKey,
+        currentTeacherMinutes: int.tryParse(
+          next.teacherCreditedDurationInput ?? '',
+        ),
+      );
+      next = next.copyWith(
+        teacherCompensationRuleKey: recommendation.compensationRuleKey,
+        teacherCreditedDurationInput: recommendation
+            .teacherCreditedDurationMinutes
+            ?.toString(),
+        teacherCompensationSource: recommendation.source,
+      );
+    }
+    next = next.copyWith(
+      clientDecisions: _recomputeInheritedClientMinutes(
+        next.clientDecisions,
+        settlement,
+        value,
+        clearManual: false,
+      ),
+    );
+    _update(next);
+  }
+
   void selectLessonsPerDay(int value) =>
       _update(_state.copyWith(lessonsPerDay: value));
   void selectTeacher(String? value) =>
@@ -212,11 +309,120 @@ class PreferredScheduleEditorController extends ChangeNotifier {
   void selectRoom(String? value) => _update(_state.copyWith(roomId: value));
   void selectSubscription(String? value) =>
       _update(_state.copyWith(subscriptionId: value));
-  void selectSettlementType(String? value) =>
-      _update(_state.copyWith(settlementTypeKey: value));
+  void selectSettlementType(String? value) {
+    final settlement = _settlement(value);
+    var next = _state.copyWith(settlementTypeKey: value);
+    if (settlement != null) {
+      final recommendation = _autofill.apply(
+        settlement: settlement,
+        durationMinutes: next.durationMinutes,
+        compensationTouched: next.compensationTouched,
+        currentRuleKey: next.teacherCompensationRuleKey,
+        currentTeacherMinutes: int.tryParse(
+          next.teacherCreditedDurationInput ?? '',
+        ),
+      );
+      next = next.copyWith(
+        teacherCompensationRuleKey: recommendation.compensationRuleKey,
+        teacherCreditedDurationInput: recommendation
+            .teacherCreditedDurationMinutes
+            ?.toString(),
+        teacherCompensationSource: recommendation.source,
+        clientDecisions: _recomputeInheritedClientMinutes(
+          next.clientDecisions,
+          settlement,
+          next.durationMinutes,
+        ),
+      );
+    }
+    _update(next);
+  }
+
+  List<Map<String, dynamic>> _recomputeInheritedClientMinutes(
+    List<Map<String, dynamic>> decisions,
+    LessonDecisionCatalogItem? settlement,
+    int durationMinutes, {
+    bool clearManual = true,
+  }) {
+    if (settlement == null) return decisions;
+    final minutes = _autofill.recommendedClientMinutes(
+      settlement: settlement,
+      durationMinutes: durationMinutes,
+    );
+    return [
+      for (final decision in decisions)
+        _recomputedClientDecision(decision, minutes, clearManual),
+    ];
+  }
+
+  Map<String, dynamic> _recomputedClientDecision(
+    Map<String, dynamic> decision,
+    int? minutes,
+    bool clearManual,
+  ) {
+    final copy = Map<String, dynamic>.from(decision);
+    if (copy['settlementTypeKey'] != null) return copy;
+    if (minutes != null) {
+      copy['chargeDurationMinutes'] = minutes;
+    } else if (clearManual) {
+      copy.remove('chargeDurationMinutes');
+    }
+    return copy;
+  }
+
   void selectTeacherCompensationRule(String? value) {
     if (!canManageTeacherCompensation) return;
-    _update(_state.copyWith(teacherCompensationRuleKey: value));
+    _update(
+      _state.copyWith(
+        teacherCompensationRuleKey: value,
+        compensationTouched: true,
+        teacherCompensationSource: 'manual',
+      ),
+    );
+  }
+
+  void setTeacherCreditedDurationInput(String value) {
+    if (!canManageTeacherCompensation) return;
+    _update(
+      _state.copyWith(
+        teacherCreditedDurationInput: value,
+        compensationTouched: true,
+        teacherCompensationSource: 'manual',
+      ),
+    );
+  }
+
+  void setClientChargeDurationInput(String clientId, String value) {
+    _update(
+      _state.copyWith(
+        clientDecisions: [
+          for (final decision in _state.clientDecisions)
+            if (decision['clientId']?.toString() == clientId)
+              {...decision, 'chargeDurationMinutes': value}
+            else
+              Map<String, dynamic>.from(decision),
+        ],
+      ),
+    );
+  }
+
+  void applyRecommendedTeacherCompensation() {
+    final settlement = _settlement(_state.settlementTypeKey);
+    if (settlement == null) return;
+    final recommendation = _autofill.restoreRecommendation(
+      settlement: settlement,
+      durationMinutes: _state.durationMinutes,
+    );
+    _update(
+      _state.copyWith(
+        teacherCompensationRuleKey: recommendation.compensationRuleKey,
+        teacherCreditedDurationInput: recommendation
+            .teacherCreditedDurationMinutes
+            ?.toString(),
+        teacherCompensationSource: recommendation.source,
+        compensationTouched: false,
+      ),
+    );
   }
 
   void setOpenEnded(bool value) => _update(_state.copyWith(openEnded: value));
@@ -286,6 +492,28 @@ class PreferredScheduleEditorController extends ChangeNotifier {
             _state.teacherCompensationRuleKey!.isEmpty)) {
       return 'Выберите оплату преподавателю.';
     }
+    final settlement = _settlement(_state.settlementTypeKey);
+    if (canManageTeacherCompensation &&
+        (settlement?.teacherDurationMode == 'manual' ||
+            (_state.teacherCompensationSource == 'manual' &&
+                (_state.teacherCreditedDurationInput?.isNotEmpty ?? false)))) {
+      final error = partialDurationError(
+        _state.teacherCreditedDurationInput,
+        lessonDurationMinutes: _state.durationMinutes,
+      );
+      if (error != null) return error;
+    }
+    for (final decision in _state.clientDecisions) {
+      final effective = _settlement(
+        decision['settlementTypeKey']?.toString() ?? _state.settlementTypeKey,
+      );
+      if (effective?.clientDurationMode != 'manual') continue;
+      final error = partialDurationError(
+        decision['chargeDurationMinutes']?.toString(),
+        lessonDurationMinutes: _state.durationMinutes,
+      );
+      if (error != null) return error;
+    }
     return null;
   }
 
@@ -321,6 +549,11 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     subscriptionId: _state.subscriptionId,
     settlementTypeKey: _state.settlementTypeKey ?? '',
     teacherCompensationRuleKey: _state.teacherCompensationRuleKey ?? '',
+    teacherCreditedDurationMinutes: int.tryParse(
+      _state.teacherCreditedDurationInput ?? '',
+    ),
+    teacherCompensationSource: _state.teacherCompensationSource,
+    clientDecisions: lessonClientDecisionsPayload(_state.clientDecisions),
     openEnded: _state.openEnded,
   );
 

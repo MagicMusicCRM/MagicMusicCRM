@@ -15,6 +15,9 @@ class PreferredScheduleDraft {
     this.subscriptionId,
     this.settlementTypeKey = '',
     this.teacherCompensationRuleKey = '',
+    this.teacherCreditedDurationMinutes,
+    this.teacherCompensationSource,
+    this.clientDecisions = const [],
     this.openEnded = false,
   });
 
@@ -33,6 +36,9 @@ class PreferredScheduleDraft {
   final String? subscriptionId;
   final String settlementTypeKey;
   final String teacherCompensationRuleKey;
+  final int? teacherCreditedDurationMinutes;
+  final String? teacherCompensationSource;
+  final List<Map<String, dynamic>> clientDecisions;
   final bool openEnded;
 
   PreferredScheduleDraft copyWith({
@@ -51,6 +57,9 @@ class PreferredScheduleDraft {
     String? subscriptionId,
     String? settlementTypeKey,
     String? teacherCompensationRuleKey,
+    int? teacherCreditedDurationMinutes,
+    String? teacherCompensationSource,
+    List<Map<String, dynamic>>? clientDecisions,
     bool? openEnded,
   }) => PreferredScheduleDraft(
     branchId: branchId ?? this.branchId,
@@ -69,6 +78,11 @@ class PreferredScheduleDraft {
     settlementTypeKey: settlementTypeKey ?? this.settlementTypeKey,
     teacherCompensationRuleKey:
         teacherCompensationRuleKey ?? this.teacherCompensationRuleKey,
+    teacherCreditedDurationMinutes:
+        teacherCreditedDurationMinutes ?? this.teacherCreditedDurationMinutes,
+    teacherCompensationSource:
+        teacherCompensationSource ?? this.teacherCompensationSource,
+    clientDecisions: clientDecisions ?? this.clientDecisions,
     openEnded: openEnded ?? this.openEnded,
   );
 }

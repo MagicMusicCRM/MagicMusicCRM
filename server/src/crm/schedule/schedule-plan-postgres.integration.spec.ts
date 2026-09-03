@@ -169,6 +169,74 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("freezes fractional plan decisions and reserves the resolved client minutes", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Частичная оплата",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [
+            {
+              ...row(fixture, 1, "10:00"),
+              plannedSettlementReason: "Согласовано директором",
+              financialDecision: {
+                settlementTypeKey: "partially_paid_lesson",
+                teacherCompensationRuleKey: "percent",
+                teacherCreditedDurationMinutes: 45,
+                teacherCompensationSource: "manual" as const,
+                clientDecisions: [
+                  {
+                    clientId: fixture.studentIds[0]!,
+                    chargeDurationMinutes: 30,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          idempotencyKey: `plan-partial-${randomUUID()}`,
+          requestId: randomUUID(),
+        },
+      );
+      const series = await pool.query<{ planned_financial_decision: Record<string, unknown> }>(
+        "select planned_financial_decision from app.schedule_series where id = $1",
+        [created.seriesIds[0]],
+      );
+      expect(series.rows[0]!.planned_financial_decision).toMatchObject({
+        settlementTypeKey: "partially_paid_lesson",
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: "manual",
+        clientDecisions: [
+          { clientId: fixture.studentIds[0], chargeDurationMinutes: 30 },
+        ],
+      });
+      const reservations = await pool.query<{ units: string }>(
+        `select reservation.units::text as units
+         from app.lesson_reservations reservation
+         join app.lessons lesson on lesson.id = reservation.lesson_id
+         where lesson.series_id = $1 order by reservation.id`,
+        [created.seriesIds[0]],
+      );
+      expect(reservations.rows.length).toBeGreaterThan(0);
+      expect(reservations.rows.map((item) => item.units)).toEqual(
+        reservations.rows.map(() => "0.50"),
+      );
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("creates one open-ended individual plan with N series and idempotent unique lessons", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
@@ -2316,6 +2384,118 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         [created.id, fixture.effectiveFrom],
       );
       expect(assignments.rows[0]).toEqual({ historical: "4", current: "2" });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("materializes each group participant's frozen payer and partial minutes once", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const participants = fixture.studentIds.map((studentId, index) => ({
+        studentId,
+        subscriptionId: fixture.subscriptionIds[index]!,
+      }));
+      const created = await plans.create(
+        actor,
+        {
+          kind: "group",
+          title: "Разные плательщики",
+          groupId: fixture.groupId,
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          participants,
+          rows: [
+            {
+              ...row(fixture, 3, "14:00"),
+              plannedSettlementReason: "Согласовано директором",
+              financialDecision: {
+                settlementTypeKey: "partially_paid_lesson",
+                teacherCompensationRuleKey: "percent",
+                teacherCreditedDurationMinutes: 45,
+                teacherCompensationSource: "manual" as const,
+                clientDecisions: [
+                  {
+                    clientId: fixture.studentIds[0]!,
+                    payerStudentId: fixture.studentIds[1]!,
+                    subscriptionId: fixture.subscriptionIds[1]!,
+                    chargeType: "subscription" as const,
+                    chargeDurationMinutes: 30,
+                  },
+                  {
+                    clientId: fixture.studentIds[1]!,
+                    payerStudentId: fixture.studentIds[0]!,
+                    subscriptionId: fixture.subscriptionIds[0]!,
+                    chargeType: "subscription" as const,
+                    chargeDurationMinutes: 45,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          idempotencyKey: `plan-group-partial-${randomUUID()}`,
+          requestId: randomUUID(),
+        },
+      );
+      const materialized = await pool.query<{
+        student_id: string;
+        subscription_id: string;
+        charge_value: string;
+      }>(
+        `select participant.student_id, participant.subscription_id,
+           participant.charge_value::text
+         from app.lesson_snapshot_participants participant
+         join app.lessons lesson on lesson.id = participant.lesson_id
+         where lesson.series_id = $1
+         order by participant.lesson_id, participant.student_id`,
+        [created.seriesIds[0]],
+      );
+      expect(materialized.rows.length).toBeGreaterThan(0);
+      for (const lessonId of created.lessonIds) {
+        const reservations = await pool.query<{ units: string }>(
+          "select units::text from app.lesson_reservations where lesson_id = $1 order by units",
+          [lessonId],
+        );
+        expect(reservations.rows.map((item) => item.units)).toEqual([
+          "0.50",
+          "0.75",
+        ]);
+      }
+      const firstLessonParticipants = materialized.rows.slice(0, 2);
+      expect(
+        firstLessonParticipants.map((item) => ({
+          studentId: item.student_id,
+          subscriptionId: item.subscription_id,
+          units: item.charge_value,
+        })),
+      ).toEqual(
+        expect.arrayContaining([
+          {
+            studentId: fixture.studentIds[0],
+            subscriptionId: fixture.subscriptionIds[1],
+            units: "0.50",
+          },
+          {
+            studentId: fixture.studentIds[1],
+            subscriptionId: fixture.subscriptionIds[0],
+            units: "0.75",
+          },
+        ]),
+      );
+      const plansPerLesson = await pool.query<{ count: string }>(
+        `select count(*)::text
+         from app.lesson_settlement_plans settlement
+         join app.lessons lesson on lesson.id = settlement.lesson_id
+         where lesson.series_id = $1`,
+        [created.seriesIds[0]],
+      );
+      expect(plansPerLesson.rows[0]!.count).toBe(String(created.lessonIds.length));
     } finally {
       await cleanup(pool, fixture);
     }

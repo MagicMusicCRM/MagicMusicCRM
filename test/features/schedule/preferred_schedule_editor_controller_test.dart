@@ -216,6 +216,135 @@ void main() {
     expect(() => draft.weekdays.add(7), throwsUnsupportedError);
   });
 
+  test('restores and builds the complete frozen recurring decision', () {
+    final controller = _controller(
+      series: const {
+        'id': 'series-a',
+        'branch_id': 'branch-a',
+        'weekday': 1,
+        'begin_time': '15:00',
+        'duration_minutes': 60,
+        'valid_from': '2026-08-28',
+        'valid_until': '2026-11-26',
+        'teacher_id': 'teacher-a',
+        'room_id': 'room-a',
+        'financial_decision': {
+          'settlementTypeKey': 'partial',
+          'teacherCompensationRuleKey': 'percent',
+          'teacherCreditedDurationMinutes': 45,
+          'teacherCompensationSource': 'manual',
+          'clientDecisions': [
+            {'clientId': 'student-a', 'chargeDurationMinutes': 30},
+          ],
+        },
+      },
+      decisionCatalogs: _durationCatalogs,
+      canManageTeacherCompensation: true,
+    )..initialize(now: DateTime(2026, 8, 27));
+
+    expect(controller.state.teacherCreditedDurationInput, '45');
+    expect(controller.state.teacherCompensationSource, 'manual');
+    expect(controller.state.compensationTouched, isTrue);
+    final draft = controller.buildDraft(title: 'План', notes: '');
+    expect(draft.teacherCreditedDurationMinutes, 45);
+    expect(draft.teacherCompensationSource, 'manual');
+    expect(draft.clientDecisions, [
+      {'clientId': 'student-a', 'chargeDurationMinutes': 30},
+    ]);
+  });
+
+  test(
+    'settlement changes recompute inherited client and untouched teacher minutes',
+    () {
+      final controller = _controller(
+        initialDraft: _draft(
+          settlementTypeKey: 'partial',
+          teacherCompensationRuleKey: 'percent',
+          teacherCreditedDurationMinutes: 30,
+          teacherCompensationSource: 'automatic',
+          clientDecisions: const [
+            {'clientId': 'student-a', 'chargeDurationMinutes': 20},
+            {
+              'clientId': 'student-b',
+              'settlementTypeKey': 'partial',
+              'chargeDurationMinutes': 15,
+            },
+          ],
+        ),
+        decisionCatalogs: _durationCatalogs,
+      )..initialize(now: DateTime(2026, 8, 27));
+
+      controller.selectSettlementType('full');
+
+      expect(controller.state.teacherCompensationRuleKey, 'standard');
+      expect(controller.state.teacherCreditedDurationInput, '60');
+      expect(controller.state.teacherCompensationSource, 'automatic');
+      expect(controller.state.clientDecisions, [
+        {'clientId': 'student-a', 'chargeDurationMinutes': 60},
+        {
+          'clientId': 'student-b',
+          'settlementTypeKey': 'partial',
+          'chargeDurationMinutes': 15,
+        },
+      ]);
+    },
+  );
+
+  test('manual teacher minutes stay exact until recommendation is applied', () {
+    final controller = _controller(
+      initialDraft: _draft(
+        settlementTypeKey: 'partial',
+        teacherCompensationRuleKey: 'percent',
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: 'manual',
+      ),
+      decisionCatalogs: _durationCatalogs,
+    )..initialize(now: DateTime(2026, 8, 27));
+
+    controller.selectSettlementType('full');
+    expect(controller.state.teacherCompensationRuleKey, 'percent');
+    expect(controller.state.teacherCreditedDurationInput, '45');
+    expect(controller.state.compensationTouched, isTrue);
+
+    controller.applyRecommendedTeacherCompensation();
+    expect(controller.state.teacherCompensationRuleKey, 'standard');
+    expect(controller.state.teacherCreditedDurationInput, '60');
+    expect(controller.state.teacherCompensationSource, 'automatic');
+    expect(controller.state.compensationTouched, isFalse);
+  });
+
+  test(
+    'duration changes report out-of-range manual minutes without clamping',
+    () {
+      final controller = _controller(
+        planMode: true,
+        requireFinancialDecision: true,
+        initialDraft: _draft(
+          teacherId: 'teacher-a',
+          roomId: 'room-a',
+          settlementTypeKey: 'partial',
+          teacherCompensationRuleKey: 'percent',
+          teacherCreditedDurationMinutes: 45,
+          teacherCompensationSource: 'manual',
+          clientDecisions: const [
+            {'clientId': 'student-a', 'chargeDurationMinutes': 40},
+          ],
+        ),
+        decisionCatalogs: _durationCatalogs,
+      )..initialize(now: DateTime(2026, 8, 27));
+
+      controller.selectDurationMinutes(30);
+
+      expect(controller.state.teacherCreditedDurationInput, '45');
+      expect(
+        controller.state.clientDecisions.single['chargeDurationMinutes'],
+        40,
+      );
+      expect(controller.validate(title: 'План'), isFalse);
+      expect(controller.state.validationError, 'Не больше 30 мин');
+    },
+  );
+
   test('operational editor does not require teacher compensation input', () {
     final controller = _controller(
       planMode: true,
@@ -287,6 +416,9 @@ PreferredScheduleDraft _draft({
   String roomId = '',
   String settlementTypeKey = '',
   String teacherCompensationRuleKey = '',
+  int? teacherCreditedDurationMinutes,
+  String? teacherCompensationSource,
+  List<Map<String, dynamic>> clientDecisions = const [],
 }) => PreferredScheduleDraft(
   branchId: branchId,
   weekdays: const {1},
@@ -300,4 +432,43 @@ PreferredScheduleDraft _draft({
   notes: '',
   settlementTypeKey: settlementTypeKey,
   teacherCompensationRuleKey: teacherCompensationRuleKey,
+  teacherCreditedDurationMinutes: teacherCreditedDurationMinutes,
+  teacherCompensationSource: teacherCompensationSource,
+  clientDecisions: clientDecisions,
 );
+
+const _durationCatalogs = {
+  'branch-a': LessonDecisionCatalog(
+    settlementTypes: [
+      LessonDecisionCatalogItem(
+        key: 'partial',
+        label: 'Частично',
+        order: 0,
+        clientDurationMode: 'manual',
+        teacherDurationMode: 'manual',
+        defaultTeacherCompensationRuleKey: 'percent',
+      ),
+      LessonDecisionCatalogItem(
+        key: 'full',
+        label: 'Полностью',
+        order: 1,
+        clientDurationMode: 'full',
+        teacherDurationMode: 'full',
+        defaultTeacherCompensationRuleKey: 'standard',
+      ),
+      LessonDecisionCatalogItem(
+        key: 'zero',
+        label: 'Без оплаты',
+        order: 2,
+        clientDurationMode: 'zero',
+        teacherDurationMode: 'zero',
+        defaultTeacherCompensationRuleKey: 'none',
+      ),
+    ],
+    compensationRules: [
+      LessonDecisionCatalogItem(key: 'none', label: 'Нет', order: 0),
+      LessonDecisionCatalogItem(key: 'standard', label: 'Ставка', order: 1),
+      LessonDecisionCatalogItem(key: 'percent', label: 'Процент', order: 2),
+    ],
+  ),
+};

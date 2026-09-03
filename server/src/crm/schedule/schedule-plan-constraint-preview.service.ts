@@ -231,24 +231,52 @@ export class SchedulePlanConstraintPreviewService {
     rows: SchedulePlanRowDto[],
     prepared?: PreparedSchedulePlanUpdate,
   ): Promise<SchedulePlanRowDto[]> {
-    if (this.policy.canManageTeacherCompensation(actor)) return rows;
     return Promise.all(
       rows.map(async (row) => {
         const stored = prepared?.activeSeries.find(
           (series) => series.id === row.seriesId,
         )?.planned_financial_decision;
-        const financialDecision = stored
+        const requestedDecision = this.policy.canManageTeacherCompensation(actor)
+          ? row.financialDecision
+          : stored
           ? {
               ...row.financialDecision,
               teacherCompensationRuleKey: stored.teacherCompensationRuleKey,
               teacherCompensationValueMinor:
                 stored.teacherCompensationValueMinor,
+              teacherCreditedDurationMinutes:
+                stored.teacherCreditedDurationMinutes,
+              teacherCompensationSource: stored.teacherCompensationSource,
             }
           : await this.settlement.applyDefaultTeacherCompensation(
               client,
               row.branchId,
               row.financialDecision,
             );
+        const preservedTeacherDecision = stored &&
+            sameTeacherDecision(requestedDecision, stored)
+          ? {
+              teacherCompensationRuleKey: stored.teacherCompensationRuleKey,
+              teacherCompensationValueMinor:
+                stored.teacherCompensationValueMinor,
+              teacherCreditedDurationMinutes:
+                stored.teacherCreditedDurationMinutes,
+              teacherCompensationSource: stored.teacherCompensationSource,
+            }
+          : undefined;
+        const financialDecision = await this.settlement.resolvePlannedDecision(
+          client,
+          {
+            branchId: row.branchId,
+            durationMinutes: row.durationMinutes ?? 60,
+            decision: requestedDecision,
+            actorUserId: actor.userId,
+            authorization:
+              this.policy.teacherCompensationMutationAuthorization(actor),
+            reasonText: row.plannedSettlementReason,
+            ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
+          },
+        );
         return { ...row, financialDecision };
       }),
     );
@@ -506,6 +534,19 @@ export class SchedulePlanConstraintPreviewService {
       ? prepared.plan.active_from
       : prepared.effectiveFrom;
   }
+}
+
+function sameTeacherDecision(
+  left: SchedulePlanRowDto["financialDecision"],
+  right: SchedulePlanRowDto["financialDecision"],
+) {
+  return left.teacherCompensationRuleKey ===
+      right.teacherCompensationRuleKey &&
+    left.teacherCompensationValueMinor ===
+      right.teacherCompensationValueMinor &&
+    left.teacherCreditedDurationMinutes ===
+      right.teacherCreditedDurationMinutes &&
+    left.teacherCompensationSource === right.teacherCompensationSource;
 }
 
 interface HistoricalTokenInput {

@@ -21,7 +21,7 @@ void main() {
     );
   });
 
-  test('operational schedule-plan payload omits teacher compensation', () {
+  test('schedule-plan payload preserves the complete frozen decision', () {
     final draft = PreferredScheduleDraft(
       branchId: 'branch-a',
       weekdays: const {1},
@@ -35,6 +35,16 @@ void main() {
       notes: '',
       settlementTypeKey: 'visit',
       teacherCompensationRuleKey: 'hourly',
+      teacherCreditedDurationMinutes: 45,
+      teacherCompensationSource: 'manual',
+      clientDecisions: const [
+        {
+          'clientId': 'student-a',
+          'chargeDurationMinutes': 30,
+          'chargeType': 'subscription',
+          'subscriptionId': 'subscription-a',
+        },
+      ],
     );
 
     final rows = SchedulePlanMutationFlow.rowsFromDraft(
@@ -42,6 +52,19 @@ void main() {
       canManageTeacherCompensation: false,
     );
 
-    expect(rows.single['financialDecision'], {'settlementTypeKey': 'visit'});
+    expect(rows.single['financialDecision'], {
+      'settlementTypeKey': 'visit',
+      'teacherCompensationRuleKey': 'hourly',
+      'teacherCreditedDurationMinutes': 45,
+      'teacherCompensationSource': 'manual',
+      'clientDecisions': [
+        {
+          'clientId': 'student-a',
+          'chargeDurationMinutes': 30,
+          'chargeType': 'subscription',
+          'subscriptionId': 'subscription-a',
+        },
+      ],
+    });
   });
 }

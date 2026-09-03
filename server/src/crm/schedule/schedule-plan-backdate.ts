@@ -57,12 +57,20 @@ const effectiveDecision = (
   const decision = stored.planned_financial_decision!;
   return {
     ...requested,
+    clientDecisions:
+      requested.clientDecisions ?? decision.clientDecisions,
     teacherCompensationRuleKey:
       requested.teacherCompensationRuleKey ??
       decision.teacherCompensationRuleKey,
     teacherCompensationValueMinor:
       requested.teacherCompensationValueMinor ??
       decision.teacherCompensationValueMinor,
+    teacherCreditedDurationMinutes:
+      requested.teacherCreditedDurationMinutes ??
+      decision.teacherCreditedDurationMinutes,
+    teacherCompensationSource:
+      requested.teacherCompensationSource ??
+      decision.teacherCompensationSource,
   };
 };
 

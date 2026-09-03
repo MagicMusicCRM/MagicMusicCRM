@@ -91,6 +91,8 @@ class SchedulePlanMutationFlow {
         defaultBranchId: defaultBranchId,
         decisionCatalogs: references.decisionCatalogs,
         canManageTeacherCompensation: canManageTeacherCompensation,
+        initialClientDecisions: _initialClientDecisions(participantDraft),
+        participantLabels: _decisionParticipantLabels,
       ),
     );
     if (draft == null || !context.mounted) {
@@ -185,6 +187,7 @@ class SchedulePlanMutationFlow {
         series: source,
         decisionCatalogs: references.decisionCatalogs,
         canManageTeacherCompensation: canManageTeacherCompensation,
+        participantLabels: _decisionParticipantLabels,
       ),
     );
     if (draft == null || !context.mounted) {
@@ -379,6 +382,7 @@ class SchedulePlanMutationFlow {
       requireFinancialDecision: true,
       decisionCatalogs: references.decisionCatalogs,
       canManageTeacherCompensation: canManageTeacherCompensation,
+      participantLabels: _decisionParticipantLabels,
     ),
   );
 
@@ -460,6 +464,17 @@ class SchedulePlanMutationFlow {
         row.financialDecision['settlementTypeKey']?.toString() ?? '',
     teacherCompensationRuleKey:
         row.financialDecision['teacherCompensationRuleKey']?.toString() ?? '',
+    teacherCreditedDurationMinutes:
+        (row.financialDecision['teacherCreditedDurationMinutes'] as num?)
+            ?.toInt(),
+    teacherCompensationSource: row
+        .financialDecision['teacherCompensationSource']
+        ?.toString(),
+    clientDecisions: [
+      for (final item
+          in row.financialDecision['clientDecisions'] as List? ?? const [])
+        if (item is Map) Map<String, dynamic>.from(item),
+    ],
     openEnded: openEnded,
   );
 
@@ -493,14 +508,47 @@ class SchedulePlanMutationFlow {
           if (draft.notes.isNotEmpty) 'notes': draft.notes,
           'financialDecision': {
             'settlementTypeKey': draft.settlementTypeKey,
-            if (canManageTeacherCompensation)
-              'teacherCompensationRuleKey': draft.teacherCompensationRuleKey,
+            'teacherCompensationRuleKey': draft.teacherCompensationRuleKey,
+            if (draft.teacherCreditedDurationMinutes != null)
+              'teacherCreditedDurationMinutes':
+                  draft.teacherCreditedDurationMinutes,
+            if (draft.teacherCompensationSource != null)
+              'teacherCompensationSource': draft.teacherCompensationSource,
+            'clientDecisions': lessonClientDecisionsPayload(
+              draft.clientDecisions,
+            ),
           },
         });
       }
     }
     return rows;
   }
+
+  Map<String, String> get _decisionParticipantLabels => {
+    ..._participantLabels,
+    ?studentId: 'Ученик',
+  };
+
+  List<Map<String, dynamic>> _initialClientDecisions(
+    GroupScheduleParticipantsDraft? participants,
+  ) => _groupMode
+      ? [
+          for (final participant in participants?.participants ?? const [])
+            {
+              'clientId': participant['studentId'],
+              'chargeType': 'subscription',
+              'subscriptionId': participant['subscriptionId'],
+            },
+        ]
+      : [
+          if (studentId != null)
+            {
+              'clientId': studentId,
+              'chargeType': 'subscription',
+              if (subscriptions.firstOrNull?['id'] != null)
+                'subscriptionId': subscriptions.first['id'],
+            },
+        ];
 
   static String slotTime({
     required String beginTime,

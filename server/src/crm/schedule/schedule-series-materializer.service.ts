@@ -444,25 +444,62 @@ export class ScheduleSeriesMaterializerService {
           subscription_id, trial, duration_minutes
         )
         select lesson.id, 'student', plan.student_id, 'standard.success',
-          'subscription',
-          round(
-            lesson.duration_minutes::numeric
-              * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
-          ) / 100,
+          coalesce(choice.item->>'chargeType', 'subscription'),
+          case
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'none'
+              then 0
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'personal_account'
+              and choice.item->>'basePriceMinor' ~ '^(0|[1-9][0-9]*)$'
+              then (choice.item->>'basePriceMinor')::numeric / 100
+            when choice.item->>'chargeDurationMinutes' ~ '^[0-9]+$'
+              then (choice.item->>'chargeDurationMinutes')::numeric / 60
+            else round(
+              lesson.duration_minutes::numeric
+                * coalesce((
+                    select (client_type.item->>'hourShareBasisPoints')::numeric
+                    from jsonb_array_elements(
+                      revision.effective_snapshot->'lessonSettlementTypes'
+                    ) client_type(item)
+                    where client_type.item->>'stableKey' =
+                      choice.item->>'settlementTypeKey'
+                    limit 1
+                  ), (settlement.item->>'hourShareBasisPoints')::numeric) / 6000
+            ) / 100
+          end,
           case when rate.value > 0 then 'hourly' else 'none' end,
-          rate.value, coalesce(series.subscription_id, plan.subscription_id),
+          rate.value,
+          case
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'subscription'
+              then coalesce(
+                nullif(choice.item->>'subscriptionId', '')::uuid,
+                series.subscription_id,
+                plan.subscription_id
+              )
+            else null
+          end,
           false, lesson.duration_minutes
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
         join app.schedule_plans plan on plan.id = series.plan_id
+        cross join lateral (
+          select (
+            select decision.item
+            from jsonb_array_elements(coalesce(
+              series.planned_financial_decision->'clientDecisions',
+              '[]'::jsonb
+            )) decision(item)
+            where decision.item->>'clientId' = plan.student_id::text
+            limit 1
+          ) as item
+        ) choice
         join app.crm_configuration_revisions revision
           on revision.id = series.settlement_revision_id
         cross join lateral (
-          select item
+          select settlement_type.item
           from jsonb_array_elements(
             revision.effective_snapshot->'lessonSettlementTypes'
-          ) item
-          where item->>'stableKey' =
+          ) settlement_type(item)
+          where settlement_type.item->>'stableKey' =
             series.planned_financial_decision->>'settlementTypeKey'
           limit 1
         ) settlement
@@ -519,30 +556,66 @@ export class ScheduleSeriesMaterializerService {
         insert into app.lesson_snapshot_participants (
           lesson_id, student_id, charge_type, charge_value, subscription_id
         )
-        select lesson.id, participant.student_id, 'subscription',
-          round(
-            lesson.duration_minutes::numeric
-              * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
-          ) / 100,
-          participant.subscription_id
+        select lesson.id, participant.student_id,
+          coalesce(choice.item->>'chargeType', 'subscription'),
+          case
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'none'
+              then 0
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'personal_account'
+              and choice.item->>'basePriceMinor' ~ '^(0|[1-9][0-9]*)$'
+              then (choice.item->>'basePriceMinor')::numeric / 100
+            when choice.item->>'chargeDurationMinutes' ~ '^[0-9]+$'
+              then (choice.item->>'chargeDurationMinutes')::numeric / 60
+            else round(
+              lesson.duration_minutes::numeric
+                * coalesce((
+                    select (client_type.item->>'hourShareBasisPoints')::numeric
+                    from jsonb_array_elements(
+                      revision.effective_snapshot->'lessonSettlementTypes'
+                    ) client_type(item)
+                    where client_type.item->>'stableKey' =
+                      choice.item->>'settlementTypeKey'
+                    limit 1
+                  ), (settlement.item->>'hourShareBasisPoints')::numeric) / 6000
+            ) / 100
+          end,
+          case
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'subscription'
+              then coalesce(
+                nullif(choice.item->>'subscriptionId', '')::uuid,
+                participant.subscription_id
+              )
+            else null
+          end
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
-        join app.crm_configuration_revisions revision
-          on revision.id = series.settlement_revision_id
-        cross join lateral (
-          select item
-          from jsonb_array_elements(
-            revision.effective_snapshot->'lessonSettlementTypes'
-          ) item
-          where item->>'stableKey' =
-            series.planned_financial_decision->>'settlementTypeKey'
-          limit 1
-        ) settlement
         join app.schedule_plan_participants participant
           on participant.plan_id = series.plan_id
          and participant.effective_from <= lesson.series_date
          and (participant.effective_until is null
            or participant.effective_until >= lesson.series_date)
+        cross join lateral (
+          select (
+            select decision.item
+            from jsonb_array_elements(coalesce(
+              series.planned_financial_decision->'clientDecisions',
+              '[]'::jsonb
+            )) decision(item)
+            where decision.item->>'clientId' = participant.student_id::text
+            limit 1
+          ) as item
+        ) choice
+        join app.crm_configuration_revisions revision
+          on revision.id = series.settlement_revision_id
+        cross join lateral (
+          select settlement_type.item
+          from jsonb_array_elements(
+            revision.effective_snapshot->'lessonSettlementTypes'
+          ) settlement_type(item)
+          where settlement_type.item->>'stableKey' =
+            series.planned_financial_decision->>'settlementTypeKey'
+          limit 1
+        ) settlement
         where lesson.id = any($1::uuid[])
         on conflict (lesson_id, student_id) do nothing
       `,
@@ -619,11 +692,22 @@ export class ScheduleSeriesMaterializerService {
     const planCharges = await executor.query<{
       lesson_id: string;
       student_id: string;
+      payer_student_id: string;
       subscription_id: string;
       units: string;
     }>(
       `
         select snapshot.lesson_id, snapshot.client_id as student_id,
+          coalesce((
+            select nullif(choice->>'payerStudentId', '')::uuid
+            from app.lesson_settlement_plans funding_plan,
+              jsonb_array_elements(coalesce(
+                funding_plan.decision->'clientDecisions', '[]'::jsonb
+              )) choice
+            where funding_plan.lesson_id = snapshot.lesson_id
+              and choice->>'clientId' = snapshot.client_id::text
+            limit 1
+          ), snapshot.client_id) as payer_student_id,
           lesson.scheduled_at,
           snapshot.subscription_id, snapshot.client_charge_value::text as units
         from app.lesson_snapshots snapshot
@@ -646,6 +730,16 @@ export class ScheduleSeriesMaterializerService {
           and snapshot.client_charge_value > 0
         union all
         select participant.lesson_id, participant.student_id,
+          coalesce((
+            select nullif(choice->>'payerStudentId', '')::uuid
+            from app.lesson_settlement_plans funding_plan,
+              jsonb_array_elements(coalesce(
+                funding_plan.decision->'clientDecisions', '[]'::jsonb
+              )) choice
+            where funding_plan.lesson_id = participant.lesson_id
+              and choice->>'clientId' = participant.student_id::text
+            limit 1
+          ), participant.student_id) as payer_student_id,
           lesson.scheduled_at,
           participant.subscription_id, participant.charge_value::text
         from app.lesson_snapshot_participants participant
@@ -680,6 +774,7 @@ export class ScheduleSeriesMaterializerService {
         lessonId: charge.lesson_id,
         clientType: "student",
         clientId: charge.student_id,
+        payerStudentId: charge.payer_student_id,
         chargeType: "subscription",
         subscriptionId: charge.subscription_id,
         units: Number(charge.units),

@@ -254,6 +254,14 @@ describe("Schedule plan semantic owners", () => {
       ),
     } as unknown as ScheduleSeriesMaterializerService;
     const settlement = {
+      resolvePlannedDecision: jest.fn(async (_client, input) => ({
+        ...input.decision,
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: "manual",
+        clientDecisions: [
+          { clientId: "student-a", chargeDurationMinutes: 30 },
+        ],
+      })),
       preparePlan: jest.fn(async () => ({
         decision: {},
         settlementRevisionId: null,
@@ -320,6 +328,31 @@ describe("Schedule plan semantic owners", () => {
       "validate-new-series",
       "materialize-new-series",
     ]);
+    expect(settlement.resolvePlannedDecision).toHaveBeenCalledWith(client, {
+      branchId: "branch-a",
+      durationMinutes: 60,
+      decision: expect.objectContaining({ settlementTypeKey: "lesson" }),
+      actorUserId: actor.userId,
+      authorization: {
+        actor,
+        capabilityKey: "config.commerce.manage",
+      },
+      reasonText: undefined,
+    });
+    expect(repository.insertSeries).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({
+        row: expect.objectContaining({
+          financialDecision: expect.objectContaining({
+            teacherCreditedDurationMinutes: 45,
+            teacherCompensationSource: "manual",
+            clientDecisions: [
+              { clientId: "student-a", chargeDurationMinutes: 30 },
+            ],
+          }),
+        }),
+      }),
+    );
   });
 
   it("preserves end lock, fingerprint, history, and reservation ordering", async () => {

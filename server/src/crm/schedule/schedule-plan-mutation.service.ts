@@ -381,11 +381,28 @@ export class SchedulePlanMutationService {
     actor: ActorContext,
     storedDecision: SchedulePlanRowDto["financialDecision"] | null = null,
   ) {
-    const financialDecision = await this.authorizedFinancialDecision(
+    const requestedDecision = await this.authorizedFinancialDecision(
       client,
       actor,
       input.row,
       storedDecision,
+    );
+    const preservedTeacherDecision = storedDecision &&
+        sameTeacherDecision(requestedDecision, storedDecision)
+      ? teacherDecision(storedDecision)
+      : undefined;
+    const financialDecision = await this.settlement.resolvePlannedDecision(
+      client,
+      {
+        branchId: input.row.branchId,
+        durationMinutes: input.row.durationMinutes ?? 60,
+        decision: requestedDecision,
+        actorUserId: actor.userId,
+        authorization:
+          this.policy.teacherCompensationMutationAuthorization(actor),
+        reasonText: input.row.plannedSettlementReason,
+        ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
+      },
     );
     const settlementPlan = await this.settlement.preparePlan(
       client,
@@ -415,6 +432,10 @@ export class SchedulePlanMutationService {
         teacherCompensationRuleKey: storedDecision.teacherCompensationRuleKey,
         teacherCompensationValueMinor:
           storedDecision.teacherCompensationValueMinor,
+        teacherCreditedDurationMinutes:
+          storedDecision.teacherCreditedDurationMinutes,
+        teacherCompensationSource:
+          storedDecision.teacherCompensationSource,
       });
     }
     return this.settlement.applyDefaultTeacherCompensation(
@@ -509,4 +530,29 @@ export class SchedulePlanMutationService {
       replayed,
     };
   }
+}
+
+function teacherDecision(
+  decision: SchedulePlanRowDto["financialDecision"],
+) {
+  return {
+    teacherCompensationRuleKey: decision.teacherCompensationRuleKey,
+    teacherCompensationValueMinor: decision.teacherCompensationValueMinor,
+    teacherCreditedDurationMinutes:
+      decision.teacherCreditedDurationMinutes,
+    teacherCompensationSource: decision.teacherCompensationSource,
+  };
+}
+
+function sameTeacherDecision(
+  left: SchedulePlanRowDto["financialDecision"],
+  right: SchedulePlanRowDto["financialDecision"],
+) {
+  const leftTeacher = teacherDecision(left);
+  const rightTeacher = teacherDecision(right);
+  return Object.keys(leftTeacher).every(
+    (key) =>
+      leftTeacher[key as keyof typeof leftTeacher] ===
+      rightTeacher[key as keyof typeof rightTeacher],
+  );
 }

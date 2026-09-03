@@ -27,6 +27,8 @@ class PreferredScheduleEditor extends StatefulWidget {
     this.decisionCatalogs = const {},
     this.requireFinancialDecision = false,
     this.canManageTeacherCompensation = false,
+    this.initialClientDecisions = const [],
+    this.participantLabels = const {},
     super.key,
   });
 
@@ -46,6 +48,8 @@ class PreferredScheduleEditor extends StatefulWidget {
   final Map<String, LessonDecisionCatalog> decisionCatalogs;
   final bool requireFinancialDecision;
   final bool canManageTeacherCompensation;
+  final List<Map<String, dynamic>> initialClientDecisions;
+  final Map<String, String> participantLabels;
 
   @override
   State<PreferredScheduleEditor> createState() =>
@@ -81,6 +85,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       decisionCatalogs: widget.decisionCatalogs,
       requireFinancialDecision: widget.requireFinancialDecision,
       canManageTeacherCompensation: widget.canManageTeacherCompensation,
+      initialClientDecisions: widget.initialClientDecisions,
     )..initialize();
     _controller.addListener(_refresh);
     _notesController = TextEditingController(
@@ -184,6 +189,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       planMode: widget.planMode,
       requireFinancialDecision: widget.requireFinancialDecision,
       canManageTeacherCompensation: widget.canManageTeacherCompensation,
+      participantLabels: widget.participantLabels,
       requireSubscription: widget.requireSubscription,
       allowOpenEnded: widget.allowOpenEnded,
       showPeriod: widget.showPeriod,
@@ -206,6 +212,13 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
           _changed(() => _controller.selectSettlementType(value)),
       onCompensationRuleChanged: (value) =>
           _changed(() => _controller.selectTeacherCompensationRule(value)),
+      onTeacherMinutesChanged: (value) =>
+          _changed(() => _controller.setTeacherCreditedDurationInput(value)),
+      onClientMinutesChanged: (clientId, value) => _changed(
+        () => _controller.setClientChargeDurationInput(clientId, value),
+      ),
+      onApplyRecommendation: () =>
+          _changed(_controller.applyRecommendedTeacherCompensation),
       onPickStartDate: () => _pickDate(start: true),
       onPickEndDate: () => _pickDate(start: false),
       onOpenEndedChanged: (value) =>

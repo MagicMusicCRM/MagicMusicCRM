@@ -16,9 +16,17 @@ class PreferredScheduleEditorState {
     required this.subscriptionId,
     required this.settlementTypeKey,
     required this.teacherCompensationRuleKey,
+    required this.teacherCreditedDurationInput,
+    required this.teacherCompensationSource,
+    required this.compensationTouched,
+    required List<Map<String, dynamic>> clientDecisions,
     required this.openEnded,
     this.validationError,
-  }) : weekdays = UnmodifiableSetView(Set<int>.of(weekdays));
+  }) : weekdays = UnmodifiableSetView(Set<int>.of(weekdays)),
+       clientDecisions = UnmodifiableListView([
+         for (final item in clientDecisions)
+           Map<String, dynamic>.unmodifiable(item),
+       ]);
 
   final String branchId;
   final Set<int> weekdays;
@@ -32,6 +40,10 @@ class PreferredScheduleEditorState {
   final String? subscriptionId;
   final String? settlementTypeKey;
   final String? teacherCompensationRuleKey;
+  final String? teacherCreditedDurationInput;
+  final String? teacherCompensationSource;
+  final bool compensationTouched;
+  final List<Map<String, dynamic>> clientDecisions;
   final bool openEnded;
   final String? validationError;
 
@@ -48,6 +60,10 @@ class PreferredScheduleEditorState {
     Object? subscriptionId = _unset,
     Object? settlementTypeKey = _unset,
     Object? teacherCompensationRuleKey = _unset,
+    Object? teacherCreditedDurationInput = _unset,
+    Object? teacherCompensationSource = _unset,
+    bool? compensationTouched,
+    List<Map<String, dynamic>>? clientDecisions,
     bool? openEnded,
     Object? validationError = _unset,
   }) => PreferredScheduleEditorState(
@@ -71,6 +87,15 @@ class PreferredScheduleEditorState {
     teacherCompensationRuleKey: identical(teacherCompensationRuleKey, _unset)
         ? this.teacherCompensationRuleKey
         : teacherCompensationRuleKey as String?,
+    teacherCreditedDurationInput:
+        identical(teacherCreditedDurationInput, _unset)
+        ? this.teacherCreditedDurationInput
+        : teacherCreditedDurationInput as String?,
+    teacherCompensationSource: identical(teacherCompensationSource, _unset)
+        ? this.teacherCompensationSource
+        : teacherCompensationSource as String?,
+    compensationTouched: compensationTouched ?? this.compensationTouched,
+    clientDecisions: clientDecisions ?? this.clientDecisions,
     openEnded: openEnded ?? this.openEnded,
     validationError: identical(validationError, _unset)
         ? this.validationError
