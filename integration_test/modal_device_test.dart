@@ -40,8 +40,8 @@ void main() {
     expect(find.text('Конфликт'), findsOneWidget);
     expect(find.textContaining('Причина конфликта'), findsOneWidget);
     expect(find.textContaining('ConflictException'), findsNothing);
-    expect(find.text('Исправить расчёт'), findsOneWidget);
-    expect(find.text('Перенести или изменить'), findsOneWidget);
+    expect(find.text('Исправить расчёт'), findsNothing);
+    expect(find.text('Изменить занятие'), findsOneWidget);
     await captureEvidence(tester, 'lesson-quick-view');
     await captureEvidence(tester, 'lesson-settlement-review-required');
     if (const bool.fromEnvironment('V6_VISUAL_CHECK')) {
@@ -51,7 +51,7 @@ void main() {
       );
     }
 
-    await tester.tap(find.text('Перенести или изменить'));
+    await tester.tap(find.text('Изменить занятие'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Выбрать клиента'));
     await tester.pumpAndSettle();
@@ -753,7 +753,6 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
               lessonId: 'lesson-1',
               onEdit: () {},
               onCancel: () async {},
-              onSettle: () async {},
             ),
             child: const Text('Быстрый просмотр'),
           ),
