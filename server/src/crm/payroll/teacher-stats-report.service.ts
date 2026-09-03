@@ -20,6 +20,7 @@ interface ReportPeriod {
 interface UnitAccumulator {
   compensationKey: string;
   compensationLabel: string;
+  compensationSource: "automatic" | "manual";
   unitType: TeacherStatsUnitType;
   groupId: string | null;
   studentId: string | null;
@@ -32,6 +33,7 @@ interface UnitAccumulator {
   completedLessons: number;
   payableLessons: number;
   hoursTotal: number;
+  scheduledHoursTotal: number;
   accruedTotal: number;
 }
 
@@ -39,6 +41,7 @@ interface TeacherAccumulator {
   completedLessons: number;
   payableLessons: number;
   hoursTotal: number;
+  scheduledHoursTotal: number;
   accruedTotal: number;
   units: Map<string, UnitAccumulator>;
 }
@@ -47,6 +50,7 @@ interface ReportTotals {
   completedLessons: number;
   payableLessons: number;
   hoursTotal: number;
+  scheduledHoursTotal: number;
   accruedTotal: number;
   bonusTotal: number;
   deductionTotal: number;
@@ -169,6 +173,7 @@ export class TeacherStatsReportService {
       completedLessons: 0,
       payableLessons: 0,
       hoursTotal: 0,
+      scheduledHoursTotal: 0,
       accruedTotal: 0,
       units: new Map(),
     };
@@ -200,6 +205,7 @@ export class TeacherStatsReportService {
       this.calculator.unitKeyFor(lesson),
       compensationKey,
       lesson.compensation_rule_label,
+      lesson.compensation_override_reason ?? null,
     ]);
     const unit = teacher.units.get(key) ?? this.newUnit(lesson, accrual.rate);
     teacher.units.set(key, unit);
@@ -214,10 +220,12 @@ export class TeacherStatsReportService {
       teacher.payableLessons += 1;
     }
     const day = this.calculator.toDateOnly(lesson.scheduled_at);
-    unit.days.set(day, (unit.days.get(day) ?? 0) + accrual.hours);
-    unit.hoursTotal += accrual.hours;
+    unit.days.set(day, (unit.days.get(day) ?? 0) + accrual.creditedHours);
+    unit.hoursTotal += accrual.creditedHours;
+    unit.scheduledHoursTotal += accrual.scheduledHours;
     unit.accruedTotal += accrual.amount;
-    teacher.hoursTotal += accrual.hours;
+    teacher.hoursTotal += accrual.creditedHours;
+    teacher.scheduledHoursTotal += accrual.scheduledHours;
     teacher.accruedTotal += accrual.amount;
   }
 
@@ -235,6 +243,8 @@ export class TeacherStatsReportService {
       compensationLabel:
         lesson.compensation_rule_label ??
         labels[lesson.compensation_type ?? "hourly"] ?? "Тип не указан",
+      compensationSource:
+        lesson.compensation_override_reason == null ? "automatic" : "manual",
       unitType: this.calculator.unitTypeFor(lesson),
       groupId: lesson.group_id,
       studentId: lesson.group_id ? null : lesson.student_id,
@@ -252,6 +262,7 @@ export class TeacherStatsReportService {
       completedLessons: 0,
       payableLessons: 0,
       hoursTotal: 0,
+      scheduledHoursTotal: 0,
       accruedTotal: 0,
     };
   }
@@ -286,6 +297,7 @@ export class TeacherStatsReportService {
         payableLessons: teacher.payableLessons,
         noAccrualLessons: teacher.completedLessons - teacher.payableLessons,
         hoursTotal: this.calculator.round2(teacher.hoursTotal),
+        scheduledHoursTotal: this.calculator.round2(teacher.scheduledHoursTotal),
         accruedTotal: this.calculator.round2(teacher.accruedTotal),
         compensationTypes: this.compensationTypes(teacher),
         bonusTotal: this.calculator.round2(movement.bonus),
@@ -303,6 +315,7 @@ export class TeacherStatsReportService {
     return {
       compensationKey: unit.compensationKey,
       compensationLabel: unit.compensationLabel,
+      compensationSource: unit.compensationSource,
       unitType: unit.unitType,
       groupId: unit.groupId,
       studentId: unit.studentId,
@@ -322,6 +335,7 @@ export class TeacherStatsReportService {
       payableLessons: unit.payableLessons,
       noAccrualLessons: unit.completedLessons - unit.payableLessons,
       hoursTotal: this.calculator.round2(unit.hoursTotal),
+      scheduledHoursTotal: this.calculator.round2(unit.scheduledHoursTotal),
       accruedTotal: this.calculator.round2(unit.accruedTotal),
     };
   }
@@ -370,6 +384,7 @@ export class TeacherStatsReportService {
     totals.completedLessons += teacher.completedLessons;
     totals.payableLessons += teacher.payableLessons;
     totals.hoursTotal += teacher.hoursTotal;
+    totals.scheduledHoursTotal += teacher.scheduledHoursTotal;
     totals.accruedTotal += teacher.accruedTotal;
     totals.bonusTotal += movement.bonus;
     totals.deductionTotal += movement.deduction;
@@ -380,6 +395,7 @@ export class TeacherStatsReportService {
   private projectTotals(totals: ReportTotals) {
     return {
       hoursTotal: this.calculator.round2(totals.hoursTotal),
+      scheduledHoursTotal: this.calculator.round2(totals.scheduledHoursTotal),
       completedLessons: totals.completedLessons,
       payableLessons: totals.payableLessons,
       noAccrualLessons: totals.completedLessons - totals.payableLessons,
@@ -396,6 +412,7 @@ export class TeacherStatsReportService {
       completedLessons: 0,
       payableLessons: 0,
       hoursTotal: 0,
+      scheduledHoursTotal: 0,
       accruedTotal: 0,
       bonusTotal: 0,
       deductionTotal: 0,

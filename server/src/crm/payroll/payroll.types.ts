@@ -38,10 +38,15 @@ export interface PayrollLessonRow {
   compensation_type?: string | null;
   compensation_rule_key?: string | null;
   compensation_rule_label?: string | null;
+  compensation_actual_value?: string | number | null;
+  teacher_snapshot_rate?: string | number | null;
+  compensation_override_reason?: string | null;
 }
 
 export interface PayrollLessonAccrual {
   hours: number;
+  scheduledHours: number;
+  creditedHours: number;
   rate: number;
   coefficient: number;
   amount: number;

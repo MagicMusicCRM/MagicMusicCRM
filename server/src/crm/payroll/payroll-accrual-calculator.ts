@@ -26,16 +26,18 @@ export class PayrollAccrualCalculator {
     lesson: PayrollLessonRow,
     rates: Map<string, TeacherRateEntry[]>,
   ): PayrollLessonAccrual {
-    const hours = Number(lesson.duration_minutes ?? 0) / 60;
-    const settled = this.settledAccrual(lesson, hours);
+    const scheduledHours = Number(lesson.duration_minutes ?? 0) / 60;
+    const settled = this.settledAccrual(lesson, scheduledHours);
     if (settled) return settled;
     const rate = this.effectiveRate(lesson, rates);
     const coefficient = this.attendanceCoefficient(lesson);
     return {
-      hours,
+      hours: scheduledHours,
+      scheduledHours,
+      creditedHours: scheduledHours,
       rate,
       coefficient,
-      amount: this.roundedAmount(hours, rate, coefficient),
+      amount: this.roundedAmount(scheduledHours, rate, coefficient),
     };
   }
 
@@ -62,7 +64,7 @@ export class PayrollAccrualCalculator {
 
   private settledAccrual(
     lesson: PayrollLessonRow,
-    hours: number,
+    scheduledHours: number,
   ): PayrollLessonAccrual | null {
     if (
       lesson.settlement_fact_id == null ||
@@ -71,12 +73,34 @@ export class PayrollAccrualCalculator {
       return null;
     }
     const amount = Number(lesson.settled_amount_minor) / 100;
+    const creditedHours = this.creditedHours(lesson, scheduledHours);
     return {
-      hours,
-      rate: hours > 0 ? this.round2(amount / hours) : 0,
+      hours: scheduledHours,
+      scheduledHours,
+      creditedHours,
+      rate:
+        lesson.teacher_snapshot_rate == null
+          ? scheduledHours > 0
+            ? this.round2(amount / scheduledHours)
+            : 0
+          : Number(lesson.teacher_snapshot_rate),
       coefficient: 1,
       amount: this.round2(amount),
     };
+  }
+
+  private creditedHours(
+    lesson: PayrollLessonRow,
+    scheduledHours: number,
+  ): number {
+    if (lesson.compensation_type === "none") return 0;
+    if (lesson.compensation_type === "percent") {
+      return this.round2(
+        (scheduledHours * Number(lesson.compensation_actual_value ?? 0)) /
+          10_000,
+      );
+    }
+    return scheduledHours;
   }
 
   private effectiveRate(

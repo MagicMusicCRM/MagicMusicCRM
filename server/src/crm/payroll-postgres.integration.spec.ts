@@ -121,6 +121,78 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("reports credited group hours from one effective percent compensation fact", async () => {
+    await client.query("savepoint credited_group_hours");
+    try {
+      const branch = await client.query<{ id: string }>(
+        "insert into app.branches (name) values ($1) returning id",
+        [`Credited hours ${randomUUID()}`],
+      );
+      const group = await client.query<{ id: string }>(
+        `insert into app.groups (teacher_id, branch_id, name, price_per_lesson)
+         values ($1, $2, $3, 800) returning id`,
+        [teacherId, branch.rows[0]!.id, `Percent group ${randomUUID()}`],
+      );
+      const lesson = await client.query<{ id: string }>(
+        `insert into app.lessons (
+           group_id, teacher_id, branch_id, scheduled_at, duration_minutes,
+           status, created_by
+         ) values ($1, $2, $3, '2026-08-15T10:00:00.000Z', 60, 'completed', $4)
+         returning id`,
+        [group.rows[0]!.id, teacherId, branch.rows[0]!.id, actor.userId],
+      );
+      const revision = await client.query<{ id: string }>(
+        `select id from app.crm_configuration_revisions
+         where branch_id is null order by version desc limit 1`,
+      );
+      await client.query(
+        `insert into app.lesson_teacher_compensation_facts (
+           lesson_id, teacher_id, compensation_type, snapshot_rate, rate_minor,
+           duration_minutes, amount_minor, compensation_rule_key,
+           compensation_rule_label, compensation_mode, compensation_default_value,
+           compensation_actual_value, compensation_override_reason,
+           configuration_revision_id
+         ) values (
+           $1, $2, 'percent', 1000, 100000, 60, 75000, 'percent',
+           'Процент от стандартной ставки', 'percent', 100000, 7500,
+           'Согласовано директором', $3
+         )`,
+        [lesson.rows[0]!.id, teacherId, revision.rows[0]!.id],
+      );
+
+      const effectiveFacts = await client.query<{ count: string }>(
+        `select count(*)::text as count
+         from app.lesson_teacher_compensation_facts_effective
+         where lesson_id = $1`,
+        [lesson.rows[0]!.id],
+      );
+      expect(effectiveFacts.rows[0]!.count).toBe("1");
+
+      const report = await payroll.getTeacherStatsReport(actor, {
+        teacherId,
+        from: "2026-08-01T00:00:00.000Z",
+        to: "2026-09-01T00:00:00.000Z",
+      });
+      const unit = report.items[0]!.units.find(
+        (item) => item.groupId === group.rows[0]!.id,
+      );
+      expect(unit).toMatchObject({
+        rate: 1000,
+        scheduledHoursTotal: 1,
+        hoursTotal: 0.75,
+        accruedTotal: 750,
+        compensationSource: "manual",
+      });
+      expect(report.totals).toMatchObject({
+        scheduledHoursTotal: 1,
+        hoursTotal: 0.75,
+        accruedTotal: 750,
+      });
+    } finally {
+      await client.query("rollback to savepoint credited_group_hours");
+    }
+  });
+
   it("keeps global payroll details inside an Admin or Manager's complete teacher branch scope", async () => {
     await client.query("savepoint direct_payroll_scope");
     try {

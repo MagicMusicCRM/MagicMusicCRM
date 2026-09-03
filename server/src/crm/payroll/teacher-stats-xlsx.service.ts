@@ -29,9 +29,11 @@ export class TeacherStatsXlsxService {
         "",
         item.completedLessons,
         item.payableLessons,
+        item.scheduledHoursTotal,
         item.hoursTotal,
         "",
         item.accruedTotal,
+        "",
         "",
       ]);
     }
@@ -42,9 +44,11 @@ export class TeacherStatsXlsxService {
       "",
       report.totals.completedLessons,
       report.totals.payableLessons,
+      report.totals.scheduledHoursTotal,
       report.totals.hoursTotal,
       "",
       report.totals.accruedTotal,
+      "",
       "",
     ]);
     return this.workbook.build({
@@ -56,10 +60,12 @@ export class TeacherStatsXlsxService {
         { key: "days", header: "Дни", type: "string", width: 32 },
         { key: "lessons", header: "Занятий", type: "number" },
         { key: "payable", header: "Оплачиваемых занятий", type: "number" },
-        { key: "hours", header: "Часы", type: "number" },
+        { key: "scheduledHours", header: "По расписанию, астр.ч.", type: "number" },
+        { key: "creditedHours", header: "Зачтено преподавателю, астр.ч.", type: "number" },
         { key: "rate", header: "Ставка за астр. час", type: "string" },
         { key: "accrued", header: "Начислено", type: "money" },
         { key: "compensation", header: "Тип начисления", type: "string", width: 32 },
+        { key: "source", header: "Источник", type: "string" },
       ],
       rows,
     });
@@ -71,10 +77,12 @@ export class TeacherStatsXlsxService {
       unitName: string;
       unitType: string;
       compensationLabel: string;
+      compensationSource: "automatic" | "manual";
       days: { date: string; hours: number }[];
       completedLessons: number;
       payableLessons: number;
       hoursTotal: number;
+      scheduledHoursTotal: number;
       rate: number;
       accruedTotal: number;
     },
@@ -86,10 +94,12 @@ export class TeacherStatsXlsxService {
       unit.days.map((day) => `${day.date} (${day.hours} астр.ч.)`).join(" "),
       unit.completedLessons,
       unit.payableLessons,
+      unit.scheduledHoursTotal,
       unit.hoursTotal,
       unit.rate === 0 ? "Входит в оклад" : String(unit.rate),
       unit.accruedTotal,
       this.excelText(unit.compensationLabel),
+      unit.compensationSource === "manual" ? "Вручную" : "Автоматически",
     ];
   }
 

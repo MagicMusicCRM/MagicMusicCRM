@@ -42,7 +42,10 @@ export class PayrollReadRepository {
           compensation.amount_minor as settled_amount_minor,
           compensation.compensation_type,
           compensation.compensation_rule_key,
-          compensation.compensation_rule_label
+          compensation.compensation_rule_label,
+          compensation.compensation_actual_value,
+          compensation.snapshot_rate as teacher_snapshot_rate,
+          compensation.compensation_override_reason
         from app.lessons l
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
         left join app.students s on s.id = l.student_id and s.deleted_at is null

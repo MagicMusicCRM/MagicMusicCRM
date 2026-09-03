@@ -2,6 +2,15 @@ import 'package:flutter/foundation.dart';
 
 const _unsetTeacherStatsFilter = Object();
 
+abstract final class TeacherStatsCompensationSource {
+  static const automatic = 'automatic';
+  static const manual = 'manual';
+
+  static String label(dynamic source) => source == manual
+      ? 'Источник: вручную'
+      : 'Источник: автоматически';
+}
+
 @immutable
 class TeacherStatsQuery {
   const TeacherStatsQuery({
