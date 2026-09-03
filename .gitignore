@@ -53,6 +53,7 @@ migrate_working_dir/
 /exports/
 /security-scans/
 /.supergoal/
+/.worktrees/
 
 # Symbolication related
 app.*.symbols
