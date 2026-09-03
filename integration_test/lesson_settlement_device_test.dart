@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
@@ -431,7 +432,18 @@ void main() {
     final api = _LessonCreateApi();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          capabilitySnapshotProvider.overrideWith(
+            (ref) async => const CapabilitySnapshot(
+              accountId: 'director-device',
+              role: 'director',
+              accessVersion: 1,
+              capabilities: {'commerce.teacher_payroll.write'},
+              scopes: {},
+            ),
+          ),
+        ],
         child: RepaintBoundary(
           key: evidenceRootKey,
           child: MaterialApp(
@@ -502,13 +514,26 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Стандартная ставка').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('lesson-charge-type-field')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('С личного счёта').last);
     await tester.pumpAndSettle();
     await tester.ensureVisible(
-      find.byKey(const ValueKey('lesson-charge-type-field')),
+      find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
     );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('lesson-client-price-$_studentId')),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('lesson-client-price-$_studentId')),
+      '1500',
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('Тип списания *'), findsOneWidget);
     expect(find.text('Правило оплаты преподавателю *'), findsOneWidget);
@@ -522,10 +547,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     expect(api.lessonPosts, hasLength(1));
-    expect(api.lessonPosts.single['financialDecision'], {
-      'settlementTypeKey': 'lesson',
-      'teacherCompensationRuleKey': 'standard',
-    });
+    final financial = api.lessonPosts.single['financialDecision'] as Map;
+    expect(financial['settlementTypeKey'], 'lesson');
+    expect(financial['teacherCompensationRuleKey'], 'standard');
+    expect(
+      (financial['clientDecisions'] as List).single,
+      allOf(
+        containsPair('clientId', _studentId),
+        containsPair('payerStudentId', _studentId),
+        containsPair('chargeType', 'personal_account'),
+        containsPair('basePriceMinor', '150000'),
+      ),
+    );
     expect(api.lessonPosts.single['clientChargeType'], 'personal_account');
     expect(api.lessonPosts.single['isTrial'], isTrue);
     expect(api.lessonPosts.single, isNot(contains('subscriptionId')));
@@ -546,7 +579,18 @@ void main() {
     final api = _LessonCreateApi();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          capabilitySnapshotProvider.overrideWith(
+            (ref) async => const CapabilitySnapshot(
+              accountId: 'director-device',
+              role: 'director',
+              accessVersion: 1,
+              capabilities: {'commerce.teacher_payroll.write'},
+              scopes: {},
+            ),
+          ),
+        ],
         child: RepaintBoundary(
           key: evidenceRootKey,
           child: MaterialApp(
@@ -581,21 +625,37 @@ void main() {
     );
 
     await tester.ensureVisible(
-      find.byKey(const ValueKey('lesson-charge-type-field')),
+      find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
     );
     expect(find.text('С абонемента'), findsOneWidget);
     await captureEvidence(tester, 'lesson-funding-subscription-default');
-    await tester.tap(find.byKey(const ValueKey('lesson-charge-type-field')));
+    await tester.tap(
+      find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Без списания'), findsNothing);
     await tester.tap(find.text('С абонемента').last);
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('lesson-settlement-type-field')),
+    );
     await tester.tap(
       find.byKey(const ValueKey('lesson-settlement-type-field')),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Бесплатное занятие').last);
+    await tester.pumpAndSettle();
+    // Funding is now an explicit per-payer choice, independent of the common
+    // settlement type. A free type makes the no-charge option available.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Без списания').last);
     await tester.pumpAndSettle();
     expect(find.text('Без списания'), findsOneWidget);
     await captureEvidence(tester, 'lesson-funding-free-no-charge');
@@ -609,10 +669,13 @@ void main() {
     expect(api.lessonPosts.single['clientChargeType'], 'none');
     expect(api.lessonPosts.single['clientChargeValue'], 0);
     expect(api.lessonPosts.single, isNot(contains('subscriptionId')));
-    expect(api.lessonPosts.single['financialDecision'], {
-      'settlementTypeKey': 'free_lesson',
-      'teacherCompensationRuleKey': 'none',
-    });
+    final financial = api.lessonPosts.single['financialDecision'] as Map;
+    expect(financial['settlementTypeKey'], 'free_lesson');
+    expect(financial['teacherCompensationRuleKey'], 'standard');
+    expect(
+      (financial['clientDecisions'] as List).single,
+      containsPair('chargeType', 'none'),
+    );
     expect(tester.takeException(), isNull);
     debugPrint('V7_LESSON_FUNDING_DEVICE_PASS');
   });

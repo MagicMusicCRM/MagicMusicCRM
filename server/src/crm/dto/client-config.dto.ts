@@ -13,6 +13,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
 
@@ -74,12 +75,13 @@ export class UpdateLeadSourceDto {
   @Min(1)
   expectedVersion!: number;
 
-  @IsOptional()
+  // PATCH may omit a required name, but cannot replace it with null.
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @Matches(/^[a-z][a-z0-9_-]{0,63}$/)
   canonicalName?: string;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @MaxLength(120)
   displayName?: string;
@@ -132,7 +134,7 @@ export class UpdateClientCustomFieldDto {
   @Min(1)
   expectedVersion!: number;
 
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @MaxLength(120)
   label?: string;

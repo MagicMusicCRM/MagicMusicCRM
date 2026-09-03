@@ -8,8 +8,9 @@ const PATCH_SAFE_FIELDS = new Set<keyof UpsertLessonDto>([
 
 export function assertLessonPatchUsesTransition(dto: UpsertLessonDto) {
   const supplied = Object.keys(dto) as Array<keyof UpsertLessonDto>;
+  // Transformed DTOs own unassigned class fields; only defined values are writes.
   const protectedFields = supplied.filter(
-    (field) => !PATCH_SAFE_FIELDS.has(field),
+    (field) => dto[field] !== undefined && !PATCH_SAFE_FIELDS.has(field),
   );
   if (protectedFields.length > 0) {
     throw new UnprocessableEntityException({
