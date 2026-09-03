@@ -1139,6 +1139,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         fixture.subscriptionIds[0],
       );
       expect(await new MigrationRunner(pool).down()).toBe(
+        "0147_lesson_reservation_history",
+      );
+      expect(await new MigrationRunner(pool).down()).toBe(
         "0146_lesson_funding_payer",
       );
       expect(await new MigrationRunner(pool).down()).toBe(
@@ -1165,6 +1168,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           "0144_direct_subscription_payment_isolation",
           "0145_student_contact_email",
           "0146_lesson_funding_payer",
+          "0147_lesson_reservation_history",
         ]);
       }
     } finally {

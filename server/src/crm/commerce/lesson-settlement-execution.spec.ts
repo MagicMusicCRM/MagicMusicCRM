@@ -1,6 +1,7 @@
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 import {
   assertLessonSettleable,
+  previewLessonSettlement,
   settleLesson,
 } from "./lesson-settlement-execution";
 import type { LessonSettlementSource } from "./lesson-settlement-facts.persistence";
@@ -53,6 +54,73 @@ function errorResponse(action: () => unknown): unknown {
 }
 
 describe("lesson settlement execution", () => {
+  it.each([
+    ["duplicate subscriptions", true, "DUPLICATE_SUBSCRIPTION_SELECTION"],
+    ["a subscription owned by another payer", false, "SUBSCRIPTION_CAPACITY"],
+  ] as const)("rejects %s in a zero-unit planned preview", async (_name, duplicate, code) => {
+    const clientIds = duplicate ? ["student-a", "student-b"] : ["student-a"];
+    const client = {
+      query: async (sql: string) => {
+        if (sql.includes("from app.lessons lesson")) {
+          return queryResult([source({
+            group_id: duplicate ? "group-a" : null,
+            participant_count: duplicate ? 2 : 0,
+          })]);
+        }
+        if (sql.includes("from app.crm_configuration_revisions")) {
+          return queryResult([{
+            settlement_revision_id: "settlement-revision",
+            compensation_revision_id: "compensation-revision",
+            settlement_types: [{
+              stableKey: "free_lesson", label: "Бесплатно", active: true,
+              order: 0, allowedContexts: ["settle"], hourShareBasisPoints: 0,
+              fixedPenaltyMinor: "0", colorToken: "neutral",
+            }],
+            compensation_rules: [{
+              stableKey: "standard", label: "Полная ставка", active: true,
+              order: 0, mode: "standard", value: "0",
+            }],
+          }]);
+        }
+        if (sql.includes("select student.id from app.students student")) {
+          return queryResult([{ id: "payer-owner" }]);
+        }
+        if (sql.includes("select snapshot.client_type, snapshot.client_id")) {
+          return queryResult(clientIds.map((clientId) => ({
+            client_type: "student", client_id: clientId,
+            charge_type: "subscription", charge_value: "1.00",
+            subscription_id: `original-${clientId}`,
+          })));
+        }
+        if (sql.includes("from app.lesson_participant_exclusions")) {
+          return queryResult([]);
+        }
+        if (sql.includes("from app.subscriptions")) {
+          return queryResult([{
+            id: "selected-subscription", student_id: "different-owner",
+            is_usable: true, has_capacity: true, available_units: "12.00",
+          }]);
+        }
+        throw new Error(`Unexpected query in zero-unit preview: ${sql}`);
+      },
+    } as unknown as PoolClient;
+    await expect(previewLessonSettlement(client, "lesson-a", {
+      context: "settle",
+      decision: {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "standard",
+        clientDecisions: clientIds.map((clientId) => ({
+          clientId, chargeType: "subscription", payerStudentId: "payer-owner",
+          subscriptionId: "selected-subscription",
+        })),
+      },
+      configurationRevisionIds: {
+        settlementRevisionId: "settlement-revision",
+        compensationRevisionId: "compensation-revision",
+      },
+    })).rejects.toMatchObject({ response: { code } });
+  });
+
   it("maps reschedule and cancel contexts to their terminal lifecycle state", () => {
     expect(() =>
       assertLessonSettleable(

@@ -243,8 +243,8 @@ describe("schedule read branch scope (PostgreSQL)", () => {
       expect((await matrix(manager)).items[0].reservationState).toBeNull();
 
       await client.query(
-        `insert into app.lesson_reservations (lesson_id, subscription_id, units)
-         values ($1, $2, 1)`,
+        `insert into app.lesson_reservations (id, lesson_id, subscription_id, units)
+         values ('ffffffff-ffff-4fff-bfff-ffffffff0147', $1, $2, 1)`,
         [assignedLessonId, subscriptionId],
       );
       for (const actor of [manager, teacher, { ...teacher, role: "manager" as const }]) {
@@ -274,6 +274,20 @@ describe("schedule read branch scope (PostgreSQL)", () => {
         [assignedLessonId],
       );
       expect((await matrix(manager)).items[0].reservationState).toBe("released");
+      // Rebooking in the same transaction shares now() with its released row.
+      // The current reservation must win regardless of UUID sorting.
+      await client.query(
+        `insert into app.lesson_reservations (id, lesson_id, subscription_id, units)
+         values ('00000000-0000-4000-8000-000000000147', $1, $2, 1)`,
+        [assignedLessonId, subscriptionId],
+      );
+      for (const actor of [manager, teacher]) {
+        const calendar = await matrix(actor);
+        expect(calendar.items.filter((item) => item.id === assignedLessonId)).toHaveLength(1);
+        expect(calendar.items.find((item) => item.id === assignedLessonId)?.reservationState).toBe("reserved");
+        const exact = await schedule.listLessons(actor, { lessonId: assignedLessonId });
+        expect(exact.items[0].reservationState).toBe("reserved");
+      }
     } finally {
       await client.query("rollback to savepoint reservation_read");
     }
