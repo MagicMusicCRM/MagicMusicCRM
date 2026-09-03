@@ -1,11 +1,32 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-09-02
-> Production: client `1.5.29+209`, server `229b8a6f`,
-> image `sha256:aee7deaf…`, migration `0145`
+> Обновлено: 2026-09-03
+> Production: client `1.5.30+210`, server `b5994969`,
+> image `sha256:c507e60e…`, migration `0146_lesson_funding_payer`
 > Рабочая ветка: `main`
-> Статус: абонементы, расписание и аналитика преподавателей rollout PASS;
-> общий update build `209` опубликован
+> Статус: единый редактор занятия и адаптивные окна rollout PASS;
+> общий update build `210` опубликован
+
+Release `1.5.30+210`: общие центральные окна на native desktop и нижние sheets
+на телефонах, единый редактор занятия с плательщиком/источником средств/ценой,
+стандартная ставка преподавателя, канонический ученик вместо дублирования
+лида, согласованные цвета и отдельный зелёный значок абонемента. Matrix API
+возвращает reservation state; production probe подтверждает 12 reserved
+scheduled занятий. Расчёты преподавателей — третья вкладка Аналитики.
+Flutter `1553/1553`, backend `279/279` suites / `3690/3690` tests,
+analyze/typecheck/build, security, production-like и оба exact-image gates PASS.
+Windows startup и package/signature checks PASS; Android device smoke не
+выполнен, устройство отсутствует. Оба cutover PASS, final healthy/restart `0`,
+reconciliation дважды `issues=[]`, очереди `0`, monitor PASS. Pre/post encrypted
+off-host backups прошли isolated restore. Manifests, четыре artifacts и GitHub
+`v1.5.30` опубликованы и проверены по SHA-256.
+
+**Rollback только на payer-aware bridge `bf25d357`**, image
+`magicmusiccrm-server:1.5.30-210-bridge-bf25d357e257`, без down migration.
+209 несовместим с новыми финансовыми решениями; deploy guard запрещает такой
+откат после их появления. Bridge и final имеют одинаковый backend: общий
+дефект требует forward fix. Evidence и полный rollback contract:
+`docs/audits/v7-production-normalized-lessons-windows-210.md`.
 
 Release `1.5.29+209` включает бессрочную продажу по умолчанию, полный явный
 диапазон постоянного расписания, зелёное покрытие абонементом, точное открытие
