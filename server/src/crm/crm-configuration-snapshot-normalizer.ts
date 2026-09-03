@@ -34,6 +34,7 @@ const settingDefinitions = {
   payment_reminder_days: { min: 0, max: 60 },
 } as const;
 const settlementContexts = new Set(["settle", "reschedule", "cancel"]);
+const settlementDurationModes = new Set(["zero", "full", "manual"]);
 const compensationModes = new Set([
   "none",
   "standard",
@@ -496,6 +497,18 @@ function normalizeSettlementTypes(raw: unknown): LessonSettlementTypeConfig[] {
           0,
           20000,
         ),
+        clientDurationMode: readSettlementDurationMode(
+          row.clientDurationMode,
+          `lessonSettlementTypes.${index}.clientDurationMode`,
+        ),
+        teacherDurationMode: readSettlementDurationMode(
+          row.teacherDurationMode,
+          `lessonSettlementTypes.${index}.teacherDurationMode`,
+        ),
+        defaultTeacherCompensationRuleKey: readKey(
+          row.defaultTeacherCompensationRuleKey,
+          `lessonSettlementTypes.${index}.defaultTeacherCompensationRuleKey`,
+        ),
         ...(row.fixedPenaltyMinor === undefined ||
         row.fixedPenaltyMinor === null
           ? {}
@@ -536,6 +549,21 @@ function normalizeSettlementTypes(raw: unknown): LessonSettlementTypeConfig[] {
     );
   }
   return settlementTypes;
+}
+
+function readSettlementDurationMode(
+  value: unknown,
+  field: string,
+): LessonSettlementTypeConfig["clientDurationMode"] {
+  const mode = readText(value, field, 16);
+  if (!settlementDurationModes.has(mode)) {
+    invalid(
+      field,
+      "INVALID_SETTLEMENT_DURATION_MODE",
+      "Допустимы zero, full и manual.",
+    );
+  }
+  return mode as LessonSettlementTypeConfig["clientDurationMode"];
 }
 
 function normalizeCompensationRules(

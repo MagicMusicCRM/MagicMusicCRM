@@ -36,6 +36,9 @@ function validRawSnapshot(): Record<string, unknown> {
         label: "Занятие",
         colorToken: "success",
         hourShareBasisPoints: 10000,
+        clientDurationMode: "full",
+        teacherDurationMode: "full",
+        defaultTeacherCompensationRuleKey: "standard",
         allowedContexts: ["settle"],
         active: true,
         order: 0,
@@ -233,6 +236,16 @@ describe("normalizeCrmConfigurationSnapshot", () => {
     });
   });
 
+  it("preserves the system-owned settlement policy metadata", () => {
+    const normalized = normalizeCrmConfigurationSnapshot(validRawSnapshot());
+
+    expect(normalized.lessonSettlementTypes[0]).toMatchObject({
+      clientDurationMode: "full",
+      teacherDurationMode: "full",
+      defaultTeacherCompensationRuleKey: "standard",
+    });
+  });
+
   it("requires at least one active lesson settlement type", () => {
     const raw = validRawSnapshot();
     rows(raw, "lessonSettlementTypes")[0].active = false;
@@ -292,6 +305,9 @@ describe("normalizeCrmConfigurationSnapshot", () => {
       label: "Бесплатно",
       colorToken: "warning",
       hourShareBasisPoints: 0,
+      clientDurationMode: "zero",
+      teacherDurationMode: "zero",
+      defaultTeacherCompensationRuleKey: "none",
       allowedContexts: ["settle", "cancel"],
       active: true,
       order: 0,

@@ -3,6 +3,7 @@ import type {
   LessonSettlementTypeConfig,
   TeacherCompensationRuleConfig,
 } from "../crm-configuration.contracts";
+import { buildCrmConfigurationBaseline } from "../crm-configuration-baseline";
 import type { LessonFinancialDecision } from "./lesson-settlement.port";
 import {
   assertPlannedLessonSettlementDecision,
@@ -30,6 +31,9 @@ function catalog(): LessonSettlementCatalog {
         label: "Проведено",
         colorToken: "success",
         hourShareBasisPoints: 10_000,
+        clientDurationMode: "full",
+        teacherDurationMode: "full",
+        defaultTeacherCompensationRuleKey: "percent",
         allowedContexts: ["settle"],
         active: true,
         order: 0,
@@ -71,6 +75,16 @@ function errorResponse(action: () => unknown): unknown {
 }
 
 describe("lesson settlement catalog", () => {
+  it("keeps the retired penalty lesson unavailable for new decisions", () => {
+    const snapshot = buildCrmConfigurationBaseline([]);
+
+    expect(
+      snapshot.lessonSettlementTypes.find(
+        (type) => type.stableKey === "penalty_lesson",
+      )?.active,
+    ).toBe(false);
+  });
+
   it("loads an exact frozen revision pair through the supplied executor", async () => {
     const calls: Array<{ text: string; values?: unknown[] }> = [];
     const expected = catalog();
