@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/responsive_detail_row.dart';
 
 import 'lesson_editor_models.dart';
 
@@ -205,11 +206,12 @@ class LessonEditorActionsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return OverflowBar(
+      alignment: MainAxisAlignment.end,
+      spacing: AppSpace.sm,
+      overflowSpacing: AppSpace.sm,
       children: [
         TextButton(onPressed: actions.cancel, child: const Text('Отмена')),
-        const SizedBox(width: AppSpace.sm),
         FilledButton(
           onPressed: isSaving || !canSave ? null : actions.save,
           child: isSaving
@@ -301,33 +303,9 @@ class _SnapshotRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpace.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: textTheme.bodySmall?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpace.md),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: ResponsiveDetailRow(label: label, value: value),
     );
   }
 }

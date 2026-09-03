@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_feedback.dart';
@@ -10,6 +13,8 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_edito
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_participant_section.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_schedule_section.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_view.dart';
+
+import '../../support/modal_layout_evidence.dart';
 
 Widget _host(Widget child) => MaterialApp(home: Material(child: child));
 
@@ -282,6 +287,78 @@ List<String> _forbiddenUsesIn(String source) => [
 ];
 
 void main() {
+  for (final (size, scale, platform) in [
+    (const Size(1280, 900), 1.0, TargetPlatform.windows),
+    (const Size(600, 800), 1.3, TargetPlatform.windows),
+    (const Size(320, 800), 1.3, TargetPlatform.android),
+    (const Size(390, 844), 1.0, TargetPlatform.android),
+    (const Size(430, 932), 1.5, TargetPlatform.android),
+  ]) {
+    testWidgets('real lesson form layout ${size.width} text $scale', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadModalFonts);
+      final actions = _RecordingActions();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: evidenceRootKey,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            supportedLocales: const [Locale('ru')],
+            locale: const Locale('ru'),
+            theme: AppTheme.production.copyWith(platform: platform),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showMagicDialog<void>(
+                    context: context,
+                    builder: (_) =>
+                        LessonEditorView(model: _viewModel(), actions: actions),
+                  ),
+                  child: const Text('Открыть'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Открыть'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Создать').hitTestable(), findsOneWidget);
+      final client = tester.getRect(
+        find.byKey(const ValueKey('lesson-client-field')),
+      );
+      expect(
+        client.width,
+        greaterThan(size.width >= 840 ? 650 : size.width - 130),
+      );
+      await captureModalLayout(tester, 'lesson-${size.width.toInt()}-top');
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-snapshot-preview')),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Оплата преподавателю').hitTestable(), findsOneWidget);
+      await captureModalLayout(
+        tester,
+        'lesson-${size.width.toInt()}-calculation',
+      );
+      await tester.tap(find.text('Создать'));
+      expect(actions.saveCount, 1);
+    });
+  }
+
   testWidgets('schedule section emits analyzer and suggestion intents', (
     tester,
   ) async {
@@ -1002,6 +1079,50 @@ void main() {
     },
   );
 
+  testWidgets('snapshot values align in a column and stack on a phone', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    for (final width in [680.0, 320.0]) {
+      tester.view.physicalSize = Size(width, 900);
+      await tester.pumpWidget(
+        _host(
+          LessonEditorFeedback(
+            model: LessonEditorFeedbackModel(
+              session: _session(),
+              draft: _draft(),
+              validationMessage: null,
+              settlementLabel: 'Занятие',
+              clientSnapshotValue: '0 ₽',
+              compensationLabel: 'Полная стандартная ставка',
+              teacherSnapshotValue: 'Стандартная ставка преподавателя · 0 ₽',
+              canManageTeacherCompensation: true,
+            ),
+          ),
+        ),
+      );
+      final value = tester.getRect(
+        find.text(
+          'Полная стандартная ставка · Стандартная ставка преподавателя · 0 ₽',
+        ),
+      );
+      final label = tester.getRect(find.text('Оплата преподавателю'));
+      if (width > 600) {
+        expect(
+          value.left,
+          closeTo(tester.getRect(find.text('Обычное')).left, 1),
+        );
+        expect(value.top, closeTo(label.top, 1));
+      } else {
+        expect(value.left, closeTo(label.left, 1));
+        expect(value.top, greaterThanOrEqualTo(label.bottom));
+        expect(value.width, greaterThanOrEqualTo(280));
+      }
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('feedback preserves snapshot, validation and action behavior', (
     tester,
   ) async {
@@ -1461,6 +1582,7 @@ void main() {
             'package:flutter/material.dart',
             'package:magic_music_crm/core/api/magic_api_error.dart',
             'package:magic_music_crm/core/theme/design_tokens.dart',
+            'package:magic_music_crm/core/widgets/responsive_detail_row.dart',
             'lesson_editor_models.dart',
           },
     };

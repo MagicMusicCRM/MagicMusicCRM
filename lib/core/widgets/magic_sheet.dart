@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../theme/design_tokens.dart';
 
 const magicModalDesktopBreakpoint = 840.0;
+// Matches the lesson editor: 680 logical pixels of content plus dialog padding.
+const magicModalFormWidth = 728.0;
 
 bool usesDesktopMagicModal(BuildContext context) => kIsWeb
     ? MediaQuery.sizeOf(context).width >= magicModalDesktopBreakpoint
@@ -69,7 +71,16 @@ Future<T?> showMagicDialog<T>({
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(AppRadius.sheet),
-          child: builder(context),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              dialogTheme: Theme.of(context).dialogTheme.copyWith(
+                constraints: const BoxConstraints.tightFor(
+                  width: magicModalFormWidth,
+                ),
+              ),
+            ),
+            child: Builder(builder: builder),
+          ),
         ),
       ),
     ),
@@ -321,27 +332,32 @@ class _MagicSheetFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bodyScroll = embeddedDialog
-        ? CustomScrollView(
-            controller: scrollController,
-            slivers: [
-              SliverFillRemaining(
-                child: Theme(
-                  data: Theme.of(context).copyWith(
-                    dialogTheme: Theme.of(context).dialogTheme.copyWith(
-                      insetPadding: EdgeInsets.zero,
-                      alignment: Alignment.topCenter,
-                      elevation: 0,
-                      shape: const RoundedRectangleBorder(),
+        ? LayoutBuilder(
+            builder: (context, constraints) => CustomScrollView(
+              controller: scrollController,
+              slivers: [
+                SliverFillRemaining(
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      dialogTheme: Theme.of(context).dialogTheme.copyWith(
+                        insetPadding: EdgeInsets.zero,
+                        constraints: BoxConstraints.tightFor(
+                          width: constraints.maxWidth,
+                        ),
+                        alignment: Alignment.topCenter,
+                        elevation: 0,
+                        shape: const RoundedRectangleBorder(),
+                      ),
+                    ),
+                    child: MediaQuery.removeViewInsets(
+                      context: context,
+                      removeBottom: true,
+                      child: body,
                     ),
                   ),
-                  child: MediaQuery.removeViewInsets(
-                    context: context,
-                    removeBottom: true,
-                    child: body,
-                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           )
         : SingleChildScrollView(
             key: const ValueKey('magic-sheet-body-scroll'),
@@ -391,75 +407,7 @@ class _MagicSheetFrame extends StatelessWidget {
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 2, 12, 13),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (icon != null) ...[
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColor.goldSoft,
-                      borderRadius: BorderRadius.circular(AppRadius.icon),
-                      border: Border.all(color: AppColor.goldLine),
-                    ),
-                    child: Icon(icon, size: 20, color: AppColor.gold),
-                  ),
-                  const SizedBox(width: AppSpace.md),
-                ],
-                if (title != null)
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColor.text,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                        if (subtitle != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              subtitle!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColor.text2,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                if (title == null) const Spacer(),
-                if (onToggleExtent != null)
-                  IconButton(
-                    key: const ValueKey('magic-sheet-toggle'),
-                    onPressed: onToggleExtent,
-                    tooltip: expandLabel,
-                    icon: Icon(
-                      expandLabel == 'Свернуть'
-                          ? Icons.unfold_less_rounded
-                          : Icons.unfold_more_rounded,
-                    ),
-                  ),
-                if (showCloseButton)
-                  IconButton(
-                    key: const ValueKey('magic-modal-close'),
-                    tooltip: 'Закрыть',
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-              ],
-            ),
+            child: _buildHeader(context),
           ),
           const Divider(height: 1, color: AppColor.divider),
           if (fillHeight)
@@ -483,6 +431,101 @@ class _MagicSheetFrame extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final heading = title == null
+        ? null
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                title!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColor.text,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              if (subtitle != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    subtitle!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColor.text2,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ),
+            ],
+          );
+    final leading = icon == null
+        ? null
+        : Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColor.goldSoft,
+              borderRadius: BorderRadius.circular(AppRadius.icon),
+              border: Border.all(color: AppColor.goldLine),
+            ),
+            child: Icon(icon, size: 20, color: AppColor.gold),
+          );
+    final controls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (onToggleExtent != null)
+          IconButton(
+            key: const ValueKey('magic-sheet-toggle'),
+            onPressed: onToggleExtent,
+            tooltip: expandLabel,
+            icon: Icon(
+              expandLabel == 'Свернуть'
+                  ? Icons.unfold_less_rounded
+                  : Icons.unfold_more_rounded,
+            ),
+          ),
+        if (showCloseButton)
+          IconButton(
+            key: const ValueKey('magic-modal-close'),
+            tooltip: 'Закрыть',
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.close_rounded),
+          ),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScale = MediaQuery.textScalerOf(context).scale(17) / 17;
+        if (heading != null && constraints.maxWidth < 520 * textScale) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [?leading, const Spacer(), controls]),
+              const SizedBox(height: AppSpace.sm),
+              heading,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (leading != null) ...[
+              leading,
+              const SizedBox(width: AppSpace.md),
+            ],
+            if (heading != null) Expanded(child: heading) else const Spacer(),
+            controls,
+          ],
+        );
+      },
     );
   }
 }

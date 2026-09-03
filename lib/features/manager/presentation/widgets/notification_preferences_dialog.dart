@@ -209,51 +209,70 @@ class _EventSection extends StatelessWidget {
         for (final pref in prefs)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 130,
-                  child: Text(
-                    notificationRoleLabels[pref.role] ?? pref.role,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final role = Text(
+                  notificationRoleLabels[pref.role] ?? pref.role,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                ),
-                Switch(
+                );
+                final toggle = Switch(
                   value: pref.enabled,
                   onChanged: isSaving(pref)
                       ? null
                       : (value) => onToggle(pref, value),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
+                );
+                final channels = Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final entry in notificationChannelLabels.entries)
+                      FilterChip(
+                        label: Text(entry.value),
+                        selected: pref.channels.contains(entry.key),
+                        // Channels are meaningless while the row is off —
+                        // showing them live would imply the role still gets
+                        // something.
+                        onSelected: (!pref.enabled || isSaving(pref))
+                            ? null
+                            : (selected) {
+                                final next = [...pref.channels];
+                                if (selected) {
+                                  next.add(entry.key);
+                                } else {
+                                  next.remove(entry.key);
+                                }
+                                onChannels(pref, next);
+                              },
+                      ),
+                  ],
+                );
+                final textScale =
+                    MediaQuery.textScalerOf(context).scale(14) / 14;
+                if (constraints.maxWidth < 520 * textScale) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final entry in notificationChannelLabels.entries)
-                        FilterChip(
-                          label: Text(entry.value),
-                          selected: pref.channels.contains(entry.key),
-                          // Channels are meaningless while the row is off —
-                          // showing them live would imply the role still gets
-                          // something.
-                          onSelected: (!pref.enabled || isSaving(pref))
-                              ? null
-                              : (selected) {
-                                  final next = [...pref.channels];
-                                  if (selected) {
-                                    next.add(entry.key);
-                                  } else {
-                                    next.remove(entry.key);
-                                  }
-                                  onChannels(pref, next);
-                                },
-                        ),
+                      Row(
+                        children: [
+                          Expanded(child: role),
+                          toggle,
+                        ],
+                      ),
+                      channels,
                     ],
-                  ),
-                ),
-              ],
+                  );
+                }
+                return Row(
+                  children: [
+                    SizedBox(width: 160, child: role),
+                    toggle,
+                    const SizedBox(width: 8),
+                    Expanded(child: channels),
+                  ],
+                );
+              },
             ),
           ),
       ],

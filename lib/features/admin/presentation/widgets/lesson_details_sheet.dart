@@ -5,33 +5,26 @@ import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/responsive_detail_row.dart';
 
 /// One icon+label+value row inside the lesson details sheet. Pure.
 Widget detailRow(
   BuildContext context,
   IconData icon,
   String label,
-  String value,
-) {
+  String value, {
+  Widget? valueWidget,
+}) {
   return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Icon(icon, size: 18, color: AppColor.gold),
       SizedBox(width: 8),
-      Text(
-        '$label: ',
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-          fontSize: 13,
-        ),
-      ),
       Expanded(
-        child: Text(
-          value,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+        child: ResponsiveDetailRow(
+          label: '$label: ',
+          value: value,
+          valueWidget: valueWidget,
         ),
       ),
     ],
@@ -115,26 +108,17 @@ Widget _referenceRow(
       reference.available ? reference.value : 'Связанная запись недоступна',
     );
   }
-  return Row(
-    children: [
-      Icon(reference.icon, size: 18, color: AppColor.gold),
-      const SizedBox(width: AppSpace.sm),
-      Text(
-        '${reference.label}: ',
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-          fontSize: 13,
-        ),
-      ),
-      Expanded(
-        child: EntityLinkText(
-          key: ValueKey('lesson-reference-${reference.label}'),
-          text: reference.value,
-          onPressed: () => onOpen(EntityOpenTarget.current),
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-      ),
-    ],
+  return detailRow(
+    context,
+    reference.icon,
+    reference.label,
+    reference.value,
+    valueWidget: EntityLinkText(
+      key: ValueKey('lesson-reference-${reference.label}'),
+      text: reference.value,
+      onPressed: () => onOpen(EntityOpenTarget.current),
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    ),
   );
 }
 

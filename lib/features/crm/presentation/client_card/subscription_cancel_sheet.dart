@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/responsive_detail_row.dart';
 import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -539,24 +540,7 @@ class _CancellationSummaryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(color: AppColor.text2, fontSize: 12),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppColor.text,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
+      child: ResponsiveDetailRow(label: label, value: value),
     );
   }
 }

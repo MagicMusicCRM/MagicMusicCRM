@@ -52,6 +52,11 @@ presentation-контур `magic_sheet.dart`: центральный Dialog на
 `showMagicSheet` — содержимое с заголовком и действиями. Material pickers
 проходят тот же контур через `magic_picker.dart`. Боковой modal drawer удалён;
 маршруты рабочих вкладок, контроллеры, результаты команд и dirty guards сохранены.
+Размер формы задаёт общий `DialogTheme` внутри этого контура: 728 логических px
+на desktop с ограничением экраном, полная доступная ширина на телефоне.
+Локальные устаревшие `SizedBox(width: ...)` не должны сжимать форму.
+`ResponsiveDetailRow` задаёт общий перенос длинных подписей и значений в расчётах
+и подробностях занятия; узкие формы учитывают масштаб текста, а не только экран.
 
 DECISION: Production использует один owned runtime:
 Flutter → NestJS → PostgreSQL, с Redis/Socket.IO и private file storage.

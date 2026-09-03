@@ -162,6 +162,8 @@ void main() {
 
     expect(find.textContaining('Воронка ещё не настроена'), findsOneWidget);
     expect(find.text('Версия 0'), findsOneWidget);
+    await tester.ensureVisible(find.text('Добавить этап'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Добавить этап'));
     await tester.pumpAndSettle();
     final stage = find.byType(TextFormField).first;
