@@ -23,9 +23,38 @@ export function resolveSettlementPolicy(
       "settlementTypeKey",
     );
   }
+  const legacyPolicy = resolveLegacySettlementPolicy(type.hourShareBasisPoints);
   return {
-    clientDurationMode: type.clientDurationMode,
-    teacherDurationMode: type.teacherDurationMode,
-    teacherCompensationRuleKey: type.defaultTeacherCompensationRuleKey,
+    clientDurationMode:
+      type.clientDurationMode ?? legacyPolicy.clientDurationMode,
+    teacherDurationMode:
+      type.teacherDurationMode ?? legacyPolicy.teacherDurationMode,
+    teacherCompensationRuleKey:
+      type.defaultTeacherCompensationRuleKey ??
+      legacyPolicy.teacherCompensationRuleKey,
+  };
+}
+
+function resolveLegacySettlementPolicy(
+  hourShareBasisPoints: number,
+): ResolvedSettlementPolicy {
+  if (hourShareBasisPoints === 0) {
+    return {
+      clientDurationMode: "zero",
+      teacherDurationMode: "zero",
+      teacherCompensationRuleKey: "none",
+    };
+  }
+  if (hourShareBasisPoints === 10_000) {
+    return {
+      clientDurationMode: "full",
+      teacherDurationMode: "full",
+      teacherCompensationRuleKey: "standard",
+    };
+  }
+  return {
+    clientDurationMode: "manual",
+    teacherDurationMode: "manual",
+    teacherCompensationRuleKey: "percent",
   };
 }

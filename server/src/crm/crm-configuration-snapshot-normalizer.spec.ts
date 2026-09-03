@@ -236,6 +236,17 @@ describe("normalizeCrmConfigurationSnapshot", () => {
     });
   });
 
+  it("rejects an unsupported settlement duration mode", () => {
+    const raw = validRawSnapshot();
+    rows(raw, "lessonSettlementTypes")[0].clientDurationMode = "fraction";
+
+    expect(invalidResponse(raw)).toEqual({
+      code: "INVALID_SETTLEMENT_DURATION_MODE",
+      field: "lessonSettlementTypes.0.clientDurationMode",
+      message: "Допустимы zero, full и manual.",
+    });
+  });
+
   it("preserves the system-owned settlement policy metadata", () => {
     const normalized = normalizeCrmConfigurationSnapshot(validRawSnapshot());
 
