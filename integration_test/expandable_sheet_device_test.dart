@@ -53,10 +53,10 @@ void main() {
 
     await tester.tap(find.text('Открыть sheet'));
     await tester.pumpAndSettle();
-    expect(find.text('Развернуть'), findsOneWidget);
-    await tester.tap(find.text('Развернуть'));
+    expect(find.byTooltip('Развернуть'), findsOneWidget);
+    await tester.tap(find.byTooltip('Развернуть'));
     await tester.pumpAndSettle();
-    expect(find.text('Свернуть'), findsOneWidget);
+    expect(find.byTooltip('Свернуть'), findsOneWidget);
     debugPrint('V6_SHEET_EXPANDED_READY_FOR_ADB');
 
     await tester.runAsync(

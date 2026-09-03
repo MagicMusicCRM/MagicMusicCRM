@@ -49,9 +49,9 @@ void main() {
         .byKey(const ValueKey('magic-sheet-mobile'))
         .evaluate()
         .isNotEmpty) {
-      await tester.tap(find.text('Развернуть'));
+      await tester.tap(find.byTooltip('Развернуть'));
       await tester.pumpAndSettle();
-      expect(find.text('Свернуть'), findsOneWidget);
+      expect(find.byTooltip('Свернуть'), findsOneWidget);
     }
     await tester.ensureVisible(find.text('Напомнить в приложении'));
     await tester.tap(find.text('Напомнить в приложении'));

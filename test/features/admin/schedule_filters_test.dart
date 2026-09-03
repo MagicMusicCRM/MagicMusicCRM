@@ -169,8 +169,8 @@ void main() {
     await tester.tap(find.byTooltip('Фильтры расписания'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'filter sheet at 360px');
-    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
-    expect(find.text('Развернуть'), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-sheet-handle')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('schedule-filter-lesson-type')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Только пробные').last);

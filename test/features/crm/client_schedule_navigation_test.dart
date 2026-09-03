@@ -6,7 +6,6 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
-import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
@@ -81,11 +80,13 @@ void main() {
 
       await tester.tap(find.text('Создать занятие'));
       await tester.pumpAndSettle();
-      final clientField = tester.widget<SearchablePickerField>(
-        find.byKey(const ValueKey('lesson-client-field')),
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('lesson-client-field')),
+          matching: find.text('Анна Тестова · Ученик'),
+        ),
+        findsOneWidget,
       );
-      expect(clientField.selectedId, 'student:student-1');
-      expect(clientField.selectedLabel, 'Анна Тестова · Student');
       expect(
         find.byKey(const ValueKey('lesson-branch-field:branch-1')),
         findsOneWidget,

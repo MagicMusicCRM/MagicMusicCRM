@@ -100,13 +100,13 @@ void main() {
                             'teacherCompensationRuleKey': 'none',
                           },
                           'reason': 'Согласовано бесплатное занятие',
+                          'settlementTypeLabel': 'Без списания',
+                          'teacherCompensationRuleLabel': 'Стандартная ставка',
                           'actorName': 'Мария Управляющая',
                           'createdAt': '2026-08-07T08:00:00.000Z',
                         },
                       ],
-                      adjustSettlementLabel: 'Изменить расчёт',
-                      onAdjustSettlement: () async => adjusted = true,
-                      onEdit: () {},
+                      onEdit: () => adjusted = true,
                       onCancel: () async {},
                     ),
                     child: const Text('Открыть занятие'),
@@ -131,14 +131,13 @@ void main() {
         expect(find.text('Связанная запись недоступна'), findsOneWidget);
         expect(find.text('Без аудитории'), findsOneWidget);
         expect(find.byTooltip('Открыть в новой вкладке'), findsNothing);
-        expect(
-          find.byKey(const Key('lesson-adjust-settlement')),
-          findsOneWidget,
-        );
+        expect(find.text('Изменить занятие'), findsOneWidget);
         await tester.tap(find.byKey(const Key('lesson-settlement-history')));
         await tester.pumpAndSettle();
         expect(find.text('План расчёта · заменён'), findsOneWidget);
         expect(find.text('Корректировка · действующий'), findsOneWidget);
+        expect(find.textContaining('free_lesson'), findsNothing);
+        expect(find.text('Списание: Без списания · преподаватель: Стандартная ставка'), findsOneWidget);
         expect(
           find.text('Причина: Согласовано бесплатное занятие'),
           findsOneWidget,
@@ -151,7 +150,7 @@ void main() {
 
         await tester.tap(find.text('Открыть занятие'));
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('lesson-adjust-settlement')));
+        await tester.tap(find.text('Изменить занятие'));
         await tester.pumpAndSettle();
         expect(adjusted, isTrue);
       },

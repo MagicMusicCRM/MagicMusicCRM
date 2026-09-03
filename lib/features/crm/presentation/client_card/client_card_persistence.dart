@@ -79,7 +79,7 @@ extension _ClientCardPersistence on _ClientCardState {
   Future<void> _retryAutoSave() async {
     if (_saving) return;
     if (_autoSaveConflict) {
-      final applyDraft = await showDialog<bool>(
+      final applyDraft = await showMagicDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Карточка изменилась'),
@@ -712,7 +712,7 @@ extension _ClientCardPersistence on _ClientCardState {
     if (candidateId == null || candidateId.isEmpty) return;
     final student = _candidateEntity(candidate, 'student');
     final studentName = student['name']?.toString().trim();
-    final confirm = await showDialog<bool>(
+    final confirm = await showMagicDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Связать с учеником?'),

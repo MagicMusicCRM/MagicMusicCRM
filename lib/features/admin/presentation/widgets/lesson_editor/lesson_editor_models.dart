@@ -53,6 +53,7 @@ class LessonEditorDraft {
     this.compensationValueMinor,
     this.plannedSettlementReason = '',
     this.notes = '',
+    this.clientDecisions = const [],
   });
 
   final DateTime localStart;
@@ -70,6 +71,7 @@ class LessonEditorDraft {
   final String? compensationValueMinor;
   final String plannedSettlementReason;
   final String notes;
+  final List<Map<String, dynamic>> clientDecisions;
 
   LessonEditorDraft copyWith({
     DateTime? localStart,
@@ -87,6 +89,7 @@ class LessonEditorDraft {
     Object? compensationValueMinor = _lessonEditorAbsent,
     String? plannedSettlementReason,
     String? notes,
+    List<Map<String, dynamic>>? clientDecisions,
   }) => LessonEditorDraft(
     localStart: localStart ?? this.localStart,
     durationMinutes: durationMinutes ?? this.durationMinutes,
@@ -121,6 +124,7 @@ class LessonEditorDraft {
     plannedSettlementReason:
         plannedSettlementReason ?? this.plannedSettlementReason,
     notes: notes ?? this.notes,
+    clientDecisions: clientDecisions ?? this.clientDecisions,
   );
 
   LessonEditorDraft withDate(DateTime value) => copyWith(
@@ -181,6 +185,11 @@ enum LessonTextTarget {
 
 sealed class LessonEditorEdit {
   const LessonEditorEdit();
+}
+
+final class LessonClientDecisionsEdit extends LessonEditorEdit {
+  const LessonClientDecisionsEdit(this.value);
+  final List<Map<String, dynamic>> value;
 }
 
 final class LessonReferenceEdit extends LessonEditorEdit {
@@ -269,13 +278,14 @@ class LessonEditorInitialInput {
   });
 
   factory LessonEditorInitialInput.fromSource(
-    LessonEditorInitialSource source,
-  ) => LessonEditorInitialInput(
+    LessonEditorInitialSource source, {
+    Map<String, dynamic>? lessonOverride,
+  }) => LessonEditorInitialInput(
     initialDate: source.initialDate,
     initialRoomId: source.initialRoomId,
     initialBranchId: source.initialBranchId,
     initialDurationMinutes: source.initialDurationMinutes,
-    lesson: source.lesson,
+    lesson: lessonOverride ?? source.lesson,
     initialIsTrial: source.initialIsTrial,
     leadId: source.leadId,
     leadName: source.leadName,

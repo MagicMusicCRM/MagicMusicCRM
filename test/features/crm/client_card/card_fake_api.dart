@@ -30,6 +30,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.role = 'admin',
     this.lead,
     this.student,
+    this.linkedStudents = const [],
     this.leadTasks = const [],
     this.sharedTasks = const [],
     this.sharedTaskHistory = const [],
@@ -119,6 +120,7 @@ class FakeCardApiClient extends MagicApiClient {
 
   /// Сырой ученик для GET /crm/students/:id/card.
   final Map<String, dynamic>? student;
+  final List<Map<String, dynamic>> linkedStudents;
 
   /// Сырые задачи лид-карточки (camelCase, как с сервера).
   final List<Map<String, dynamic>> leadTasks;
@@ -478,7 +480,7 @@ class FakeCardApiClient extends MagicApiClient {
     if (lead != null && path == '/crm/leads/${lead!['id']}/card') {
       return <String, dynamic>{
             'lead': lead,
-            'linkedStudents': <dynamic>[],
+            'linkedStudents': linkedStudents,
             'otherLeads': <dynamic>[],
             'comments': <dynamic>[],
             'tasks': leadTasks,

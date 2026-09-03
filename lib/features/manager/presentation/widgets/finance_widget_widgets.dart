@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
 
@@ -34,7 +35,6 @@ Widget _financeTotals({
   required BoxConstraints constraints,
   required FinanceState state,
   required ColorScheme colors,
-  required NumberFormat format,
 }) {
   final range = state.customRange;
   return SizedBox(
@@ -47,7 +47,7 @@ Widget _financeTotals({
           style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
         ),
         Text(
-          '${format.format(state.total)} ₽',
+          formatPaymentMajor(state.total),
           style: const TextStyle(
             color: AppTheme.success,
             fontSize: 26,
@@ -210,7 +210,6 @@ class _FinanceSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final fmt = NumberFormat('#,##0', 'ru');
     return Container(
       margin: const EdgeInsets.all(14),
       padding: const EdgeInsets.all(14),
@@ -229,7 +228,6 @@ class _FinanceSummary extends StatelessWidget {
               constraints: constraints,
               state: state,
               colors: colors,
-              format: fmt,
             ),
             const Text(
               'Новая оплата проводится в карточке ученика',
@@ -405,7 +403,10 @@ class _PaymentTile extends StatelessWidget {
           ),
         ),
         trailing: Text(
-          '${NumberFormat('#,##0', 'ru').format(payment.amount)} ₽',
+          formatPaymentMajor(
+            payment.amountRaw ?? payment.amount,
+            currencyCode: payment.currency ?? 'RUB',
+          ),
           style: const TextStyle(
             color: AppTheme.success,
             fontWeight: FontWeight.w700,
@@ -581,7 +582,6 @@ class _ExpensesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final fmt = NumberFormat('#,##0', 'ru');
 
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -615,7 +615,7 @@ class _ExpensesPanel extends StatelessWidget {
                       )
                     else
                       Text(
-                        '${fmt.format(total)} ₽',
+                        formatPaymentMajor(total),
                         style: const TextStyle(
                           color: AppColor.danger,
                           fontSize: 22,
@@ -652,7 +652,6 @@ class _ExpensesPanel extends StatelessWidget {
                   final expense = expenses[index];
                   return _ExpenseRow(
                     expense: expense,
-                    fmt: fmt,
                     saving: saving,
                     onEdit: () => onEdit(expense),
                     onDelete: () => onDelete(expense),
@@ -711,14 +710,12 @@ class _AddExpenseButton extends StatelessWidget {
 class _ExpenseRow extends StatelessWidget {
   const _ExpenseRow({
     required this.expense,
-    required this.fmt,
     required this.saving,
     required this.onEdit,
     required this.onDelete,
   });
 
   final Map<String, dynamic> expense;
-  final NumberFormat fmt;
   final bool saving;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -783,7 +780,7 @@ class _ExpenseRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            '− ${fmt.format(amount)} ₽',
+            '− ${formatPaymentMajor(amount)}',
             style: const TextStyle(
               color: AppColor.danger,
               fontWeight: FontWeight.w700,

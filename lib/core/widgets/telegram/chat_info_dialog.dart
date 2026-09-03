@@ -196,15 +196,13 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
   @override
   Future<void> addMembers() async {
     if (!_controller.access.canManageGroup) return;
-    final selected = await showDialog<Set<String>>(
-      context: context,
-      builder: (_) => ChatInfoAddMembersDialog(
-        existingMemberUserIds: _controller.snapshot.members
-            .map((member) => member['user_id']?.toString() ?? '')
-            .where((userId) => userId.isNotEmpty)
-            .toSet(),
-        loadProfiles: _controller.listProfilesForMembership,
-      ),
+    final selected = await ChatInfoAddMembersDialog.show(
+      context,
+      existingMemberUserIds: _controller.snapshot.members
+          .map((member) => member['user_id']?.toString() ?? '')
+          .where((userId) => userId.isNotEmpty)
+          .toSet(),
+      loadProfiles: _controller.listProfilesForMembership,
     );
     if (selected == null || selected.isEmpty || !mounted) return;
     try {
@@ -240,12 +238,10 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
 
   @override
   Future<void> showAllMembers() async {
-    final selected = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => ChatInfoMembersDialog(
-        members: _controller.snapshot.members,
-        canManageGroup: _controller.access.canManageGroup,
-      ),
+    final selected = await ChatInfoMembersDialog.show(
+      context,
+      members: _controller.snapshot.members,
+      canManageGroup: _controller.access.canManageGroup,
     );
     if (selected != null && mounted) await removeMember(selected);
   }

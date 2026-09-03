@@ -155,9 +155,6 @@ Future<void> showLessonDetailsSheet(
   required String? lessonId,
   required VoidCallback onEdit,
   required Future<void> Function() onCancel,
-  Future<void> Function()? onSettle,
-  Future<void> Function()? onAdjustSettlement,
-  String? adjustSettlementLabel,
   String? settlementIssue,
   List<Map<String, dynamic>> settlementHistory = const [],
 }) {
@@ -244,37 +241,13 @@ Future<void> showLessonDetailsSheet(
         ],
         if (lessonId != null) ...[
           const SizedBox(height: AppSpace.lg),
-          if (onAdjustSettlement != null) ...[
-            FilledButton.icon(
-              key: const Key('lesson-adjust-settlement'),
-              onPressed: () async {
-                Navigator.pop(surfaceContext);
-                await onAdjustSettlement();
-              },
-              icon: const Icon(Icons.price_change_outlined, size: 18),
-              label: Text(adjustSettlementLabel ?? 'Изменить расчёт'),
-            ),
-            const SizedBox(height: AppSpace.sm),
-          ],
-          if (onSettle != null) ...[
-            FilledButton.icon(
-              key: const Key('lesson-repair-settlement'),
-              onPressed: () async {
-                Navigator.pop(surfaceContext);
-                await onSettle();
-              },
-              icon: const Icon(Icons.fact_check_outlined, size: 18),
-              label: const Text('Исправить расчёт'),
-            ),
-            const SizedBox(height: AppSpace.sm),
-          ],
-          OutlinedButton.icon(
+          FilledButton.icon(
             onPressed: () {
               Navigator.pop(surfaceContext);
               onEdit();
             },
             icon: const Icon(Icons.edit_outlined, size: 18),
-            label: const Text('Перенести или изменить'),
+            label: const Text('Изменить занятие'),
           ),
           const SizedBox(height: AppSpace.sm),
           TextButton.icon(
@@ -299,14 +272,13 @@ class _SettlementHistoryEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final decision = item['decision'] is Map
-        ? Map<String, dynamic>.from(item['decision'] as Map)
-        : const <String, dynamic>{};
     final effective = item['effective'] == true;
     final reason = item['reason']?.toString().trim();
-    final kind = item['kind'] == 'correction'
-        ? 'Корректировка'
-        : 'План расчёта';
+    final kind = switch (item['kind']) {
+      'correction' => 'Корректировка',
+      'transition' => 'Расчёт занятия',
+      _ => 'План расчёта',
+    };
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: AppSpace.sm),
@@ -329,8 +301,8 @@ class _SettlementHistoryEntry extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Списание: ${decision['settlementTypeKey'] ?? 'Не указано'} · '
-            'преподаватель: ${decision['teacherCompensationRuleKey'] ?? 'Не указано'}',
+            'Списание: ${item['settlementTypeLabel'] ?? 'Тип из справочника'} · '
+            'преподаватель: ${item['teacherCompensationRuleLabel'] ?? 'Правило из справочника'}',
             style: const TextStyle(fontSize: 12),
           ),
           if (reason?.isNotEmpty == true)

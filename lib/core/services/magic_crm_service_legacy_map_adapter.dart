@@ -521,6 +521,10 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
     'lifecycle_state': item['lifecycleState'],
     'reservation_state': item['reservationState'],
     'settlement_failure_code': item['settlementFailureCode'],
+    if (item.containsKey('financialDecision'))
+      'financial_decision': item['financialDecision'],
+    if (item.containsKey('groupParticipants'))
+      'group_participants': item['groupParticipants'] ?? const <dynamic>[],
     'student_first_name': studentParts.$1,
     'student_last_name': studentParts.$2,
     'teacher_first_name': teacherParts.$1,

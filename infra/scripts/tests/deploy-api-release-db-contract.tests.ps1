@@ -216,6 +216,77 @@ $$;
   if ((Get-Sha256Hex $noOpDefinition) -eq $expectedTriggerFunctionSha256) {
     throw "Deploy guard failed to distinguish a no-op trigger function."
   }
+
+  $fundingQuery = Get-RequiredMatch $deployScript `
+    "(?s)<<'FUNDING_ROLLBACK_SQL'\r?\n(.*?)\r?\nFUNDING_ROLLBACK_SQL" `
+    'lesson funding rollback query'
+  $fundingSchema = @'
+create table app.lesson_client_charge_facts (
+  client_id uuid, payer_student_id uuid, pricing_snapshot jsonb
+);
+create table app.lesson_settlement_plans (decision jsonb);
+create table app.lesson_transitions (financial_decision jsonb);
+create table app.lesson_settlement_corrections (decision jsonb);
+'@
+  $fundingSchema | docker exec -i $containerName `
+    psql -X -qAt -v ON_ERROR_STOP=1 -U postgres | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Isolated lesson funding rollback fixtures failed to initialize.'
+  }
+  $fundingCases = @(
+    @{
+      Name = 'legacy payer subscription decision remains compatible'
+      Expected = 't'
+      Sql = @'
+insert into app.lesson_settlement_plans values
+  ('{"clientDecisions":[{"clientId":"recipient","payerStudentId":"payer","subscriptionId":"subscription"}]}');
+insert into app.lesson_client_charge_facts values (null, null, null);
+'@
+    },
+    @{
+      Name = 'payer facts require the bridge even when recipient is unchanged'
+      Expected = 'f'
+      Sql = @'
+insert into app.lesson_client_charge_facts values
+  ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001', null);
+'@
+    },
+    @{
+      Name = 'pricing facts require the bridge'
+      Expected = 'f'
+      Sql = @'
+insert into app.lesson_client_charge_facts values (null, null, '{"finalPriceMinor":"92000"}');
+'@
+    },
+    @{
+      Name = 'explicit free plan requires the bridge without payer facts'
+      Expected = 'f'
+      Sql = @'
+insert into app.lesson_settlement_plans values ('{"clientDecisions":[{"chargeType":"none"}]}');
+'@
+    },
+    @{
+      Name = 'terminal transition decisions remain protected'
+      Expected = 'f'
+      Sql = @'
+insert into app.lesson_transitions values ('{"clientDecisions":[{"basePriceMinor":"90000"}]}');
+'@
+    },
+    @{
+      Name = 'historical correction decisions remain protected'
+      Expected = 'f'
+      Sql = @'
+insert into app.lesson_settlement_corrections values ('{"clientDecisions":[{"discount":{"type":"none"}}]}');
+'@
+    }
+  )
+  foreach ($fundingCase in $fundingCases) {
+    $fundingResult = @("begin;", $fundingCase.Sql, $fundingQuery, "rollback;") -join "`n" |
+      docker exec -i $containerName psql -X -qAt -v ON_ERROR_STOP=1 -U postgres
+    if ($LASTEXITCODE -ne 0 -or "$fundingResult".Trim() -ne $fundingCase.Expected) {
+      throw "Lesson funding rollback contract failed: $($fundingCase.Name)"
+    }
+  }
 } finally {
   if ($containerStarted) {
     docker rm -f $containerName 2>$null | Out-Null

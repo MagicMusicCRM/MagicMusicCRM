@@ -585,7 +585,7 @@ void main() {
         tester,
         find.byKey(const Key('subscription-purchase-preview')),
       ),
-      contains('1 600 ₽'),
+      contains('1 600,00 ₽'),
     );
 
     expect(submissions, hasLength(1));
@@ -648,7 +648,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(_normalizedTexts(tester, previewCard), contains('1 000 ₽'));
+    expect(_normalizedTexts(tester, previewCard), contains('1 000,00 ₽'));
 
     expect(submission?.purchase.paymentAmountMinor, BigInt.from(900000));
     expect(submission?.preview.overpaymentMinor, BigInt.from(100000));

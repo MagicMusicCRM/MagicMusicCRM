@@ -5,6 +5,44 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_edito
 void main() {
   const mapper = LessonEditorInitialMapper();
 
+  test('uses current financial decision instead of the booking snapshot', () {
+    final session = mapper.map(
+      const LessonEditorInitialInput(
+        initialDate: null,
+        initialRoomId: null,
+        initialBranchId: null,
+        initialDurationMinutes: null,
+        initialIsTrial: false,
+        lesson: {
+          'id': 'lesson-a',
+          'student_id': 'student-a',
+          'lead_id': 'lead-a',
+          'student_name': 'Анна',
+          'completion_type': 'scheduled',
+          'client_charge_type': 'none',
+          'teacher_compensation_type': 'none',
+          'financial_decision': {
+            'settlementTypeKey': 'lesson',
+            'teacherCompensationRuleKey': 'standard',
+            'clientDecisions': [
+              {
+                'clientId': 'student-a',
+                'payerStudentId': 'payer-a',
+                'chargeType': 'subscription',
+                'subscriptionId': 'sub-a',
+              },
+            ],
+          },
+        },
+      ),
+    );
+    expect(session.draft.client?.type, 'student');
+    expect(session.draft.completionType, 'standard.success');
+    expect(session.draft.compensationRuleKey, 'standard');
+    expect(session.draft.clientChargeType, 'subscription');
+    expect(session.draft.subscriptionId, 'sub-a');
+  });
+
   test('normalizes a frozen group edit from legacy aliases', () {
     final session = mapper.map(
       const LessonEditorInitialInput(

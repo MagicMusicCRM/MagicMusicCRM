@@ -380,7 +380,7 @@ class _ExactLessonCardApiClient extends FakeCardApiClient {
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
 
-  testWidgets('reserved lessons are green with coverage label and count', (
+  testWidgets('reserved lessons stay blue with a separate coverage marker', (
     tester,
   ) async {
     final api = _api(
@@ -412,10 +412,18 @@ void main() {
                 )
                 .decoration!
             as BoxDecoration;
-    expect(box.color, AppColor.success.withValues(alpha: 0.12));
+    expect(box.color, AppColor.actionBlue.withValues(alpha: 0.12));
+    expect(
+      find.descendant(
+        of: tile,
+        matching: find.byIcon(Icons.card_membership_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Абон.'), findsOneWidget);
     expect(
       find.byTooltip(
-        '07.08.2026 16:00\nПокрыто абонементом\nМария Иванова\nКласс 1',
+        '07.08.2026 16:00\nЗабронировано\nПокрыто абонементом\nМария Иванова\nКласс 1',
       ),
       findsOneWidget,
     );
@@ -552,17 +560,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(api.exactLessonQuery, {'limit': 1, 'lessonId': 'lesson-exact-12'});
-      expect(find.text('Перенести или изменить занятие'), findsOneWidget);
+      expect(find.text('Изменить занятие'), findsOneWidget);
       expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is EditableText &&
-              widget.controller.text == 'Анна Смирнова',
+        find.descendant(
+          of: find.byKey(const ValueKey('lesson-client-field')),
+          matching: find.text('Анна Смирнова · Ученик'),
         ),
         findsOneWidget,
       );
 
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       final restoredScroll = find.descendant(
         of: find.byKey(const ValueKey('schedule-plan-tray-plan-active')),
@@ -1278,6 +1285,11 @@ Future<void> _pump(
     ProviderScope(
       overrides: [magicApiClientProvider.overrideWithValue(api)],
       child: MaterialApp(
+        theme: ThemeData(
+          platform: width >= 840
+              ? TargetPlatform.windows
+              : TargetPlatform.android,
+        ),
         home: MediaQuery(
           data: MediaQueryData(
             size: Size(width, 1000),
@@ -1340,11 +1352,6 @@ Future<void> _chooseSearchable(
   await tester.ensureVisible(find.byKey(field));
   await tester.tap(find.byKey(field));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.descendant(
-      of: find.byType(Scrollbar).last,
-      matching: find.text(option),
-    ),
-  );
+  await tester.tap(find.widgetWithText(MenuItemButton, option).hitTestable());
   await tester.pumpAndSettle();
 }

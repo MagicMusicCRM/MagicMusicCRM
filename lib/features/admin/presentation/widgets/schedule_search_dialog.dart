@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 /// Search prompt for the schedule (student / teacher / room / date). Returns
 /// the entered text, or null on cancel. Extracted from _ScheduleWidgetState.
@@ -7,7 +8,7 @@ Future<String?> showScheduleSearchDialog(
   String initialValue = '',
 }) async {
   var value = initialValue;
-  final query = await showDialog<String>(
+  final query = await showMagicDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Поиск в расписании'),

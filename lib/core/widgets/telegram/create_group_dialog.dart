@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
@@ -12,7 +13,7 @@ class CreateGroupChatDialog extends ConsumerStatefulWidget {
   const CreateGroupChatDialog({super.key});
 
   static Future<void> show(BuildContext context) {
-    return showDialog(
+    return showMagicDialog(
       context: context,
       builder: (context) => const CreateGroupChatDialog(),
     );

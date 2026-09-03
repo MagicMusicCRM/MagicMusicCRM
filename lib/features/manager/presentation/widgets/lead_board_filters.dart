@@ -1,7 +1,8 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/magic_drawer.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 
 /// Reusable labelled dropdown for one lead-board filter facet. Pure.
@@ -122,7 +123,7 @@ Widget filterDateRangeButton({
             label: Text(label, overflow: TextOverflow.ellipsis),
             onPressed: () async {
               final now = DateTime.now();
-              final picked = await showDateRangePicker(
+              final picked = await showMagicDateRangePicker(
                 context: context,
                 firstDate: DateTime(2000),
                 lastDate: DateTime(now.year + 3, 12, 31),
@@ -372,7 +373,7 @@ Future<void> openLeadsFilterDrawer(
   // applying the drawer never clobbers the inline quick search.
   var draft = filters.copyWith(q: searchText);
 
-  final applied = await showMagicDrawer<bool>(
+  final applied = await showMagicSheet<bool>(
     context,
     title: 'Фильтры',
     builder: (drawerContext) {

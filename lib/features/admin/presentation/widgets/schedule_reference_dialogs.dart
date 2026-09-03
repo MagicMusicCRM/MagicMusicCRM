@@ -1,9 +1,11 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:intl/intl.dart';
 
 Future<String?> pickScheduleTime(BuildContext context, String current) async {
   final parts = current.split(':').map(int.tryParse).toList();
-  final picked = await showTimePicker(
+  final picked = await showMagicTimePicker(
     context: context,
     initialTime: TimeOfDay(
       hour: parts.firstOrNull ?? 9,
@@ -20,14 +22,14 @@ Future<Map<String, dynamic>?> showBranchExceptionDialog(
   BuildContext context,
 ) async {
   final now = DateTime.now();
-  final date = await showDatePicker(
+  final date = await showMagicDatePicker(
     context: context,
     firstDate: now.subtract(const Duration(days: 365)),
     lastDate: now.add(const Duration(days: 730)),
     initialDate: now,
   );
   if (date == null || !context.mounted) return null;
-  final closed = await showDialog<bool>(
+  final closed = await showMagicDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Исключение'),
@@ -70,7 +72,7 @@ Future<Map<String, dynamic>?> showUnavailableIntervalDialog(
   BuildContext context,
 ) async {
   final now = DateTime.now();
-  final date = await showDatePicker(
+  final date = await showMagicDatePicker(
     context: context,
     firstDate: now.subtract(const Duration(days: 30)),
     lastDate: now.add(const Duration(days: 730)),
@@ -94,7 +96,7 @@ Future<Map<String, dynamic>?> showUnavailableIntervalDialog(
 
 Future<String?> _showUnavailableReasonDialog(BuildContext context) {
   var reasonText = '';
-  return showDialog<String>(
+  return showMagicDialog<String>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(

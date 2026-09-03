@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/notification_preference.dart';
@@ -18,7 +19,7 @@ class NotificationPreferencesDialog extends ConsumerStatefulWidget {
   const NotificationPreferencesDialog({super.key});
 
   static Future<void> show(BuildContext context) {
-    return showDialog<void>(
+    return showMagicDialog<void>(
       context: context,
       builder: (_) => const NotificationPreferencesDialog(),
     );

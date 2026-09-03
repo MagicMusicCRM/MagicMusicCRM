@@ -178,7 +178,6 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     for (final row in await _crm.searchClientRefs(
       q: query,
       type: 'student',
-      branchId: _effectiveBranchId,
       limit: 50,
     )) {
       final ref = row['ref'];
@@ -198,6 +197,16 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     String payerId,
   ) async {
     final result = <LessonDecisionSubscription>[];
+    final financial =
+        lesson['financial_decision'] ?? lesson['financialDecision'];
+    final current = <String>{
+      if (lesson['subscription_id'] != null)
+        lesson['subscription_id'].toString(),
+      if (financial is Map)
+        for (final item in financial['clientDecisions'] as List? ?? const [])
+          if (item is Map && item['subscriptionId'] != null)
+            item['subscriptionId'].toString(),
+    };
     for (final row in await _crm.listSubscriptions(
       studentId: payerId,
       limit: 50,
@@ -208,9 +217,9 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
       );
       if (id == null ||
           id.isEmpty ||
-          row['status']?.toString() != 'active' ||
           remaining == null ||
-          remaining <= 0) {
+          (!current.contains(id) &&
+              (row['status']?.toString() != 'active' || remaining <= 0))) {
         continue;
       }
       final name = (row['package_name'] ?? row['packageName'])
@@ -259,10 +268,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
       'financialDecision': {
         'settlementTypeKey': settlementTypeKey,
         if (clientDecisions.isNotEmpty)
-          'clientDecisions': [
-            for (final decision in clientDecisions)
-              Map<String, dynamic>.from(decision),
-          ],
+          'clientDecisions': lessonClientDecisionsPayload(clientDecisions),
         if (canManageTeacherCompensation) ...{
           'teacherCompensationRuleKey': compensationRuleKey,
           'teacherCompensationValueMinor': ?compensationValueMinor,

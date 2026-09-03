@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'update_center.dart';
@@ -55,7 +56,7 @@ Future<void> _showWindowsUpdateDialog(
   UpdateManifest manifest, {
   WindowsUpdateService? service,
 }) async {
-  final accepted = await showDialog<bool>(
+  final accepted = await showMagicDialog<bool>(
     context: context,
     barrierDismissible: true,
     builder: (dialogCtx) {
@@ -109,20 +110,24 @@ Future<void> _showWindowsUpdateDialog(
 
   // Brief blocking indicator; applyAndRestart normally quits the process. Keep
   // the route future so a synchronous launch failure can close it reliably.
-  final progressClosed = showDialog<void>(
+  final progressClosed = showMagicDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => const AlertDialog(
-      content: Row(
-        children: [
-          SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
-          ),
-          SizedBox(width: AppSpace.lg),
-          Expanded(child: Text('Загружаем обновление…')),
-        ],
+    showCloseButton: false,
+    builder: (_) => const PopScope(
+      canPop: false,
+      child: AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            SizedBox(width: AppSpace.lg),
+            Expanded(child: Text('Загружаем обновление…')),
+          ],
+        ),
       ),
     ),
   );
@@ -138,7 +143,7 @@ Future<void> _showWindowsUpdateDialog(
     if (navigator.canPop()) navigator.pop();
     await progressClosed;
     if (!context.mounted) return;
-    await showDialog<void>(
+    await showMagicDialog<void>(
       context: context,
       builder: (errorContext) => AlertDialog(
         icon: const Icon(Icons.error_outline_rounded, color: AppColor.danger),

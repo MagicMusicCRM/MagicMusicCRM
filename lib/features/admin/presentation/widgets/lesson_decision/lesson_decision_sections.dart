@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -876,10 +877,7 @@ String _formatLessonTime(DateTime value) =>
 
 String _formatMinor(Object? value) {
   final minor = BigInt.tryParse(value?.toString() ?? '') ?? BigInt.zero;
-  final rubles = minor.abs() ~/ BigInt.from(100);
-  final kopecks = (minor.abs() % BigInt.from(100)).toString().padLeft(2, '0');
-  final grouped = NumberFormat.decimalPattern('ru').format(rubles.toInt());
-  return '${minor.isNegative ? '−' : ''}$grouped,$kopecks ₽';
+  return formatPaymentMinor(minor);
 }
 
 String _warningLabel(String value) => switch (value) {

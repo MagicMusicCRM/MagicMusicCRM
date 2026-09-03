@@ -85,6 +85,14 @@ class _SearchablePickerFieldState extends State<SearchablePickerField> {
   @override
   void didUpdateWidget(covariant SearchablePickerField oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.enabled && !widget.enabled) {
+      _debounce?.cancel();
+      _searchSequence++;
+      _searching = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !widget.enabled) _menuController.close();
+      });
+    }
     if (!_sameItems(oldWidget.items, widget.items) && !_searching) {
       _items = widget.items;
     }
@@ -155,24 +163,31 @@ class _SearchablePickerFieldState extends State<SearchablePickerField> {
   }
 
   void _search() {
+    if (!widget.enabled) return;
     final search = widget.onSearch;
     if (search == null) return;
     final query = _controller.text.trim();
     if (query == _selectedLabel) return;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () async {
+      if (!mounted || !widget.enabled) return;
       final sequence = ++_searchSequence;
       if (mounted) setState(() => _searching = true);
       try {
         final items = query.isEmpty ? widget.items : await search(query);
-        if (!mounted || sequence != _searchSequence) return;
+        if (!mounted || !widget.enabled || sequence != _searchSequence) return;
         setState(() {
           _items = items;
           _menuRevision++;
           _searching = false;
         });
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || _controller.text.trim() != query) return;
+          if (!mounted ||
+              !widget.enabled ||
+              sequence != _searchSequence ||
+              _controller.text.trim() != query) {
+            return;
+          }
           _menuController.open();
         });
       } catch (_) {
@@ -197,7 +212,6 @@ class _SearchablePickerFieldState extends State<SearchablePickerField> {
         enableFilter: true,
         enableSearch: true,
         requestFocusOnTap: true,
-        initialSelection: widget.selectedId,
         label: Text(widget.label),
         hintText: widget.placeholder,
         helperText: widget.hintText,
@@ -242,7 +256,7 @@ class _SearchablePickerFieldState extends State<SearchablePickerField> {
             ? null
             : (entries, _) => entries,
         onSelected: (id) {
-          if (id == null) return;
+          if (!widget.enabled || id == null) return;
           _debounce?.cancel();
           if (id == _clearId) {
             _controller.clear();

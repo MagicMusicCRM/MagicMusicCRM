@@ -1,6 +1,8 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -23,6 +25,7 @@ import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms_api.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
@@ -490,7 +493,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
       _fetchFamily();
       _fetchClientAccess();
       _fetchInternalContext();
-      _fetchStudentData(then: _resolveLeadCounterpart);
+      _fetchStudentData();
       return;
     }
     // Opened as a lead. Start in leadOnly; once the lead card loads we inspect
@@ -500,7 +503,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _statuses = widget.allStatuses ?? const [];
     if (widget.allStatuses == null) _fetchStatuses();
     _fetchMetadata();
-    _fetchCard(then: _resolveStudentCounterpart);
+    _fetchCard();
     _fetchDuplicateCandidates();
     _fetchFamily();
     _fetchClientAccess();

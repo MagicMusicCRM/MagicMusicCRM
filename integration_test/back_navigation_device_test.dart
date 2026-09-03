@@ -24,13 +24,13 @@ void main() {
 
     await tester.tap(find.text('Полный лист'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Развернуть'));
+    await tester.tap(find.byTooltip('Развернуть'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Вложенный диалог'));
     await tester.pumpAndSettle();
     debugPrint('V6_BACK_DIALOG_READY');
     await _waitUntilGone(tester, find.text('Диалог поверх листа'));
-    expect(find.text('Свернуть'), findsOneWidget);
+    expect(find.byTooltip('Свернуть'), findsOneWidget);
 
     debugPrint('V6_BACK_FULL_READY');
     await _waitUntilGone(tester, find.text('Полный лист открыт'));

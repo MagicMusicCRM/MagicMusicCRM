@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
@@ -28,7 +29,7 @@ class TeacherDetailDialog extends ConsumerStatefulWidget {
     BuildContext context,
     Map<String, dynamic> teacher,
   ) {
-    return showDialog<bool>(
+    return showMagicDialog<bool>(
       context: context,
       builder: (_) => TeacherDetailDialog(teacher: teacher),
     );

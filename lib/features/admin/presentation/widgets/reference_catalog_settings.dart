@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -68,7 +69,7 @@ class _ReferenceCatalogSettingsState
   }
 
   Future<void> _create() async {
-    final result = await showDialog<({String name, String kind})>(
+    final result = await showMagicDialog<({String name, String kind})>(
       context: context,
       builder: (_) => _CreateReferenceDialog(
         lossReason: _view == _ReferenceCatalogView.lossReasons,
@@ -96,7 +97,7 @@ class _ReferenceCatalogSettingsState
   }
 
   Future<void> _openLifecycle(Map<String, dynamic> item) async {
-    final changed = await showDialog<bool>(
+    final changed = await showMagicDialog<bool>(
       context: context,
       builder: (_) => ReferenceCatalogLifecycleDialog(
         entityType: _view == _ReferenceCatalogView.disciplines

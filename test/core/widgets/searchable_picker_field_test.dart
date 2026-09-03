@@ -1,8 +1,110 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
 void main() {
+  testWidgets('server results containing the current selection keep the query and remain selectable', (tester) async {
+    SearchableSelectItem? selected;
+    final items = [
+      SearchableSelectItem(id: 'current', label: 'Иван Первый'),
+      SearchableSelectItem(id: 'other', label: 'Иван Второй'),
+    ];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SizedBox(width: 420,
+      child: SearchablePickerField(
+        label: 'Плательщик',
+        selectedId: 'current',
+        selectedLabel: 'Иван Первый',
+        items: items,
+        onSearch: (_) async => items,
+        onSelected: (item) => selected = item,
+      ),
+    ))));
+    await tester.tap(find.byType(TextField));
+    await tester.enterText(find.byType(TextField), 'Иван');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'Иван');
+    final result = find.descendant(of: find.byType(Scrollbar), matching: find.text('Иван Второй'));
+    expect(result, findsOneWidget);
+    await tester.tap(result);
+    await tester.pumpAndSettle();
+    expect(selected?.id, 'other');
+  });
+
+  testWidgets(
+    'disabling a picker discards a pending search and closes its menu',
+    (tester) async {
+      final result = Completer<List<SearchableSelectItem>>();
+      Widget host(bool enabled) => MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 420,
+            child: SearchablePickerField(
+              label: 'Клиент',
+              enabled: enabled,
+              items: const [],
+              onSearch: (_) => result.future,
+              onSelected: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(host(true));
+      await tester.tap(find.byType(TextField));
+      await tester.enterText(find.byType(TextField), 'Анна');
+      await tester.pump(const Duration(milliseconds: 400));
+
+      await tester.pumpWidget(host(false));
+      result.complete([
+        SearchableSelectItem(id: 'found', label: 'Анна Найденная'),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Scrollbar), findsNothing);
+      expect(find.text('Анна Найденная'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'disabled picker never searches or opens its menu when selection syncs',
+    (tester) async {
+      var searches = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 420,
+              child: SearchablePickerField(
+                label: 'Клиент',
+                enabled: false,
+                selectedId: 'current',
+                selectedLabel: 'Иван Иванов · Ученик',
+                items: [
+                  SearchableSelectItem(id: 'current', label: 'Иван Иванов'),
+                ],
+                onSearch: (_) async {
+                  searches++;
+                  return [];
+                },
+                onSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      expect(searches, 0);
+      expect(find.byType(Scrollbar), findsNothing);
+    },
+  );
+
   testWidgets('searchable picker caps its menu at five scrollable rows', (
     tester,
   ) async {

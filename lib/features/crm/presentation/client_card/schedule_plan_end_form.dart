@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -46,7 +47,7 @@ class _SchedulePlanEndFormState extends State<SchedulePlanEndForm> {
   Future<void> _pickDate() async {
     final today = DateUtils.dateOnly(DateTime.now());
     final starts = DateTime.tryParse(widget.plan.activeFrom) ?? today;
-    final picked = await showDatePicker(
+    final picked = await showMagicDatePicker(
       context: context,
       initialDate: _lastDate,
       firstDate: starts.isAfter(today) ? starts : today,

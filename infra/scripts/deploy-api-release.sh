@@ -675,6 +675,55 @@ start_caddy() {
 mutation_started=0
 
 # CONTRACT_HARNESS_BEGIN rollback-recovery
+legacy_lesson_funding_rollback_query() {
+  cat <<'FUNDING_ROLLBACK_SQL'
+select not (
+  exists (
+    select 1 from app.lesson_client_charge_facts
+    where payer_student_id is not null or pricing_snapshot is not null
+  )
+  or exists (
+    select 1
+    from (
+      select decision from app.lesson_settlement_plans
+      union all
+      select financial_decision from app.lesson_transitions
+      union all
+      select decision from app.lesson_settlement_corrections
+    ) funding
+    cross join lateral jsonb_array_elements(
+      coalesce(funding.decision->'clientDecisions', '[]'::jsonb)
+    ) choice
+    where choice ?| array['chargeType', 'basePriceMinor', 'discount', 'surcharge']
+  )
+) as legacy_lesson_funding_compatible;
+FUNDING_ROLLBACK_SQL
+}
+
+assert_legacy_lesson_funding_rollback() {
+  local actual_migration funding_compatible
+
+  # A payer-aware bridge understands all 0146 facts and stored decisions.
+  if [[ "${rollback_image_migration_head:0:4}" > 0145 ]]; then
+    return 0
+  fi
+  actual_migration="$(get_migration)" || return 1
+  [[ "${actual_migration}" =~ ^[0-9]{4}_[a-z0-9_]+$ ]] || return 1
+  if [[ "${actual_migration:0:4}" < 0146 ]]; then
+    return 0
+  fi
+  # Both writers are stopped before this check. Never let an older worker
+  # reinterpret new funding, including terminal decisions used by corrections.
+  funding_compatible="$(database_query "$(legacy_lesson_funding_rollback_query)")" || {
+    printf 'AUTOMATIC_ROLLBACK|BLOCKED|lesson-funding-compatibility-unproven\n' >&2
+    return 1
+  }
+  if [[ "${funding_compatible}" != t ]]; then
+    printf 'AUTOMATIC_ROLLBACK|BLOCKED|payer-aware-rollback-image-required\n' >&2
+    return 1
+  fi
+}
+
 assert_rollback_schema_contract() {
   local actual_migration="$1"
 
@@ -755,6 +804,7 @@ automatic_rollback() {
   # Restore only the canonical production runtime; disabled workers are invalid in production.
   if stop_service_fail_closed caddy &&
     stop_service_fail_closed api &&
+    assert_legacy_lesson_funding_rollback &&
     recreate_api "${rollback_override}" "${workers_enabled_override}" &&
     rollback_schema="$(verify_rollback_stage \
       "${workers_enabled_override}" true)" &&

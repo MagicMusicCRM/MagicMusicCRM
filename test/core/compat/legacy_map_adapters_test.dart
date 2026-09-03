@@ -475,6 +475,7 @@ void main() {
         'type': 'Абонемент',
         'package_name': '8 занятий',
         'package_price': 25.0,
+        'final_price_minor': '2500',
         'paid_amount': 12.5,
         'actual_paid_minor': '1250',
         'debt_minor': '1250',

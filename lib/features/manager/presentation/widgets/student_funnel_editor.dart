@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/models/student_funnel.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
@@ -92,7 +93,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
   }
 
   Future<void> _requestRollback(int targetVersion) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMagicDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Вернуть версию $targetVersion?'),
@@ -145,7 +146,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
   }
 
   Future<bool> _confirmScopeDiscard() async {
-    final discard = await showDialog<bool>(
+    final discard = await showMagicDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Сменить область?'),
@@ -168,7 +169,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
   }
 
   Future<bool> _confirmDiscard() async {
-    final discard = await showDialog<bool>(
+    final discard = await showMagicDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Сбросить изменения?'),
@@ -190,7 +191,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
 
   Future<bool?> _confirmPreview(Map<String, dynamic> preview) {
     final changes = preview['changes'] as Map? ?? const {};
-    return showDialog<bool>(
+    return showMagicDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Опубликовать воронку?'),
@@ -216,7 +217,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
 
   Future<void> _handleBlockedClose(bool didPop, bool? result) async {
     if (didPop) return;
-    final discard = await showDialog<bool>(
+    final discard = await showMagicDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Закрыть без публикации?'),

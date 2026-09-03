@@ -256,7 +256,7 @@ class _GroupLessonDecisionApi extends MagicApiClient {
     if (path == '/crm/clients/search') {
       payerQueries.add(Map<String, dynamic>.from(queryParameters ?? const {}));
       expect(queryParameters?['type'], 'student');
-      expect(queryParameters?['branchId'], _branchId);
+      expect(queryParameters?['branchId'], isNull);
       expect(queryParameters?['limit'], 50);
       return <String, dynamic>{
             'items': const [
@@ -439,6 +439,7 @@ Widget _host(
   bool canManageTeacherCompensation = true,
   LessonDecisionCommitted? afterCommit,
 }) => MaterialApp(
+  theme: ThemeData(platform: TargetPlatform.windows),
   home: Scaffold(
     body: Builder(
       builder: (context) => FilledButton(
@@ -998,6 +999,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
           home: Scaffold(
             body: Builder(
               builder: (context) => FilledButton(
@@ -1105,6 +1107,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
           home: Scaffold(
             body: Builder(
               builder: (context) => FilledButton(

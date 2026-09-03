@@ -5,7 +5,6 @@ extension _MessengerShell on _MessengerScreenState {
     return AdaptiveMessengerShell(
       selectedChatId: _selectedChatId,
       onChatSelected: (id) {},
-      showProfilePanel: _showProfilePanel,
       chatListBuilder: (context, isMobile, selectedId) => AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
         transitionBuilder: (child, animation) {
@@ -31,38 +30,39 @@ extension _MessengerShell on _MessengerScreenState {
       ),
       chatViewBuilder: (context, isMobile, selectedId) =>
           _buildChatView(context, isMobile),
-      profilePanelBuilder: (context) =>
-          _selectedChatId != null && _selectedChatType != null
-          ? ChatInfoDialog(
-              key: ValueKey('$_selectedChatType:$_selectedChatId'),
-              chatId: _selectedChatId!,
-              chatType: _selectedChatType!,
-              userRole: widget.role,
-              onClose: () => _emitState(() => _showProfilePanel = false),
-              onUpdate: _loadChatList,
-              onSearch: _onSearchInChat,
-              onMute: _onMuteChat,
-              initialIsMuted:
-                  _selectedChatId != null &&
-                  _mutedChatIds.contains(_selectedChatId),
-              onNavigateToChat: (chat) {
-                _emitState(() {
-                  _showProfilePanel = false;
-                });
-                _selectChat(chat);
-              },
-              onLeftGroup: () {
-                final leftId = _selectedChatId;
-                _emitState(() {
-                  if (leftId != null) {
-                    _chatItems = removeChat(_chatItems, leftId);
-                  }
-                  _showProfilePanel = false;
-                });
-                _deselectChat();
-              },
-            )
-          : const SizedBox.shrink(),
+    );
+  }
+
+  Future<void> _showChatInfo() async {
+    final chatId = _selectedChatId;
+    final chatType = _selectedChatType;
+    if (chatId == null || chatType == null) return;
+    await showMagicDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: SizedBox(
+          width: 640,
+          height: MediaQuery.sizeOf(dialogContext).height * 0.8,
+          child: ChatInfoDialog(
+            key: ValueKey('$chatType:$chatId'),
+            chatId: chatId,
+            chatType: chatType,
+            userRole: widget.role,
+            onClose: usesDesktopMagicModal(dialogContext)
+                ? () => Navigator.of(dialogContext).maybePop()
+                : null,
+            onUpdate: _loadChatList,
+            onSearch: _onSearchInChat,
+            onMute: _onMuteChat,
+            initialIsMuted: _mutedChatIds.contains(chatId),
+            onNavigateToChat: _selectChat,
+            onLeftGroup: () {
+              _emitState(() => _chatItems = removeChat(_chatItems, chatId));
+              _deselectChat();
+            },
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,14 +1,82 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../theme/design_tokens.dart';
 
-/// Opens a v7 bottom sheet (`.sheet` — grabber, head with icon-badge +
-/// title/subtitle, scrollable body, optional footer actions) and resolves to
-/// whatever the body pops via `Navigator.pop`.
-///
-/// Mirrors the prototype's booking / expense / card-menu sheets. Additive in
-/// P0 — the canonical wrapper reskin phases use instead of bespoke
-/// `showModalBottomSheet` chrome.
+const magicModalDesktopBreakpoint = 840.0;
+
+bool usesDesktopMagicModal(BuildContext context) => kIsWeb
+    ? MediaQuery.sizeOf(context).width >= magicModalDesktopBreakpoint
+    : switch (Theme.of(context).platform) {
+        TargetPlatform.windows ||
+        TargetPlatform.macOS ||
+        TargetPlatform.linux => true,
+        _ => false,
+      };
+
+/// One route policy for action windows, including existing Dialog widgets.
+Future<T?> showMagicDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+  bool useRootNavigator = true,
+  bool useSafeArea = true,
+  bool showCloseButton = true,
+  RouteSettings? routeSettings,
+  Offset? anchorPoint,
+}) {
+  if (!usesDesktopMagicModal(context)) {
+    return showModalBottomSheet<T>(
+      context: context,
+      useRootNavigator: useRootNavigator,
+      routeSettings: routeSettings,
+      anchorPoint: anchorPoint,
+      useSafeArea: useSafeArea,
+      isScrollControlled: true,
+      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width),
+      isDismissible: barrierDismissible,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColor.scrim,
+      builder: (context) => _MobileMagicSheet(
+        title: null,
+        subtitle: null,
+        icon: null,
+        actions: null,
+        embeddedDialog: true,
+        showCloseButton: showCloseButton,
+        body: builder(context),
+      ),
+    );
+  }
+  return showDialog<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierColor: AppColor.scrim,
+    useRootNavigator: useRootNavigator,
+    useSafeArea: useSafeArea,
+    routeSettings: routeSettings,
+    anchorPoint: anchorPoint,
+    builder: (context) => Center(
+      child: ConstrainedBox(
+        key: const ValueKey('magic-dialog-desktop'),
+        constraints: BoxConstraints(
+          maxWidth: 1000,
+          maxHeight: (MediaQuery.sizeOf(context).height - 48).clamp(
+            0,
+            double.infinity,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.sheet),
+          child: builder(context),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Scrollable action content: centered dialog on desktop, draggable sheet on phone.
 Future<T?> showMagicSheet<T>(
   BuildContext context, {
   required String title,
@@ -17,13 +85,35 @@ Future<T?> showMagicSheet<T>(
   IconData? icon,
   List<Widget>? actions,
 }) {
+  if (usesDesktopMagicModal(context)) {
+    return showMagicDialog<T>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: _MagicSheetFrame(
+            key: const ValueKey('magic-sheet-desktop'),
+            title: title,
+            subtitle: subtitle,
+            icon: icon,
+            actions: actions,
+            body: builder(context),
+          ),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<T>(
     context: context,
+    useSafeArea: true,
     isScrollControlled: true,
+    constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width),
     enableDrag: false,
     backgroundColor: Colors.transparent,
     barrierColor: AppColor.scrim,
-    builder: (context) => _MagicSheet(
+    builder: (context) => _MobileMagicSheet(
       title: title,
       subtitle: subtitle,
       icon: icon,
@@ -33,60 +123,6 @@ Future<T?> showMagicSheet<T>(
   );
 }
 
-class _MagicSheet extends StatelessWidget {
-  const _MagicSheet({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.actions,
-    required this.body,
-  });
-
-  final String title;
-  final String? subtitle;
-  final IconData? icon;
-  final List<Widget>? actions;
-  final Widget body;
-
-  @override
-  Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    if (media.size.width < 840) {
-      return _MobileMagicSheet(
-        title: title,
-        subtitle: subtitle,
-        icon: icon,
-        actions: actions,
-        body: body,
-      );
-    }
-
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 460,
-              maxHeight: media.size.height * 0.9,
-            ),
-            child: _MagicSheetFrame(
-              key: const ValueKey('magic-sheet-desktop'),
-              title: title,
-              subtitle: subtitle,
-              icon: icon,
-              actions: actions,
-              body: body,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _MobileMagicSheet extends StatefulWidget {
   const _MobileMagicSheet({
     required this.title,
@@ -94,13 +130,17 @@ class _MobileMagicSheet extends StatefulWidget {
     required this.icon,
     required this.actions,
     required this.body,
+    this.embeddedDialog = false,
+    this.showCloseButton = true,
   });
 
-  final String title;
+  final String? title;
   final String? subtitle;
   final IconData? icon;
   final List<Widget>? actions;
   final Widget body;
+  final bool embeddedDialog;
+  final bool showCloseButton;
 
   @override
   State<_MobileMagicSheet> createState() => _MobileMagicSheetState();
@@ -110,12 +150,14 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
   static const _snaps = [0.58, 0.9, 1.0];
   final _controller = DraggableScrollableController();
   var _extent = _snaps.first;
+  var _dismissDistance = 0.0;
 
   bool get _expanded => _extent >= 0.99;
 
   @override
   void initState() {
     super.initState();
+    if (widget.embeddedDialog) _extent = _snaps[1];
     _controller.addListener(_syncExtent);
   }
 
@@ -139,22 +181,27 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
 
   void _onHandleDragUpdate(DragUpdateDetails details) {
     if (!_controller.isAttached || details.primaryDelta == null) return;
-    final media = MediaQuery.of(context);
-    final availableHeight =
-        media.size.height - media.viewInsets.bottom - media.padding.vertical;
+    final availableHeight = _controller.sizeToPixels(1);
     if (availableHeight <= 0) return;
-    _controller.jumpTo(
-      (_controller.size - details.primaryDelta! / availableHeight).clamp(
-        _snaps.first,
-        _snaps.last,
-      ),
-    );
+    final target = _controller.size - details.primaryDelta! / availableHeight;
+    _dismissDistance = target < _snaps.first
+        ? _dismissDistance + (_snaps.first - target) * availableHeight
+        : 0;
+    _controller.jumpTo(target.clamp(_snaps.first, _snaps.last));
   }
 
   void _onHandleDragEnd(DragEndDetails details) {
     if (!_controller.isAttached) return;
     final velocity = details.primaryVelocity ?? 0;
     final size = _controller.size;
+    if (widget.showCloseButton &&
+        size <= _snaps.first + 0.001 &&
+        (_dismissDistance > 56 || velocity > 700)) {
+      _dismissDistance = 0;
+      Navigator.of(context).maybePop();
+      return;
+    }
+    _dismissDistance = 0;
     double target;
     if (velocity < -200) {
       target = _snaps.firstWhere((snap) => snap > size, orElse: () => 1);
@@ -200,7 +247,7 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
           child: DraggableScrollableSheet(
             key: const ValueKey('magic-sheet-mobile'),
             controller: _controller,
-            initialChildSize: _snaps.first,
+            initialChildSize: widget.embeddedDialog ? _snaps[1] : _snaps.first,
             minChildSize: _snaps.first,
             maxChildSize: _snaps.last,
             snap: true,
@@ -211,7 +258,8 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
               key: const ValueKey('magic-sheet-state'),
               container: true,
               liveRegion: true,
-              label: 'Окно «${widget.title}»: $stateLabel',
+              label:
+                  '${widget.title == null ? 'Окно' : 'Окно «${widget.title}»'}: $stateLabel',
               child: _MagicSheetFrame(
                 title: widget.title,
                 subtitle: widget.subtitle,
@@ -219,6 +267,9 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
                 actions: widget.actions,
                 body: widget.body,
                 fillHeight: true,
+                showHandle: true,
+                embeddedDialog: widget.embeddedDialog,
+                showCloseButton: widget.showCloseButton,
                 scrollController: scrollController,
                 expandLabel: _expanded ? 'Свернуть' : 'Развернуть',
                 onToggleExtent: _toggleExtent,
@@ -246,10 +297,13 @@ class _MagicSheetFrame extends StatelessWidget {
     this.onToggleExtent,
     this.onHandleDragUpdate,
     this.onHandleDragEnd,
+    this.showHandle = false,
+    this.embeddedDialog = false,
+    this.showCloseButton = true,
     super.key,
   });
 
-  final String title;
+  final String? title;
   final String? subtitle;
   final IconData? icon;
   final List<Widget>? actions;
@@ -260,18 +314,45 @@ class _MagicSheetFrame extends StatelessWidget {
   final VoidCallback? onToggleExtent;
   final GestureDragUpdateCallback? onHandleDragUpdate;
   final GestureDragEndCallback? onHandleDragEnd;
+  final bool showHandle;
+  final bool embeddedDialog;
+  final bool showCloseButton;
 
   @override
   Widget build(BuildContext context) {
-    final bodyScroll = SingleChildScrollView(
-      key: const ValueKey('magic-sheet-body-scroll'),
-      controller: scrollController,
-      padding: AppSpace.sheetBody,
-      child: body,
-    );
+    final bodyScroll = embeddedDialog
+        ? CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              SliverFillRemaining(
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    dialogTheme: Theme.of(context).dialogTheme.copyWith(
+                      insetPadding: EdgeInsets.zero,
+                      alignment: Alignment.topCenter,
+                      elevation: 0,
+                      shape: const RoundedRectangleBorder(),
+                    ),
+                  ),
+                  child: MediaQuery.removeViewInsets(
+                    context: context,
+                    removeBottom: true,
+                    child: body,
+                  ),
+                ),
+              ),
+            ],
+          )
+        : SingleChildScrollView(
+            key: const ValueKey('magic-sheet-body-scroll'),
+            controller: scrollController,
+            padding: AppSpace.sheetBody,
+            child: body,
+          );
     return Container(
       key: const ValueKey('magic-sheet-frame'),
       width: double.infinity,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColor.surface,
         border: const Border(
@@ -279,34 +360,35 @@ class _MagicSheetFrame extends StatelessWidget {
           left: BorderSide(color: AppColor.divider),
           right: BorderSide(color: AppColor.divider),
         ),
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(AppRadius.sheet),
-        ),
+        borderRadius: showHandle
+            ? const BorderRadius.vertical(top: Radius.circular(AppRadius.sheet))
+            : BorderRadius.circular(AppRadius.sheet),
         boxShadow: AppShadow.sh2,
       ),
       child: Column(
         mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
         children: [
-          GestureDetector(
-            key: const ValueKey('magic-sheet-handle'),
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragUpdate: onHandleDragUpdate,
-            onVerticalDragEnd: onHandleDragEnd,
-            child: SizedBox(
-              height: 16,
-              width: double.infinity,
-              child: Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColor.sheetGrab,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
+          if (showHandle)
+            GestureDetector(
+              key: const ValueKey('magic-sheet-handle'),
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragUpdate: onHandleDragUpdate,
+              onVerticalDragEnd: onHandleDragEnd,
+              child: SizedBox(
+                height: 16,
+                width: double.infinity,
+                child: Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColor.sheetGrab,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 2, 12, 13),
             child: Row(
@@ -325,42 +407,56 @@ class _MagicSheetFrame extends StatelessWidget {
                   ),
                   const SizedBox(width: AppSpace.md),
                 ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColor.text,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                      if (subtitle != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            subtitle!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColor.text2,
-                              fontSize: 12.5,
-                            ),
+                if (title != null)
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColor.text,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
                           ),
                         ),
-                    ],
+                        if (subtitle != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              subtitle!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColor.text2,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
+                if (title == null) const Spacer(),
                 if (onToggleExtent != null)
-                  TextButton(
+                  IconButton(
                     key: const ValueKey('magic-sheet-toggle'),
                     onPressed: onToggleExtent,
-                    child: Text(expandLabel!),
+                    tooltip: expandLabel,
+                    icon: Icon(
+                      expandLabel == 'Свернуть'
+                          ? Icons.unfold_less_rounded
+                          : Icons.unfold_more_rounded,
+                    ),
+                  ),
+                if (showCloseButton)
+                  IconButton(
+                    key: const ValueKey('magic-modal-close'),
+                    tooltip: 'Закрыть',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.close_rounded),
                   ),
               ],
             ),

@@ -1,7 +1,10 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+
+import 'lifecycle_dialog_content.dart';
 
 class GroupLifecycleDialog extends ConsumerStatefulWidget {
   const GroupLifecycleDialog({super.key, required this.group});
@@ -133,7 +136,7 @@ class _GroupLifecycleDialogState extends ConsumerState<GroupLifecycleDialog> {
       '${value.day.toString().padLeft(2, '0')}';
 
   Future<void> _pickEffectiveDate() async {
-    final selected = await showDatePicker(
+    final selected = await showMagicDatePicker(
       context: context,
       initialDate: _effectiveDate,
       firstDate: DateTime(2000),
@@ -169,159 +172,66 @@ class _GroupLifecycleDialogState extends ConsumerState<GroupLifecycleDialog> {
             return value is num && value.toInt() > 0;
           }).toList()
         : const <MapEntry<String, dynamic>>[];
-    return AlertDialog(
-      title: Text(_archived ? 'Восстановить группу' : 'Завершить группу'),
-      content: SizedBox(
-        width: 640,
-        child: _loading
-            ? const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      '«$name»',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _archived
-                          ? 'Группа снова станет доступна для состава и нового расписания. История завершений сохранится.'
-                          : 'Группа уйдёт из рабочих списков. Состав ($members) и все финансовые факты останутся без изменений.',
-                      style: TextStyle(color: colors.onSurfaceVariant),
-                    ),
-                    if (_blockers.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Сначала завершите активные сценарии',
-                        style: TextStyle(
-                          color: colors.error,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      for (final blocker in _blockers)
-                        ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            Icons.error_outline_rounded,
-                            color: colors.error,
-                          ),
-                          title: Text(
-                            '${blocker['label']}: ${blocker['count']}',
-                          ),
-                          subtitle: Text(
-                            blocker['remediation']?.toString() ?? '',
-                          ),
-                        ),
-                    ] else ...[
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Icon(Icons.verified_outlined, color: colors.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _archived
-                                  ? 'Филиал, аудитория и преподаватель активны. Группу можно восстановить.'
-                                  : 'Будущих занятий и активных планов нет. Группу можно завершить.',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (preservedFacts.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      const Text(
-                        'История останется без изменений',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final fact in preservedFacts)
-                            Chip(label: Text('${fact.key}: ${fact.value}')),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: _saving ? null : _pickEffectiveDate,
-                      icon: const Icon(Icons.event_outlined),
-                      label: Text('Дата действия: ${_dateKey(_effectiveDate)}'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _reason,
-                      minLines: 2,
-                      maxLines: 4,
-                      maxLength: 500,
-                      decoration: InputDecoration(
-                        labelText: _archived
-                            ? 'Причина восстановления *'
-                            : 'Причина завершения *',
-                        hintText: 'Причина останется в журнале изменений',
-                      ),
-                    ),
-                    if (_history.isNotEmpty)
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        title: Text('История (${_history.length})'),
-                        children: [
-                          for (final item in _history.take(10))
-                            ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(
-                                item['toState'] == 'archived'
-                                    ? Icons.archive_outlined
-                                    : Icons.restore_rounded,
-                              ),
-                              title: Text(
-                                item['toState'] == 'archived'
-                                    ? 'Группа завершена'
-                                    : 'Группа восстановлена',
-                              ),
-                              subtitle: Text(
-                                '${item['reasonText']?.toString() ?? 'Не указано'}'
-                                '${item['effectiveDate'] == null ? '' : ' • ${item['effectiveDate']}'}',
-                              ),
-                            ),
-                        ],
-                      ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 8),
-                      Text(_error!, style: TextStyle(color: colors.error)),
-                    ],
-                  ],
+    return LifecycleDialogContent(
+      title: _archived ? 'Восстановить группу' : 'Завершить группу',
+      width: 640,
+      loading: _loading,
+      saving: _saving,
+      archived: _archived,
+      canCommit: canCommit,
+      commitLabel: _archived ? 'Восстановить' : 'Завершить',
+      reasonLabel: _archived
+          ? 'Причина восстановления *'
+          : 'Причина завершения *',
+      reasonController: _reason,
+      effectiveDate: _dateKey(_effectiveDate),
+      onPickEffectiveDate: _pickEffectiveDate,
+      history: _history,
+      archivedHistoryLabel: 'Группа завершена',
+      restoredHistoryLabel: 'Группа восстановлена',
+      preservedFacts: preservedFacts,
+      error: _error,
+      onCommit: _commit,
+      details: [
+        Text('«$name»', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          _archived
+              ? 'Группа снова станет доступна для состава и нового расписания. История завершений сохранится.'
+              : 'Группа уйдёт из рабочих списков. Состав ($members) и все финансовые факты останутся без изменений.',
+          style: TextStyle(color: colors.onSurfaceVariant),
+        ),
+        if (_blockers.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            'Сначала завершите активные сценарии',
+            style: TextStyle(color: colors.error, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          for (final blocker in _blockers)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.error_outline_rounded, color: colors.error),
+              title: Text('${blocker['label']}: ${blocker['count']}'),
+              subtitle: Text(blocker['remediation']?.toString() ?? ''),
+            ),
+        ] else ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Icon(Icons.verified_outlined, color: colors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _archived
+                      ? 'Филиал, аудитория и преподаватель активны. Группу можно восстановить.'
+                      : 'Будущих занятий и активных планов нет. Группу можно завершить.',
                 ),
               ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-        FilledButton.icon(
-          onPressed: _saving || _loading || !canCommit ? null : _commit,
-          icon: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  _archived ? Icons.restore_rounded : Icons.archive_outlined,
-                ),
-          label: Text(_archived ? 'Восстановить' : 'Завершить'),
-        ),
+            ],
+          ),
+        ],
       ],
     );
   }

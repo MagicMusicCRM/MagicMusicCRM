@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
-import 'package:magic_music_crm/core/widgets/magic_drawer.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
-enum AdaptiveSurfaceContainer { route, sheet, drawer, dialog }
+enum AdaptiveSurfaceContainer { route, sheet, dialog }
 
 abstract final class AdaptiveSurfacePolicy {
-  static const desktopBreakpoint = 840.0;
+  static const desktopBreakpoint = magicModalDesktopBreakpoint;
 
   static AdaptiveSurfaceContainer containerFor(
     AppSurfaceKind kind,
-    double width,
-  ) {
+    double width, {
+    bool? desktop,
+  }) {
     return switch (kind) {
       AppSurfaceKind.primary ||
       AppSurfaceKind.comparison => AdaptiveSurfaceContainer.route,
-      AppSurfaceKind.quickView || AppSurfaceKind.selection =>
-        width < desktopBreakpoint
+      AppSurfaceKind.quickView ||
+      AppSurfaceKind.selection ||
+      AppSurfaceKind.confirmation =>
+        !(desktop ?? width >= desktopBreakpoint)
             ? AdaptiveSurfaceContainer.sheet
-            : AdaptiveSurfaceContainer.drawer,
-      AppSurfaceKind.confirmation => AdaptiveSurfaceContainer.dialog,
+            : AdaptiveSurfaceContainer.dialog,
     };
   }
 }
@@ -37,6 +38,7 @@ Future<T?> showMagicAdaptiveSurface<T>(
   final container = AdaptiveSurfacePolicy.containerFor(
     kind,
     MediaQuery.sizeOf(context).width,
+    desktop: usesDesktopMagicModal(context),
   );
   if (container == AdaptiveSurfaceContainer.route) {
     if (openRoute == null) {
@@ -53,30 +55,14 @@ Future<T?> showMagicAdaptiveSurface<T>(
   }
 
   return switch (container) {
-    AdaptiveSurfaceContainer.sheet => showMagicSheet<T>(
+    AdaptiveSurfaceContainer.sheet ||
+    AdaptiveSurfaceContainer.dialog => showMagicSheet<T>(
       context,
       title: title,
       subtitle: subtitle,
       icon: icon,
       actions: actions,
       builder: builder,
-    ),
-    AdaptiveSurfaceContainer.drawer => showMagicDrawer<T>(
-      context,
-      title: title,
-      subtitle: subtitle,
-      icon: icon,
-      actions: actions,
-      builder: builder,
-    ),
-    AdaptiveSurfaceContainer.dialog => showDialog<T>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: builder(dialogContext),
-        actions: actions,
-      ),
     ),
     AdaptiveSurfaceContainer.route => throw StateError(
       'Route jobs are handled before content construction.',

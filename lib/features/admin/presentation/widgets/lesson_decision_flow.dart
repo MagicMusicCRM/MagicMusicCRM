@@ -1,14 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_form.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_save_flow.dart';
+import 'lesson_editor/lesson_editor_feedback.dart';
+import 'lesson_editor/lesson_editor_models.dart';
 
 export 'lesson_decision/lesson_decision_controller.dart';
 export 'lesson_decision/lesson_decision_models.dart';
+
+Future<bool?> showLessonEditorSurface(
+  BuildContext context,
+  Widget Function(bool pageMode) editor,
+) {
+  return showMagicDialog<bool>(
+    context: context,
+    routeSettings: const RouteSettings(name: 'lesson-editor'),
+    builder: (_) => editor(false),
+  );
+}
+
+void finishLessonEditor(BuildContext context, String message) {
+  final messenger = ScaffoldMessenger.of(context);
+  Navigator.pop(context, true);
+  messenger.showSnackBar(SnackBar(content: Text(message)));
+}
+
+Future<void> showLessonEditorConstraints(
+  BuildContext context,
+  List<LessonConstraintViolation> violations, {
+  required ValueChanged<String> onOpen,
+}) => showMagicDialog<void>(
+  context: context,
+  builder: (dialogContext) => LessonConstraintDialog(
+    violations: violations,
+    onOpen: (lessonId) {
+      Navigator.pop(dialogContext);
+      onOpen(lessonId);
+    },
+    onFix: () => Navigator.pop(dialogContext),
+  ),
+);
 
 Future<bool?> showLessonDecisionFlow(
   BuildContext context, {
@@ -42,31 +77,5 @@ Future<bool?> showLessonDecisionFlow(
     subtitle: 'Сначала расчёт, затем подтверждение',
     icon: Icons.rule_rounded,
     builder: (_) => LessonDecisionForm(controller: controller),
-  );
-}
-
-Future<bool?> showLessonEditorDecisionFlow(
-  BuildContext context, {
-  required MagicCrmService crm,
-  required LessonSaveDecision decision,
-  required LessonEditorSaveFlow saveFlow,
-  required bool canManageTeacherCompensation,
-}) async {
-  final edit = decision.request;
-  final pendingNote = decision.noteUpdate;
-  return showLessonDecisionFlow(
-    context,
-    crm: crm,
-    operation: edit.operation,
-    lesson: edit.lesson,
-    successor: edit.successor,
-    resources: edit.resources,
-    initialSettlementTypeKey: edit.initialSettlementTypeKey,
-    initialCompensationRuleKey: edit.initialCompensationRuleKey,
-    initialCompensationValueMinor: edit.initialCompensationValueMinor,
-    canManageTeacherCompensation: canManageTeacherCompensation,
-    afterCommit: pendingNote == null
-        ? null
-        : (result) => saveFlow.saveConfirmedNotes(pendingNote, result),
   );
 }

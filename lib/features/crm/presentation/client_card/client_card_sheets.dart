@@ -1,5 +1,7 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
@@ -66,13 +68,18 @@ class SubscriptionPackageTile extends StatelessWidget {
       (package['basePriceMinor'] ?? package['base_price_minor'])?.toString() ??
           '',
     );
+    final currency =
+        (package['currencyCode'] ?? package['currency_code'])?.toString() ??
+        'RUB';
     final price = minor == null
-        ? package['price']
-        : NumberFormat('#,##0.##', 'ru').format(minor.toInt() / 100);
+        ? package['price'] == null
+              ? null
+              : formatPaymentMajor(package['price'], currencyCode: currency)
+        : formatPaymentMinor(minor, currencyCode: currency);
     final validity = package['validity_days'] ?? package['validityDays'];
     final meta = [
       if (lessons != null) '$lessons ч.',
-      if (price != null) '$price ₽',
+      ?price,
       if (validity != null) '$validity дн.',
     ].join(' · ');
 
@@ -205,7 +212,7 @@ Future<TaskInput?> showAddTaskSheet(
               InkWell(
                 borderRadius: BorderRadius.circular(AppRadius.control),
                 onTap: () async {
-                  final picked = await showDatePicker(
+                  final picked = await showMagicDatePicker(
                     context: context,
                     initialDate: due ?? DateTime.now(),
                     firstDate: DateTime(2020),
@@ -215,7 +222,7 @@ Future<TaskInput?> showAddTaskSheet(
                   // Time as well as date: the deadline drives the -1h/-10m and
                   // overdue reminders, and a midnight due date fires them in
                   // the middle of the night.
-                  final time = await showTimePicker(
+                  final time = await showMagicTimePicker(
                     context: context,
                     initialTime: due == null
                         ? const TimeOfDay(hour: 12, minute: 0)
@@ -406,14 +413,14 @@ Future<HomeworkInput?> showAssignHomeworkSheet(
                 borderRadius: BorderRadius.circular(AppRadius.control),
                 onTap: () async {
                   final now = DateTime.now();
-                  final date = await showDatePicker(
+                  final date = await showMagicDatePicker(
                     context: sheetContext,
                     initialDate: dueAt ?? now,
                     firstDate: now.subtract(const Duration(days: 1)),
                     lastDate: now.add(const Duration(days: 365)),
                   );
                   if (date == null || !sheetContext.mounted) return;
-                  final time = await showTimePicker(
+                  final time = await showMagicTimePicker(
                     context: sheetContext,
                     initialTime: TimeOfDay.fromDateTime(dueAt ?? now),
                   );

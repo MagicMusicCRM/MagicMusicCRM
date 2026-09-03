@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -51,7 +52,7 @@ class _ClientSourcesEditorState extends ConsumerState<ClientSourcesEditor> {
   }
 
   Future<void> _edit(Map<String, dynamic>? source) async {
-    final input = await showDialog<_SourceInput>(
+    final input = await showMagicDialog<_SourceInput>(
       context: context,
       builder: (_) => _SourceDialog(source: source),
     );
@@ -75,7 +76,7 @@ class _ClientSourcesEditorState extends ConsumerState<ClientSourcesEditor> {
 
   Future<void> _setActive(Map<String, dynamic> source, bool active) async {
     if (!active) {
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showMagicDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Архивировать источник?'),

@@ -633,7 +633,7 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
   }
 
   Future<void> _create() async {
-    final saved = await showDialog<bool>(
+    final saved = await showMagicDialog<bool>(
       context: context,
       builder: (_) => const BranchFormDialog(),
     );

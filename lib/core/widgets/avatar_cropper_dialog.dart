@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:crop_image/crop_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:ui' as ui;
@@ -70,7 +71,7 @@ class AvatarCropperDialog extends StatefulWidget {
 
     if (!context.mounted) return null;
 
-    return showDialog<Uint8List>(
+    return showMagicDialog<Uint8List>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AvatarCropperDialog(imageBytes: imageBytes),

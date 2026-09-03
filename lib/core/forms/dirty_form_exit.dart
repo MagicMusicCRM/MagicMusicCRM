@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 enum DirtyFormExitReason {
   appBack,
@@ -16,7 +17,7 @@ enum DirtyFormExitDecision { save, discard, cancel }
 typedef DirtyFormSave = Future<bool> Function();
 
 Future<DirtyFormExitDecision?> showDirtyFormExitDialog(BuildContext context) {
-  return showDialog<DirtyFormExitDecision>(
+  return showMagicDialog<DirtyFormExitDecision>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('Сохранить изменения?'),

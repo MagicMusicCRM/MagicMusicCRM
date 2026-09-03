@@ -1,8 +1,11 @@
+import 'dart:math' show max;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 
 typedef SchedulePlanPageIntent =
     void Function(SchedulePlan plan, String direction);
@@ -562,22 +565,36 @@ class _LessonTrayGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      key: const Key('client-lesson-date-tray'),
-      height: 84,
-      child: GridView.builder(
-        key: PageStorageKey('client-lesson-date-tray-$storageKey'),
-        scrollDirection: Axis.horizontal,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisExtent: 78,
-          mainAxisSpacing: 4,
-          crossAxisSpacing: 4,
-        ),
-        itemCount: items.length,
-        itemBuilder: (context, index) =>
-            _TrayTile(item: items[index], onTap: () => onOpen(items[index])),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final contentColumns = max(1, (items.length / 2).ceil());
+        final visibleColumns = ((constraints.maxWidth + 4) / 82).floor().clamp(
+          1,
+          contentColumns,
+        );
+        final tileWidth =
+            (constraints.maxWidth - (visibleColumns - 1) * 4) / visibleColumns;
+        return SizedBox(
+          key: const Key('client-lesson-date-tray'),
+          height: 84,
+          child: GridView.builder(
+            key: PageStorageKey('client-lesson-date-tray-$storageKey'),
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisExtent: tileWidth,
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 4,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, index) => _TrayTile(
+              item: items[index],
+              onTap: () => onOpen(items[index]),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -594,22 +611,20 @@ class _TrayTile extends StatelessWidget {
       'lifecycle_state': item.state,
     });
     final marker = item.settlementMarkers.firstOrNull;
-    final covered =
-        state.token == LessonStateToken.booked &&
-        item.settlementMarkers.any(
-          (marker) => marker['key'] == 'subscription_reserved',
-        );
-    final accent = covered ? AppColor.success : state.token.accent;
+    final covered = lessonHasSubscriptionCoverage({
+      'settlementMarkers': item.settlementMarkers,
+    });
+    final accent = state.token.accent;
     final markerAccent = marker == null
         ? accent
-        : _settlementColor(marker['colorToken']?.toString());
+        : lessonDecisionColorToken(marker['colorToken']?.toString());
     final markerLabels = item.settlementMarkers
         .map((value) => value['label']?.toString())
         .whereType<String>();
     final relationLabel = _relationMarkerLabel(item.relationMarker);
     final tooltip = [
       '${_date(item.localDate)} ${item.localTime}',
-      if (!covered) state.label,
+      state.label,
       ...markerLabels,
       ?relationLabel,
       ?item.teacherName,
@@ -623,7 +638,7 @@ class _TrayTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         child: Container(
           decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.12),
+            color: state.token.soft,
             borderRadius: BorderRadius.circular(4),
             border: Border.all(color: accent.withValues(alpha: 0.55)),
           ),
@@ -644,11 +659,20 @@ class _TrayTile extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    Icon(_stateIcon(item.state), size: 10, color: accent),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_stateIcon(item.state), size: 10, color: accent),
+                        if (covered) ...[
+                          const SizedBox(width: 4),
+                          const LessonSubscriptionBadge(compact: true),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),
-              if (marker != null)
+              if (marker != null && !covered)
                 Positioned(
                   top: 2,
                   right: 3,
@@ -700,9 +724,7 @@ class _FallbackLessonTray extends StatelessWidget {
                 localTime: DateFormat('HH:mm').format(scheduled.toLocal()),
                 state: projection.state,
                 settlementMarkers: [
-                  if ((lesson['reservation_state'] ??
-                          lesson['reservationState']) ==
-                      'reserved')
+                  if (lessonHasSubscriptionCoverage(lesson))
                     {
                       'key': 'subscription_reserved',
                       'label': 'Покрыто абонементом',
@@ -773,12 +795,4 @@ IconData _stateIcon(String state) => switch (state) {
   'cancelled' => Icons.close_rounded,
   'rescheduled' => Icons.swap_horiz_rounded,
   _ => Icons.event_rounded,
-};
-
-Color _settlementColor(String? token) => switch (token) {
-  'success' => AppColor.success,
-  'warning' => AppColor.warning,
-  'info' || 'blue' || 'cyan' => AppColor.actionBlue,
-  'violet' => const Color(0xFF7C5CBF),
-  _ => AppColor.text2,
 };

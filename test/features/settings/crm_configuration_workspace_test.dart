@@ -293,6 +293,7 @@ Future<void> _pump(
   WidgetTester tester,
   ConfigurationTestApi api, {
   Size size = const Size(1200, 900),
+  TargetPlatform platform = TargetPlatform.windows,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -301,7 +302,10 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [magicApiClientProvider.overrideWithValue(api)],
-      child: const MaterialApp(home: CrmConfigurationRouteScreen()),
+      child: MaterialApp(
+        theme: ThemeData(platform: platform),
+        home: const CrmConfigurationRouteScreen(),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -793,7 +797,12 @@ void main() {
       role: 'manager',
       capabilities: const ['config.crm.read', 'config.crm.edit'],
     );
-    await _pump(tester, api, size: const Size(390, 844));
+    await _pump(
+      tester,
+      api,
+      size: const Size(390, 844),
+      platform: TargetPlatform.android,
+    );
 
     expect(find.text('Вся школа'), findsNothing);
     expect(find.text('Сокол'), findsOneWidget);

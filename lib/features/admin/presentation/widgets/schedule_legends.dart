@@ -69,6 +69,8 @@ class _ScheduleLessonLegend extends StatelessWidget {
               const SizedBox(width: 8),
             ],
             const LessonTrialBadge(),
+            const SizedBox(width: 8),
+            const LessonSubscriptionBadge(),
           ],
         ),
       ),

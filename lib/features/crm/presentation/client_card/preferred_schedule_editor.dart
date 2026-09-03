@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
@@ -132,7 +133,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
   Future<void> _pickDate({required bool start}) async {
     final state = _controller.state;
     final today = DateUtils.dateOnly(DateTime.now());
-    final picked = await showDatePicker(
+    final picked = await showMagicDatePicker(
       context: context,
       initialDate: start ? state.validFrom : state.validUntil,
       firstDate: start
@@ -150,7 +151,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
 
   Future<void> _pickTime() async {
     final parts = _controller.state.beginTime.split(':');
-    final picked = await showTimePicker(
+    final picked = await showMagicTimePicker(
       context: context,
       initialTime: TimeOfDay(
         hour: int.tryParse(parts.first) ?? 15,

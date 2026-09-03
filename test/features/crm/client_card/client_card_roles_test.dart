@@ -272,6 +272,7 @@ void main() {
 
       expect(find.byKey(const ValueKey('client-archive-open')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('client-archive-open')));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(
         find.text('Финансовые факты останутся неизменными.'),

@@ -5,16 +5,21 @@ import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 /// Emulates Telegram Desktop on wide screens and Telegram Mobile on narrow screens.
 class AdaptiveMessengerShell extends StatefulWidget {
   /// Builder for the chat list panel (left side on desktop).
-  final Widget Function(BuildContext context, bool isMobile, String? selectedChatId)
-      chatListBuilder;
+  final Widget Function(
+    BuildContext context,
+    bool isMobile,
+    String? selectedChatId,
+  )
+  chatListBuilder;
 
   /// Builder for the chat view panel (middle/right side on desktop).
   /// Receives the selected chat data.
-  final Widget Function(BuildContext context, bool isMobile, String? selectedChatId)?
-      chatViewBuilder;
-
-  /// Builder for the right-side profile panel (desktop only).
-  final Widget Function(BuildContext context)? profilePanelBuilder;
+  final Widget Function(
+    BuildContext context,
+    bool isMobile,
+    String? selectedChatId,
+  )?
+  chatViewBuilder;
 
   /// Builder for an empty state when no chat is selected (desktop only).
   final Widget Function(BuildContext context)? emptyStateBuilder;
@@ -24,9 +29,6 @@ class AdaptiveMessengerShell extends StatefulWidget {
 
   /// Currently selected chat ID (controlled externally).
   final String? selectedChatId;
-  
-  /// Controls the visibility of the profile panel sliding from the right.
-  final bool showProfilePanel;
 
   /// Width breakpoint for mobile/desktop switch.
   final double breakpoint;
@@ -38,11 +40,9 @@ class AdaptiveMessengerShell extends StatefulWidget {
     super.key,
     required this.chatListBuilder,
     this.chatViewBuilder,
-    this.profilePanelBuilder,
     this.emptyStateBuilder,
     this.onChatSelected,
     this.selectedChatId,
-    this.showProfilePanel = false,
     this.breakpoint = 768,
     this.sidebarWidth = 320,
   });
@@ -69,7 +69,9 @@ class _AdaptiveMessengerShellState extends State<AdaptiveMessengerShell> {
   }
 
   Widget _buildDesktopLayout(BuildContext context, bool isDark) {
-    final dividerColor = isDark ? TelegramColors.darkDivider : TelegramColors.lightDivider;
+    final dividerColor = isDark
+        ? TelegramColors.darkDivider
+        : TelegramColors.lightDivider;
 
     return Row(
       children: [
@@ -78,36 +80,26 @@ class _AdaptiveMessengerShellState extends State<AdaptiveMessengerShell> {
           width: widget.sidebarWidth,
           child: Container(
             decoration: BoxDecoration(
-              color: isDark ? TelegramColors.darkSidebar : TelegramColors.lightSidebar,
-              border: Border(right: BorderSide(color: dividerColor, width: 0.5)),
+              color: isDark
+                  ? TelegramColors.darkSidebar
+                  : TelegramColors.lightSidebar,
+              border: Border(
+                right: BorderSide(color: dividerColor, width: 0.5),
+              ),
             ),
-            child: widget.chatListBuilder(context, false, widget.selectedChatId),
+            child: widget.chatListBuilder(
+              context,
+              false,
+              widget.selectedChatId,
+            ),
           ),
         ),
         // Middle panel — chat view or empty state
         Expanded(
           child: widget.selectedChatId != null && widget.chatViewBuilder != null
               ? widget.chatViewBuilder!(context, false, widget.selectedChatId)
-              : widget.emptyStateBuilder?.call(context) ?? _defaultEmptyState(context, isDark),
-        ),
-        // Right sliding panel — profile view
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.fastOutSlowIn,
-          width: widget.showProfilePanel ? 380 : 0,
-          decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: dividerColor, width: 0.5)),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const NeverScrollableScrollPhysics(),
-            child: SizedBox(
-              width: 380,
-              child: widget.showProfilePanel && widget.profilePanelBuilder != null
-                  ? widget.profilePanelBuilder!(context)
-                  : const SizedBox.shrink(),
-            ),
-          ),
+              : widget.emptyStateBuilder?.call(context) ??
+                    _defaultEmptyState(context, isDark),
         ),
       ],
     );

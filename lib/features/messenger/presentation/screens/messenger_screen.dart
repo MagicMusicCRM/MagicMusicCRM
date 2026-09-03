@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -107,7 +108,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   String? _chatListError;
   String? _messagesLoadError;
   String _searchQuery = '';
-  bool _showProfilePanel = false;
   bool _showMyProfile = false;
   int _currentLoadId = 0;
   List<String> _adminIds = [];

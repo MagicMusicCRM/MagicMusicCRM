@@ -20,6 +20,7 @@ class _FakeApiClient extends MagicApiClient {
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final Map<String, Map<String, dynamic>> queries = {};
+  final List<String> requests = [];
 
   @override
   Future<T> get<T>(
@@ -27,6 +28,7 @@ class _FakeApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    requests.add(path);
     queries[path] = Map<String, dynamic>.from(queryParameters ?? const {});
     return <String, dynamic>{
           'items': <dynamic>[],
@@ -74,36 +76,79 @@ class _RebuildableState extends State<_Rebuildable> {
 void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
 
-  testWidgets('teacher analytics opens a separate window with period presets', (
+  testWidgets(
+    'teacher settlements is an analytics tab and retains its period',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = _FakeApiClient();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [magicApiClientProvider.overrideWithValue(api)],
+          child: const MaterialApp(
+            home: Scaffold(body: ReportsWidget(role: 'director')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Расчёты преподавателей'), findsOneWidget);
+      expect(find.text('Преподаватели'), findsNothing);
+      expect(api.queries.containsKey('/crm/reports/teacher-stats'), isFalse);
+      await tester.tap(find.text('Расчёты преподавателей'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.text('Неделя'), findsOneWidget);
+      expect(find.text('Месяц'), findsOneWidget);
+      await tester.tap(find.text('Год'));
+      await tester.pumpAndSettle();
+      final query = api.queries['/crm/reports/teacher-stats']!;
+      final from = DateTime.parse(query['from'] as String).toLocal();
+      final to = DateTime.parse(query['to'] as String).toLocal();
+      expect(from, DateTime(DateTime.now().year));
+      expect(to, DateTime(DateTime.now().year + 1));
+      final reportCalls = api.requests
+          .where((path) => path == '/crm/reports/teacher-stats')
+          .length;
+      await tester.tap(find.text('Обзор'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Расчёты преподавателей'));
+      await tester.pumpAndSettle();
+      expect(api.queries['/crm/reports/teacher-stats'], query);
+      expect(
+        api.requests.where((path) => path == '/crm/reports/teacher-stats'),
+        hasLength(reportCalls),
+        reason:
+            'returning to the section retains its filters and loaded report',
+      );
+    },
+  );
+
+  testWidgets('legacy teacher report link opens the tab and respects access', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final api = _FakeApiClient();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [magicApiClientProvider.overrideWithValue(api)],
-        child: const MaterialApp(
-          home: Scaffold(body: ReportsWidget(role: 'director')),
-        ),
+    Widget host(String role) => ProviderScope(
+      overrides: [magicApiClientProvider.overrideWithValue(api)],
+      child: MaterialApp(
+        home: Scaffold(body: ReportsWidget(role: role, initialTab: 5)),
       ),
     );
+    await tester.pumpWidget(host('director'));
     await tester.pumpAndSettle();
-    expect(api.queries.containsKey('/crm/reports/teacher-stats'), isFalse);
-    await tester.tap(find.text('Преподаватели'));
-    await tester.pumpAndSettle();
-    expect(find.text('Аналитика преподавателей'), findsOneWidget);
-    expect(find.byType(Dialog), findsOneWidget);
     expect(find.text('Неделя'), findsOneWidget);
-    expect(find.text('Месяц'), findsOneWidget);
-    await tester.tap(find.text('Год'));
+    expect(find.byType(Dialog), findsNothing);
+    expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 2);
+    final requestCount = api.requests.length;
+    await tester.pumpWidget(host('teacher'));
     await tester.pumpAndSettle();
-    final query = api.queries['/crm/reports/teacher-stats']!;
-    final from = DateTime.parse(query['from'] as String).toLocal();
-    final to = DateTime.parse(query['to'] as String).toLocal();
-    expect(from, DateTime(DateTime.now().year));
-    expect(to, DateTime(DateTime.now().year + 1));
+    expect(find.byKey(const ValueKey('reports-forbidden')), findsOneWidget);
+    expect(find.text('Расчёты преподавателей'), findsNothing);
+    expect(api.requests, hasLength(requestCount));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a parent rebuild does not reset the selected reports tab', (

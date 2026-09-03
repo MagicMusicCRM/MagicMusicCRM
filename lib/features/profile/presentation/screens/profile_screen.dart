@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -232,7 +233,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
+    final DateTime? picked = await showMagicDatePicker(
       context: context,
       initialDate: DateTime.now().subtract(const Duration(days: 365 * 20)),
       firstDate: DateTime(1900),

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 
@@ -177,13 +178,23 @@ class SubscriptionStatusCard extends ConsumerWidget {
                       _SubscriptionMetric(
                         key: const Key('subscription-paid'),
                         label: 'Оплачено',
-                        value: _formatMinor(subscription['actual_paid_minor']),
+                        value: _formatMinor(
+                          subscription['actual_paid_minor'],
+                          currencyCode:
+                              subscription['currency_code']?.toString() ??
+                              'RUB',
+                        ),
                         color: AppTheme.success,
                       ),
                       _SubscriptionMetric(
                         key: const Key('subscription-debt'),
                         label: 'Долг',
-                        value: _formatMinor(subscription['debt_minor']),
+                        value: _formatMinor(
+                          subscription['debt_minor'],
+                          currencyCode:
+                              subscription['currency_code']?.toString() ??
+                              'RUB',
+                        ),
                         color: _minorPositive(subscription['debt_minor'])
                             ? AppTheme.danger
                             : null,
@@ -191,7 +202,12 @@ class SubscriptionStatusCard extends ConsumerWidget {
                       _SubscriptionMetric(
                         key: const Key('subscription-pending'),
                         label: 'Ожидает подтверждения',
-                        value: _formatMinor(subscription['pending_minor']),
+                        value: _formatMinor(
+                          subscription['pending_minor'],
+                          currencyCode:
+                              subscription['currency_code']?.toString() ??
+                              'RUB',
+                        ),
                         color: _minorPositive(subscription['pending_minor'])
                             ? AppTheme.warning
                             : null,
@@ -199,7 +215,12 @@ class SubscriptionStatusCard extends ConsumerWidget {
                       _SubscriptionMetric(
                         key: const Key('subscription-overpayment'),
                         label: 'Переплата',
-                        value: _formatMinor(subscription['overpayment_minor']),
+                        value: _formatMinor(
+                          subscription['overpayment_minor'],
+                          currencyCode:
+                              subscription['currency_code']?.toString() ??
+                              'RUB',
+                        ),
                         color: _minorPositive(subscription['overpayment_minor'])
                             ? AppTheme.success
                             : null,
@@ -326,18 +347,9 @@ String _formatHours(num value) => value == value.truncate()
 bool _minorPositive(Object? raw) =>
     (BigInt.tryParse(raw?.toString() ?? '') ?? BigInt.zero) > BigInt.zero;
 
-String _formatMinor(Object? raw) {
+String _formatMinor(Object? raw, {String currencyCode = 'RUB'}) {
   final minor = BigInt.tryParse(raw?.toString() ?? '') ?? BigInt.zero;
-  final negative = minor.isNegative;
-  final absolute = minor.abs();
-  final rubles = absolute ~/ BigInt.from(100);
-  final kopecks = (absolute % BigInt.from(100)).toInt();
-  final grouped = rubles.toString().replaceAllMapped(
-    RegExp(r'(?<=\d)(?=(\d{3})+$)'),
-    (_) => '\u00a0',
-  );
-  final fraction = kopecks == 0 ? '' : ',${kopecks.toString().padLeft(2, '0')}';
-  return '${negative ? '−' : ''}$grouped$fraction ₽';
+  return formatPaymentMinor(minor, currencyCode: currencyCode);
 }
 
 class _SubscriptionSkeleton extends StatelessWidget {

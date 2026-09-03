@@ -1,10 +1,10 @@
 part of 'client_card.dart';
 
 extension _ClientCardCounterpartResolution on _ClientCardState {
-  /// lead half (lead card, statuses, metadata) and flip to
-  /// `converted`. Failures degrade silently back to studentOnly.
+  /// Resolve the lead half after every successful student load, including a
+  /// retry. An already resolved pair must not start another fetch cycle.
   void _resolveLeadCounterpart() {
-    if (!mounted) return;
+    if (!mounted || _isConverted) return;
     final leadId = _student?['lead_id']?.toString();
     if (leadId == null || leadId.isEmpty) return;
     _emitState(() {
@@ -25,9 +25,9 @@ extension _ClientCardCounterpartResolution on _ClientCardState {
   /// Lead-opened path: if the lead card lists linked students, pick the primary
   /// (first / most recent) one, fetch the student half and flip to `converted`.
   /// Additional linked students stay visible via the existing linked-students
-  /// UI. Failures degrade silently back to leadOnly.
+  /// UI. An already resolved pair must not start another fetch cycle.
   void _resolveStudentCounterpart() {
-    if (!mounted) return;
+    if (!mounted || _isConverted) return;
     final linked = _list(_leadCard?['linked_students']);
     if (linked.isEmpty) return;
     final primary = _primaryLinkedStudent(linked);

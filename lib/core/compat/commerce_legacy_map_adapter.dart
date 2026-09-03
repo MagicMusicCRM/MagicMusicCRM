@@ -29,6 +29,7 @@ class CommerceLegacyMapAdapter {
     'type': subscription.status == 'active' ? 'Абонемент' : subscription.status,
     'package_name': subscription.terms.displayName,
     'package_price': _commerceMajor(subscription.terms.finalPriceMinor),
+    'final_price_minor': subscription.terms.finalPriceMinor.toString(),
     'paid_amount': _commerceMajor(subscription.financial.actualPaidMinor),
     'actual_paid_minor': subscription.financial.actualPaidMinor.toString(),
     'debt_minor': subscription.financial.debtMinor.toString(),

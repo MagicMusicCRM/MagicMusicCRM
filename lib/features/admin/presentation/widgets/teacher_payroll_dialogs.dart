@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_dialog_controller_owner.dart';
@@ -19,7 +20,7 @@ Future<String?> showTeacherEmploymentChangeReasonDialog(
       'Ставка: ${money.format(initial.rate ?? 0)} → '
           '${money.format(employment.rate ?? 0)} ₽/ч',
   ];
-  final reason = await showDialog<String>(
+  final reason = await showMagicDialog<String>(
     context: context,
     builder: (dialogContext) => TeacherPayrollDialogControllerOwner(
       controllers: [controller],

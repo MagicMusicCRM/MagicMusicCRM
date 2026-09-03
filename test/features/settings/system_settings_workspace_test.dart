@@ -19,6 +19,7 @@ Future<void> _pump(
     ProviderScope(
       overrides: [magicApiClientProvider.overrideWithValue(api)],
       child: MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
         home: Scaffold(
           body: SystemSettingsWorkspace(
             role: api.role,
@@ -38,12 +39,7 @@ Future<void> _chooseSearchable(
 ) async {
   await tester.tap(find.byKey(field));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.descendant(
-      of: find.byType(Scrollbar).last,
-      matching: find.text(option),
-    ),
-  );
+  await tester.tap(find.widgetWithText(MenuItemButton, option).hitTestable());
   await tester.pumpAndSettle();
 }
 

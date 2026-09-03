@@ -132,10 +132,15 @@ class LessonDecisionPreview {
 }
 
 class LessonDecisionParticipant {
-  const LessonDecisionParticipant({required this.id, required this.name});
+  const LessonDecisionParticipant({
+    required this.id,
+    required this.name,
+    this.isStudent = true,
+  });
 
   final String id;
   final String name;
+  final bool isStudent;
 }
 
 class LessonDecisionSubscription {
@@ -204,4 +209,65 @@ Map<String, dynamic> _map(Object? value) {
 List<Map<String, dynamic>> _maps(Object? value) => [
   for (final item in value as List? ?? const [])
     if (item is Map) Map<String, dynamic>.from(item),
+];
+
+/// Keep the editor's integer basis points separate from the existing HTTP DTO.
+Map<String, dynamic> normalizeLessonClientDecision(Map<String, dynamic> value) {
+  final discount = value['discount'];
+  final surcharge = value['surcharge'];
+  return {
+    ...value,
+    if (discount is Map)
+      'discount': {
+        ...discount,
+        if (discount['type'] == 'percent' && discount['percent'] is num)
+          'percentBasisPoints': ((discount['percent'] as num) * 100).round(),
+      }..remove('percent'),
+    if (surcharge is Map)
+      'surcharge': {
+        if (surcharge['amountMinor'] != null) 'type': 'fixed',
+        ...surcharge,
+      },
+  };
+}
+
+List<Map<String, dynamic>> lessonClientDecisionsPayload(
+  List<Map<String, dynamic>> decisions,
+) => [
+  for (final row in decisions)
+    {
+      'clientId': row['clientId'],
+      if (row['settlementTypeKey'] != null)
+        'settlementTypeKey': row['settlementTypeKey'],
+      if (row['chargeType'] != null) 'chargeType': row['chargeType'],
+      if (row['chargeType'] != 'none' && row['payerStudentId'] != null)
+        'payerStudentId': row['payerStudentId'],
+      if (row['chargeType'] != 'personal_account' &&
+          row['chargeType'] != 'none' &&
+          row['subscriptionId'] != null)
+        'subscriptionId': row['subscriptionId'],
+      if (row['chargeType'] == 'personal_account') ...{
+        if (row['basePriceMinor'] != null)
+          'basePriceMinor': row['basePriceMinor'],
+        if (row['discount'] case final Map discount
+            when discount['type'] == 'percent' || discount['type'] == 'fixed')
+          'discount': {
+            'type': discount['type'],
+            'reason': discount['reason'],
+            if (discount['type'] == 'percent')
+              'percent': discount['percentBasisPoints'] is num
+                  ? (discount['percentBasisPoints'] as num) / 100
+                  : discount['percent'],
+            if (discount['type'] == 'fixed')
+              'fixedMinor': discount['fixedMinor'],
+          },
+        if (row['surcharge'] case final Map surcharge
+            when surcharge['type'] != 'none' &&
+                surcharge['amountMinor'] != null)
+          'surcharge': {
+            'amountMinor': surcharge['amountMinor'],
+            'reason': surcharge['reason'],
+          },
+      },
+    },
 ];

@@ -88,7 +88,7 @@ extension _ClientCardFamilyAccess on _ClientCardState {
     final memberId = member.id;
     if (memberId.isEmpty) return;
     final name = member.name.trim().isNotEmpty ? member.name : 'участника';
-    final confirm = await showDialog<bool>(
+    final confirm = await showMagicDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Удалить участника?'),

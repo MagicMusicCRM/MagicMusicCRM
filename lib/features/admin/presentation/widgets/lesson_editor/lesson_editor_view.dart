@@ -14,6 +14,8 @@ export 'lesson_editor_feedback.dart'
     show
         LessonConstraintDialog,
         LessonEditorActions,
+        showLessonEditorError,
+        scrollToLessonPreview,
         lessonEditorErrorMessage,
         lessonEditorTitle,
         lessonLoadErrorMessage,
@@ -46,20 +48,23 @@ class LessonEditorViewModel {
     required this.canManageTeacherCompensation,
     this.loadErrorMessage,
     this.scheduleAnalysisError,
+    this.canSave = true,
   });
 
   factory LessonEditorViewModel.fromState(
     LessonEditorCoreViewState editor,
     LessonEditorProgressViewState progress,
     LessonEditorFeedbackViewState feedback,
-    bool canManageTeacherCompensation,
-  ) => LessonEditorViewModel(
+    bool canManageTeacherCompensation, {
+    bool canSave = true,
+  }) => LessonEditorViewModel(
     session: editor.$1,
     draft: editor.$2,
     references: editor.$3,
     analysis: progress.$1,
     isLoading: progress.$2,
     isSaving: progress.$3,
+    canSave: canSave,
     isAnalyzing: progress.$4,
     validationMessage: feedback.$1,
     canManageTeacherCompensation: canManageTeacherCompensation,
@@ -73,6 +78,7 @@ class LessonEditorViewModel {
   final LessonScheduleAnalysis? analysis;
   final bool isLoading;
   final bool isSaving;
+  final bool canSave;
   final bool isAnalyzing;
   final String? validationMessage;
   final String? loadErrorMessage;
@@ -89,6 +95,10 @@ class LessonEditorView extends StatelessWidget {
     this.scrollController,
     this.now,
     this.onRetry,
+    this.fundingFields,
+    this.financialPreview,
+    this.funding,
+    this.knownPayers = const [],
     super.key,
   });
 
@@ -103,6 +113,11 @@ class LessonEditorView extends StatelessWidget {
     ScrollController? scrollController,
     DateTime? now,
     VoidCallback? onRetry,
+    Widget? fundingFields,
+    LessonDecisionPreview? financialPreview,
+    LessonDecisionFormLifecycle? funding,
+    List<LessonDecisionParticipant> knownPayers = const [],
+    bool canSave = true,
     Key? key,
   }) => LessonEditorView(
     model: LessonEditorViewModel.fromState(
@@ -110,6 +125,7 @@ class LessonEditorView extends StatelessWidget {
       progress,
       feedback,
       canManageTeacherCompensation,
+      canSave: canSave,
     ),
     actions: actions,
     pageMode: pageMode,
@@ -117,6 +133,10 @@ class LessonEditorView extends StatelessWidget {
     scrollController: scrollController,
     now: now,
     onRetry: onRetry,
+    fundingFields: fundingFields,
+    financialPreview: financialPreview,
+    funding: funding,
+    knownPayers: knownPayers,
     key: key,
   );
 
@@ -127,10 +147,14 @@ class LessonEditorView extends StatelessWidget {
   final ScrollController? scrollController;
   final DateTime? now;
   final VoidCallback? onRetry;
+  final Widget? fundingFields;
+  final LessonDecisionPreview? financialPreview;
+  final LessonDecisionFormLifecycle? funding;
+  final List<LessonDecisionParticipant> knownPayers;
 
   String get _title {
     if (title != null) return title!;
-    if (model.session.isEdit) return 'Перенести или изменить занятие';
+    if (model.session.isEdit) return 'Изменить занятие';
     return 'Новое занятие';
   }
 
@@ -183,106 +207,116 @@ class LessonEditorView extends StatelessWidget {
         height: pageMode ? double.maxFinite : null,
         child: SingleChildScrollView(
           controller: scrollController,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              LessonParticipantSection(
-                model: LessonParticipantSectionModel(
-                  session: model.session,
-                  draft: model.draft,
-                  references: model.references,
-                ),
-                onSearchClients: actions.searchClients,
-                onClientChanged: actions.selectClient,
-                onBranchChanged: (value) => actions.edit(
-                  LessonReferenceEdit(LessonReferenceTarget.branch, value),
-                ),
-                onRoomChanged: (value) => actions.edit(
-                  LessonReferenceEdit(LessonReferenceTarget.room, value),
-                ),
-                onTeacherChanged: (value) => actions.edit(
-                  LessonReferenceEdit(LessonReferenceTarget.teacher, value),
-                ),
-              ),
-              const SizedBox(height: 16),
-              LessonScheduleSection(
-                model: LessonScheduleSectionModel.fromEditor(
-                  draft: model.draft,
-                  analysis: model.analysis,
-                  isAnalyzing: model.isAnalyzing,
-                  isEdit: model.session.isEdit,
-                  now: now,
-                  errorMessage: model.scheduleAnalysisError,
-                  isSaving: model.isSaving,
-                ),
-                onAnalyze: actions.analyzeSchedule,
-                onApplySuggestion: actions.applySuggestion,
-                onOpenConstraint: actions.openConstraint,
-                onDateRequested: actions.selectDate,
-                onTimeRequested: actions.selectTime,
-                onDurationChanged: (value) =>
-                    actions.edit(LessonDurationEdit(value)),
-              ),
-              LessonFinancialSection(
-                model: LessonFinancialSectionModel(
-                  session: model.session,
-                  draft: model.draft,
-                  references: model.references,
-                  isSaving: model.isSaving,
-                  requiresCompensationValue: policy.requiresCompensationValue(
-                    selectedRule,
-                  ),
-                  compensationNeedsReason: policy.compensationNeedsReason(
+          child: AbsorbPointer(
+            absorbing: model.isSaving,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LessonParticipantSection(
+                  model: LessonParticipantSectionModel(
+                    session: model.session,
                     draft: model.draft,
-                    rule: selectedRule,
+                    references: model.references,
                   ),
-                  canManageTeacherCompensation:
-                      model.canManageTeacherCompensation,
-                  allowsNoFunding: policy.isNoCharge(selectedSettlement),
+                  onSearchClients: actions.searchClients,
+                  onClientChanged: actions.selectClient,
+                  onBranchChanged: (value) => actions.edit(
+                    LessonReferenceEdit(LessonReferenceTarget.branch, value),
+                  ),
+                  onRoomChanged: (value) => actions.edit(
+                    LessonReferenceEdit(LessonReferenceTarget.room, value),
+                  ),
+                  onTeacherChanged: (value) => actions.edit(
+                    LessonReferenceEdit(LessonReferenceTarget.teacher, value),
+                  ),
                 ),
-                actions: actions,
-              ),
-              if (model.session.isEdit) ...[
-                const SizedBox(height: AppSpace.md),
-                TextFormField(
-                  key: const Key('lesson-notes-input'),
-                  initialValue: model.draft.notes,
-                  onChanged: (value) => actions.edit(LessonNotesEdit(value)),
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Заметка',
-                    alignLabelWithHint: true,
+                const SizedBox(height: 16),
+                LessonScheduleSection(
+                  model: LessonScheduleSectionModel.fromEditor(
+                    draft: model.draft,
+                    analysis: model.analysis,
+                    isAnalyzing: model.isAnalyzing,
+                    isEdit: model.session.isEdit,
+                    now: now,
+                    errorMessage: model.scheduleAnalysisError,
+                    isSaving: model.isSaving,
+                  ),
+                  onAnalyze: actions.analyzeSchedule,
+                  onApplySuggestion: actions.applySuggestion,
+                  onOpenConstraint: actions.openConstraint,
+                  onDateRequested: actions.selectDate,
+                  onTimeRequested: actions.selectTime,
+                  onDurationChanged: (value) =>
+                      actions.edit(LessonDurationEdit(value)),
+                ),
+                LessonFinancialSection(
+                  fundingFields: fundingFields,
+                  financialPreview: financialPreview,
+                  funding: funding,
+                  knownPayers: knownPayers,
+                  model: LessonFinancialSectionModel(
+                    session: model.session,
+                    draft: model.draft,
+                    references: model.references,
+                    isSaving: model.isSaving,
+                    requiresCompensationValue: policy.requiresCompensationValue(
+                      selectedRule,
+                    ),
+                    compensationNeedsReason: policy.compensationNeedsReason(
+                      draft: model.draft,
+                      rule: selectedRule,
+                    ),
+                    canManageTeacherCompensation:
+                        model.canManageTeacherCompensation,
+                    allowsNoFunding: policy.isNoCharge(selectedSettlement),
+                  ),
+                  actions: actions,
+                ),
+                if (model.session.isEdit) ...[
+                  const SizedBox(height: AppSpace.md),
+                  TextFormField(
+                    key: const Key('lesson-notes-input'),
+                    initialValue: model.draft.notes,
+                    onChanged: (value) => actions.edit(LessonNotesEdit(value)),
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Заметка',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                ],
+                LessonEditorFeedback(
+                  model: LessonEditorFeedbackModel(
+                    session: model.session,
+                    draft: model.draft,
+                    validationMessage: model.validationMessage,
+                    settlementLabel: selectedSettlement?.label ?? 'Не выбран',
+                    clientSnapshotValue: policy.clientChargeSnapshotLabel(
+                      draft: model.draft,
+                      references: model.references,
+                    ),
+                    compensationLabel: selectedRule?.label ?? 'Не выбрано',
+                    teacherSnapshotValue: policy
+                        .teacherCompensationSnapshotLabel(
+                          draft: model.draft,
+                          references: model.references,
+                        ),
+                    canManageTeacherCompensation:
+                        model.canManageTeacherCompensation,
                   ),
                 ),
               ],
-              LessonEditorFeedback(
-                model: LessonEditorFeedbackModel(
-                  session: model.session,
-                  draft: model.draft,
-                  validationMessage: model.validationMessage,
-                  settlementLabel: selectedSettlement?.label ?? 'Не выбран',
-                  clientSnapshotValue: policy.clientChargeSnapshotLabel(
-                    draft: model.draft,
-                    references: model.references,
-                  ),
-                  compensationLabel: selectedRule?.label ?? 'Не выбрано',
-                  teacherSnapshotValue: policy.teacherCompensationSnapshotLabel(
-                    draft: model.draft,
-                    references: model.references,
-                  ),
-                  canManageTeacherCompensation:
-                      model.canManageTeacherCompensation,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
       actions: [
         LessonEditorActionsRow(
           isEdit: model.session.isEdit,
+          confirming: financialPreview?.canConfirm == true,
           isSaving: model.isSaving,
+          canSave: model.canSave,
           actions: actions,
         ),
       ],

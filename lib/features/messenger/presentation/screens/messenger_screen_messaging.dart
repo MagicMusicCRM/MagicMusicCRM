@@ -188,7 +188,7 @@ extension _MessengerMessaging on _MessengerScreenState {
       return;
     }
 
-    final confirm = await showDialog<bool>(
+    final confirm = await showMagicDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удаление сообщения'),
@@ -311,7 +311,7 @@ extension _MessengerMessaging on _MessengerScreenState {
   }
 
   void _showSendFileDialog(Uint8List bytes, String fileName, int fileSize) {
-    showDialog(
+    showMagicDialog(
       context: context,
       builder: (context) => SendFileDialog(
         fileName: fileName,
@@ -414,25 +414,16 @@ extension _MessengerMessaging on _MessengerScreenState {
       _selectedChatAvatarUrl = null;
       _selectedPartnerId = null;
       _messages = [];
-      _showProfilePanel = false;
     });
   }
 
   bool _hasInternalBackState() {
-    return _showMyProfile ||
-        _showProfilePanel ||
-        _isSearchingInChat ||
-        _selectedChatId != null;
+    return _showMyProfile || _isSearchingInChat || _selectedChatId != null;
   }
 
   void _consumeBackNavigation() {
     if (_showMyProfile) {
       _emitState(() => _showMyProfile = false);
-      return;
-    }
-
-    if (_showProfilePanel) {
-      _emitState(() => _showProfilePanel = false);
       return;
     }
 

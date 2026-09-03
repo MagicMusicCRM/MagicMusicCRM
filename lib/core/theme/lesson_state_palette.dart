@@ -3,8 +3,8 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 /// Closed visual vocabulary for operational lesson surfaces.
 ///
-/// Trial is a lesson type and is rendered as a separate badge. The client lesson
-/// tray may highlight reserved subscription coverage without changing lifecycle.
+/// Trial and subscription coverage use separate badges. Lesson backgrounds
+/// always express lifecycle, including when a subscription reserves the lesson.
 enum LessonStateToken { booked, completed, conflict }
 
 class LessonStateProjection {
@@ -57,6 +57,19 @@ bool _mapHasConflicts(Map<String, dynamic> lesson) {
     final String value => value.trim().isNotEmpty,
     _ => false,
   };
+}
+
+/// Coverage comes from an actual reservation, never an intended funding choice.
+bool lessonHasSubscriptionCoverage(Map<String, dynamic> lesson) {
+  if ((lesson['reservation_state'] ?? lesson['reservationState']) ==
+      'reserved') {
+    return true;
+  }
+  final markers = lesson['settlement_markers'] ?? lesson['settlementMarkers'];
+  return markers is Iterable &&
+      markers.whereType<Map>().any(
+        (marker) => marker['key'] == 'subscription_reserved',
+      );
 }
 
 String _normalizeState(String? lifecycleState, String? rawStatus) {

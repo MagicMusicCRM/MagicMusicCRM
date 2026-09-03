@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_models.dart';
@@ -12,6 +13,18 @@ class ChatInfoAddMembersDialog extends StatefulWidget {
 
   final Set<String> existingMemberUserIds;
   final Future<List<Map<String, dynamic>>> Function() loadProfiles;
+
+  static Future<Set<String>?> show(
+    BuildContext context, {
+    required Set<String> existingMemberUserIds,
+    required Future<List<Map<String, dynamic>>> Function() loadProfiles,
+  }) => showMagicDialog<Set<String>>(
+    context: context,
+    builder: (_) => ChatInfoAddMembersDialog(
+      existingMemberUserIds: existingMemberUserIds,
+      loadProfiles: loadProfiles,
+    ),
+  );
 
   @override
   State<ChatInfoAddMembersDialog> createState() =>

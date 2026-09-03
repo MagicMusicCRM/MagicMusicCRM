@@ -352,7 +352,7 @@ extension _MessengerActions on _MessengerScreenState {
     final id = item['id']?.toString();
     if (id == null || id.isEmpty) return;
     final isArchived = item['archived'] == true;
-    showDialog<void>(
+    showMagicDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -591,7 +591,6 @@ extension _MessengerActions on _MessengerScreenState {
           _selectedChatAvatarUrl = null;
           _selectedPartnerId = null;
           _messages = [];
-          _showProfilePanel = false;
         }
 
         // Update selected chat info from list
@@ -616,7 +615,7 @@ extension _MessengerActions on _MessengerScreenState {
   }
 
   void _onForwardMessage(Map<String, dynamic> msg) async {
-    final targetChat = await showDialog<Map<String, dynamic>>(
+    final targetChat = await showMagicDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Переслать...'),
@@ -687,7 +686,7 @@ extension _MessengerActions on _MessengerScreenState {
       if (!mounted) return;
       final targetName = targetChat['resolved_name'] ?? 'Чат';
 
-      final confirm = await showDialog<bool>(
+      final confirm = await showMagicDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Переслать сообщение?'),

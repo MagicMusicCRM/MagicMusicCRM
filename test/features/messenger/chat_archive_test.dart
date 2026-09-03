@@ -14,6 +14,8 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
+import 'package:magic_music_crm/core/widgets/telegram/chat_header.dart';
+import 'package:magic_music_crm/core/widgets/telegram/chat_info_dialog.dart';
 import 'package:magic_music_crm/features/messenger/data/chat_archive_api.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 
@@ -41,8 +43,10 @@ Future<RecordingFakeApiClient> _pumpAdminMessenger(
   RecordingFakeApiClient? api,
   _TestRealtimeTransport? realtimeTransport,
   EntityLink? initialLink,
+  Size size = const Size(1400, 900),
+  TargetPlatform platform = TargetPlatform.windows,
 }) async {
-  tester.view.physicalSize = const Size(1400, 900);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
@@ -78,6 +82,7 @@ Future<RecordingFakeApiClient> _pumpAdminMessenger(
     ProviderScope(
       overrides: overrides,
       child: MaterialApp(
+        theme: ThemeData(platform: platform),
         home: MessengerScreen(role: 'admin', initialLink: initialLink),
       ),
     ),
@@ -89,6 +94,57 @@ Future<RecordingFakeApiClient> _pumpAdminMessenger(
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
+
+  for (final device in [
+    (platform: TargetPlatform.android, size: const Size(390, 844)),
+    (platform: TargetPlatform.android, size: const Size(900, 390)),
+    (platform: TargetPlatform.windows, size: const Size(1400, 900)),
+    (platform: TargetPlatform.windows, size: const Size(640, 900)),
+  ]) {
+    testWidgets('chat title uses an adaptive modal for $device', (
+      tester,
+    ) async {
+      await _pumpAdminMessenger(
+        tester,
+        size: device.size,
+        platform: device.platform,
+        initialLink: EntityLink.typed(
+          entityType: EntityLinkType.chat,
+          entityId: 'c1',
+        ),
+      );
+      await tester.pumpAndSettle();
+      final header = find.byType(ChatHeader);
+      expect(header, findsOneWidget);
+      final headerTitle = find
+          .descendant(of: header, matching: find.byType(Text))
+          .first;
+      final conversationWidth = tester.getSize(header).width;
+      await tester.tap(headerTitle);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChatInfoDialog), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('magic-sheet-mobile')),
+        device.platform == TargetPlatform.android
+            ? findsOneWidget
+            : findsNothing,
+      );
+      final dialogRoute = ModalRoute.of(
+        tester.element(find.byType(ChatInfoDialog)),
+      );
+      expect(dialogRoute, isNot(isA<MaterialPageRoute<void>>()));
+      expect(tester.getSize(header).width, conversationWidth);
+      expect(tester.takeException(), isNull);
+
+      expect(find.byTooltip('Закрыть'), findsOneWidget);
+      await tester.tap(find.byTooltip('Закрыть'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ChatInfoDialog), findsNothing);
+      expect(find.byType(ChatHeader), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   test(
     'setChatArchived бьёт ровно в контракт №3: PATCH /chats/:id/archive',

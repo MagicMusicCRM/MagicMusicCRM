@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_state_view.dart';
@@ -179,11 +179,7 @@ class ReportingFinanceDetailView extends StatelessWidget {
         BigInt.tryParse(row['revenueMinor']?.toString() ?? '') ?? BigInt.zero;
     final expenses =
         BigInt.tryParse(row['expensesMinor']?.toString() ?? '') ?? BigInt.zero;
-    final formatter = NumberFormat.currency(
-      locale: 'ru',
-      symbol: '₽',
-      decimalDigits: 2,
-    );
+    final currency = row['currencyCode']?.toString() ?? 'RUB';
     return ListView(
       key: const ValueKey('reporting-finance-detail'),
       padding: const EdgeInsets.all(16),
@@ -204,12 +200,12 @@ class ReportingFinanceDetailView extends StatelessWidget {
         ListTile(
           leading: const Icon(Icons.trending_up),
           title: const Text('Фактическая выручка'),
-          trailing: Text(formatter.format(revenue.toDouble() / 100)),
+          trailing: Text(formatPaymentMinor(revenue, currencyCode: currency)),
         ),
         ListTile(
           leading: const Icon(Icons.trending_down),
           title: const Text('Расходы'),
-          trailing: Text(formatter.format(expenses.toDouble() / 100)),
+          trailing: Text(formatPaymentMinor(expenses, currencyCode: currency)),
         ),
         ListTile(
           leading: const Icon(Icons.event_available_outlined),

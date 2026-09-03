@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
@@ -33,7 +34,7 @@ class ChannelEditorDialog extends ConsumerStatefulWidget {
     String initialTitle = '',
     String initialDescription = '',
   }) {
-    return showDialog<Map<String, dynamic>>(
+    return showMagicDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => ChannelEditorDialog(
         channelId: channelId,

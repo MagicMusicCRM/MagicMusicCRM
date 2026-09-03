@@ -288,7 +288,7 @@ extension _LeadsActions on _LeadsWidgetState {
   }
 
   Future<void> _addLead() async {
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showMagicDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => const LeadCreateDialog(),
     );

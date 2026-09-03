@@ -493,7 +493,7 @@ class _LeadCard extends ConsumerWidget {
     while (true) {
       if (!context.mounted) return;
       final controller = TextEditingController(text: draft);
-      final content = await showDialog<String>(
+      final content = await showMagicDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Комментарий к лиду'),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
@@ -61,7 +62,6 @@ class TeacherStatsController extends ChangeNotifier {
   final MagicCrmService _crm;
   final MagicSettingsService _settings;
   final ReportFileOpener _reportFileOpener;
-  final NumberFormat _money = NumberFormat('#,##0', 'ru');
   final DateFormat _dayFormat = DateFormat('dd.MM');
   final _TeacherStatsAsyncLifecycle _lifecycle = _TeacherStatsAsyncLifecycle();
   late TeacherStatsState _state;
@@ -340,7 +340,7 @@ class TeacherStatsController extends ChangeNotifier {
     return lessonIds;
   }
 
-  String rub(dynamic value) => '${_money.format(number(value))} ₽';
+  String rub(dynamic value) => formatPaymentMajor(value ?? 0);
 
   String hours(dynamic value) {
     final hours = number(value);
@@ -352,7 +352,7 @@ class TeacherStatsController extends ChangeNotifier {
 
   String rateLabel(dynamic value) {
     final rate = number(value);
-    return rate == 0 ? 'оклад' : '${_money.format(rate)} ₽';
+    return rate == 0 ? 'оклад' : formatPaymentMajor(value);
   }
 
   String dayLabel(DateTime value) => _dayFormat.format(value);

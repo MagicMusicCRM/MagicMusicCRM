@@ -53,6 +53,7 @@ class ChatInfoView extends StatelessWidget {
 
   SliverAppBar _buildAppBar(bool isDark, bool innerBoxIsScrolled) {
     return SliverAppBar(
+      automaticallyImplyLeading: false,
       expandedHeight: 300,
       pinned: true,
       backgroundColor: isDark

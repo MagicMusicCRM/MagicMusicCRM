@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../constants/env.dart';
@@ -15,7 +16,7 @@ Future<void> showUpdatesCenter(
   ReleaseHistoryRepository? historyRepository,
   Future<void> Function(UpdateManifest manifest)? onInstall,
 }) {
-  return showDialog<void>(
+  return showMagicDialog<void>(
     context: context,
     barrierDismissible: true,
     builder: (_) => UpdatesCenterDialog(

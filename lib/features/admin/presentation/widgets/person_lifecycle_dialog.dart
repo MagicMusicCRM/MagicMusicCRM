@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -10,7 +11,7 @@ Future<bool?> showPersonLifecycleDialog(
   required String personId,
   required String personName,
 }) {
-  return showDialog<bool>(
+  return showMagicDialog<bool>(
     context: context,
     builder: (_) => _PersonLifecycleDialog(
       personType: personType,

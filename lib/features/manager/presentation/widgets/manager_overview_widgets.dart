@@ -448,7 +448,7 @@ String _count(Object? value) {
 }
 
 String _money(Object? value) {
-  return '${NumberFormat('#,##0', 'ru').format(_asNum(value).round())} ₽';
+  return formatPaymentMajor(value ?? 0);
 }
 
 String _sourceLabel(Object? source, String fallback) {

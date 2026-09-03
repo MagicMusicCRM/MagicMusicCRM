@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/models/commerce_projection.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 class ClientPaymentSubmission {
@@ -124,7 +126,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
   }
 
   Future<void> _pickDate() async {
-    final selected = await showDatePicker(
+    final selected = await showMagicDatePicker(
       context: context,
       initialDate: _date,
       firstDate: DateTime(2000),
@@ -1298,14 +1300,4 @@ BigInt? parsePaymentMinor(String raw) {
   if (rubles == null) return null;
   final kopecks = parts.length == 1 ? '00' : parts[1].padRight(2, '0');
   return rubles * BigInt.from(100) + BigInt.parse(kopecks);
-}
-
-String formatPaymentMinor(BigInt minor, {String currencyCode = 'RUB'}) {
-  final negative = minor.isNegative;
-  final absolute = minor.abs();
-  final rubles = absolute ~/ BigInt.from(100);
-  final kopecks = (absolute % BigInt.from(100)).toString().padLeft(2, '0');
-  final grouped = NumberFormat.decimalPattern('ru').format(rubles.toInt());
-  final value = '$grouped,$kopecks';
-  return '${negative ? '−' : ''}$value ${currencyCode == 'RUB' ? '₽' : currencyCode}';
 }

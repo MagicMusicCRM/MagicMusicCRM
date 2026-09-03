@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
-import 'package:magic_music_crm/core/widgets/magic_drawer.dart';
+
 import 'package:magic_music_crm/core/widgets/magic_menu.dart';
 import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
 import 'package:magic_music_crm/core/widgets/magic_toast.dart';
@@ -12,8 +12,9 @@ import 'package:magic_music_crm/core/widgets/magic_toast.dart';
 void main() {
   Widget host(Widget child) => MaterialApp(home: Scaffold(body: child));
 
-  testWidgets('SkeletonBox renders a static box under reduced motion',
-      (tester) async {
+  testWidgets('SkeletonBox renders a static box under reduced motion', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: MediaQuery(
@@ -30,8 +31,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('showMagicSheet shows title/footer and pops the chosen value',
-      (tester) async {
+  testWidgets('showMagicSheet shows title/footer and pops the chosen value', (
+    tester,
+  ) async {
     int? result;
     await tester.pumpWidget(
       host(
@@ -71,15 +73,15 @@ void main() {
     expect(result, 42);
   });
 
-  testWidgets('showMagicDrawer opens and closes', (tester) async {
+  testWidgets('action window opens and closes', (tester) async {
     await tester.pumpWidget(
       host(
         Builder(
           builder: (context) => ElevatedButton(
-            onPressed: () => showMagicDrawer<void>(
+            onPressed: () => showMagicSheet<void>(
               context,
               title: 'Карточка клиента',
-              builder: (_) => const Text('drawer-body'),
+              builder: (_) => const Text('window-body'),
             ),
             child: const Text('open'),
           ),
@@ -90,15 +92,16 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(find.text('Карточка клиента'), findsOneWidget);
-    expect(find.text('drawer-body'), findsOneWidget);
+    expect(find.text('window-body'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_rounded));
     await tester.pumpAndSettle();
     expect(find.text('Карточка клиента'), findsNothing);
   });
 
-  testWidgets('showMagicMenu shows items and returns the tapped value',
-      (tester) async {
+  testWidgets('showMagicMenu shows items and returns the tapped value', (
+    tester,
+  ) async {
     String? picked;
     await tester.pumpWidget(
       host(
@@ -139,8 +142,9 @@ void main() {
     expect(picked, 'delete');
   });
 
-  testWidgets('MagicToast inserts and dismisses an overlay toast',
-      (tester) async {
+  testWidgets('MagicToast inserts and dismisses an overlay toast', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       host(
         Builder(

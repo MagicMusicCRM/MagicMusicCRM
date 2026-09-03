@@ -173,6 +173,7 @@ void main() {
     final publish = find.byKey(const ValueKey('client-pipeline-publish'));
     await tester.ensureVisible(publish);
     await tester.tap(publish);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
     await tester.pumpAndSettle();
@@ -207,6 +208,7 @@ void main() {
     await tester.ensureVisible(publish);
     await tester.pumpAndSettle();
     await tester.tap(publish);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(publishedCallbacks, 0);
     await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
@@ -236,6 +238,7 @@ void main() {
     await tester.ensureVisible(publish);
     await tester.pumpAndSettle();
     await tester.tap(publish);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
     await tester.pumpAndSettle();
@@ -333,6 +336,7 @@ void main() {
     final publish = find.byKey(const ValueKey('client-pipeline-publish'));
     await tester.ensureVisible(publish);
     await tester.tap(publish);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
     await tester.pumpAndSettle();
@@ -364,6 +368,7 @@ void main() {
     final publish = find.byKey(const ValueKey('client-pipeline-publish'));
     await tester.ensureVisible(publish);
     await tester.tap(publish);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
     await tester.pumpAndSettle();

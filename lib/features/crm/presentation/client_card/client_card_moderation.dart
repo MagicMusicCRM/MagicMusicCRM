@@ -107,7 +107,7 @@ extension _ClientCardModeration on _ClientCardState {
 
   Future<String?> _askBlacklistReason() async {
     final controller = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMagicDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('В чёрный список'),

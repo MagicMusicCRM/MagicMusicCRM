@@ -1,6 +1,8 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
@@ -85,7 +87,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   }
 
   Future<void> _pickRange() async {
-    final picked = await showDateRangePicker(
+    final picked = await showMagicDateRangePicker(
       context: context,
       firstDate: DateTime(2018),
       lastDate: DateTime.now(),
@@ -152,7 +154,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   Future<void> _deleteExpense(Map<String, dynamic> expense) async {
     final expenseId = expense['id']?.toString();
     if (expenseId == null || expenseId.isEmpty) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMagicDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Удалить расход?'),

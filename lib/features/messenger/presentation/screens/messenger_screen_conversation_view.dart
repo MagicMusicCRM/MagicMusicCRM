@@ -220,45 +220,7 @@ extension _MessengerConversationView on _MessengerScreenState {
                     },
                   ),
               ],
-              onTitleTap: () {
-                if (_selectedChatId == null || _selectedChatType == null) {
-                  return;
-                }
-
-                if (MediaQuery.of(context).size.width >= 768) {
-                  _emitState(() => _showProfilePanel = !_showProfilePanel);
-                } else {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ChatInfoDialog(
-                        key: ValueKey('$_selectedChatType:$_selectedChatId'),
-                        chatId: _selectedChatId!,
-                        chatType: _selectedChatType!,
-                        userRole: widget.role,
-                        onUpdate: _loadChatList,
-                        onSearch: _onSearchInChat,
-                        onMute: _onMuteChat,
-                        initialIsMuted:
-                            _selectedChatId != null &&
-                            _mutedChatIds.contains(_selectedChatId),
-                        onNavigateToChat: (chat) {
-                          _selectChat(chat);
-                        },
-                        onLeftGroup: () {
-                          final leftId = _selectedChatId;
-                          _emitState(() {
-                            if (leftId != null) {
-                              _chatItems = removeChat(_chatItems, leftId);
-                            }
-                            _showProfilePanel = false;
-                          });
-                          _deselectChat();
-                        },
-                      ),
-                    ),
-                  );
-                }
-              },
+              onTitleTap: _showChatInfo,
               isSearchActive: _isSearchingInChat,
               searchController: _chatSearchController,
               onSearchToggle: _onSearchInChat,

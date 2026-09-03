@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
@@ -84,7 +85,7 @@ class _GroupScheduleParticipantsEditorState
 
   Future<void> _pickEffectiveFrom() async {
     final today = DateUtils.dateOnly(DateTime.now());
-    final picked = await showDatePicker(
+    final picked = await showMagicDatePicker(
       context: context,
       initialDate: _effectiveFrom.isBefore(today) ? today : _effectiveFrom,
       firstDate: today,

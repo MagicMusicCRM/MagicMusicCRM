@@ -130,6 +130,10 @@ class _LessonCard extends StatelessWidget {
                 message: projection.label,
                 child: Icon(projection.token.icon, color: accent, size: 12),
               ),
+              if (lessonHasSubscriptionCoverage(entry.lesson)) ...[
+                const SizedBox(width: 3),
+                const LessonSubscriptionBadge(compact: true, iconOnly: true),
+              ],
               if (entry.isTrial && entry.durationMinutes >= 45) ...[
                 const SizedBox(width: 3),
                 const LessonTrialBadge(compact: true),

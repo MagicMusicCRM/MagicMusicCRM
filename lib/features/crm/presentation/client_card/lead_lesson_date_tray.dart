@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 
 /// Compact lesson history shown for leads without recurring schedule controls.
 class LeadLessonDateTray extends StatefulWidget {
@@ -121,8 +123,10 @@ class _LeadLessonDateTrayState extends State<LeadLessonDateTray> {
     final tooltip = [
       DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt.toLocal()),
       projection.label,
+      if (lessonHasSubscriptionCoverage(lesson))
+        LessonSubscriptionBadge.tooltip,
       if (isTrial) 'Пробное занятие',
-      if (paid != null) 'Оплачено: ${_money(paid)} ₽',
+      if (paid != null) 'Оплачено: ${formatPaymentMajor(paid)}',
       if (notes.isNotEmpty) notes,
     ].join('\n');
     return Tooltip(
@@ -208,15 +212,15 @@ class _LeadLessonDateTrayState extends State<LeadLessonDateTray> {
                   ),
                 ),
               ),
+            if (lessonHasSubscriptionCoverage(lesson))
+              const Positioned(
+                bottom: 0,
+                right: 0,
+                child: LessonSubscriptionBadge(compact: true, iconOnly: true),
+              ),
           ],
         ),
       ),
     );
-  }
-
-  /// «1 500» вместо «1500.0»: сумма в тултипе читается человеком.
-  String _money(double value) {
-    final rounded = value.roundToDouble() == value ? value.round() : value;
-    return NumberFormat.decimalPattern('ru').format(rounded);
   }
 }

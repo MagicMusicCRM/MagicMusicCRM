@@ -246,8 +246,8 @@ void main() {
     expect(view, isNot(contains('preferred_schedule_editor_controller.dart')));
     expect(view, contains('preferred_schedule_editor_state.dart'));
     expect(shell, contains('DirtyFormExitController'));
-    expect(shell, contains('showDatePicker'));
-    expect(shell, contains('showTimePicker'));
+    expect(shell, contains('showMagicDatePicker'));
+    expect(shell, contains('showMagicTimePicker'));
     expect(shell, isNot(contains('Выберите педагога.')));
     expect(shell, isNot(contains('Последнее занятие выходит')));
   });

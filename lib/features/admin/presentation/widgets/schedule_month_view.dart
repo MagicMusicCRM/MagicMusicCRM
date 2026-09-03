@@ -332,6 +332,7 @@ class ScheduleMonthView extends StatelessWidget {
         lesson['group_name']?.toString() ??
         (leadName.isNotEmpty ? leadName : 'Занятие');
     return Container(
+      key: ValueKey('schedule-month-lesson-${lesson['id']}'),
       margin: const EdgeInsets.only(bottom: 2),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
@@ -389,6 +390,11 @@ class ScheduleMonthView extends StatelessWidget {
                   style: TextStyle(color: cs.onSurface, fontSize: 9.5),
                 ),
               ),
+              if (lessonHasSubscriptionCoverage(lesson) &&
+                  constraints.maxWidth >= 64) ...[
+                const SizedBox(width: 2),
+                const LessonSubscriptionBadge(compact: true, iconOnly: true),
+              ],
             ],
           );
         },

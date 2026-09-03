@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 
 import 'subscription_issue_models.dart';
 
@@ -481,8 +482,5 @@ class SubscriptionIssueInlineError extends StatelessWidget {
 }
 
 String formatSubscriptionMinor(BigInt minor, String currencyCode) {
-  final amount = minor.toInt() / 100;
-  final formatted = NumberFormat('#,##0.##', 'ru').format(amount);
-  final symbol = currencyCode == 'RUB' ? '₽' : currencyCode;
-  return '$formatted $symbol';
+  return formatPaymentMinor(minor, currencyCode: currencyCode);
 }

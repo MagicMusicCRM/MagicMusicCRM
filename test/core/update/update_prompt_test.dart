@@ -148,6 +148,55 @@ void main() {
     },
   );
 
+  testWidgets('active update blocks phone Back and downward handle dismissal', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    final service = _DelayedUpdateService();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => unawaited(
+                showWindowsUpdateDialog(context, _manifest, service: service),
+              ),
+              child: const Text('Проверить'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Проверить'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Обновить и перезапустить'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('Загружаем обновление…'), findsOneWidget);
+    expect(find.byTooltip('Закрыть'), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.drag(
+      find.byKey(const ValueKey('magic-sheet-handle')),
+      const Offset(0, 650),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('Загружаем обновление…'), findsOneWidget);
+    expect(service.applyCalls, 1);
+
+    service.release();
+    await tester.pumpAndSettle();
+    expect(find.text('Не удалось запустить обновление'), findsOneWidget);
+    await tester.tap(find.text('Закрыть'));
+    await tester.pumpAndSettle();
+    expect(find.text('Проверить'), findsOneWidget);
+    expect(windowsUpdateCoordinator.isBusy, isFalse);
+  });
+
   testWidgets(
     'startup prompt and repeated launches create one delayed update',
     (tester) async {
@@ -165,6 +214,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           navigatorKey: navigatorKey,
+          theme: ThemeData(platform: TargetPlatform.windows),
           home: StatefulBuilder(
             builder: (context, setState) {
               setHostState = setState;

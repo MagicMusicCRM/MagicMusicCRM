@@ -24,16 +24,16 @@ void main() {
       );
       expect(
         AdaptiveSurfacePolicy.containerFor(AppSurfaceKind.confirmation, width),
-        AdaptiveSurfaceContainer.dialog,
+        AdaptiveSurfaceContainer.sheet,
       );
     }
     expect(
       AdaptiveSurfacePolicy.containerFor(AppSurfaceKind.quickView, 840),
-      AdaptiveSurfaceContainer.drawer,
+      AdaptiveSurfaceContainer.dialog,
     );
     expect(
       AdaptiveSurfacePolicy.containerFor(AppSurfaceKind.selection, 840),
-      AdaptiveSurfaceContainer.drawer,
+      AdaptiveSurfaceContainer.dialog,
     );
   });
 
@@ -73,55 +73,60 @@ void main() {
     expect(find.text('duplicate-content'), findsNothing);
   });
 
-  testWidgets('Lesson quick view builds once in sheet then desktop drawer', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+  testWidgets(
+    'Lesson quick view opens one surface and returns from both devices',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
 
-    for (final width in const [360.0, 600.0, 839.0, 840.0]) {
-      tester.view.physicalSize = Size(width, 720);
-      var contentBuilds = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => FilledButton(
-                onPressed: () => showMagicAdaptiveSurface<void>(
-                  context,
-                  kind: AppSurfaceKind.quickView,
-                  title: 'Занятие',
-                  subtitle: 'Краткий просмотр',
-                  icon: Icons.calendar_today,
-                  builder: (surfaceContext) {
-                    contentBuilds++;
-                    return FilledButton(
-                      onPressed: () => Navigator.pop(surfaceContext),
-                      child: const Text('Закрыть занятие'),
-                    );
-                  },
+      for (final width in const [360.0, 600.0, 839.0, 840.0]) {
+        tester.view.physicalSize = Size(width, 720);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(
+              platform: width >= 840
+                  ? TargetPlatform.windows
+                  : TargetPlatform.android,
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => FilledButton(
+                  onPressed: () => showMagicAdaptiveSurface<void>(
+                    context,
+                    kind: AppSurfaceKind.quickView,
+                    title: 'Занятие',
+                    subtitle: 'Краткий просмотр',
+                    icon: Icons.calendar_today,
+                    builder: (surfaceContext) {
+                      return FilledButton(
+                        onPressed: () => Navigator.pop(surfaceContext),
+                        child: const Text('Закрыть занятие'),
+                      );
+                    },
+                  ),
+                  child: const Text('Открыть занятие'),
                 ),
-                child: const Text('Открыть занятие'),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.tap(find.text('Открыть занятие'));
-      await tester.pumpAndSettle();
-      expect(contentBuilds, 1, reason: 'width=$width');
-      expect(find.text('Занятие'), findsOneWidget);
-      expect(
-        find.byTooltip('Закрыть'),
-        width >= 840 ? findsOneWidget : findsNothing,
-      );
+        await tester.tap(find.text('Открыть занятие'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Закрыть занятие'),
+          findsOneWidget,
+          reason: 'width=$width',
+        );
+        expect(find.text('Занятие'), findsOneWidget);
+        expect(find.byTooltip('Закрыть'), findsOneWidget);
 
-      await tester.tap(find.text('Закрыть занятие'));
-      await tester.pumpAndSettle();
-      expect(find.text('Занятие'), findsNothing);
-    }
-  });
+        await tester.tap(find.text('Закрыть занятие'));
+        await tester.pumpAndSettle();
+        expect(find.text('Занятие'), findsNothing);
+      }
+    },
+  );
 
   testWidgets('short confirmation stays a modal decision', (tester) async {
     await tester.pumpWidget(
@@ -147,9 +152,9 @@ void main() {
 
     await tester.tap(find.text('Открыть confirmation'));
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-sheet-frame')), findsOneWidget);
     await tester.tap(find.text('Отменить'));
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(const ValueKey('magic-sheet-frame')), findsNothing);
   });
 }

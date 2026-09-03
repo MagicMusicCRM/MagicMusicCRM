@@ -73,9 +73,7 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: TeacherScheduleWidget())),
       ),
     );
-    // SfCalendar keeps internal animations alive, so pumpAndSettle can wait
-    // forever even after both API calls complete. Pump only until the business
-    // request under test has been observed.
+    // Pump only until the business request under test has been observed.
     for (
       var attempt = 0;
       attempt < 20 && api.requestedTeacherId == null;

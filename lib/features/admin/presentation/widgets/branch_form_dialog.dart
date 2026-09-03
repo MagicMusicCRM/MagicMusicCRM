@@ -1,4 +1,6 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -104,7 +106,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   Future<void> _openRoom([Map<String, dynamic>? room]) async {
     final id = widget.branch?['id']?.toString();
     if (id == null || id.isEmpty) return;
-    final saved = await showDialog<bool>(
+    final saved = await showMagicDialog<bool>(
       context: context,
       builder: (_) => CreateRoomDialog(
         room: room,
@@ -116,7 +118,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   }
 
   Future<void> _openRoomLifecycle(Map<String, dynamic> room) async {
-    final changed = await showDialog<bool>(
+    final changed = await showMagicDialog<bool>(
       context: context,
       builder: (_) => RoomLifecycleDialog(room: room),
     );
@@ -169,7 +171,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
       );
       return;
     }
-    final selected = await showDialog<String>(
+    final selected = await showMagicDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
         title: const Text('Добавить дисциплину'),
@@ -205,7 +207,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   }
 
   Future<void> _openDisciplineLifecycle(Map<String, dynamic> discipline) async {
-    final changed = await showDialog<bool>(
+    final changed = await showMagicDialog<bool>(
       context: context,
       builder: (_) => ReferenceCatalogLifecycleDialog(
         entityType: 'branch_discipline',
@@ -302,7 +304,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
 
   Future<String?> _pickTime(String current) async {
     final parts = current.split(':').map(int.tryParse).toList();
-    final picked = await showTimePicker(
+    final picked = await showMagicTimePicker(
       context: context,
       initialTime: TimeOfDay(
         hour: parts.firstOrNull ?? 9,

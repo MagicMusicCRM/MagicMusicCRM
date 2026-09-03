@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -689,8 +690,5 @@ class _ReplaceError extends StatelessWidget {
 }
 
 String _formatReplacementMinor(BigInt minor, String currencyCode) {
-  final amount = minor.toInt() / 100;
-  final formatted = NumberFormat('#,##0.##', 'ru').format(amount);
-  final symbol = currencyCode == 'RUB' ? '₽' : currencyCode;
-  return '$formatted $symbol';
+  return formatPaymentMinor(minor, currencyCode: currencyCode);
 }

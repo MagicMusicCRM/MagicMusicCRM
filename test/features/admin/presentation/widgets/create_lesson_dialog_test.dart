@@ -22,8 +22,10 @@ const _roomAId = '55555555-5555-4555-8555-555555555551';
 const _roomBId = '55555555-5555-4555-8555-555555555552';
 
 class _FakeApiClient extends MagicApiClient {
-  _FakeApiClient()
+  _FakeApiClient({this.lesson})
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+
+  final Map<String, dynamic>? lesson;
 
   @override
   Future<T> get<T>(
@@ -31,6 +33,10 @@ class _FakeApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    if (path == '/crm/lessons' && lesson != null) {
+      expect(queryParameters, {'lessonId': lesson!['id'], 'limit': 1});
+      return _lessonResponse(lesson!) as T;
+    }
     if (path == '/crm/students/33333333-3333-3333-3333-333333333333/commerce') {
       return <String, dynamic>{
             'projection': 'admin_scoped',
@@ -69,6 +75,7 @@ class _ControlledApiClient extends MagicApiClient {
   final bool controlBranchLoads;
   final bool controlSubscriptionLoads;
   final bool controlInitialRoomLoad;
+  Map<String, dynamic>? lesson;
   final initialRoomResponse = Completer<Map<String, dynamic>>();
   final roomResponses = <String, Completer<Map<String, dynamic>>>{};
   final catalogResponses = <String, Completer<Map<String, dynamic>>>{};
@@ -83,6 +90,9 @@ class _ControlledApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     switch (path) {
+      case '/crm/lessons':
+        expect(queryParameters, {'lessonId': lesson!['id'], 'limit': 1});
+        return _lessonResponse(lesson!) as T;
       case '/crm/teachers':
         return <String, dynamic>{'items': const []} as T;
       case '/crm/branches':
@@ -158,6 +168,23 @@ class _ControlledApiClient extends MagicApiClient {
     }
   }
 }
+
+Map<String, dynamic> _lessonResponse(Map<String, dynamic> lesson) => {
+  'items': [
+    {
+      'id': lesson['id'],
+      'version': lesson['version'],
+      'studentId': lesson['student_id'],
+      'studentName': lesson['student_name'],
+      'branchId': lesson['branch_id'],
+      'roomId': lesson['room_id'],
+      'scheduledAt': lesson['scheduled_at'],
+      'durationMinutes': lesson['duration_minutes'],
+      'lifecycleState': lesson['lifecycle_state'] ?? 'scheduled',
+      'settlementTypeKey': lesson['settlement_type_key'],
+    },
+  ],
+};
 
 Map<String, dynamic> _roomResponse(String branchId, String suffix) => {
   'items': [
@@ -251,7 +278,9 @@ Map<String, dynamic> _commerceResponse(String studentId, String name) => {
 
 Widget _host(Map<String, dynamic> lesson) {
   return ProviderScope(
-    overrides: [magicApiClientProvider.overrideWithValue(_FakeApiClient())],
+    overrides: [
+      magicApiClientProvider.overrideWithValue(_FakeApiClient(lesson: lesson)),
+    ],
     child: MaterialApp(
       home: Scaffold(body: CreateLessonDialog(lesson: lesson)),
     ),
@@ -263,6 +292,7 @@ Widget _controlledHost(
   int? initialDurationMinutes,
   Map<String, dynamic>? lesson,
 }) {
+  client.lesson = lesson;
   return ProviderScope(
     overrides: [magicApiClientProvider.overrideWithValue(client)],
     child: MaterialApp(
@@ -286,6 +316,9 @@ Widget _showHost({
   return ProviderScope(
     overrides: [magicApiClientProvider.overrideWithValue(_FakeApiClient())],
     child: MaterialApp(
+      theme: ThemeData(
+        platform: isDesktop ? TargetPlatform.windows : TargetPlatform.android,
+      ),
       home: WorkspaceNavigationScope(
         controller: controller,
         isDesktop: isDesktop,
@@ -367,35 +400,41 @@ void main() {
     });
   }
 
-  testWidgets(
-    'mobile show uses the lesson editor route and returns its result',
-    (tester) async {
-      final controller = _workspaceController();
-      final result = ValueNotifier<bool?>(true);
-      addTearDown(controller.dispose);
-      addTearDown(result.dispose);
-      await tester.pumpWidget(
-        _showHost(isDesktop: false, controller: controller, result: result),
-      );
+  testWidgets('mobile show uses the shared sheet and returns its result', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = _workspaceController();
+    final result = ValueNotifier<bool?>(true);
+    addTearDown(controller.dispose);
+    addTearDown(result.dispose);
+    await tester.pumpWidget(
+      _showHost(isDesktop: false, controller: controller, result: result),
+    );
 
-      await tester.tap(find.text('Открыть занятие'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Открыть занятие'));
+    await tester.pumpAndSettle();
 
-      final dialogContext = tester.element(find.text('Новое занятие'));
-      final route = ModalRoute.of(dialogContext);
-      expect(route?.settings.name, 'lesson-editor');
-      expect((route as MaterialPageRoute).fullscreenDialog, isTrue);
-      expect(find.byType(BackButton), findsOneWidget);
+    final dialogContext = tester.element(find.text('Новое занятие'));
+    final route = ModalRoute.of(dialogContext);
+    expect(route?.settings.name, 'lesson-editor');
+    expect(route, isA<ModalBottomSheetRoute<bool>>());
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
+    expect(find.byType(BackButton), findsNothing);
 
-      await tester.tap(find.text('Отмена'));
-      await tester.pumpAndSettle();
-      expect(result.value, isNull);
-    },
-  );
+    await tester.tap(find.byTooltip('Закрыть').first);
+    await tester.pumpAndSettle();
+    expect(result.value, isNull);
+  });
 
   testWidgets('desktop show uses a dialog surface and returns its result', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final controller = _workspaceController();
     final result = ValueNotifier<bool?>(true);
     addTearDown(controller.dispose);
@@ -408,6 +447,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
     expect(find.byType(BackButton), findsNothing);
 
     await tester.tap(find.text('Отмена'));
@@ -576,9 +616,37 @@ void main() {
     await tester.tap(find.text('Филиал А').last);
     await tester.pump();
 
+    expect(
+      tester
+          .widget<AbsorbPointer>(
+            find
+                .ancestor(
+                  of: find.byKey(const ValueKey('lesson-client-field')),
+                  matching: find.byType(AbsorbPointer),
+                )
+                .first,
+          )
+          .absorbing,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Создать'))
+          .onPressed,
+      isNull,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
     client.roomResponses[_branchAId]!.complete(_roomResponse(_branchAId, 'А'));
     client.catalogResponses[_branchAId]!.complete(_catalogResponse('А'));
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Создать'))
+          .onPressed,
+      isNotNull,
+      reason: 'The completed latest selection must not wait for stale branch B',
+    );
     await _selectPickerOption(
       tester,
       const ValueKey('lesson-room-field'),

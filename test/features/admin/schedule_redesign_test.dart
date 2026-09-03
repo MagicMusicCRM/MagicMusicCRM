@@ -6,6 +6,8 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_teacher_timeline.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
@@ -23,10 +25,15 @@ DateTime _today() {
 }
 
 class _FakeClient extends MagicApiClient {
-  _FakeClient({this.reviewRequired = false})
-    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+  _FakeClient({
+    this.reviewRequired = false,
+    this.reservationState,
+    this.subscriptionId,
+  }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool reviewRequired;
+  final String? reservationState;
+  final String? subscriptionId;
   final previews = <Map<String, dynamic>>[];
 
   @override
@@ -40,6 +47,23 @@ class _FakeClient extends MagicApiClient {
       return <String, dynamic>{
             'items': [
               {'id': _branchId, 'name': 'Сокол', 'utcOffsetMinutes': 0},
+            ],
+          }
+          as T;
+    }
+    if (path == '/crm/teachers') {
+      return <String, dynamic>{
+            'items': [
+              {
+                'id': 'teacher-a',
+                'firstName': 'Анна',
+                'lastName': 'Сусарина',
+                'branchId': _branchId,
+                'assignedBranches': [
+                  {'id': _branchId, 'name': 'Сокол'},
+                ],
+                'status': 'active',
+              },
             ],
           }
           as T;
@@ -75,7 +99,7 @@ class _FakeClient extends MagicApiClient {
           }
           as T;
     }
-    if (path == '/crm/schedule/matrix') {
+    if (path == '/crm/schedule/matrix' || path == '/crm/lessons') {
       return <String, dynamic>{
             'items': [
               {
@@ -91,6 +115,8 @@ class _FakeClient extends MagicApiClient {
                 'scheduledAt': iso,
                 'durationMinutes': 120,
                 'status': 'scheduled',
+                'reservationState': reservationState,
+                'subscriptionId': subscriptionId,
                 'lifecycleState': reviewRequired
                     ? 'settlement_pending'
                     : 'scheduled',
@@ -191,6 +217,63 @@ void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
 
   group('KVA-195 schedule redesign', () {
+    for (final reservation in ['reserved', 'released', null]) {
+      testWidgets(
+        'subscription coverage $reservation stays separate in every calendar view',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(1500, 1050));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          await tester.pumpWidget(
+            _host(
+              const ScheduleWidget(),
+              client: _FakeClient(
+                reservationState: reservation,
+                subscriptionId: 'subscription-a',
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          void expectLesson(String key) {
+            final card = find.byKey(ValueKey(key)).first;
+            expect(card, findsOneWidget);
+            final lifecycle = find.descendant(
+              of: card,
+              matching: find.byIcon(Icons.event_available_outlined),
+            );
+            expect(lifecycle, findsOneWidget);
+            expect(tester.widget<Icon>(lifecycle).color, AppColor.actionBlue);
+            final coverage = find.descendant(
+              of: card,
+              matching: find.byType(LessonSubscriptionBadge),
+            );
+            expect(
+              coverage,
+              reservation == 'reserved' ? findsOneWidget : findsNothing,
+            );
+            if (reservation == 'reserved') {
+              final icon = find.descendant(
+                of: coverage,
+                matching: find.byIcon(Icons.card_membership_outlined),
+              );
+              expect(tester.widget<Icon>(icon).color, AppColor.success);
+            }
+            expect(tester.takeException(), isNull);
+          }
+
+          expectLesson('schedule-month-lesson-lesson-1');
+          for (final view in ['Неделя', 'День']) {
+            await tester.tap(find.text(view));
+            await tester.pumpAndSettle();
+            expectLesson('schedule-lesson-lesson-1');
+          }
+          await tester.tap(find.text('По преподавателям'));
+          await tester.pumpAndSettle();
+          expectLesson('schedule-lesson-lesson-1');
+        },
+      );
+    }
+
     testWidgets('responsive toolbar has one labelled create action', (
       tester,
     ) async {
@@ -318,40 +401,32 @@ void main() {
       expect(find.text('Ольга Ученик'), findsNWidgets(2));
 
       expect(find.text('Конфликт'), findsWidgets);
-      expect(
-        find.byKey(const ValueKey('lesson-repair-settlement')),
-        findsOneWidget,
-      );
+      expect(find.text('Изменить занятие'), findsOneWidget);
       expect(find.textContaining('Причина конфликта'), findsOneWidget);
       expect(find.textContaining('ConflictException'), findsNothing);
       expect(find.textContaining('Провести занятие'), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('lesson-repair-settlement')));
+      await tester.tap(find.text('Изменить занятие'));
       await tester.pumpAndSettle();
-      expect(find.text('Исправление расчёта'), findsOneWidget);
-      await tester.enterText(
-        find.byKey(const Key('lesson-decision-reason')),
-        'Проверка расчёта сотрудником',
-      );
-      await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Занятие').last);
-      await tester.pumpAndSettle();
+      expect(find.text('Изменить занятие'), findsOneWidget);
+      final reason = find.byKey(const Key('lesson-edit-reason'));
+      await tester.ensureVisible(reason);
+      await tester.enterText(reason, 'Проверка расчёта сотрудником');
       expect(
-        find.byKey(const Key('lesson-decision-compensation')),
+        find.byKey(const Key('lesson-compensation-rule-field')),
         findsNothing,
       );
-      await tester.ensureVisible(
-        find.byKey(const Key('lesson-decision-submit')),
-      );
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.ensureVisible(find.text('Рассчитать'));
+      await tester.tap(find.text('Рассчитать'));
       await tester.pumpAndSettle();
 
       expect(api.previews, hasLength(1));
       expect(api.previews.single['expectedVersion'], 2);
       expect(api.previews.single['financialDecision'], {
         'settlementTypeKey': 'lesson',
+        'clientDecisions': [
+          {'clientId': 'student-a', 'chargeType': 'none'},
+        ],
       });
       expect(find.text('Изменение готово к подтверждению'), findsOneWidget);
       expect(tester.takeException(), isNull);

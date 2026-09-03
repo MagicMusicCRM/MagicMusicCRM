@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -378,7 +379,7 @@ class _CrmConfigurationWorkspaceState
     if (!_canManageCommerceCatalogs) return;
     final items = _items(listKey)
       ..sort(CrmConfigurationSnapshotOps.compareCatalogOrder);
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showMagicDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _CommerceCatalogEditorDialog(
         settlement: listKey == 'lessonSettlementTypes',
@@ -524,7 +525,7 @@ class _CrmConfigurationWorkspaceState
 
   Future<void> _editField(Map<String, dynamic>? current) async {
     final categories = _items('categories');
-    final draft = await showDialog<Map<String, dynamic>>(
+    final draft = await showMagicDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _FieldEditorDialog(
         field: current,
@@ -548,7 +549,7 @@ class _CrmConfigurationWorkspaceState
   }
 
   Future<void> _editCategory([Map<String, dynamic>? current]) async {
-    final draft = await showDialog<Map<String, dynamic>>(
+    final draft = await showMagicDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _CategoryEditorDialog(category: current),
     );
@@ -595,7 +596,7 @@ class _CrmConfigurationWorkspaceState
   }
 
   Future<void> _editOptionSet(Map<String, dynamic>? current) async {
-    final draft = await showDialog<Map<String, dynamic>>(
+    final draft = await showMagicDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _OptionSetEditorDialog(optionSet: current),
     );

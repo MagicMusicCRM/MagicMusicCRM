@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_models.dart';
 
@@ -31,7 +32,7 @@ Future<bool> _showChatInfoDangerConfirmation(
   required Widget content,
   required String confirmLabel,
 }) async {
-  return await showDialog<bool>(
+  return await showMagicDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(title),
@@ -55,7 +56,7 @@ Future<bool> _showChatInfoDangerConfirmation(
 }
 
 Future<String?> showChatInfoNoteEditor(BuildContext context) async {
-  return showDialog<String>(
+  return showMagicDialog<String>(
     context: context,
     builder: (_) => const _ChatInfoNoteEditorDialog(),
   );
@@ -110,6 +111,16 @@ class ChatInfoMembersDialog extends StatelessWidget {
 
   final List<Map<String, dynamic>> members;
   final bool canManageGroup;
+
+  static Future<Map<String, dynamic>?> show(
+    BuildContext context, {
+    required List<Map<String, dynamic>> members,
+    required bool canManageGroup,
+  }) => showMagicDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (_) =>
+        ChatInfoMembersDialog(members: members, canManageGroup: canManageGroup),
+  );
 
   @override
   Widget build(BuildContext context) => AlertDialog(

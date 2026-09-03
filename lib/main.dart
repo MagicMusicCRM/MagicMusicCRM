@@ -20,7 +20,6 @@ import 'package:magic_music_crm/core/services/notification_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:syncfusion_localizations/syncfusion_localizations.dart';
 import 'package:magic_music_crm/firebase_options.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -256,7 +255,6 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
-          SfGlobalLocalizations.delegate,
         ],
         supportedLocales: const [Locale('ru'), Locale('en')],
         locale: const Locale('ru'),

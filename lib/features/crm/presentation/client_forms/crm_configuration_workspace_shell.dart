@@ -503,7 +503,7 @@ Future<String?> _showCrmConfigurationImpactDialog(
   final valid = impact['valid'] == true;
   final changes = impact['changes'] as Map? ?? const {};
   final screens = (impact['affectedScreens'] as List? ?? const []).join(', ');
-  return showDialog<String>(
+  return showMagicDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(
@@ -539,7 +539,7 @@ Future<String?> _askCrmConfigurationReason(
   String title,
 ) async {
   var reason = '';
-  return showDialog<String>(
+  return showMagicDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),

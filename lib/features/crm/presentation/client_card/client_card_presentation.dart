@@ -231,7 +231,7 @@ extension _ClientCardPresentation on _ClientCardState {
     return b < 0 ? AppTheme.danger : AppTheme.success;
   }
 
-  // Pill badge for the header («Ученик» / «Лид→Ученик»).
+  // Pill badge for the header («Ученик» / «Лид → Ученик»).
   Widget _buildStudentHeader(ColorScheme cs, StatusRecord curStatus) {
     final contact = _studentContact();
     final converted = _isConverted;
@@ -277,7 +277,7 @@ extension _ClientCardPresentation on _ClientCardState {
                   padding: const EdgeInsets.only(top: 2),
                   child: Row(
                     children: [
-                      _headerBadge(converted ? 'Лид→Ученик' : 'Ученик'),
+                      _headerBadge(converted ? 'Лид → Ученик' : 'Ученик'),
                       // For a converted client surface BOTH halves: the lead
                       // status (origin) and the student balance.
                       if (converted) ...[

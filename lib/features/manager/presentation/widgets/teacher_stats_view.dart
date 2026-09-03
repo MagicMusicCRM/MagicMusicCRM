@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -187,7 +188,7 @@ class TeacherStatsView extends StatelessWidget {
 
   Future<void> _pickPeriod(BuildContext context) async {
     final query = _state.query;
-    final picked = await showDateRangePicker(
+    final picked = await showMagicDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),

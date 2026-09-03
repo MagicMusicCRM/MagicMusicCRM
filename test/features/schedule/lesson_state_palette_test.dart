@@ -25,6 +25,33 @@ void main() {
       expect(projection.label, 'Забронировано');
     });
 
+    test('coverage requires a reservation rather than a funding choice', () {
+      for (final lesson in <Map<String, dynamic>>[
+        {'reservation_state': 'reserved'},
+        {'reservationState': 'reserved'},
+        {
+          'settlementMarkers': [
+            {'key': 'subscription_reserved'},
+          ],
+        },
+      ]) {
+        expect(lessonHasSubscriptionCoverage(lesson), isTrue);
+      }
+      for (final lesson in <Map<String, dynamic>>[
+        {'subscription_id': 'subscription-1'},
+        {'client_charge_type': 'subscription'},
+        {'reservation_state': 'released'},
+        {'reservation_state': 'consumed'},
+        {
+          'settlementMarkers': [
+            {'key': 'paid', 'colorToken': 'success'},
+          ],
+        },
+      ]) {
+        expect(lessonHasSubscriptionCoverage(lesson), isFalse);
+      }
+    });
+
     test('successful completion is green without reservation', () {
       final projection = lessonStateProjection(
         lifecycleState: 'successfully_completed',
@@ -93,5 +120,31 @@ void main() {
 
     expect(find.text('Пробное'), findsOneWidget);
     expect(find.text('Забронировано'), findsOneWidget);
+  });
+
+  testWidgets('subscription marker preserves the visible lifecycle status', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Row(
+          children: [
+            LessonStateBadge.fromMap(const {
+              'lifecycle_state': 'scheduled',
+              'reservation_state': 'reserved',
+            }),
+            const LessonSubscriptionBadge(),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.text('Забронировано'), findsOneWidget);
+    expect(find.text('Абонемент'), findsOneWidget);
+    expect(find.byTooltip('Покрыто абонементом'), findsOneWidget);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.card_membership_outlined)).color,
+      AppColor.success,
+    );
   });
 }

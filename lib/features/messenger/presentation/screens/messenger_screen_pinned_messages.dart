@@ -113,7 +113,7 @@ extension _MessengerPinnedMessages on _MessengerScreenState {
   void _showPinnedMessagesDialog() {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    showDialog(
+    showMagicDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {

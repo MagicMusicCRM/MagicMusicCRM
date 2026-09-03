@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -40,7 +41,7 @@ class _ClientArchiveButtonState extends ConsumerState<ClientArchiveButton> {
             entityId: widget.entityId,
           );
       if (!mounted) return;
-      final confirmed = await showDialog<String>(
+      final confirmed = await showMagicDialog<String>(
         context: context,
         builder: (_) => _ArchivePreviewDialog(preview: preview),
       );

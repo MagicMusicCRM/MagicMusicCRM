@@ -80,7 +80,7 @@ class _GroupsList extends ConsumerWidget {
                   onTap: () async {
                     final Future<bool?> dialog;
                     if (archived) {
-                      dialog = showDialog<bool>(
+                      dialog = showMagicDialog<bool>(
                         context: context,
                         builder: (_) => GroupLifecycleDialog(group: item),
                       );
@@ -138,7 +138,7 @@ class _GroupsList extends ConsumerWidget {
                                 : Icons.archive_outlined,
                           ),
                           onPressed: () async {
-                            final updated = await showDialog<bool>(
+                            final updated = await showMagicDialog<bool>(
                               context: context,
                               builder: (_) => GroupLifecycleDialog(group: item),
                             );

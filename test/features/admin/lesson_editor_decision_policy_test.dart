@@ -9,6 +9,111 @@ void main() {
   const policy = LessonEditorDecisionPolicy();
 
   test(
+    'payer and personal account pricing survive catalog and create payload',
+    () {
+      const decisions = [
+        {
+          'clientId': 'student-a',
+          'payerStudentId': 'payer-b',
+          'chargeType': 'personal_account',
+          'basePriceMinor': '150050',
+          'discount': {
+            'type': 'percent',
+            'percentBasisPoints': 1000,
+            'reason': 'Акция',
+          },
+          'surcharge': {
+            'type': 'fixed',
+            'amountMinor': '10000',
+            'reason': 'Материалы',
+          },
+        },
+      ];
+      final draft = _draft().copyWith(clientDecisions: decisions);
+      final session = _editSession(_draft());
+      expect(
+        policy.hasFinancialChanges(session: session, draft: draft),
+        isTrue,
+      );
+      final normalized = policy
+          .applyReferenceDefaults(
+            _createSession(draft),
+            draft,
+            _references(),
+            false,
+          )
+          .draft;
+      expect(normalized.clientDecisions, decisions);
+      expect(normalized.clientChargeType, 'personal_account');
+      final payload = policy.createPayload(
+        session: _createSession(normalized),
+        draft: normalized,
+        references: _references(),
+        canManageTeacherCompensation: true,
+      );
+      expect(
+        (payload['financialDecision'] as Map)['clientDecisions'],
+        lessonClientDecisionsPayload(decisions),
+      );
+      expect(payload['clientChargeValue'], 1500.50);
+      expect(payload.containsKey('subscriptionId'), isFalse);
+      expect(
+        policy
+            .validate(session: session, draft: draft, references: _references())
+            .isValid,
+        isTrue,
+      );
+      final changedType = policy
+          .applyEdit(
+            draft,
+            _references(),
+            const LessonReferenceEdit(
+              LessonReferenceTarget.settlement,
+              'another',
+            ),
+          )
+          .draft;
+      expect(changedType.clientDecisions, decisions);
+    },
+  );
+
+  test(
+    'personal account requires an explicit valid price and adjustment reason',
+    () {
+      for (final invalid in [
+        {'clientId': 'student-a', 'chargeType': 'personal_account'},
+        {
+          'clientId': 'student-a',
+          'chargeType': 'personal_account',
+          'basePriceMinor': '-1',
+        },
+        {
+          'clientId': 'student-a',
+          'chargeType': 'personal_account',
+          'basePriceMinor': '10000',
+          'discount': {
+            'type': 'percent',
+            'percentBasisPoints': 500,
+            'reason': '',
+          },
+        },
+      ]) {
+        final draft = _draft().copyWith(clientDecisions: [invalid]);
+        expect(
+          policy
+              .validate(
+                session: _createSession(draft),
+                draft: draft,
+                references: _references(),
+              )
+              .isValid,
+          isFalse,
+        );
+      }
+    },
+  );
+
+  test(
     'settlement edits are saved and resource edits preserve lesson identity',
     () {
       final draft = _draft();
@@ -830,6 +935,7 @@ void main() {
         'completed': LessonDecisionOperation.correction,
         'done': LessonDecisionOperation.correction,
         'planned': LessonDecisionOperation.plannedSettlement,
+        'settlement_pending': LessonDecisionOperation.settle,
       };
 
       for (final entry in cases.entries) {
@@ -897,7 +1003,7 @@ void main() {
                   .having(
                     (value) => value.plannedSettlementReason,
                     'reason',
-                    isEmpty,
+                    'Старая причина',
                   ),
               scheduleChanged: true,
               branchToLoad: 'branch-b',
@@ -945,12 +1051,12 @@ void main() {
                   .having(
                     (value) => value.clientChargeType,
                     'funding',
-                    'subscription',
+                    'personal_account',
                   )
                   .having(
                     (value) => value.subscriptionId,
                     'subscription',
-                    'subscription-first',
+                    'subscription-old',
                   ),
               scheduleChanged: false,
               branchToLoad: null,
@@ -975,7 +1081,7 @@ void main() {
                   .having(
                     (value) => value.plannedSettlementReason,
                     'reason',
-                    isEmpty,
+                    'Старая причина',
                   ),
               scheduleChanged: false,
               branchToLoad: null,

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
-
 import '../lesson_decision/lesson_decision_models.dart';
+import '../lesson_decision/lesson_decision_sections.dart';
 import '../lesson_form_rules.dart';
+import 'lesson_client_funding_fields.dart';
 import 'lesson_editor_feedback.dart';
 import 'lesson_editor_models.dart';
 
@@ -34,11 +34,75 @@ class LessonFinancialSection extends StatelessWidget {
   const LessonFinancialSection({
     required this.model,
     required this.actions,
+    this.fundingFields,
+    this.funding,
+    this.knownPayers = const [],
+    this.financialPreview,
     super.key,
   });
 
   final LessonFinancialSectionModel model;
   final LessonEditorActions actions;
+  final Widget? fundingFields;
+  final LessonDecisionFormLifecycle? funding;
+  final List<LessonDecisionParticipant> knownPayers;
+  final LessonDecisionPreview? financialPreview;
+
+  Widget? _fundingFields() {
+    final controller = funding;
+    final client = model.draft.client;
+    if (controller == null || client == null) return null;
+    return LessonClientFundingFields(
+      key: ValueKey('lesson-funding-${client.key}'),
+      participants: model.session.isGroupEdit
+          ? controller.groupParticipants
+          : [
+              LessonDecisionParticipant(
+                id: client.id,
+                name: client.label,
+                isStudent: client.type == 'student',
+              ),
+            ],
+      decisions: model.draft.clientDecisions,
+      enabled: !model.isSaving,
+      allowsNoFunding: model.allowsNoFunding,
+      searchPayers: controller.searchPayers,
+      loadSubscriptions: controller.loadSubscriptions,
+      subscriptionsByPayer: _subscriptionCache(client),
+      knownPayers: knownPayers,
+      onChanged: (value) => actions.edit(LessonClientDecisionsEdit(value)),
+    );
+  }
+
+  Map<String, List<LessonDecisionSubscription>> _subscriptionCache(
+    LessonClientRef client,
+  ) {
+    if (client.type != 'student') return const {};
+    final current = model.draft.clientDecisions
+        .where((row) => row['clientId'] == client.id)
+        .firstOrNull;
+    final selected = current?['subscriptionId'] ?? model.draft.subscriptionId;
+    final items = model.references.subscriptions;
+    // A missing historical selection must be resolved by the funding loader.
+    if (selected != null && !items.any((item) => item.id == selected)) {
+      return const {};
+    }
+    return {
+      client.id: [
+        for (final item in items)
+          if (item.id == selected ||
+              (num.tryParse(
+                        (item.raw['lessons_remaining'] ??
+                                    item.raw['lessonsRemaining'])
+                                ?.toString() ??
+                            '',
+                      ) ??
+                      0) >
+                  0)
+            LessonDecisionSubscription(id: item.id, label: item.label),
+      ],
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,8 +117,30 @@ class LessonFinancialSection extends StatelessWidget {
         if (model.canManageTeacherCompensation)
           _CompensationOverride(model: model, actions: actions),
         const SizedBox(height: 16),
-        _FundingField(model: model, actions: actions),
-        _SubscriptionField(model: model, actions: actions),
+        ?fundingFields ?? _fundingFields(),
+        if (model.session.isEdit) ...[
+          const SizedBox(height: 16),
+          TextFormField(
+            key: const Key('lesson-edit-reason'),
+            initialValue: model.draft.plannedSettlementReason,
+            enabled: !model.isSaving,
+            minLines: 2,
+            maxLines: 3,
+            maxLength: 500,
+            decoration: const InputDecoration(
+              labelText: 'Причина изменения *',
+              helperText: 'Сохранится в истории занятия',
+            ),
+            onChanged: (value) => actions.edit(
+              LessonTextEdit(LessonTextTarget.settlementReason, value),
+            ),
+          ),
+        ],
+        if (financialPreview case final preview?)
+          LessonDecisionPreviewCard(
+            preview: preview,
+            participantNames: funding?.participantNames ?? const {},
+          ),
       ],
     );
   }
@@ -95,7 +181,6 @@ class _CompletionControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final draft = model.draft;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -105,42 +190,14 @@ class _CompletionControl extends StatelessWidget {
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 12),
-        if (model.session.isEdit)
-          InputDecorator(
-            key: const ValueKey('lesson-completion-type-field'),
-            decoration: const InputDecoration(
-              labelText: 'Автозавершение *',
-              enabled: false,
-              helperText: 'Результат зафиксирован при создании',
-            ),
-            child: Text(
-              draft.completionType == 'standard.success'
-                  ? 'Успешно завершить'
-                  : draft.completionType,
-            ),
-          )
-        else
-          DropdownButtonFormField<String>(
-            menuMaxHeight: 256,
-            key: const ValueKey('lesson-completion-type-field'),
-            initialValue: draft.completionType,
-            decoration: const InputDecoration(
-              labelText: 'Автозавершение *',
-              helperText: 'Результат формируется сервером после окончания',
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: 'standard.success',
-                child: Text('Успешно завершить'),
-              ),
-            ],
-            onChanged: (value) => actions.edit(
-              LessonTextEdit(
-                LessonTextTarget.completion,
-                value ?? 'standard.success',
-              ),
-            ),
+        const InputDecorator(
+          key: ValueKey('lesson-completion-type-field'),
+          decoration: InputDecoration(
+            labelText: 'Завершение',
+            helperText: 'Занятие завершается автоматически после окончания',
           ),
+          child: Text('Автозавершение'),
+        ),
       ],
     );
   }
@@ -158,6 +215,7 @@ class _DecisionFields extends StatelessWidget {
     final catalog = model.references.catalog;
     final settlement = DropdownButtonFormField<String>(
       menuMaxHeight: 256,
+      isExpanded: true,
       key: const ValueKey('lesson-settlement-type-field'),
       initialValue: draft.settlementTypeKey,
       decoration: const InputDecoration(
@@ -166,7 +224,14 @@ class _DecisionFields extends StatelessWidget {
       ),
       items: [
         for (final item in catalog?.settlementTypes ?? const [])
-          DropdownMenuItem(value: item.key, child: Text(item.label)),
+          DropdownMenuItem(
+            value: item.key,
+            child: Text(
+              item.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
       ],
       onChanged: model.session.isEdit && model.isSaving
           ? null
@@ -179,6 +244,7 @@ class _DecisionFields extends StatelessWidget {
       first: settlement,
       second: DropdownButtonFormField<String>(
         menuMaxHeight: 256,
+        isExpanded: true,
         key: const ValueKey('lesson-compensation-rule-field'),
         initialValue: draft.compensationRuleKey,
         decoration: const InputDecoration(
@@ -187,7 +253,14 @@ class _DecisionFields extends StatelessWidget {
         ),
         items: [
           for (final item in catalog?.compensationRules ?? const [])
-            DropdownMenuItem(value: item.key, child: Text(item.label)),
+            DropdownMenuItem(
+              value: item.key,
+              child: Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
         ],
         onChanged: model.isSaving
             ? null
@@ -267,86 +340,6 @@ class _CompensationOverride extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _FundingField extends StatelessWidget {
-  const _FundingField({required this.model, required this.actions});
-
-  final LessonFinancialSectionModel model;
-  final LessonEditorActions actions;
-
-  @override
-  Widget build(BuildContext context) {
-    final draft = model.draft;
-    final locked = model.session.isEdit;
-    final subscriptions = model.references.subscriptions;
-    return DropdownButtonFormField<String>(
-      menuMaxHeight: 256,
-      key: const ValueKey('lesson-charge-type-field'),
-      initialValue: draft.clientChargeType,
-      decoration: const InputDecoration(
-        labelText: 'Источник средств *',
-        helperText: 'Сумму и долю определяет выбранный тип списания',
-      ),
-      items: [
-        if (draft.client?.type == 'student' &&
-            (subscriptions.isNotEmpty ||
-                draft.clientChargeType == 'subscription'))
-          const DropdownMenuItem(
-            value: 'subscription',
-            child: Text('С абонемента'),
-          ),
-        const DropdownMenuItem(
-          value: 'personal_account',
-          child: Text('С личного счёта'),
-        ),
-        if (model.allowsNoFunding ||
-            (locked && draft.clientChargeType == 'none'))
-          const DropdownMenuItem(value: 'none', child: Text('Без списания')),
-      ],
-      onChanged: locked
-          ? null
-          : (value) => actions.edit(
-              LessonTextEdit(LessonTextTarget.funding, value ?? 'none'),
-            ),
-    );
-  }
-}
-
-class _SubscriptionField extends StatelessWidget {
-  const _SubscriptionField({required this.model, required this.actions});
-
-  final LessonFinancialSectionModel model;
-  final LessonEditorActions actions;
-
-  @override
-  Widget build(BuildContext context) {
-    if (model.draft.clientChargeType != 'subscription') {
-      return const SizedBox.shrink();
-    }
-    final subscriptions = model.references.subscriptions;
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: SearchablePickerField(
-        label: 'Абонемент *',
-        placeholder: subscriptions.isEmpty
-            ? 'Нет активных абонементов'
-            : 'Выберите абонемент',
-        enabled: !model.session.isEdit && subscriptions.isNotEmpty,
-        selectedId: model.draft.subscriptionId,
-        items: [
-          for (final subscription in subscriptions)
-            SearchableSelectItem(
-              id: subscription.id,
-              label: subscription.label,
-            ),
-        ],
-        onSelected: (item) => actions.edit(
-          LessonReferenceEdit(LessonReferenceTarget.subscription, item?.id),
-        ),
-      ),
     );
   }
 }

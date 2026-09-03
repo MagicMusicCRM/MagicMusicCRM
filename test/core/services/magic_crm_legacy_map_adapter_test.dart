@@ -3,6 +3,39 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 void main() {
   group('CRM legacy map adapter', () {
+    test(
+      'exact lessons preserve financial decisions and frozen membership',
+      () {
+        const decision = {
+          'settlementTypeKey': 'lesson',
+          'teacherCompensationRuleKey': 'fixed',
+          'teacherCompensationValueMinor': '150000',
+          'clientDecisions': [
+            {
+              'clientId': 'recipient-1',
+              'payerStudentId': 'payer-1',
+              'subscriptionId': 'subscription-1',
+              'chargeType': 'subscription',
+              'basePriceMinor': '200000',
+            },
+          ],
+        };
+        final lesson = legacyLessonForTesting({
+          'id': 'lesson-1',
+          'financialDecision': decision,
+          'groupParticipants': const [],
+          'reservationState': 'reserved',
+        });
+        expect(lesson['financial_decision'], decision);
+        expect(lesson['group_participants'], isEmpty);
+        expect(lesson['reservation_state'], 'reserved');
+        expect(
+          legacyLessonForTesting({'id': 'lesson-1'}),
+          isNot(contains('group_participants')),
+        );
+      },
+    );
+
     test('lead keeps legacy ids, snake_case keys, and null defaults', () {
       final result = legacyLeadForTesting({
         'id': 'lead-1',

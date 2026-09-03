@@ -46,6 +46,13 @@ Sentrux scan после каждого шага.
 
 ## Runtime
 
+DECISION (owner, 2026-09-03): Окна действий используют существующий общий
+presentation-контур `magic_sheet.dart`: центральный Dialog на desktop,
+нижний sheet на Android/iOS. `showMagicDialog` принимает существующий редактор,
+`showMagicSheet` — содержимое с заголовком и действиями. Material pickers
+проходят тот же контур через `magic_picker.dart`. Боковой modal drawer удалён;
+маршруты рабочих вкладок, контроллеры, результаты команд и dirty guards сохранены.
+
 DECISION: Production использует один owned runtime:
 Flutter → NestJS → PostgreSQL, с Redis/Socket.IO и private file storage.
 Supabase и HolliHop не являются клиентскими runtime-зависимостями.
@@ -417,6 +424,17 @@ build автоматически.
 
 DECISION: Production mutation/deploy требует явного разрешения владельца,
 нового backup, проверенного restore/rollback и post-deploy reconciliation.
+
+DECISION (2026-09-03): Выпуск 210 сначала устанавливает backend bridge с
+поддержкой migration 0146, плательщика и снимка цены, затем финальный image
+с идентичным backend. После появления новых финансовых фактов или явных
+решений об источнике средств откат допускается только на совместимый bridge.
+Deploy guard проверяет факты и сохранённые решения после остановки writers;
+ошибка проверки или несовместимость запрещает запуск старого runtime.
+Restore/reconciliation резервной копии подтверждают восстановимость схемы,
+но не совместимость старого worker с новыми решениями. Общий дефект backend
+bridge/final требует исправления вперёд; удаление финансовой истории и down
+migration для отката не применяются.
 
 DECISION: `assets/release_history.json` является версионируемым источником
 пользовательской истории выпусков. Publish-скрипт обязан проверить совпадение

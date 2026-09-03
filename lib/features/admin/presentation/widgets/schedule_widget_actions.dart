@@ -294,29 +294,6 @@ extension _ScheduleActions on _ScheduleWidgetState {
       lessonId: widget.canWrite ? lessonId : null,
       onEdit: () => _editLesson(lesson),
       onCancel: () => _cancelLesson(lesson),
-      onSettle: lifecycleState == 'settlement_pending'
-          ? () => _settleLesson(lesson)
-          : null,
-      onAdjustSettlement:
-          lifecycleState == 'successfully_completed' ||
-              currentStatus == 'completed' ||
-              currentStatus == 'done'
-          ? () => _adjustLessonSettlement(
-              lesson,
-              LessonDecisionOperation.correction,
-            )
-          : lifecycleState == 'scheduled' && start.isAfter(DateTime.now())
-          ? () => _adjustLessonSettlement(
-              lesson,
-              LessonDecisionOperation.plannedSettlement,
-            )
-          : null,
-      adjustSettlementLabel:
-          lifecycleState == 'successfully_completed' ||
-              currentStatus == 'completed' ||
-              currentStatus == 'done'
-          ? 'Исправить расчёт'
-          : 'Изменить расчёт',
     );
   }
 
@@ -341,51 +318,6 @@ extension _ScheduleActions on _ScheduleWidgetState {
       MagicToast.show(
         context,
         'Занятие отменено',
-        type: MagicToastType.success,
-      );
-    }
-  }
-
-  Future<void> _settleLesson(Map<String, dynamic> lesson) async {
-    if (!widget.canWrite) return;
-    final changed = await showLessonDecisionFlow(
-      context,
-      crm: ref.read(magicCrmServiceProvider),
-      operation: LessonDecisionOperation.settle,
-      lesson: lesson,
-      canManageTeacherCompensation: _canManageTeacherCompensation,
-    );
-    if (changed == true && mounted) {
-      await _refreshEditedSchedule();
-      if (!mounted) return;
-      MagicToast.show(
-        context,
-        'Расчёт занятия исправлен',
-        type: MagicToastType.success,
-      );
-    }
-  }
-
-  Future<void> _adjustLessonSettlement(
-    Map<String, dynamic> lesson,
-    LessonDecisionOperation operation,
-  ) async {
-    if (!widget.canWrite) return;
-    final changed = await showLessonDecisionFlow(
-      context,
-      crm: ref.read(magicCrmServiceProvider),
-      operation: operation,
-      lesson: lesson,
-      canManageTeacherCompensation: _canManageTeacherCompensation,
-    );
-    if (changed == true && mounted) {
-      await _refreshEditedSchedule();
-      if (!mounted) return;
-      MagicToast.show(
-        context,
-        operation == LessonDecisionOperation.correction
-            ? 'Расчёт занятия исправлен'
-            : 'Расчёт занятия изменён',
         type: MagicToastType.success,
       );
     }

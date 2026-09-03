@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -23,7 +24,7 @@ class GroupDetailDialog extends ConsumerStatefulWidget {
     Map<String, dynamic> group, {
     bool canWrite = true,
   }) {
-    return showDialog<bool>(
+    return showMagicDialog<bool>(
       context: context,
       builder: (ctx) => GroupDetailDialog(group: group, canWrite: canWrite),
     );
@@ -150,7 +151,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
   }
 
   Future<void> _removeStudent(String studentId) async {
-    final confirm = await showDialog<bool>(
+    final confirm = await showMagicDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Удалить из группы?'),

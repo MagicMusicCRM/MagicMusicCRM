@@ -114,7 +114,7 @@ extension _MessengerChatList on _MessengerScreenState {
                   onSelected: (value) async {
                     Object? result;
                     if (value == 'group') {
-                      result = await showDialog<String>(
+                      result = await showMagicDialog<String>(
                         context: context,
                         builder: (_) => const CreateGroupChatDialog(),
                       );

@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
 
 void main() {
-  test('production bottom sheets route through the adaptive sheet', () {
+  test('production action windows route through the shared modal policy', () {
     final directCalls = <String>[];
     for (final file
         in Directory('lib')
@@ -17,8 +17,10 @@ void main() {
                   file.path.endsWith('.dart') &&
                   !file.path.endsWith('magic_sheet.dart'),
             )) {
+      // This owner invokes its injected dialog runner, not a Flutter route API.
+      if (file.path.endsWith('teacher_detail_access_flow.dart')) continue;
       if (RegExp(
-        r'showModalBottomSheet(?:<[^>]+>)?\s*\(',
+        r'\b(?:showDialog|showModalBottomSheet|showGeneralDialog|showCupertinoModalPopup|showDatePicker|showDateRangePicker|showTimePicker)(?:<[^>]+>)?\s*\(',
       ).hasMatch(file.readAsStringSync())) {
         directCalls.add(file.path);
       }
@@ -26,7 +28,7 @@ void main() {
     expect(
       directCalls,
       isEmpty,
-      reason: 'Use the adaptive sheet: $directCalls',
+      reason: 'Use the shared modal/picker entrypoint: $directCalls',
     );
   });
 
@@ -55,9 +57,8 @@ void main() {
                   'ConflictException',
                 ),
                 lessonId: 'lesson-1',
-                onEdit: () {},
+                onEdit: () => settled++,
                 onCancel: () async => cancelled++,
-                onSettle: () async => settled++,
               ),
               child: const Text('Открыть занятие'),
             ),
@@ -69,7 +70,7 @@ void main() {
     await tester.tap(find.text('Открыть занятие'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
-    expect(find.text('Развернуть'), findsOneWidget);
+    expect(find.byTooltip('Развернуть'), findsOneWidget);
     expect(find.text('Анна Смирнова'), findsNWidgets(2));
 
     expect(find.text('Конфликт'), findsOneWidget);
@@ -81,14 +82,14 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('ConflictException'), findsNothing);
-    expect(find.text('Исправить расчёт'), findsOneWidget);
+    expect(find.text('Исправить расчёт'), findsNothing);
     expect(
       find.byKey(const ValueKey('lesson-repair-settlement')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.textContaining('Провести занятие'), findsNothing);
     expect(find.textContaining('Завершить занятие'), findsNothing);
-    expect(find.text('Перенести или изменить'), findsOneWidget);
+    expect(find.text('Изменить занятие'), findsOneWidget);
     await tester.ensureVisible(find.text('Отменить занятие'));
     await tester.pump();
     await tester.tap(find.text('Отменить занятие'));
@@ -98,7 +99,7 @@ void main() {
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
   });
 
-  testWidgets('selection uses sheet on compact and drawer on desktop', (
+  testWidgets('selection uses sheet on compact and dialog on desktop', (
     tester,
   ) async {
     Future<void> pumpAt(double width) async {
@@ -106,6 +107,11 @@ void main() {
       tester.view.devicePixelRatio = 1;
       await tester.pumpWidget(
         MaterialApp(
+          theme: ThemeData(
+            platform: width >= 840
+                ? TargetPlatform.windows
+                : TargetPlatform.android,
+          ),
           home: Scaffold(
             body: Builder(
               builder: (context) => FilledButton(
@@ -122,6 +128,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Выбрать'));
       await tester.pumpAndSettle();
     }

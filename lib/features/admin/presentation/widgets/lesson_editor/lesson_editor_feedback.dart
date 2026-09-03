@@ -6,7 +6,7 @@ import 'lesson_editor_models.dart';
 
 String lessonEditorTitle(LessonEditorSession session, bool hasLeadPreset) =>
     session.isEdit
-    ? 'Перенести или изменить занятие'
+    ? 'Изменить занятие'
     : hasLeadPreset
     ? 'Пробное занятие'
     : 'Новое занятие';
@@ -29,6 +29,26 @@ Widget lessonTimePicker24HourBuilder(BuildContext context, Widget? child) =>
       data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
       child: child!,
     );
+
+void showLessonEditorError(
+  BuildContext context,
+  Object error,
+  String fallback,
+) => ScaffoldMessenger.of(context).showSnackBar(
+  SnackBar(content: Text(lessonEditorErrorMessage(error, fallback))),
+);
+
+void scrollToLessonPreview(BuildContext context, ScrollController scroll) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (context.mounted && scroll.hasClients) {
+      scroll.animateTo(
+        scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  });
+}
 
 abstract interface class LessonEditorActions {
   Future<List<LessonClientRef>> searchClients(String query);
@@ -140,8 +160,7 @@ class LessonEditorFeedback extends StatelessWidget {
         if (model.session.isEdit) ...[
           const SizedBox(height: 10),
           Text(
-            'Клиент и списание уже зафиксированы. Остальные данные '
-            'можно изменить после подтверждения.',
+            'Параметры и расчёты изменятся после подтверждения.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -173,11 +192,15 @@ class LessonEditorActionsRow extends StatelessWidget {
     required this.isEdit,
     required this.isSaving,
     required this.actions,
+    this.confirming = false,
+    this.canSave = true,
     super.key,
   });
 
   final bool isEdit;
+  final bool confirming;
   final bool isSaving;
+  final bool canSave;
   final LessonEditorActions actions;
 
   @override
@@ -188,14 +211,20 @@ class LessonEditorActionsRow extends StatelessWidget {
         TextButton(onPressed: actions.cancel, child: const Text('Отмена')),
         const SizedBox(width: AppSpace.sm),
         FilledButton(
-          onPressed: isSaving ? null : actions.save,
+          onPressed: isSaving || !canSave ? null : actions.save,
           child: isSaving
               ? const SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Text(isEdit ? 'Перейти к расчёту' : 'Создать'),
+              : Text(
+                  confirming
+                      ? 'Подтвердить изменения'
+                      : isEdit
+                      ? 'Рассчитать'
+                      : 'Создать',
+                ),
         ),
       ],
     );
@@ -227,7 +256,7 @@ class _SnapshotPreview extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.sm),
           Text(
-            'Проверьте расчёты. При переносе они не изменятся.',
+            'Итоговые суммы проверяются сервером при сохранении.',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),

@@ -731,6 +731,19 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
                           padding: EdgeInsets.only(left: 3),
                           child: LessonTrialBadge(compact: true),
                         ),
+                      if (constraints.maxWidth >=
+                              (widget.entry.clientContext ||
+                                      widget.entry.searchContext
+                                  ? 36
+                                  : 20) &&
+                          lessonHasSubscriptionCoverage(widget.entry.lesson))
+                        const Padding(
+                          padding: EdgeInsets.only(left: 3),
+                          child: LessonSubscriptionBadge(
+                            compact: true,
+                            iconOnly: true,
+                          ),
+                        ),
                     ],
                   );
                 },

@@ -55,7 +55,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('magic-sheet-toggle')));
     await tester.pumpAndSettle();
-    expect(find.text('Свернуть'), findsOneWidget);
+    expect(find.byTooltip('Свернуть'), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);

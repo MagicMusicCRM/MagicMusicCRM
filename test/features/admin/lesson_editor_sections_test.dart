@@ -132,12 +132,14 @@ LessonEditorReferenceState _references() => LessonEditorReferenceState(
   ),
 );
 
-LessonEditorReferenceState _financialReferences() => LessonEditorReferenceState(
+LessonEditorReferenceState _financialReferences({
+  List<LessonEditorReferenceItem>? subscriptions,
+}) => LessonEditorReferenceState(
   teachers: _references().teachers,
   clients: _references().clients,
   branches: _references().branches,
   rooms: _references().rooms,
-  subscriptions: _references().subscriptions,
+  subscriptions: subscriptions ?? _references().subscriptions,
   catalog: const LessonDecisionCatalog(
     settlementTypes: [
       LessonDecisionCatalogItem(key: 'paid', label: 'Обычное', order: 1),
@@ -651,7 +653,7 @@ void main() {
         find.byKey(const ValueKey('lesson-client-field')),
       );
       expect(synchronizedPicker.selectedId, 'student:student-z');
-      expect(synchronizedPicker.selectedLabel, 'Зинаида Заречная · Student');
+      expect(synchronizedPicker.selectedLabel, 'Зинаида Заречная · Ученик');
     },
   );
 
@@ -807,6 +809,7 @@ void main() {
               canManageTeacherCompensation: true,
             ),
             actions: actions,
+            fundingFields: const Text('Оплата ученика'),
           ),
         ),
       ),
@@ -818,12 +821,7 @@ void main() {
         )
         .onChanged
         ?.call(true);
-    tester
-        .widget<DropdownButtonFormField<String>>(
-          find.byKey(const ValueKey('lesson-completion-type-field')),
-        )
-        .onChanged
-        ?.call('standard.success');
+    expect(find.text('Автозавершение'), findsOneWidget);
     tester
         .widget<DropdownButtonFormField<String>>(
           find.byKey(const ValueKey('lesson-settlement-type-field')),
@@ -844,27 +842,90 @@ void main() {
       find.byKey(const ValueKey('lesson-compensation-override-reason-field')),
       'Причина',
     );
-    tester
-        .widget<DropdownButtonFormField<String>>(
-          find.byKey(const ValueKey('lesson-charge-type-field')),
-        )
-        .onChanged
-        ?.call('personal_account');
-    final subscription = tester
-        .widgetList<SearchablePickerField>(find.byType(SearchablePickerField))
-        .singleWhere((picker) => picker.label == 'Абонемент *');
-    subscription.onSelected(subscription.items.single);
-
     expect(actions.trial, isTrue);
-    expect(actions.completion, 'standard.success');
+    expect(actions.completion, isNull);
     expect(actions.settlement, 'paid');
     expect(actions.compensationRule, 'fixed');
     expect(actions.compensationValue, '135,50');
     expect(actions.compensationReason, 'Причина');
-    expect(actions.funding, 'personal_account');
-    expect(actions.subscription, 'subscription-a');
+    expect(find.text('Оплата ученика'), findsOneWidget);
     expect(find.text('Результат и расчёты'), findsOneWidget);
   });
+
+  testWidgets(
+    'funding cache preserves the historical selection and skips depleted defaults',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final lookup = _FundingLookup();
+      final references = _financialReferences(
+        subscriptions: const [
+          LessonEditorReferenceItem(
+            id: 'depleted',
+            label: 'Исчерпанный',
+            raw: {'status': 'active', 'lessons_remaining': 0},
+          ),
+          LessonEditorReferenceItem(
+            id: 'available',
+            label: 'Доступный',
+            raw: {'status': 'active', 'lessons_remaining': 2},
+          ),
+        ],
+      );
+      for (final selected in ['expired', null, 'depleted']) {
+        final draft = _financialDraft().copyWith(
+          subscriptionId: selected,
+          clientDecisions: [
+            {
+              'clientId': 'student-a',
+              'payerStudentId': 'student-a',
+              'chargeType': 'subscription',
+              'subscriptionId': ?selected,
+            },
+          ],
+        );
+        await tester.pumpWidget(
+          _host(
+            SingleChildScrollView(
+              child: LessonFinancialSection(
+                key: ValueKey(selected),
+                model: LessonFinancialSectionModel(
+                  session: _session(isEdit: selected != null, draft: draft),
+                  draft: draft,
+                  references: references,
+                  isSaving: false,
+                  requiresCompensationValue: false,
+                  compensationNeedsReason: false,
+                  canManageTeacherCompensation: true,
+                ),
+                actions: _RecordingActions(),
+                funding: lookup,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final picker = tester.widget<SearchablePickerField>(
+          find.byKey(const ValueKey('lesson-client-subscription-student-a')),
+        );
+        expect(picker.selectedId, selected ?? 'available');
+        expect(picker.selectedLabel, switch (selected) {
+          'expired' => 'Истёкший абонемент',
+          'depleted' => 'Исчерпанный',
+          _ => 'Доступный',
+        });
+        if (selected == null) {
+          expect(picker.items.map((item) => item.id), ['available']);
+        }
+        expect(
+          lookup.loads,
+          1,
+          reason: 'Only the absent historical selection reloads',
+        );
+      }
+    },
+  );
 
   testWidgets(
     'compensation fields reset visible model values for every rule change',
@@ -1088,11 +1149,11 @@ void main() {
     final editTitleRow = editDialog.title! as Row;
     expect(
       ((editTitleRow.children.last as Expanded).child as Text).data,
-      'Перенести или изменить занятие',
+      'Изменить занятие',
     );
     expect(find.byType(SafeArea), findsWidgets);
     expect(find.byType(BackButton), findsOneWidget);
-    expect(find.text('Перейти к расчёту'), findsOneWidget);
+    expect(find.text('Рассчитать'), findsOneWidget);
   });
 
   testWidgets('saving locks only compensation and submit for create', (
@@ -1190,14 +1251,7 @@ void main() {
           .onChanged,
       isNotNull,
     );
-    expect(
-      tester
-          .widget<DropdownButtonFormField<String>>(
-            find.byKey(const ValueKey('lesson-completion-type-field')),
-          )
-          .onChanged,
-      isNotNull,
-    );
+    expect(find.text('Автозавершение'), findsOneWidget);
     expect(
       tester
           .widget<DropdownButtonFormField<String>>(
@@ -1234,21 +1288,6 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
-            find.byKey(const ValueKey('lesson-charge-type-field')),
-          )
-          .onChanged,
-      isNotNull,
-    );
-    expect(
-      tester
-          .widgetList<SearchablePickerField>(find.byType(SearchablePickerField))
-          .singleWhere((picker) => picker.label == 'Абонемент *')
-          .enabled,
-      isTrue,
-    );
-    expect(
-      tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Отмена'))
           .onPressed,
       isNotNull,
@@ -1281,12 +1320,8 @@ void main() {
     );
 
     expect(
-      tester
-          .widget<SearchablePickerField>(
-            find.byKey(const ValueKey('lesson-client-field')),
-          )
-          .enabled,
-      isFalse,
+      tester.widget(find.byKey(const ValueKey('lesson-client-field'))),
+      isA<InputDecorator>(),
     );
     expect(
       tester
@@ -1338,19 +1373,10 @@ void main() {
           .onChanged,
       isNull,
     );
-    expect(
-      tester
-          .widget<InputDecorator>(
-            find.byKey(const ValueKey('lesson-completion-type-field')),
-          )
-          .decoration
-          .enabled,
-      isFalse,
-    );
+    expect(find.text('Автозавершение'), findsOneWidget);
     for (final key in const [
       ValueKey('lesson-settlement-type-field'),
       ValueKey('lesson-compensation-rule-field'),
-      ValueKey('lesson-charge-type-field'),
     ]) {
       expect(
         tester
@@ -1373,8 +1399,7 @@ void main() {
     );
     expect(
       tester
-          .widgetList<SearchablePickerField>(find.byType(SearchablePickerField))
-          .singleWhere((picker) => picker.label == 'Абонемент *')
+          .widget<TextFormField>(find.byKey(const Key('lesson-edit-reason')))
           .enabled,
       isFalse,
     );
@@ -1424,9 +1449,10 @@ void main() {
             'package:flutter/material.dart',
             'package:flutter/services.dart',
             'package:magic_music_crm/core/theme/app_theme.dart',
-            'package:magic_music_crm/core/widgets/searchable_picker_field.dart',
             '../lesson_decision/lesson_decision_models.dart',
+            '../lesson_decision/lesson_decision_sections.dart',
             '../lesson_form_rules.dart',
+            'lesson_client_funding_fields.dart',
             'lesson_editor_feedback.dart',
             'lesson_editor_models.dart',
           },
@@ -1530,6 +1556,8 @@ class _RecordingActions implements LessonEditorActions {
   @override
   void edit(LessonEditorEdit edit) {
     switch (edit) {
+      case LessonClientDecisionsEdit():
+        break;
       case LessonReferenceEdit(:final target, :final value):
         switch (target) {
           case LessonReferenceTarget.branch:
@@ -1587,4 +1615,23 @@ class _RecordingActions implements LessonEditorActions {
   @override
   Future<void> selectTime(LessonTimePickerRequest request) async =>
       timeRequests++;
+}
+
+class _FundingLookup extends Fake implements LessonDecisionFormLifecycle {
+  int loads = 0;
+
+  @override
+  Future<List<LessonDecisionParticipant>> searchPayers(String query) async =>
+      [];
+
+  @override
+  Future<List<LessonDecisionSubscription>> loadSubscriptions(
+    String payerId,
+  ) async {
+    loads++;
+    return const [
+      LessonDecisionSubscription(id: 'expired', label: 'Истёкший абонемент'),
+      LessonDecisionSubscription(id: 'available', label: 'Доступный'),
+    ];
+  }
 }

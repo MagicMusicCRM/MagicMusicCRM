@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'dart:async';
 // ignore_for_file: annotate_overrides
 import 'package:flutter/material.dart';
@@ -5,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'lesson_decision_flow.dart';
 import 'lesson_editor/lesson_editor_data_controller.dart';
@@ -52,8 +52,9 @@ class CreateLessonDialog extends ConsumerStatefulWidget
     String? clientId,
     String? clientName,
     bool initialIsTrial = false,
-  }) {
-    CreateLessonDialog editor(bool pageMode) => CreateLessonDialog(
+  }) => showLessonEditorSurface(
+    context,
+    (pageMode) => CreateLessonDialog(
       initialDate: initialDate,
       initialRoomId: initialRoomId,
       initialBranchId: initialBranchId,
@@ -66,18 +67,8 @@ class CreateLessonDialog extends ConsumerStatefulWidget
       clientName: clientName,
       initialIsTrial: initialIsTrial,
       pageMode: pageMode,
-    );
-    if (WorkspaceNavigationScope.maybeOf(context)?.isDesktop == true) {
-      return showDialog<bool>(context: context, builder: (_) => editor(false));
-    }
-    return Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        settings: const RouteSettings(name: 'lesson-editor'),
-        builder: (_) => editor(true),
-      ),
-    );
-  }
+    ),
+  );
 
   createState() => _LessonEditorDialogState();
 }
@@ -95,6 +86,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   (bool loading, String? error) _loadState = (true, null);
   (bool analyzing, String? error) _scheduleState = (false, null);
   bool _saving = false;
+  Future<LessonEditorLoadPatch?>? _referenceLoad;
   LessonEditorValidation _valid = const LessonEditorValidation.valid();
   LessonScheduleAnalysis? _conflicts;
   bool get _canManageTeacherCompensation {
@@ -120,11 +112,12 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> _refreshReferences() async {
-    _data.invalidateClientSelection();
     setState(() => _loadState = (true, null));
-    final result = await _data.loadInitialSafely(_session);
+    final result = await _data.loadEditor(widget, _session);
     if (!mounted) return;
     if (result.patch case final patch?) {
+      _session = result.session!;
+      _draft = _session.draft;
       return _acceptPatch(patch, loaded: true);
     }
     setState(() => _loadState = (false, lessonLoadErrorMessage(result.error)));
@@ -139,6 +132,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       patch.appliesCatalogDefaults && (widget.initialDurationMinutes ?? 0) <= 0,
     );
     setState(() {
+      _flow.invalidateDecision();
       _session = defaults.session;
       _draft = defaults.draft;
       _refs = references;
@@ -148,6 +142,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
 
   void _update(LessonEditorDraft value, {bool scheduleChanged = false}) {
     setState(() {
+      _flow.invalidateDecision();
       _draft = value;
       if (!scheduleChanged) return;
       _conflicts = null;
@@ -165,14 +160,29 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     title: lessonEditorTitle(_session, widget.leadId != null),
     scrollController: _scroll,
     onRetry: _refreshReferences,
+    canSave: _referenceLoad == null,
+    funding: _data.fundingFor(_session, _draft, _canManageTeacherCompensation),
+    knownPayers: _data.knownPayers,
+    financialPreview: _flow.financialPreview,
   );
+
   searchClients(String q) => _data.searchClients(q);
-  void selectClient(LessonClientRef? value) => unawaited(
-    _patch(
-      _data.selectClient(value, draft: _draft, references: _refs),
-      'Не удалось выбрать клиента.',
-    ),
-  );
+  void selectClient(LessonClientRef? value) {
+    _update(
+      _draft.copyWith(
+        clientDecisions: [],
+        clientChargeType: 'none',
+        subscriptionId: null,
+      ),
+    );
+    unawaited(
+      _patch(
+        _data.selectClient(value, draft: _draft, references: _refs),
+        'Не удалось выбрать клиента.',
+      ),
+    );
+  }
+
   void edit(LessonEditorEdit edit) {
     final change = _policy.applyEdit(_draft, _refs, edit);
     _update(change.draft, scheduleChanged: change.scheduleChanged);
@@ -187,7 +197,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> selectDate(LessonDatePickerRequest request) async {
-    final date = await showDatePicker(
+    final date = await showMagicDatePicker(
       context: context,
       initialDate: request.initialDate,
       firstDate: request.firstDate,
@@ -198,7 +208,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> selectTime(LessonTimePickerRequest request) async {
-    final time = await showTimePicker(
+    final time = await showMagicTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: request.hour, minute: request.minute),
       builder: lessonTimePicker24HourBuilder,
@@ -219,11 +229,18 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> _patch(Future<LessonEditorLoadPatch?> load, String text) async {
+    setState(() {
+      _referenceLoad = load;
+    });
     try {
       final patch = await load;
       if (mounted && patch != null) _acceptPatch(patch);
     } catch (error) {
-      if (mounted) _showError(error, text);
+      if (mounted) showLessonEditorError(context, error, text);
+    } finally {
+      if (mounted && identical(_referenceLoad, load)) {
+        setState(() => _referenceLoad = null);
+      }
     }
   }
 
@@ -238,66 +255,57 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> save() async {
-    if (_saving) return;
+    if (_saving || _referenceLoad != null) return;
     setState(() {
       _saving = true;
       _valid = const LessonEditorValidation.valid();
     });
     try {
-      final outcome = await _flow.saveDraft(
+      final outcome = await _flow.advance(
         _session,
         _draft,
         _refs,
         () => _schedule.requestFor(session: _session, draft: _draft),
         canManageTeacherCompensation: _canManageTeacherCompensation,
+        reloadSession: () => _data.reloadAfterConflict(widget, _session, _refs),
       );
       if (!mounted) return;
       switch (outcome) {
         case LessonSaveCreated():
-          _finishSave('Занятие создано');
+          finishLessonEditor(context, 'Занятие создано');
         case LessonSaveNotes():
-          _finishSave('Заметка сохранена');
+          finishLessonEditor(context, 'Заметка сохранена');
+        case LessonSaveConfirmed():
+          finishLessonEditor(context, 'Изменения занятия применены');
+        case LessonSavePreview():
+          scrollToLessonPreview(context, _scroll);
         case LessonSaveInvalid(:final validation):
           setState(() => _valid = validation);
         case LessonSaveViolations(:final violations):
           final analysis = LessonScheduleAnalysis.fromViolations(violations);
           setState(() => _conflicts = analysis);
-          await _showViolations(violations);
-        case final LessonSaveDecision decision:
-          final changed = await showLessonEditorDecisionFlow(
+          await showLessonEditorConstraints(
             context,
-            crm: ref.read(magicCrmServiceProvider),
-            decision: decision,
-            saveFlow: _flow,
-            canManageTeacherCompensation: _canManageTeacherCompensation,
+            violations,
+            onOpen: _focusConstraint,
           );
-          if (changed == true && mounted) {
-            _finishSave('Изменения занятия применены');
-          }
-        case LessonSaveFailure(:final error):
-          _showError(error, 'Не удалось сохранить занятие.');
+        case LessonSaveDecision():
+          throw StateError('Предварительный расчёт занятия не получен.');
+        case LessonSaveFailure(:final error, :final reloadedSession):
+          if (reloadedSession != null) _session = reloadedSession;
+          showLessonEditorError(
+            context,
+            error,
+            'Не удалось сохранить занятие.',
+          );
         case LessonSaveBusy():
           break;
       }
-    } catch (error) {
-      if (mounted) _showError(error, 'Не удалось сохранить занятие.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _showViolations(List<LessonConstraintViolation> violations) =>
-      showDialog<void>(
-        context: context,
-        builder: (dialogContext) => LessonConstraintDialog(
-          violations: violations,
-          onOpen: (lessonId) {
-            Navigator.pop(dialogContext);
-            _focusConstraint(lessonId);
-          },
-          onFix: () => Navigator.pop(dialogContext),
-        ),
-      );
   void _focusConstraint(String lessonId) {
     final navigation = ref.read(scheduleNavigationProvider.notifier);
     navigation.focus(_draft.localStart, lessonId);
@@ -305,14 +313,4 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   void cancel() => Navigator.pop(context);
-  void _finishSave(String message) {
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.pop(context, true);
-    messenger.showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _showError(Object error, String fallback) =>
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(lessonEditorErrorMessage(error, fallback))),
-      );
 }

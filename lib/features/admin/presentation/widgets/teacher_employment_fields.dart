@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
@@ -561,7 +562,7 @@ class _TeacherDateField extends StatelessWidget {
                   : initialDate.isAfter(lastDate)
                   ? lastDate
                   : initialDate;
-              final picked = await showDatePicker(
+              final picked = await showMagicDatePicker(
                 context: context,
                 initialDate: boundedInitial,
                 firstDate: firstDate,

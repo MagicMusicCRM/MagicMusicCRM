@@ -33,7 +33,7 @@ Future<String?> showSingleFieldDialog(
   TextInputType? keyboardType,
 }) async {
   final controller = TextEditingController(text: initialValue);
-  final result = await showDialog<String>(
+  final result = await showMagicDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title),
@@ -78,7 +78,7 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
   );
   String relation = existing['relation']?.toString() ?? '';
   final cs = Theme.of(context).colorScheme;
-  final saved = await showDialog<bool>(
+  final saved = await showMagicDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(isNew ? 'Новое контактное лицо' : 'Контактное лицо'),

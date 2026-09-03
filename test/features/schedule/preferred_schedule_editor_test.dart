@@ -195,12 +195,7 @@ void main() {
 Future<void> _choose(WidgetTester tester, Key field, String option) async {
   await tester.tap(find.byKey(field));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.descendant(
-      of: find.byType(Scrollbar).last,
-      matching: find.text(option),
-    ),
-  );
+  await tester.tap(find.widgetWithText(MenuItemButton, option).hitTestable());
   await tester.pumpAndSettle();
 }
 
@@ -215,6 +210,11 @@ Future<void> _openEditor(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
+      theme: ThemeData(
+        platform: width >= 840
+            ? TargetPlatform.windows
+            : TargetPlatform.android,
+      ),
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(

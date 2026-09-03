@@ -273,6 +273,7 @@ Assert-Order $rollbackText @(
   '# Restore only the canonical production runtime; disabled workers are invalid in production.',
   'stop_service_fail_closed caddy',
   'stop_service_fail_closed api',
+  'assert_legacy_lesson_funding_rollback',
   'recreate_api "${rollback_override}" "${workers_enabled_override}"',
   'rollback_schema="$(verify_rollback_stage',
   '"${workers_enabled_override}" true)',

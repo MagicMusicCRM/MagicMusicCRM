@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -184,27 +185,24 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
     return '${dir.path}$separator${DateTime.now().millisecondsSinceEpoch}_$fileName';
   }
 
-  Future<void> _showFullScreenImage(BuildContext context) async {
+  Future<void> _showImagePreview(BuildContext context) async {
     final imageUrl = await ref
         .read(chatAttachmentServiceProvider)
         .resolveUrl(widget.fileUrl);
     if (imageUrl == null) return;
     if (!context.mounted) return;
 
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierColor: Colors.black87,
-        barrierDismissible: true,
-        pageBuilder: (context, animation, secondaryAnimation) {
-          return FadeTransition(
-            opacity: animation,
-            child: _FullScreenImageViewer(
-              imageUrl: imageUrl,
-              fileName: widget.fileName,
-            ),
-          );
-        },
+    await showMagicDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: SizedBox(
+          width: 900,
+          height: MediaQuery.sizeOf(dialogContext).height * 0.8,
+          child: _AttachmentImageViewer(
+            imageUrl: imageUrl,
+            fileName: widget.fileName,
+          ),
+        ),
       ),
     );
   }
@@ -271,7 +269,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
       final cacheH = (250 * dpr).round();
 
       return GestureDetector(
-        onTap: () => unawaited(_showFullScreenImage(context)),
+        onTap: () => unawaited(_showImagePreview(context)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: ConstrainedBox(
@@ -416,29 +414,29 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
   }
 }
 
-/// Full-screen image viewer with zoom and close button (like Telegram).
-class _FullScreenImageViewer extends StatelessWidget {
+/// Image preview with zoom inside the shared action surface.
+class _AttachmentImageViewer extends StatelessWidget {
   final String imageUrl;
   final String? fileName;
 
-  const _FullScreenImageViewer({required this.imageUrl, this.fileName});
+  const _AttachmentImageViewer({required this.imageUrl, this.fileName});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black87,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          tooltip: 'Закрыть просмотр',
-          icon: const Icon(Icons.close_rounded, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          fileName ?? 'Фото',
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
-        ),
+        automaticallyImplyLeading: false,
+        actions: usesDesktopMagicModal(context)
+            ? [
+                IconButton(
+                  tooltip: 'Закрыть',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ]
+            : null,
+        title: Text(fileName ?? 'Фото', style: const TextStyle(fontSize: 14)),
       ),
       body: Center(
         child: InteractiveViewer(
@@ -455,7 +453,6 @@ class _FullScreenImageViewer extends StatelessWidget {
                       ? progress.cumulativeBytesLoaded /
                             progress.expectedTotalBytes!
                       : null,
-                  color: Colors.white,
                 ),
               );
             },

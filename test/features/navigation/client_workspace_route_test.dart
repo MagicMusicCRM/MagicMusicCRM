@@ -527,8 +527,8 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('client-lesson-lesson-1')));
       await tester.pumpAndSettle();
-      expect(find.text('Перенести или изменить занятие'), findsOneWidget);
-      await tester.pageBack();
+      expect(find.text('Изменить занятие'), findsOneWidget);
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(
         tester.getTopLeft(find.text('Постоянные расписания')).dy,
@@ -692,8 +692,9 @@ void main() {
             (ref) => const Stream<CrmChangedEvent>.empty(),
           ),
         ],
-        child: const MaterialApp(
-          home: StaffWorkspaceScreen(
+        child: MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
+          home: const StaffWorkspaceScreen(
             initialLink: EntityLink(
               entityType: EntityLinkType.client,
               entityId: 'student-1',
@@ -756,8 +757,9 @@ void main() {
             (ref) => const Stream<CrmChangedEvent>.empty(),
           ),
         ],
-        child: const MaterialApp(
-          home: StaffWorkspaceScreen(
+        child: MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
+          home: const StaffWorkspaceScreen(
             initialLink: EntityLink(
               entityType: EntityLinkType.client,
               entityId: 'student-1',

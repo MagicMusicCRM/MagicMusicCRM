@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../lesson_decision/lesson_decision_models.dart';
 import '../lesson_form_rules.dart';
 import 'lesson_editor_models.dart';
@@ -40,7 +41,7 @@ class LessonEditorDecisionPolicy {
           draft.compensationRuleKey,
         ) ??
         catalog.compensationRules
-            .where((item) => item.mode == legacyMode)
+            .where((item) => legacyMode != 'none' && item.mode == legacyMode)
             .firstOrNull ??
         catalog.compensationRules
             .where((item) => item.mode == 'standard')
@@ -64,8 +65,41 @@ class LessonEditorDecisionPolicy {
       compensationRuleKey: rule?.key,
       compensationValueMinor: compensationValue,
     );
-    if (!session.isEdit) {
+    if (next.clientDecisions.isEmpty &&
+        (!session.isEdit || next.clientChargeType == 'none')) {
       next = applyFundingDefault(draft: next, references: references);
+    }
+    if (next.client?.type != 'group' &&
+        next.client != null &&
+        next.clientDecisions.isEmpty) {
+      final oldPrice = num.tryParse(
+        session.snapshot?.rawLesson['client_charge_value']?.toString() ?? '',
+      );
+      next = next.copyWith(
+        clientDecisions: [
+          {
+            'clientId': next.client!.id,
+            if (next.client!.type == 'student')
+              'payerStudentId': next.client!.id,
+            'chargeType': next.clientChargeType,
+            if (next.subscriptionId != null)
+              'subscriptionId': next.subscriptionId,
+            if (next.clientChargeType == 'personal_account' && oldPrice != null)
+              'basePriceMinor': (oldPrice * 100).round().toString(),
+          },
+        ],
+      );
+    }
+    if (next.client?.type != 'group' && next.clientDecisions.isNotEmpty) {
+      final funding = next.clientDecisions.first;
+      next = next.copyWith(
+        clientChargeType:
+            funding['chargeType']?.toString() ??
+            (funding['subscriptionId'] != null
+                ? 'subscription'
+                : next.clientChargeType),
+        subscriptionId: funding['subscriptionId']?.toString(),
+      );
     }
     return (
       session: _normalizeCompensationBaseline(
@@ -104,6 +138,17 @@ class LessonEditorDecisionPolicy {
     LessonEditorReferenceState references,
     LessonEditorEdit edit,
   ) => switch (edit) {
+    LessonClientDecisionsEdit(:final value) => (
+      draft: draft.copyWith(
+        clientDecisions: value,
+        clientChargeType:
+            value.firstOrNull?['chargeType']?.toString() ??
+            draft.clientChargeType,
+        subscriptionId: value.firstOrNull?['subscriptionId']?.toString(),
+      ),
+      scheduleChanged: false,
+      branchToLoad: null,
+    ),
     LessonReferenceEdit(:final target, :final value) => _applyReferenceEdit(
       draft,
       references,
@@ -156,10 +201,7 @@ class LessonEditorDecisionPolicy {
       branchToLoad: null,
     ),
     LessonReferenceTarget.settlement => (
-      draft: applyFundingDefault(
-        draft: draft.copyWith(settlementTypeKey: value),
-        references: references,
-      ),
+      draft: draft.copyWith(settlementTypeKey: value),
       scheduleChanged: false,
       branchToLoad: null,
     ),
@@ -216,7 +258,6 @@ class LessonEditorDecisionPolicy {
       settlementTypeKey: null,
       compensationRuleKey: null,
       compensationValueMinor: null,
-      plannedSettlementReason: '',
     );
   }
 
@@ -234,7 +275,6 @@ class LessonEditorDecisionPolicy {
       compensationValueMinor: requiresCompensationValue(rule)
           ? rule?.value
           : null,
-      plannedSettlementReason: '',
     );
   }
 
@@ -262,6 +302,7 @@ class LessonEditorDecisionPolicy {
   }) {
     final message =
         _requiredFieldsMessage(session: session, draft: draft) ??
+        _editMessage(session: session, draft: draft) ??
         _createFundingMessage(
           session: session,
           draft: draft,
@@ -272,8 +313,7 @@ class LessonEditorDecisionPolicy {
           session: session,
           draft: draft,
           references: references,
-        ) ??
-        _editMessage(session: session, draft: draft);
+        );
     return message == null
         ? const LessonEditorValidation.valid()
         : LessonEditorValidation.invalid(message);
@@ -283,6 +323,7 @@ class LessonEditorDecisionPolicy {
     required LessonEditorDraft draft,
     required LessonEditorReferenceState references,
   }) {
+    if (draft.clientDecisions.isNotEmpty) return draft;
     final settlement = _catalogItemByKey(
       references.catalog?.settlementTypes,
       draft.settlementTypeKey,
@@ -290,15 +331,14 @@ class LessonEditorDecisionPolicy {
     if (isNoCharge(settlement)) {
       return draft.copyWith(clientChargeType: 'none', subscriptionId: null);
     }
-    if (draft.client?.type == 'student' &&
-        references.subscriptions.isNotEmpty) {
+    if (draft.client?.type == 'student') {
       final selected = _referenceById(
         references.subscriptions,
         draft.subscriptionId,
       );
       return draft.copyWith(
         clientChargeType: 'subscription',
-        subscriptionId: (selected ?? references.subscriptions.first).id,
+        subscriptionId: (selected ?? references.subscriptions.firstOrNull)?.id,
       );
     }
     return draft.copyWith(
@@ -354,6 +394,8 @@ class LessonEditorDecisionPolicy {
     );
     final financialDecision = <String, dynamic>{
       'settlementTypeKey': draft.settlementTypeKey,
+      if (draft.clientDecisions.isNotEmpty)
+        'clientDecisions': lessonClientDecisionsPayload(draft.clientDecisions),
       if (canManageTeacherCompensation) ...{
         'teacherCompensationRuleKey': draft.compensationRuleKey,
         'teacherCompensationValueMinor': ?draft.compensationValueMinor,
@@ -404,7 +446,10 @@ class LessonEditorDecisionPolicy {
             (snapshot.initialSettlementTypeKey ??
                 session.draft.settlementTypeKey) ||
         draft.compensationRuleKey != snapshot.initialCompensationRuleKey ||
-        draft.compensationValueMinor != snapshot.initialCompensationValueMinor;
+        draft.compensationValueMinor !=
+            snapshot.initialCompensationValueMinor ||
+        jsonEncode(draft.clientDecisions) !=
+            jsonEncode(session.draft.clientDecisions);
   }
 
   bool hasNotesChanges({
@@ -511,6 +556,54 @@ class LessonEditorDecisionPolicy {
     required LessonEditorDraft draft,
     required LessonEditorReferenceState references,
   }) {
+    for (final decision in draft.clientDecisions) {
+      final source = decision['chargeType'];
+      if (source == 'none' &&
+          !isNoCharge(
+            _catalogItemByKey(
+              references.catalog?.settlementTypes,
+              draft.settlementTypeKey,
+            ),
+          )) {
+        return 'Для платного списания выберите абонемент или личный счёт';
+      }
+      if (source == 'subscription' &&
+          (decision['subscriptionId']?.toString().isEmpty ?? true)) {
+        return 'Выберите абонемент плательщика';
+      }
+      if (source == 'personal_account') {
+        if (draft.client?.type == 'lead' &&
+            (decision['payerStudentId'] == null ||
+                decision['payerStudentId'] == draft.client?.id)) {
+          return 'Выберите ученика-плательщика для списания с личного счёта';
+        }
+        final price = int.tryParse(
+          decision['basePriceMinor']?.toString() ?? '',
+        );
+        if (price == null || price < 0 || price > 999999999999) {
+          return 'Введите корректную стоимость занятия';
+        }
+        for (final key in ['discount', 'surcharge']) {
+          final adjustment = decision[key];
+          if (adjustment is! Map || adjustment['type'] == 'none') continue;
+          if (adjustment['reason']?.toString().trim().isNotEmpty != true) {
+            return 'Укажите причину скидки или надбавки';
+          }
+          final field = adjustment['type'] == 'percent'
+              ? 'percentBasisPoints'
+              : key == 'discount'
+              ? 'fixedMinor'
+              : 'amountMinor';
+          final amount = int.tryParse(adjustment[field]?.toString() ?? '');
+          if (amount == null ||
+              amount <= 0 ||
+              (field == 'percentBasisPoints' && amount > 10000)) {
+            return 'Введите корректную скидку или надбавку';
+          }
+        }
+      }
+    }
+    if (draft.clientDecisions.isNotEmpty) return null;
     if (session.isEdit) return null;
     if (requiresSubscription(draft) && draft.subscriptionId == null) {
       return 'Заполните обязательные поля корректно';
@@ -570,7 +663,9 @@ class LessonEditorDecisionPolicy {
         hasScheduleChanges(session: session, draft: draft) ||
         hasFinancialChanges(session: session, draft: draft) ||
         hasNotesChanges(session: session, draft: draft);
-    return changed
+    return changed ||
+            _financialEditOperation(session.snapshot!.rawLesson) ==
+                LessonDecisionOperation.settle
         ? null
         : 'Измените параметры расписания или оплату преподавателю';
   }
@@ -582,6 +677,10 @@ class LessonEditorDecisionPolicy {
     final durationHours = draft.durationMinutes / 60;
     if (draft.clientChargeType == 'subscription') return durationHours;
     if (draft.clientChargeType != 'personal_account') return 0;
+    final priceMinor = num.tryParse(
+      draft.clientDecisions.firstOrNull?['basePriceMinor']?.toString() ?? '',
+    );
+    if (priceMinor != null) return priceMinor / 100;
     final selected = _referenceById(
       references.subscriptions,
       draft.subscriptionId,
@@ -686,6 +785,7 @@ LessonDecisionOperation _financialEditOperation(Map<String, dynamic> lesson) {
               lesson['status'])
           ?.toString()
           .toLowerCase();
+  if (state == 'settlement_pending') return LessonDecisionOperation.settle;
   return state == 'successfully_completed' ||
           state == 'completed' ||
           state == 'done'

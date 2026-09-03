@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -39,7 +40,7 @@ Future<String?> showPersonAccessRoleDialog(
   required String personLabel,
   required bool teacher,
 }) {
-  return showDialog<String>(
+  return showMagicDialog<String>(
     context: context,
     builder: (_) => PersonAccessRoleDialog(
       actorRole: actorRole,

@@ -21,8 +21,12 @@ class TeacherStatsWidget extends ConsumerStatefulWidget {
   ConsumerState<TeacherStatsWidget> createState() => _TeacherStatsWidgetState();
 }
 
-class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
+class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget>
+    with AutomaticKeepAliveClientMixin {
   late final TeacherStatsController _controller;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -68,6 +72,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
     _controller.updateCorrectionPolicy(_canManageRates(snapshot));
     return TeacherStatsView(controller: _controller);

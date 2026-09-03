@@ -97,6 +97,17 @@ class _ClientField extends StatelessWidget {
         child: Text(client?.label ?? 'Группа'),
       );
     }
+    if (model.isClientLocked) {
+      return InputDecorator(
+        key: const ValueKey('lesson-client-field'),
+        decoration: const InputDecoration(labelText: 'Клиент *'),
+        child: Text(
+          client == null
+              ? 'Не выбран'
+              : '${client.label} · ${_clientTypeLabel(client.type)}',
+        ),
+      );
+    }
     return SearchablePickerField(
       key: const ValueKey('lesson-client-field'),
       label: 'Клиент *',
@@ -105,13 +116,13 @@ class _ClientField extends StatelessWidget {
       selectedId: client?.key,
       selectedLabel: client == null
           ? null
-          : '${client.label} · ${client.type == 'lead' ? 'Lead' : 'Student'}',
+          : '${client.label} · ${_clientTypeLabel(client.type)}',
       items: [
         for (final item in model.references.clients)
           SearchableSelectItem(
             id: item.id,
             label: item.label,
-            subtitle: _clientType(item) == 'lead' ? 'Lead' : 'Student',
+            subtitle: _clientTypeLabel(_clientType(item)),
             data: _clientData(item),
           ),
       ],
@@ -120,7 +131,7 @@ class _ClientField extends StatelessWidget {
           SearchableSelectItem(
             id: client.key,
             label: client.label,
-            subtitle: client.type == 'lead' ? 'Lead' : 'Student',
+            subtitle: _clientTypeLabel(client.type),
             data: {
               'ref': {'type': client.type, 'id': client.id},
               if (client.branchId != null) 'branchId': client.branchId,
@@ -128,13 +139,14 @@ class _ClientField extends StatelessWidget {
           ),
       ],
       isNullable: false,
-      enabled: !model.isClientLocked,
       onSelected: (item) => onChanged(
         item == null ? null : _clientReference(item, model.references.clients),
       ),
     );
   }
 }
+
+String _clientTypeLabel(String type) => type == 'lead' ? 'Лид' : 'Ученик';
 
 class _BranchRoomFields extends StatelessWidget {
   const _BranchRoomFields({

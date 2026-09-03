@@ -220,7 +220,12 @@ void main() {
           tester,
           find.byKey(const Key('subscription-cancel-financial')),
         ),
-        containsAll(<String>['5 000 ₽', '1 600 ₽', '-1 400 ₽', '1 875 ₽']),
+        containsAll(<String>[
+          '5 000,00 ₽',
+          '1 600,00 ₽',
+          '−1 400,00 ₽',
+          '1 875,00 ₽',
+        ]),
       );
       expect(find.text('Будущие занятия сохранятся'), findsWidgets);
       expect(find.textContaining('Покрытие будущих резервов'), findsOneWidget);

@@ -204,6 +204,7 @@ Widget _launcher({
   EditorLifecycleProbe? lifecycle,
 }) {
   return MaterialApp(
+    theme: ThemeData(platform: TargetPlatform.windows),
     home: Scaffold(
       body: Builder(
         builder: (context) => FilledButton(
@@ -234,6 +235,8 @@ Future<void> _openEditor(WidgetTester tester) async {
   await tester.pump();
   await tester.tap(find.text('Открыть редактор'));
   await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('magic-dialog-desktop')), findsOneWidget);
+  expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
 }
 
 typedef _DraftCallbacks = ({
@@ -815,6 +818,7 @@ void main() {
       ProviderScope(
         overrides: [magicApiClientProvider.overrideWithValue(api)],
         child: MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
           home: _ShowCreateSharedTaskLauncher(onSaved: () => saved++),
         ),
       ),

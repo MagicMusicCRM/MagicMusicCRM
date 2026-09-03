@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dar
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
@@ -164,6 +165,84 @@ void main() {
       api.getCalls.where((call) => call.path == '/crm/schedule/matrix'),
       isEmpty,
     );
+  });
+
+  testWidgets('subscription coverage stays separate in every calendar mode', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final api = FakeCardApiClient(
+      branches: _branches,
+      rooms: _rooms,
+      scheduleMatrix: [
+        {
+          ..._lessons.first,
+          'reservationState': 'reserved',
+          'conflictTypes': <String>[],
+          'isTrial': false,
+        },
+        _lessons[1],
+      ],
+    );
+    await tester.pumpWidget(
+      _calendarApp(api, initial: _dayState(), clientContext: false),
+    );
+    await tester.pumpAndSettle();
+
+    void expectCoverage() {
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('schedule-lesson-lesson-selected')),
+          matching: find.byType(LessonSubscriptionBadge),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('schedule-lesson-lesson-other')),
+          matching: find.byType(LessonSubscriptionBadge),
+        ),
+        findsNothing,
+      );
+    }
+
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.actionBlue);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
+    expectCoverage();
+
+    await tester.tap(find.text('По преподавателям'));
+    await tester.pumpAndSettle();
+    expect(
+      _timelineLessonBorder(tester, 'lesson-selected'),
+      AppColor.actionBlue,
+    );
+    expect(_timelineLessonBorder(tester, 'lesson-other'), AppColor.success);
+    expectCoverage();
+
+    await tester.tap(find.text('Неделя'));
+    await tester.pumpAndSettle();
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.actionBlue);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
+    expectCoverage();
+
+    await tester.tap(find.text('Месяц'));
+    await tester.pumpAndSettle();
+    final monthLesson = find.byKey(
+      const ValueKey('schedule-month-lesson-lesson-selected'),
+    );
+    final monthBox =
+        tester.widget<Container>(monthLesson).decoration as BoxDecoration;
+    expect((monthBox.border! as Border).left.color, AppColor.actionBlue);
+    expect(
+      find.descendant(
+        of: monthLesson,
+        matching: find.byType(LessonSubscriptionBadge),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

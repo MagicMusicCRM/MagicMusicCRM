@@ -81,3 +81,56 @@ class LessonTrialBadge extends StatelessWidget {
     );
   }
 }
+
+/// Funding marker kept separate from the lesson's lifecycle color and icon.
+class LessonSubscriptionBadge extends StatelessWidget {
+  const LessonSubscriptionBadge({
+    super.key,
+    this.compact = false,
+    this.iconOnly = false,
+  });
+
+  final bool compact;
+  final bool iconOnly;
+
+  static const tooltip = 'Покрыто абонементом';
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: iconOnly ? 2 : (compact ? 4 : 7),
+          vertical: compact ? 1 : 2,
+        ),
+        decoration: BoxDecoration(
+          color: AppColor.successSoft,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColor.success.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.card_membership_outlined,
+              color: AppColor.success,
+              size: compact ? 10 : 12,
+            ),
+            if (!iconOnly) ...[
+              SizedBox(width: compact ? 3 : 4),
+              Text(
+                compact ? 'Абон.' : 'Абонемент',
+                style: const TextStyle(
+                  color: AppColor.success,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}

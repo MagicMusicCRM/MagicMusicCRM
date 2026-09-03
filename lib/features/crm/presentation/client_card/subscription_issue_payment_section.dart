@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/models/subscription_purchase.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -391,7 +392,7 @@ Future<void> _pickDate(
   DateTime initial,
   ValueChanged<DateTime> onPicked,
 ) async {
-  final picked = await showDatePicker(
+  final picked = await showMagicDatePicker(
     context: context,
     initialDate: initial.toLocal(),
     firstDate: DateTime(2000),

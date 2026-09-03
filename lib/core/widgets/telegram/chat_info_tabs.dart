@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
@@ -100,7 +101,7 @@ class ChatInfoMediaGrid extends StatelessWidget {
             message['attachment_file_id']?.toString();
         if (url == null) return Container(color: Colors.grey.shade800);
         return GestureDetector(
-          onTap: () => showDialog<void>(
+          onTap: () => showMagicDialog<void>(
             context: context,
             builder: (_) => Dialog(
               backgroundColor: Colors.transparent,

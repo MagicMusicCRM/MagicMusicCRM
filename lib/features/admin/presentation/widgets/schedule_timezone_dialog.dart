@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'schedule_shared.dart';
 
 /// Branch UTC-offset picker dialog. Returns the chosen offset in minutes, or
@@ -14,7 +15,7 @@ Future<int?> showBranchTimezoneDialog(
   var selected = currentOffset;
   if (!options.contains(selected)) selected = 180;
 
-  return showDialog<int>(
+  return showMagicDialog<int>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setLocal) => AlertDialog(

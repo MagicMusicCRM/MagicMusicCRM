@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/homework_widget.dart';
@@ -254,6 +255,15 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                                     ),
                                   ),
                                   LessonStateBadge.fromMap(lesson),
+                                  if (lessonHasSubscriptionCoverage(
+                                    lesson,
+                                  )) ...[
+                                    const SizedBox(width: 4),
+                                    const LessonSubscriptionBadge(
+                                      compact: true,
+                                      iconOnly: true,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

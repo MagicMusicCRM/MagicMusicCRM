@@ -77,7 +77,7 @@ class _BranchesList extends ConsumerWidget {
               final archived = item['lifecycle_state'] == 'archived';
 
               Future<void> openLifecycle() async {
-                final changed = await showDialog<bool>(
+                final changed = await showMagicDialog<bool>(
                   context: context,
                   builder: (_) => BranchLifecycleDialog(branch: item),
                 );
@@ -92,7 +92,7 @@ class _BranchesList extends ConsumerWidget {
                       : !canEdit
                       ? null
                       : () async {
-                          final res = await showDialog<bool>(
+                          final res = await showMagicDialog<bool>(
                             context: context,
                             builder: (ctx) => BranchFormDialog(branch: item),
                           );
@@ -386,7 +386,7 @@ Future<void> _confirmArchivePackage(
   final version = _asInt(item['version']);
   final name = item['name'] as String? ?? 'абонемент';
 
-  final confirm = await showDialog<bool>(
+  final confirm = await showMagicDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Архивировать абонемент?'),
@@ -442,7 +442,7 @@ Future<void> _confirmRestorePackage(
   final version = _asInt(item['version']);
   final name = item['name'] as String? ?? 'абонемент';
 
-  final confirm = await showDialog<bool>(
+  final confirm = await showMagicDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Восстановить абонемент?'),

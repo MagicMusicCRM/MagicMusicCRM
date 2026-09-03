@@ -41,8 +41,8 @@ void main() {
     }
     expect(shell, contains('class _LessonEditorDialogState'));
     expect(shell, contains('implements LessonEditorActions'));
-    expect(shell, contains('showDatePicker('));
-    expect(shell, contains('showTimePicker('));
+    expect(shell, contains('showMagicDatePicker('));
+    expect(shell, contains('showMagicTimePicker('));
     expect(shell, contains('LessonEditorDataController'));
     expect(shell, contains('LessonEditorScheduleController'));
     expect(shell, contains('LessonEditorSaveFlow'));

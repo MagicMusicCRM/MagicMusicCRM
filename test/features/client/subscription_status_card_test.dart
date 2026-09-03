@@ -65,9 +65,9 @@ void main() {
       expect(find.text('12 ЗАНЯТИЙ ПО 60 МИНУТ'), findsOneWidget);
       expect(find.byKey(const Key('subscription-hours')), findsOneWidget);
       expect(find.text('3 из 12'), findsOneWidget);
-      expect(find.text('15\u00a0000 ₽'), findsOneWidget);
-      expect(find.text('10\u00a0000 ₽'), findsOneWidget);
-      expect(find.text('5\u00a0000 ₽'), findsOneWidget);
+      expect(find.text('15\u00a0000,00 ₽'), findsOneWidget);
+      expect(find.text('10\u00a0000,00 ₽'), findsOneWidget);
+      expect(find.text('5\u00a0000,00 ₽'), findsOneWidget);
       expect(find.text('1\u00a0250,50 ₽'), findsOneWidget);
       expect(find.textContaining('15 сентября 2026'), findsOneWidget);
     },

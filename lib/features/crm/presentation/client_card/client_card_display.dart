@@ -185,7 +185,7 @@ String _subscriptionRemainder(Subscription s) {
   final left = total - s.lessonsUsed;
   final price = s.packagePriceRaw;
   final money = (price is num && total > 0)
-      ? ' / ${(price / total * left).round()} ₽'
+      ? ' / ${formatPaymentMajor(price / total * left, currencyCode: s.raw['currency_code']?.toString() ?? 'RUB')}'
       : '';
   final status = s.status;
   final suffix = status == 'active' ? '' : ' · ${_formatStatus(status)}';
@@ -200,7 +200,13 @@ String? _subscriptionCourse(Subscription s) {
   String hours(num v) =>
       v == v.truncate() ? v.toInt().toString() : v.toStringAsFixed(1);
   final price = s.packagePriceRaw;
-  final money = price is num ? ' / ${price.round()} ₽' : '';
+  final minor = BigInt.tryParse(s.raw['final_price_minor']?.toString() ?? '');
+  final currency = s.raw['currency_code']?.toString() ?? 'RUB';
+  final money = minor != null
+      ? ' / ${formatPaymentMinor(minor, currencyCode: currency)}'
+      : price != null
+      ? ' / ${formatPaymentMajor(price, currencyCode: currency)}'
+      : '';
   return 'Курс: ${hours(total)} астр.ч.$money';
 }
 
@@ -215,8 +221,13 @@ String? _subscriptionCourse(Subscription s) {
 /// `payment_id`, и «Оплачено: 0 ₽» соврало бы про них.
 String? _subscriptionPaid(Subscription s) {
   final paid = s.paidAmountRaw;
-  if (paid is! num) return null;
-  return 'Оплачено: ${paid.round()} ₽';
+  final minor = BigInt.tryParse(s.raw['actual_paid_minor']?.toString() ?? '');
+  final currency = s.raw['currency_code']?.toString() ?? 'RUB';
+  if (minor != null) {
+    return 'Оплачено: ${formatPaymentMinor(minor, currencyCode: currency)}';
+  }
+  if (paid == null) return null;
+  return 'Оплачено: ${formatPaymentMajor(paid, currencyCode: currency)}';
 }
 
 /// «Переплата»/«Долг» — разница между тем, что пришло на счёт за абонемент, и
@@ -227,12 +238,35 @@ String? _subscriptionPaid(Subscription s) {
 ({String label, bool isDebt})? _subscriptionOverpayment(Subscription s) {
   final paid = s.paidAmountRaw;
   final price = s.packagePriceRaw;
+  final paidMinor = BigInt.tryParse(
+    s.raw['actual_paid_minor']?.toString() ?? '',
+  );
+  final priceMinor = BigInt.tryParse(
+    s.raw['final_price_minor']?.toString() ?? '',
+  );
+  final currency = s.raw['currency_code']?.toString() ?? 'RUB';
+  if (paidMinor != null && priceMinor != null) {
+    final diff = paidMinor - priceMinor;
+    if (diff == BigInt.zero) return null;
+    final amount = formatPaymentMinor(diff.abs(), currencyCode: currency);
+    return (
+      label: '${diff.isNegative ? 'Долг' : 'Переплата'}: $amount',
+      isDebt: diff.isNegative,
+    );
+  }
   if (paid is! num || price is! num) return null;
   final diff = paid - price;
   if (diff == 0) return null;
   return diff > 0
-      ? (label: 'Переплата: ${diff.round()} ₽', isDebt: false)
-      : (label: 'Долг: ${(-diff).round()} ₽', isDebt: true);
+      ? (
+          label:
+              'Переплата: ${formatPaymentMajor(diff, currencyCode: currency)}',
+          isDebt: false,
+        )
+      : (
+          label: 'Долг: ${formatPaymentMajor(-diff, currencyCode: currency)}',
+          isDebt: true,
+        );
 }
 
 String _familyRoleLabel(Object? role) {

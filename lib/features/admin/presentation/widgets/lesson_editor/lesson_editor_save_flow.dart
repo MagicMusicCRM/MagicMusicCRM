@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import '../lesson_decision/lesson_decision_models.dart';
+import '../lesson_decision/lesson_decision_controller.dart';
 import 'lesson_editor_decision_policy.dart';
 import 'lesson_editor_models.dart';
 
@@ -97,6 +98,18 @@ final class LessonSaveNotes extends LessonSaveOutcome {
   final Map<String, dynamic> lesson;
 }
 
+final class LessonSavePreview extends LessonSaveOutcome {
+  const LessonSavePreview(this.preview);
+
+  final LessonDecisionPreview preview;
+}
+
+final class LessonSaveConfirmed extends LessonSaveOutcome {
+  const LessonSaveConfirmed(this.lesson);
+
+  final Map<String, dynamic> lesson;
+}
+
 final class LessonSaveBusy extends LessonSaveOutcome {
   const LessonSaveBusy();
 }
@@ -108,10 +121,11 @@ final class LessonSaveInvalid extends LessonSaveOutcome {
 }
 
 final class LessonSaveFailure extends LessonSaveOutcome {
-  const LessonSaveFailure(this.error, this.stackTrace);
+  const LessonSaveFailure(this.error, this.stackTrace, {this.reloadedSession});
 
   final Object error;
   final StackTrace stackTrace;
+  final LessonEditorSession? reloadedSession;
 }
 
 typedef LessonSchedulePreview =
@@ -128,12 +142,15 @@ class LessonEditorSaveFlow {
     required LessonSchedulePreview preview,
     required LessonCreate create,
     LessonNotesUpdate? updateNotes,
+    MagicCrmService? crm,
   }) : _preview = preview,
        _create = create,
-       _updateNotes = updateNotes;
+       _updateNotes = updateNotes,
+       _crm = crm;
 
   LessonEditorSaveFlow.fromCrm(MagicCrmService crm)
     : this.forTesting(
+        crm: crm,
         preview: (request) => crm.analyzeLessonSchedule(
           clientType: request.clientType,
           clientId: request.clientId,
@@ -156,8 +173,101 @@ class LessonEditorSaveFlow {
   final LessonSchedulePreview _preview;
   final LessonCreate _create;
   final LessonNotesUpdate? _updateNotes;
+  final MagicCrmService? _crm;
   _LessonNotesMutationAttempt? _notesAttempt;
   bool _saving = false;
+  bool _advancing = false;
+  LessonDecisionController? _decisionController;
+  LessonDecisionPreview? _financialPreview;
+
+  LessonDecisionPreview? get financialPreview => _financialPreview;
+
+  void invalidateDecision() {
+    _decisionController = null;
+    _financialPreview = null;
+  }
+
+  /// One editor submission: create, preview an edit, or confirm its signed result.
+  Future<LessonSaveOutcome> advance(
+    LessonEditorSession session,
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    LessonEditorScheduleRequest Function() scheduleRequest, {
+    required bool canManageTeacherCompensation,
+    required Future<LessonEditorSession> Function() reloadSession,
+  }) async {
+    if (_advancing) return const LessonSaveBusy();
+    _advancing = true;
+    try {
+      if (_decisionController == null) {
+        final outcome = await saveDraft(
+          session,
+          draft,
+          references,
+          scheduleRequest,
+          canManageTeacherCompensation: canManageTeacherCompensation,
+        );
+        if (outcome is! LessonSaveDecision) return outcome;
+        if (draft.plannedSettlementReason.trim().length < 3) {
+          return const LessonSaveInvalid(
+            LessonEditorValidation.invalid(
+              'Укажите причину изменения (от 3 символов)',
+            ),
+          );
+        }
+        _decisionController = _controllerFor(
+          outcome,
+          canManageTeacherCompensation,
+        );
+      } else if (_financialPreview?.canConfirm == true) {
+        final lesson = await _decisionController!.commit(_financialPreview!);
+        invalidateDecision();
+        return LessonSaveConfirmed(lesson);
+      }
+      final preview = await _decisionController!.preview(
+        reason: draft.plannedSettlementReason,
+        settlementTypeKey: draft.settlementTypeKey!,
+        compensationRuleKey: draft.compensationRuleKey ?? '',
+        compensationValueMinor: draft.compensationValueMinor,
+        clientDecisions: draft.clientDecisions,
+      );
+      _financialPreview = preview;
+      return LessonSavePreview(preview);
+    } catch (error, stackTrace) {
+      final recovered = _decisionController?.recoverStaleCommit(error);
+      if (recovered == null) return LessonSaveFailure(error, stackTrace);
+      invalidateDecision();
+      try {
+        return LessonSaveFailure(
+          recovered,
+          stackTrace,
+          reloadedSession: await reloadSession(),
+        );
+      } catch (reloadError, reloadStackTrace) {
+        return LessonSaveFailure(reloadError, reloadStackTrace);
+      }
+    } finally {
+      _advancing = false;
+    }
+  }
+
+  LessonDecisionController _controllerFor(
+    LessonSaveDecision decision,
+    bool canManageTeacherCompensation,
+  ) {
+    final request = decision.request;
+    return LessonDecisionController(
+      crm: _crm!,
+      operation: request.operation,
+      lesson: request.lesson,
+      successor: request.successor,
+      resources: request.resources,
+      canManageTeacherCompensation: canManageTeacherCompensation,
+      afterCommit: decision.noteUpdate == null
+          ? null
+          : (result) => saveConfirmedNotes(decision.noteUpdate!, result),
+    );
+  }
 
   Future<LessonSaveOutcome> saveDraft(
     LessonEditorSession session,
@@ -177,7 +287,9 @@ class LessonEditorSaveFlow {
       final decision =
           session.isEdit &&
               (policy.hasScheduleChanges(session: session, draft: draft) ||
-                  policy.hasFinancialChanges(session: session, draft: draft))
+                  policy.hasFinancialChanges(session: session, draft: draft) ||
+                  session.snapshot?.rawLesson['lifecycle_state'] ==
+                      'settlement_pending')
           ? policy.editRequest(session: session, draft: draft)
           : null;
       return await save(

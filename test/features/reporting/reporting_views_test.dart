@@ -232,7 +232,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Фактическая выручка'), findsOneWidget);
-    expect(find.text('8 000,00 ₽'), findsOneWidget);
+    expect(find.text('8\u00a0000,00 ₽'), findsOneWidget);
     expect(backed, isTrue);
   });
 

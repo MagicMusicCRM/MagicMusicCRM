@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -30,7 +31,7 @@ class SharedTaskDateTimeButton extends StatelessWidget {
         ? null
         : () async {
             if (!canInteract()) return;
-            final date = await showDatePicker(
+            final date = await showMagicDatePicker(
               context: context,
               initialDate: value,
               firstDate: DateTime.now().subtract(const Duration(days: 365)),
@@ -41,7 +42,7 @@ class SharedTaskDateTimeButton extends StatelessWidget {
               onChanged(DateTime(date.year, date.month, date.day));
               return;
             }
-            final time = await showTimePicker(
+            final time = await showMagicTimePicker(
               context: context,
               initialTime: TimeOfDay.fromDateTime(value),
             );

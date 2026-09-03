@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/password_policy.dart';
 
@@ -13,7 +14,7 @@ Future<bool?> showProvisionAccessDialog(
   String? currentPassword,
   bool accessExists = false,
 }) {
-  return showDialog<bool>(
+  return showMagicDialog<bool>(
     context: context,
     builder: (_) => _ProvisionAccessDialog(
       personLabel: personLabel,

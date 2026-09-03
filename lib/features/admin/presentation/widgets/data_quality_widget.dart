@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -164,7 +165,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       return;
     }
 
-    final decision = await showDialog<_PhoneReviewDecision>(
+    final decision = await showMagicDialog<_PhoneReviewDecision>(
       context: context,
       builder: (_) => _PhoneReviewResolutionDialog(
         rawPhone: _readString(item, ['rawPhone', 'raw_phone']),
@@ -255,7 +256,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       'phone_normalized',
     ]);
 
-    final winnerId = await showDialog<String>(
+    final winnerId = await showMagicDialog<String>(
       context: context,
       builder: (ctx) => _MergeConfirmDialog(
         name: name,
@@ -292,7 +293,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
         return;
       }
 
-      final undo = await showDialog<bool>(
+      final undo = await showMagicDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(

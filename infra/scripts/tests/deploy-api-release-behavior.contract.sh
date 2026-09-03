@@ -301,6 +301,17 @@ expected_db_trigger_function_sha256="${expected_db_trigger_function_sha256%% *}"
 database_query() {
   local sql="$1"
   case "${sql}" in
+    *'as legacy_lesson_funding_compatible'*)
+      log_event legacy-funding-query
+      [[ "$(cat -- "${api_running_file}")" == false ]] || return 1
+      [[ "$(cat -- "${caddy_running_file}")" == false ]] || return 1
+      case "${scenario}" in
+        funding_query_error) return 1 ;;
+        funding_query_empty) return 0 ;;
+        funding_incompatible) printf 'f\n' ;;
+        *) printf 't\n' ;;
+      esac
+      ;;
     *'select pg_get_functiondef(trigger_row.tgfoid)'*)
       printf '%s\n' "${fake_function_definition}"
       ;;
@@ -610,6 +621,36 @@ assert_log_contains 'compose:stop api:2'
 assert_log_contains 'docker-stop:--time 15 fake-api-container'
 assert_log_contains 'docker-inspect:fake-api-container'
 assert_log_excludes start-caddy
+
+rollback_image_migration_head=0145_student_contact_email
+candidate_image_migration_head=0146_lesson_funding_payer
+reset_rollback_scenario funding_compatible
+automatic_rollback 80 2>/dev/null
+assert_event_before 'compose:stop api:1' legacy-funding-query
+assert_event_before legacy-funding-query 'recreate:1:workers-enabled'
+assert_log_contains 'public-ready:0146_lesson_funding_payer'
+
+for funding_failure in funding_incompatible funding_query_error funding_query_empty; do
+  reset_rollback_scenario "${funding_failure}"
+  automatic_rollback 81 2>/dev/null
+  assert_log_contains legacy-funding-query
+  assert_log_excludes 'recreate:1:workers-enabled'
+  assert_log_excludes start-caddy
+  [[ "$(cat -- "${api_running_file}")" == false &&
+    "$(cat -- "${caddy_running_file}")" == false ]] || {
+    printf 'deploy-api-release behavior: unsafe legacy funding rollback remained live\n' >&2
+    exit 1
+  }
+done
+
+rollback_image_migration_head=0146_lesson_funding_payer
+reset_rollback_scenario funding_incompatible
+automatic_rollback 82 2>/dev/null
+assert_log_excludes legacy-funding-query
+assert_log_contains 'recreate:1:workers-enabled'
+assert_log_contains 'public-ready:0146_lesson_funding_payer'
+rollback_image_migration_head=0141_previous
+candidate_image_migration_head=0142_candidate
 
 reset_rollback_scenario post_public_failure
 automatic_rollback 79 2>/dev/null

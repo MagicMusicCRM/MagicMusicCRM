@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -46,8 +47,8 @@ class ReportsWidget extends ConsumerStatefulWidget {
 }
 
 class _ReportsWidgetState extends ConsumerState<ReportsWidget>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+    with TickerProviderStateMixin {
+  late TabController _tabController;
   late DashboardFilter _dashboardFilter;
   List<Map<String, dynamic>> _branches = const [];
   Object? _branchesError;
@@ -70,6 +71,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
   int _positionForCanonicalTab(int canonical) => switch (canonical) {
     1 || 2 || 4 => 1,
+    5 when _canSeeTeacherRates => 2,
     _ => 0,
   };
 
@@ -86,16 +88,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       widget.initialLink?.optionalFocus?.filter,
     );
     _tabController = TabController(
-      length: 2,
+      length: _canSeeTeacherRates ? 3 : 2,
       vsync: this,
       initialIndex: _positionForCanonicalTab(widget.initialTab),
     );
     _journal = _journalForCanonicalTab(widget.initialTab);
-    if (widget.initialTab == 5 && _canSeeTeacherRates) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _openTeacherAnalytics(),
-      );
-    }
     if (_canSeeStatus) {
       unawaited(_loadBranches());
     } else {
@@ -106,15 +103,20 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void didUpdateWidget(covariant ReportsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final tabCount = _canSeeTeacherRates ? 3 : 2;
+    if (_tabController.length != tabCount) {
+      final index = _tabController.index.clamp(0, tabCount - 1);
+      _tabController.dispose();
+      _tabController = TabController(
+        length: tabCount,
+        vsync: this,
+        initialIndex: index,
+      );
+    }
     if (widget.initialTab != oldWidget.initialTab) {
       final nextTab = _positionForCanonicalTab(widget.initialTab);
       if (nextTab != _tabController.index) _tabController.index = nextTab;
       _journal = _journalForCanonicalTab(widget.initialTab);
-      if (widget.initialTab == 5 && _canSeeTeacherRates) {
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _openTeacherAnalytics(),
-        );
-      }
     }
   }
 
@@ -161,7 +163,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   }
 
   Future<void> _pickDashboardPeriod() async {
-    final range = await showDateRangePicker(
+    final range = await showMagicDateRangePicker(
       context: context,
       firstDate: DateTime(2018),
       lastDate: DateTime.now(),
@@ -209,21 +211,21 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           tabs: [
             const Tab(text: 'Обзор'),
             const Tab(text: 'Журналы'),
+            if (_canSeeTeacherRates)
+              const Tab(
+                key: ValueKey('analytics-teacher-settlements-tab'),
+                text: 'Расчёты преподавателей',
+              ),
           ],
         ),
-        if (_canSeeTeacherRates)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _openTeacherAnalytics,
-              icon: const Icon(Icons.people_outline),
-              label: const Text('Преподаватели'),
-            ),
-          ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: [_buildUnifiedDashboard(), _buildOperationalJournal()],
+            children: [
+              _buildUnifiedDashboard(),
+              _buildOperationalJournal(),
+              if (_canSeeTeacherRates) const TeacherStatsWidget(),
+            ],
           ),
         ),
       ],
@@ -245,26 +247,6 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           ),
         ),
       ],
-    );
-  }
-
-  Future<void> _openTeacherAnalytics() async {
-    if (!mounted || !_canSeeStatus || !_canSeeTeacherRates) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => Dialog.fullscreen(
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Аналитика преподавателей'),
-            leading: IconButton(
-              tooltip: 'Закрыть',
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-          body: const TeacherStatsWidget(),
-        ),
-      ),
     );
   }
 

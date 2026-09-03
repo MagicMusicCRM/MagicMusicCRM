@@ -21,6 +21,7 @@ const _replacementTeacherId = '22222222-2222-4222-8222-222222222223';
 const _inactiveTeacherId = '22222222-2222-4222-8222-222222222224';
 const _foreignTeacherId = '22222222-2222-4222-8222-222222222225';
 const _studentId = '33333333-3333-3333-3333-333333333333';
+const _payerStudentId = '33333333-3333-4333-8333-333333333334';
 const _leadId = '77777777-7777-7777-7777-777777777777';
 const _branchId = '11111111-1111-1111-1111-111111111111';
 const _roomId = '55555555-5555-5555-5555-555555555555';
@@ -147,6 +148,7 @@ class _FakeApiClient extends MagicApiClient {
     this.preview,
     this.previewError,
     this.createError,
+    this.decisionCommitError,
     this.subscriptions = const [],
     this.decisionCatalog,
     this.decisionViolations = const [],
@@ -157,11 +159,14 @@ class _FakeApiClient extends MagicApiClient {
   Map<String, dynamic>? preview;
   Object? previewError;
   MagicApiException? createError;
+  MagicApiException? decisionCommitError;
   final List<Map<String, dynamic>> subscriptions;
   final Map<String, dynamic>? decisionCatalog;
   final List<Map<String, dynamic>> decisionViolations;
   final num? teacherCurrentRate;
   final int notePatchFailures;
+  Map<String, dynamic>? lessonForRead;
+  final lessonReads = <Map<String, dynamic>>[];
   Completer<void>? createGate;
   final constraintPreviews = <Map<String, dynamic>>[];
   final lessonPosts = <Map<String, dynamic>>[];
@@ -177,6 +182,21 @@ class _FakeApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     switch (path) {
+      case '/crm/lessons':
+        lessonReads.add(Map<String, dynamic>.from(queryParameters ?? {}));
+        return <String, dynamic>{
+              'items': [
+                if (lessonForRead != null)
+                  {
+                    for (final entry in lessonForRead!.entries)
+                      entry.key.replaceAllMapped(
+                        RegExp(r'_([a-z])'),
+                        (match) => match[1]!.toUpperCase(),
+                      ): entry.value,
+                  },
+              ],
+            }
+            as T;
       case '/crm/teachers':
         return <String, dynamic>{
               'items': [
@@ -260,14 +280,24 @@ class _FakeApiClient extends MagicApiClient {
                   'version': 1,
                   'links': const [],
                 },
-                {
-                  'ref': {'type': 'lead', 'id': _leadId},
-                  'label': 'Анна Лидова',
-                  'lifecycleState': 'active',
-                  'tombstone': false,
-                  'version': 1,
-                  'links': const [],
-                },
+                if (queryParameters?['type'] != 'student')
+                  {
+                    'ref': {'type': 'lead', 'id': _leadId},
+                    'label': 'Анна Лидова',
+                    'lifecycleState': 'active',
+                    'tombstone': false,
+                    'version': 1,
+                    'links': const [],
+                  },
+                if (queryParameters?['type'] == 'student')
+                  {
+                    'ref': {'type': 'student', 'id': _payerStudentId},
+                    'label': 'Мария Плательщик',
+                    'lifecycleState': 'active',
+                    'tombstone': false,
+                    'version': 1,
+                    'links': const [],
+                  },
               ],
             }
             as T;
@@ -276,7 +306,11 @@ class _FakeApiClient extends MagicApiClient {
         final id = queryParameters?['id']?.toString();
         return <String, dynamic>{
               'ref': {'type': type, 'id': id},
-              'label': type == 'lead' ? 'Анна Лидова' : 'Иван Прилежный',
+              'label': type == 'lead'
+                  ? 'Анна Лидова'
+                  : id == _payerStudentId
+                  ? 'Мария Плательщик'
+                  : 'Иван Прилежный',
               'branchId': _branchId,
               'lifecycleState': 'active',
               'tombstone': false,
@@ -507,6 +541,10 @@ class _FakeApiClient extends MagicApiClient {
       decisionCommits.add(Map<String, dynamic>.from(data as Map));
       decisionCommitMethods.add('$method $path');
       expect(mutationIdentity, isNotNull);
+      if (decisionCommitError case final error?) {
+        decisionCommitError = null;
+        throw error;
+      }
       return <String, dynamic>{'lessonId': 'lesson-1', 'version': 8} as T;
     }
     throw UnimplementedError('$method $path');
@@ -522,6 +560,7 @@ Widget _host(
   bool initialIsTrial = false,
   ValueNotifier<bool?>? dialogResult,
 }) {
+  client.lessonForRead ??= lesson;
   return ProviderScope(
     overrides: [
       magicApiClientProvider.overrideWithValue(client),
@@ -536,6 +575,7 @@ Widget _host(
       ),
     ],
     child: MaterialApp(
+      theme: ThemeData(platform: TargetPlatform.windows),
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(
@@ -562,6 +602,7 @@ Widget _host(
 
 Widget _decisionHost(_FakeApiClient client, LessonDecisionOperation operation) {
   return MaterialApp(
+    theme: ThemeData(platform: TargetPlatform.windows),
     home: Scaffold(
       body: Builder(
         builder: (context) => FilledButton(
@@ -613,7 +654,8 @@ Future<void> _pumpDialog(
   await tester.pumpAndSettle();
   final formContext = tester.element(find.textContaining('занятие').first);
   expect(ModalRoute.of(formContext)?.settings.name, 'lesson-editor');
-  expect(find.byType(BackButton), findsOneWidget);
+  expect(find.byType(BackButton), findsNothing);
+  expect(find.byKey(const ValueKey('magic-dialog-desktop')), findsOneWidget);
   expect(
     find.ancestor(
       of: find.byType(AlertDialog),
@@ -624,30 +666,8 @@ Future<void> _pumpDialog(
 }
 
 Future<void> _confirmEditableDecision(WidgetTester tester) async {
-  await tester.ensureVisible(find.text('Перейти к расчёту'));
-  await tester.tap(find.text('Перейти к расчёту'));
-  for (var frame = 0; frame < 6; frame++) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  await tester.enterText(
-    find.byKey(const Key('lesson-decision-reason')),
-    'Клиент попросил другое время',
-  );
-  await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
-  await tester.pump(const Duration(milliseconds: 400));
-  await tester.tap(find.text('Бесплатное занятие').last);
-  await tester.pump(const Duration(milliseconds: 400));
-  await tester.ensureVisible(
-    find.byKey(const Key('lesson-decision-compensation')),
-  );
-  await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
-  await tester.pump(const Duration(milliseconds: 400));
-  await tester.tap(find.text('Не оплачивать').last);
-  await tester.pump(const Duration(milliseconds: 400));
-  final submit = find.byKey(const Key('lesson-decision-submit'));
-  await tester.ensureVisible(submit);
-  await tester.tap(submit);
-  await tester.pump(const Duration(milliseconds: 300));
+  await _fillRescheduleDecision(tester, reason: 'Клиент попросил другое время');
+  final submit = find.text('Подтвердить изменения');
   await tester.ensureVisible(submit);
   await tester.tap(submit);
   for (var frame = 0; frame < 10; frame++) {
@@ -684,6 +704,24 @@ Future<void> _selectRequiredResources(
   await tester.pumpAndSettle();
   await tester.tap(find.text('Не оплачивать').last);
   await tester.pumpAndSettle();
+  await _chooseFundingSource(
+    tester,
+    clientName == 'Анна Лидова' ? _leadId : _studentId,
+    'Без списания',
+  );
+}
+
+Future<void> _chooseFundingSource(
+  WidgetTester tester,
+  String clientId,
+  String label,
+) async {
+  final field = find.byKey(ValueKey('lesson-client-charge-type-$clientId'));
+  await tester.ensureVisible(field);
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
 }
 
 Future<void> _chooseSearchable(
@@ -694,12 +732,7 @@ Future<void> _chooseSearchable(
   await tester.ensureVisible(find.byKey(field));
   await tester.tap(find.byKey(field));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.descendant(
-      of: find.byType(Scrollbar).last,
-      matching: find.text(option),
-    ),
-  );
+  await tester.tap(find.widgetWithText(MenuItemButton, option).hitTestable());
   await tester.pumpAndSettle();
 }
 
@@ -725,33 +758,289 @@ Future<void> _fillRescheduleDecision(
   WidgetTester tester, {
   required String reason,
 }) async {
-  await tester.ensureVisible(find.text('Перейти к расчёту'));
-  await tester.tap(find.text('Перейти к расчёту'));
-  for (var frame = 0; frame < 6; frame++) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  await tester.enterText(
-    find.byKey(const Key('lesson-decision-reason')),
-    reason,
+  await tester.ensureVisible(
+    find.byKey(const Key('lesson-settlement-type-field')),
   );
-  await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+  await tester.tap(find.byKey(const Key('lesson-settlement-type-field')));
   await tester.pump(const Duration(milliseconds: 400));
   await tester.tap(find.text('Бесплатное занятие').last);
   await tester.pump(const Duration(milliseconds: 400));
   await tester.ensureVisible(
-    find.byKey(const Key('lesson-decision-compensation')),
+    find.byKey(const Key('lesson-compensation-rule-field')),
   );
-  await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+  await tester.tap(find.byKey(const Key('lesson-compensation-rule-field')));
   await tester.pump(const Duration(milliseconds: 400));
   await tester.tap(find.text('Не оплачивать').last);
   await tester.pump(const Duration(milliseconds: 400));
-  await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
-  await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-  await tester.pump(const Duration(milliseconds: 300));
+  await _chooseFundingSource(tester, _studentId, 'Без списания');
+  await tester.ensureVisible(find.byKey(const Key('lesson-edit-reason')));
+  await tester.enterText(find.byKey(const Key('lesson-edit-reason')), reason);
+  await tester.ensureVisible(find.text('Рассчитать'));
+  await tester.tap(find.text('Рассчитать'));
+  await tester.pumpAndSettle();
 }
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  testWidgets(
+    'unified edit hydrates canonical funding and commits only the confirmed preview',
+    (tester) async {
+      final client = _FakeApiClient();
+      client.lessonForRead = {
+        ..._editableLesson(),
+        'version': 9,
+        'financial_decision': {
+          'settlementTypeKey': 'standard_lesson',
+          'teacherCompensationRuleKey': 'standard',
+          'clientDecisions': [
+            {
+              'clientId': _studentId,
+              'payerStudentId': _studentId,
+              'chargeType': 'personal_account',
+              'basePriceMinor': '100000',
+              'discount': {
+                'type': 'percent',
+                'percent': 10,
+                'reason': 'Согласованная скидка',
+              },
+            },
+          ],
+        },
+      };
+      await _pumpDialog(tester, client, lesson: _editableLesson());
+
+      expect(client.lessonReads.single, {
+        'lessonId': '66666666-6666-6666-6666-666666666666',
+        'limit': 1,
+      });
+      expect(
+        tester.widget(find.byKey(const ValueKey('lesson-client-field'))),
+        isA<InputDecorator>(),
+      );
+      expect(find.text('Иван Прилежный · Ученик'), findsOneWidget);
+      expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+      expect(find.text('Автозавершение'), findsOneWidget);
+      final source = find.byKey(
+        const ValueKey('lesson-client-charge-type-$_studentId'),
+      );
+      expect(
+        tester.state<FormFieldState<String>>(source).value,
+        'personal_account',
+      );
+      final price = find.byKey(
+        const ValueKey('lesson-client-price-$_studentId'),
+      );
+      expect(tester.widget<TextFormField>(price).controller!.text, '1000');
+      final discount = find.byKey(
+        const ValueKey('lesson-client-discount-value-$_studentId'),
+      );
+      expect(tester.widget<TextFormField>(discount).controller!.text, '10');
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-client-payer-$_studentId')),
+      );
+      final payerField = find.byKey(
+        const ValueKey('lesson-client-payer-$_studentId'),
+      );
+      await tester.tap(payerField);
+      await tester.enterText(
+        find.descendant(of: payerField, matching: find.byType(TextField)),
+        'Мария',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Мария Плательщик').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(price, '2500,25');
+      await tester.enterText(discount, '12,5');
+      await tester.enterText(
+        find.byKey(const Key('lesson-edit-reason')),
+        'Уточнён плательщик и цена занятия',
+      );
+
+      await tester.ensureVisible(find.text('Рассчитать'));
+      await tester.tap(find.text('Рассчитать'));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionPreviews, hasLength(1));
+      expect(client.decisionCommits, isEmpty);
+      expect(client.lessonPosts, isEmpty);
+      expect(client.notePatches, isEmpty);
+      expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+      expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('lesson-client-payer-$_studentId')),
+        findsOneWidget,
+      );
+      final previewBody = client.decisionPreviews.single;
+      expect(previewBody['expectedVersion'], 9);
+      expect(previewBody['financialDecision'], {
+        'settlementTypeKey': 'standard_lesson',
+        'teacherCompensationRuleKey': 'standard',
+        'clientDecisions': [
+          {
+            'clientId': _studentId,
+            'payerStudentId': _payerStudentId,
+            'chargeType': 'personal_account',
+            'basePriceMinor': '250025',
+            'discount': {
+              'type': 'percent',
+              'percent': 12.5,
+              'reason': 'Согласованная скидка',
+            },
+          },
+        ],
+      });
+      await tester.ensureVisible(find.text('Подтвердить изменения'));
+      await tester.tap(find.text('Подтвердить изменения'));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionCommits, hasLength(1));
+      expect(
+        client.decisionCommits.single['financialDecision'],
+        previewBody['financialDecision'],
+      );
+      expect(
+        client.decisionCommits.single['previewToken'],
+        'signed-lesson-preview',
+      );
+      expect(client.decisionCommits.single['confirm'], isTrue);
+      expect(find.text('Изменения занятия применены'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'stale edit reloads the version and retains the draft before a new preview',
+    (tester) async {
+      final client = _FakeApiClient(
+        decisionCommitError: const MagicApiException(
+          statusCode: 409,
+          message: 'Conflict',
+          details: {
+            'code': 'STALE_LESSON_VERSION',
+            'expectedVersion': 7,
+            'currentVersion': 10,
+          },
+        ),
+      );
+      final lesson = {
+        ..._editableLesson(),
+        'financial_decision': {
+          'settlementTypeKey': 'standard_lesson',
+          'teacherCompensationRuleKey': 'standard',
+          'clientDecisions': [
+            {
+              'clientId': _studentId,
+              'payerStudentId': _studentId,
+              'chargeType': 'personal_account',
+              'basePriceMinor': '100000',
+            },
+          ],
+        },
+      };
+      final dialogResult = ValueNotifier<bool?>(null);
+      addTearDown(dialogResult.dispose);
+      await _pumpDialog(
+        tester,
+        client,
+        lesson: lesson,
+        dialogResult: dialogResult,
+      );
+      final price = find.byKey(
+        const ValueKey('lesson-client-price-$_studentId'),
+      );
+      final reason = find.byKey(const Key('lesson-edit-reason'));
+      await tester.enterText(price, '1250');
+      await tester.enterText(reason, 'Уточнена цена занятия');
+      await tester.ensureVisible(find.text('Рассчитать'));
+      await tester.tap(find.text('Рассчитать'));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionPreviews, hasLength(1));
+      expect(client.decisionPreviews.single['expectedVersion'], 7);
+      expect(client.decisionCommits, isEmpty);
+      client.lessonForRead = {
+        ...lesson,
+        'version': 10,
+        'financial_decision': {
+          'settlementTypeKey': 'standard_lesson',
+          'teacherCompensationRuleKey': 'standard',
+          'clientDecisions': [
+            {
+              'clientId': _studentId,
+              'payerStudentId': _studentId,
+              'chargeType': 'personal_account',
+              'basePriceMinor': '90000',
+            },
+          ],
+        },
+      };
+      await tester.ensureVisible(find.text('Подтвердить изменения'));
+      await tester.tap(find.text('Подтвердить изменения'));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionCommits, hasLength(1));
+      expect(client.lessonReads, hasLength(2));
+      expect(client.lessonReads.last, {
+        'lessonId': '66666666-6666-6666-6666-666666666666',
+        'limit': 1,
+      });
+      expect(dialogResult.value, isNull);
+      expect(find.text('Подтвердить изменения'), findsNothing);
+      expect(find.byKey(const Key('lesson-decision-preview')), findsNothing);
+      expect(tester.widget<TextFormField>(price).controller!.text, '1250');
+      expect(
+        tester
+            .widget<TextField>(
+              find.descendant(of: reason, matching: find.byType(TextField)),
+            )
+            .controller!
+            .text,
+        'Уточнена цена занятия',
+      );
+
+      await tester.enterText(price, '1500,50');
+      await tester.enterText(reason, 'Цена проверена после обновления');
+      await tester.ensureVisible(find.text('Рассчитать'));
+      await tester.tap(find.text('Рассчитать'));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionPreviews, hasLength(2));
+      expect(client.decisionCommits, hasLength(1));
+      expect(client.lessonPosts, isEmpty);
+      expect(client.notePatches, isEmpty);
+      expect(dialogResult.value, isNull);
+      final refreshedPreview = client.decisionPreviews.last;
+      expect(refreshedPreview['expectedVersion'], 10);
+      expect(refreshedPreview['reasonText'], 'Цена проверена после обновления');
+      expect(refreshedPreview['financialDecision'], {
+        'settlementTypeKey': 'standard_lesson',
+        'teacherCompensationRuleKey': 'standard',
+        'clientDecisions': [
+          {
+            'clientId': _studentId,
+            'payerStudentId': _studentId,
+            'chargeType': 'personal_account',
+            'basePriceMinor': '150050',
+          },
+        ],
+      });
+      await tester.ensureVisible(find.text('Подтвердить изменения'));
+      await tester.tap(find.text('Подтвердить изменения'));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionCommits, hasLength(2));
+      expect(client.decisionCommits.last['expectedVersion'], 10);
+      expect(client.decisionCommits.last['confirm'], isTrue);
+      expect(
+        client.decisionCommits.last['financialDecision'],
+        refreshedPreview['financialDecision'],
+      );
+      expect(dialogResult.value, isTrue);
+      expect(find.byKey(const Key('lesson-edit-reason')), findsNothing);
+    },
+  );
 
   test('every schedule constraint has a clear Russian title', () {
     const titles = {
@@ -867,11 +1156,11 @@ void main() {
       );
 
       expect(find.text('Пробное занятие'), findsWidgets);
-      final clientField = tester.widget<SearchablePickerField>(
-        find.byKey(const ValueKey('lesson-client-field')),
+      expect(
+        tester.widget(find.byKey(const ValueKey('lesson-client-field'))),
+        isA<InputDecorator>(),
       );
-      expect(clientField.selectedId, 'lead:$_leadId');
-      expect(clientField.enabled, isFalse);
+      expect(find.text('Анна Лидова · Лид'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('lesson-branch-field:$_branchId')),
         findsOneWidget,
@@ -910,6 +1199,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Стандартная ставка').last);
       await tester.pumpAndSettle();
+      await _chooseFundingSource(tester, _leadId, 'Без списания');
 
       expect(
         find.byKey(const ValueKey('lesson-snapshot-preview')),
@@ -975,6 +1265,9 @@ void main() {
       );
       expect(client.lessonPosts.single['financialDecision'], {
         'settlementTypeKey': 'free_lesson',
+        'clientDecisions': [
+          {'clientId': _leadId, 'chargeType': 'none'},
+        ],
         'teacherCompensationRuleKey': 'standard',
       });
       expect(dialogResult.value, isTrue);
@@ -1012,6 +1305,9 @@ void main() {
     expect(body['teacherCompensationValue'], 0);
     expect(body['financialDecision'], {
       'settlementTypeKey': 'free_lesson',
+      'clientDecisions': [
+        {'clientId': _leadId, 'chargeType': 'none'},
+      ],
       'teacherCompensationRuleKey': 'none',
     });
     expect(body['roomId'], _roomId);
@@ -1075,6 +1371,9 @@ void main() {
       expect(client.lessonPosts, hasLength(1));
       expect(client.lessonPosts.single['financialDecision'], {
         'settlementTypeKey': 'free_lesson',
+        'clientDecisions': [
+          {'clientId': _leadId, 'chargeType': 'none'},
+        ],
         'teacherCompensationRuleKey': 'hourly',
         'teacherCompensationValueMinor': '125050',
       });
@@ -1130,6 +1429,14 @@ void main() {
     expect(body['subscriptionId'], 'subscription-1');
     expect(body['financialDecision'], {
       'settlementTypeKey': 'standard_lesson',
+      'clientDecisions': [
+        {
+          'clientId': _studentId,
+          'payerStudentId': _studentId,
+          'chargeType': 'subscription',
+          'subscriptionId': 'subscription-1',
+        },
+      ],
       'teacherCompensationRuleKey': 'standard',
     });
   });
@@ -1153,6 +1460,9 @@ void main() {
     expect(body, isNot(contains('subscriptionId')));
     expect(body['financialDecision'], {
       'settlementTypeKey': 'free_lesson',
+      'clientDecisions': [
+        {'clientId': _studentId, 'chargeType': 'none'},
+      ],
       'teacherCompensationRuleKey': 'none',
     });
   });
@@ -1191,7 +1501,7 @@ void main() {
       );
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('lesson-charge-type-field')),
+        find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
       );
       expect(find.text('С абонемента'), findsOneWidget);
       expect(find.text('Списание клиента *'), findsNothing);
@@ -1208,6 +1518,14 @@ void main() {
       expect(body['subscriptionId'], 'subscription-1');
       expect(body['financialDecision'], {
         'settlementTypeKey': 'standard_lesson',
+        'clientDecisions': [
+          {
+            'clientId': _studentId,
+            'payerStudentId': _studentId,
+            'chargeType': 'subscription',
+            'subscriptionId': 'subscription-1',
+          },
+        ],
         'teacherCompensationRuleKey': 'standard',
       });
     },
@@ -1247,9 +1565,11 @@ void main() {
       );
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('lesson-charge-type-field')),
+        find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
       );
-      await tester.tap(find.byKey(const ValueKey('lesson-charge-type-field')));
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Без списания'), findsNothing);
       await tester.tap(find.text('С абонемента').last);
@@ -1261,6 +1581,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Бесплатное занятие').last);
       await tester.pumpAndSettle();
+      await _chooseFundingSource(tester, _studentId, 'Без списания');
       expect(find.text('Без списания'), findsOneWidget);
 
       await _tapCreate(tester);
@@ -1272,6 +1593,9 @@ void main() {
       expect(body, isNot(contains('subscriptionId')));
       expect(body['financialDecision'], {
         'settlementTypeKey': 'free_lesson',
+        'clientDecisions': [
+          {'clientId': _studentId, 'chargeType': 'none'},
+        ],
         'teacherCompensationRuleKey': 'standard',
       });
     },
@@ -1325,17 +1649,31 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Стандартная ставка').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('lesson-charge-type-field')));
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-client-charge-type-$_studentId')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('С личного счёта').last);
       await tester.pumpAndSettle();
 
+      await tester.enterText(
+        find.byKey(const ValueKey('lesson-client-price-$_studentId')),
+        '1200',
+      );
       await _tapCreate(tester);
       await tester.pumpAndSettle();
 
       final body = client.lessonPosts.single;
       expect(body['financialDecision'], {
         'settlementTypeKey': 'standard_lesson',
+        'clientDecisions': [
+          {
+            'clientId': _studentId,
+            'payerStudentId': _studentId,
+            'chargeType': 'personal_account',
+            'basePriceMinor': '120000',
+          },
+        ],
         'teacherCompensationRuleKey': 'standard',
       });
       expect(body['clientChargeType'], 'personal_account');
@@ -1631,87 +1969,65 @@ void main() {
     },
   );
 
-  testWidgets('edit проходит общий decision preview и не меняет snapshot', (
-    tester,
-  ) async {
-    final client = _FakeApiClient();
-    final lesson = _editableLesson();
-    final dialogResult = ValueNotifier<bool?>(null);
-    addTearDown(dialogResult.dispose);
-    await _pumpDialog(
-      tester,
-      client,
-      lesson: lesson,
-      dialogResult: dialogResult,
-    );
-    await tester.enterText(
-      find.byKey(const Key('lesson-notes-input')),
-      'Новая заметка',
-    );
-    await _moveEditableLessonToNextDay(tester);
+  testWidgets(
+    'edit previews changes in the same form and commits its note after confirmation',
+    (tester) async {
+      final client = _FakeApiClient();
+      final dialogResult = ValueNotifier<bool?>(null);
+      addTearDown(dialogResult.dispose);
+      await _pumpDialog(
+        tester,
+        client,
+        lesson: _editableLesson(),
+        dialogResult: dialogResult,
+      );
+      await tester.enterText(
+        find.byKey(const Key('lesson-notes-input')),
+        'Новая заметка',
+      );
+      await _moveEditableLessonToNextDay(tester);
+      await _fillRescheduleDecision(
+        tester,
+        reason: 'Клиент попросил другое время',
+      );
 
-    await tester.ensureVisible(find.text('Перейти к расчёту'));
-    await tester.tap(find.text('Перейти к расчёту'));
-    for (var frame = 0; frame < 6; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+      expect(client.decisionPreviews, hasLength(1));
+      expect(client.notePatches, isEmpty);
+      expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
+      expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+      expect(find.byKey(const Key('lesson-edit-reason')), findsOneWidget);
+      await tester.ensureVisible(find.text('Подтвердить изменения'));
+      await tester.tap(find.text('Подтвердить изменения'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Перенос занятия'), findsOneWidget);
-    expect(find.byKey(const Key('lesson-decision-reason')), findsOneWidget);
-    await tester.enterText(
-      find.byKey(const Key('lesson-decision-reason')),
-      'Клиент попросил другое время',
-    );
-    await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Бесплатное занятие').last);
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.ensureVisible(
-      find.byKey(const Key('lesson-decision-compensation')),
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Не оплачивать').last);
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(client.decisionPreviews, hasLength(1));
-    expect(client.notePatches, isEmpty);
-    expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-    await tester.pumpAndSettle();
-
-    expect(client.decisionCommits, hasLength(1));
-    expect(client.notePatches.single, {
-      'expectedVersion': 8,
-      'notes': 'Новая заметка',
-    });
-    final body = client.decisionCommits.single;
-    expect(body['expectedVersion'], 7);
-    expect(body['reasonText'], 'Клиент попросил другое время');
-    expect(body['financialDecision'], {
-      'settlementTypeKey': 'free_lesson',
-      'teacherCompensationRuleKey': 'none',
-    });
-    expect(body['successor']['teacherId'], _teacherId);
-    expect(body['successor']['roomId'], _roomId);
-    expect(body['successor']['scheduledAt'], '2026-07-19T07:00:00.000Z');
-    expect(body['successor'], isNot(contains('clientRef')));
-    expect(body['successor'], isNot(contains('isTrial')));
-    expect(body['successor'], isNot(contains('completionType')));
-    expect(body['successor'], isNot(contains('force')));
-    expect(body['previewToken'], 'signed-lesson-preview');
-    expect(body['confirm'], isTrue);
-    expect(dialogResult.value, isTrue);
-    expect(find.text('Перенести или изменить занятие'), findsNothing);
-    expect(find.text('Изменения занятия применены'), findsOneWidget);
-  });
+      expect(client.decisionCommits, hasLength(1));
+      expect(client.notePatches.single, {
+        'expectedVersion': 8,
+        'notes': 'Новая заметка',
+      });
+      final body = client.decisionCommits.single;
+      expect(body['expectedVersion'], 7);
+      expect(body['reasonText'], 'Клиент попросил другое время');
+      expect(body['financialDecision'], {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'none',
+        'clientDecisions': [
+          {'clientId': _studentId, 'chargeType': 'none'},
+        ],
+      });
+      expect(body['successor']['teacherId'], _teacherId);
+      expect(body['successor']['roomId'], _roomId);
+      expect(body['successor']['scheduledAt'], '2026-07-19T07:00:00.000Z');
+      expect(body['successor'], isNot(contains('clientRef')));
+      expect(body['successor'], isNot(contains('isTrial')));
+      expect(body['successor'], isNot(contains('completionType')));
+      expect(body['successor'], isNot(contains('force')));
+      expect(body['previewToken'], 'signed-lesson-preview');
+      expect(body['confirm'], isTrue);
+      expect(dialogResult.value, isTrue);
+      expect(find.text('Изменения занятия применены'), findsOneWidget);
+    },
+  );
 
   testWidgets('closing combined edit keeps its note uncommitted', (
     tester,
@@ -1723,20 +2039,16 @@ void main() {
       'Новая заметка',
     );
     await _moveEditableLessonToNextDay(tester);
-
-    await tester.tap(find.text('Перейти к расчёту'));
-    for (var frame = 0; frame < 6; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(find.text('Перенос занятия'), findsOneWidget);
-    final close = find.text('Закрыть');
-    await tester.ensureVisible(close);
-    await tester.tap(close);
+    await _fillRescheduleDecision(tester, reason: 'Планируем перенос');
+    expect(client.decisionPreviews, hasLength(1));
+    await tester.ensureVisible(find.text('Отмена'));
+    await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
 
     expect(client.decisionCommits, isEmpty);
     expect(client.notePatches, isEmpty);
-    expect(find.byKey(const Key('lesson-notes-input')), findsOneWidget);
+    expect(find.byKey(const Key('lesson-notes-input')), findsNothing);
+    expect(find.text('открыть диалог'), findsOneWidget);
   });
 
   testWidgets('failed note stays retryable after the decision commit', (
@@ -1761,9 +2073,11 @@ void main() {
     expect(client.decisionCommits, hasLength(1));
     expect(client.notePatches, hasLength(1));
     expect(dialogResult.value, isNull);
-    expect(find.text('Перенос занятия'), findsOneWidget);
+    expect(find.text('Изменить занятие'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
 
-    final submit = find.byKey(const Key('lesson-decision-submit'));
+    final submit = find.text('Подтвердить изменения');
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pumpAndSettle();
@@ -1775,79 +2089,51 @@ void main() {
     expect(find.text('Изменения занятия применены'), findsOneWidget);
   });
 
-  testWidgets(
-    'edit позволяет изменить только оплату преподавателю из основного окна',
-    (tester) async {
-      final client = _FakeApiClient(
-        decisionCatalog: _manualCompensationCatalog,
-      );
-      await _pumpDialog(tester, client, lesson: _editableLesson());
+  testWidgets('edit changes only teacher compensation within the same form', (
+    tester,
+  ) async {
+    final client = _FakeApiClient(decisionCatalog: _manualCompensationCatalog);
+    await _pumpDialog(tester, client, lesson: _editableLesson());
+    final rule = find.byKey(const ValueKey('lesson-compensation-rule-field'));
+    await tester.ensureVisible(rule);
+    await tester.tap(rule);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Фиксированная сумма').last);
+    await tester.pumpAndSettle();
+    final amount = find.byKey(
+      const ValueKey('lesson-compensation-value-field'),
+    );
+    await tester.enterText(amount, '1500');
+    await tester.enterText(
+      find.byKey(const Key('lesson-edit-reason')),
+      'Исправлена ставка занятия',
+    );
+    await tester.ensureVisible(find.text('Рассчитать'));
+    await tester.tap(find.text('Рассчитать'));
+    await tester.pumpAndSettle();
 
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('lesson-compensation-rule-field')),
-      );
-      await tester.tap(
-        find.byKey(const ValueKey('lesson-compensation-rule-field')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Фиксированная сумма').last);
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('lesson-compensation-value-field')),
-        '1500',
-      );
+    expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+    expect(tester.state<FormFieldState<String>>(rule).value, 'fixed');
+    expect(tester.widget<TextFormField>(amount).initialValue, '1500');
+    expect(client.decisionCommits, isEmpty);
+    await tester.ensureVisible(find.text('Подтвердить изменения'));
+    await tester.tap(find.text('Подтвердить изменения'));
+    await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Перейти к расчёту'));
-      await tester.tap(find.text('Перейти к расчёту'));
-      for (var frame = 0; frame < 6; frame++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
-      expect(find.text('Изменение расчёта'), findsOneWidget);
-      expect(
-        tester
-            .state<FormFieldState<String>>(
-              find.byKey(const Key('lesson-decision-compensation')),
-            )
-            .value,
-        'fixed',
-      );
-      expect(
-        tester
-            .widget<TextFormField>(
-              find.byKey(const Key('lesson-decision-compensation-value')),
-            )
-            .controller
-            ?.text,
-        '1500',
-      );
-      await tester.enterText(
-        find.byKey(const Key('lesson-decision-reason')),
-        'Исправлена ставка занятия',
-      );
-      await tester.ensureVisible(
-        find.byKey(const Key('lesson-decision-submit')),
-      );
-      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.ensureVisible(
-        find.byKey(const Key('lesson-decision-submit')),
-      );
-      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-      await tester.pumpAndSettle();
-
-      expect(client.decisionCommits, hasLength(1));
-      expect(client.decisionCommitMethods, [
-        'PUT /crm/lessons/66666666-6666-6666-6666-666666666666/planned-settlement',
-      ]);
-      expect(client.decisionCommits.single['financialDecision'], {
-        'settlementTypeKey': 'free_lesson',
-        'teacherCompensationRuleKey': 'fixed',
-        'teacherCompensationValueMinor': '150000',
-      });
-      expect(client.decisionCommits.single, isNot(contains('successor')));
-    },
-  );
+    expect(client.decisionCommits, hasLength(1));
+    expect(client.decisionCommitMethods, [
+      'PUT /crm/lessons/66666666-6666-6666-6666-666666666666/planned-settlement',
+    ]);
+    expect(client.decisionCommits.single['financialDecision'], {
+      'settlementTypeKey': 'free_lesson',
+      'teacherCompensationRuleKey': 'fixed',
+      'teacherCompensationValueMinor': '150000',
+      'clientDecisions': [
+        {'clientId': _studentId, 'chargeType': 'none'},
+      ],
+    });
+    expect(client.decisionCommits.single, isNot(contains('successor')));
+  });
 
   testWidgets(
     'подмена показывает только ресурсы филиала и атомарно сохраняет выбор',
@@ -1896,7 +2182,7 @@ void main() {
 
       expect(client.decisionPreviews, hasLength(1));
       expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.tap(find.text('Подтвердить изменения'));
       await tester.pumpAndSettle();
 
       final body = client.decisionCommits.single;
@@ -1943,7 +2229,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Аудитория уже занята'), findsOneWidget);
-    expect(find.text('Повторить расчёт'), findsOneWidget);
+    expect(find.text('Рассчитать'), findsOneWidget);
     expect(client.decisionCommits, isEmpty);
   });
 
@@ -1953,8 +2239,8 @@ void main() {
     final client = _FakeApiClient();
     await _pumpDialog(tester, client, lesson: _editableLesson());
 
-    await tester.ensureVisible(find.text('Перейти к расчёту'));
-    await tester.tap(find.text('Перейти к расчёту'));
+    await tester.ensureVisible(find.text('Рассчитать'));
+    await tester.tap(find.text('Рассчитать'));
     await tester.pumpAndSettle();
 
     expect(
@@ -1974,15 +2260,15 @@ void main() {
     await _pumpDialog(tester, client, lesson: lesson);
     await _moveEditableLessonToNextDay(tester);
 
-    await tester.ensureVisible(find.text('Перейти к расчёту'));
-    await tester.tap(find.text('Перейти к расчёту'));
+    await tester.ensureVisible(find.text('Рассчитать'));
+    await tester.tap(find.text('Рассчитать'));
     await tester.pumpAndSettle();
 
     expect(
       find.text('Обновите расписание: версия занятия не получена'),
       findsOneWidget,
     );
-    expect(find.text('Перенести или изменить занятие'), findsOneWidget);
+    expect(find.text('Изменить занятие'), findsOneWidget);
     expect(client.decisionPreviews, isEmpty);
     expect(client.decisionCommits, isEmpty);
   });
@@ -1997,14 +2283,12 @@ void main() {
     expect(find.text('Ансамбль Север'), findsOneWidget);
     expect(find.byKey(const ValueKey('lesson-client-field')), findsNothing);
     await _moveEditableLessonToNextDay(tester);
-    await tester.ensureVisible(find.text('Перейти к расчёту'));
-    await tester.tap(find.text('Перейти к расчёту'));
-    for (var frame = 0; frame < 6; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    await _fillRescheduleDecision(tester, reason: 'Перенос всей группы');
 
-    expect(find.text('Перенос занятия'), findsOneWidget);
-    expect(find.byKey(const Key('lesson-decision-reason')), findsOneWidget);
+    expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
+    expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+    expect(client.decisionPreviews, hasLength(1));
+    expect(client.decisionCommits, isEmpty);
   });
 
   for (final operation in const [

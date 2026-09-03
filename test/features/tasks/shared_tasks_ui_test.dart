@@ -273,6 +273,11 @@ Widget _host(
 }) {
   return ProviderScope(
     child: MaterialApp(
+      theme: ThemeData(
+        platform: size.width >= 840
+            ? TargetPlatform.windows
+            : TargetPlatform.android,
+      ),
       home: MediaQuery(
         data: MediaQueryData(size: size),
         child: SharedTasksPanel(
@@ -285,6 +290,21 @@ Widget _host(
       ),
     ),
   );
+}
+
+Future<void> _scrollTaskFormTo(WidgetTester tester, Finder target) async {
+  for (
+    var drag = 0;
+    drag < 5 && target.hitTestable().evaluate().isEmpty;
+    drag++
+  ) {
+    await tester.drag(
+      find.byKey(const ValueKey('magic-sheet-body-scroll')),
+      const Offset(0, -220),
+    );
+    await tester.pumpAndSettle();
+  }
+  expect(target.hitTestable(), findsOneWidget);
 }
 
 void main() {
@@ -552,14 +572,14 @@ void main() {
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
     expect(find.byKey(const ValueKey('magic-sheet-frame')), findsOneWidget);
     expect(find.text('Фильтры задач'), findsOneWidget);
-    expect(find.text('Развернуть'), findsOneWidget);
+    expect(find.byTooltip('Развернуть'), findsOneWidget);
     expect(
       find.byKey(const Key('shared-task-advanced-filter-scroll')),
       findsOneWidget,
     );
-    await tester.tap(find.text('Развернуть'));
+    await tester.tap(find.byTooltip('Развернуть'));
     await tester.pumpAndSettle();
-    expect(find.text('Свернуть'), findsOneWidget);
+    expect(find.byTooltip('Свернуть'), findsOneWidget);
 
     await tester.tap(find.text('Закрытые').last);
     await tester.pumpAndSettle();
@@ -567,7 +587,7 @@ void main() {
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
   });
 
-  testWidgets('wide host opens advanced filters as drawer for narrow panel', (
+  testWidgets('wide host opens centered advanced filters for narrow panel', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1000, 900);
@@ -577,6 +597,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
           home: MediaQuery(
             data: const MediaQueryData(size: Size(1000, 900)),
             child: Scaffold(
@@ -604,6 +625,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Фильтры задач'), findsOneWidget);
     expect(find.byTooltip('Закрыть'), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-dialog-desktop')), findsOneWidget);
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
 
     await tester.tap(find.text('Закрытые').last);
@@ -612,28 +634,91 @@ void main() {
     expect(find.text('Фильтры задач'), findsNothing);
   });
 
-  testWidgets('mobile task editor opens as an expandable full-width sheet', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      _host(FakeSharedTasksDataSource(), size: const Size(390, 844)),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'mobile task editor reaches dates, audience and save by scrolling',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final source = FakeSharedTasksDataSource();
+      final previousHitTestPolicy =
+          WidgetController.hitTestWarningShouldBeFatal;
+      WidgetController.hitTestWarningShouldBeFatal = true;
+      addTearDown(
+        () => WidgetController.hitTestWarningShouldBeFatal =
+            previousHitTestPolicy,
+      );
+      await tester.pumpWidget(_host(source, size: const Size(390, 844)));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Новая задача'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
-    expect(find.text('Развернуть'), findsOneWidget);
-    expect(find.text('Сейчас получат: 8'), findsOneWidget);
+      await tester.tap(find.text('Новая задача'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
+      expect(find.byTooltip('Развернуть'), findsOneWidget);
+      expect(find.text('Сейчас получат: 8'), findsOneWidget);
 
-    await tester.tap(find.text('Развернуть'));
-    await tester.pumpAndSettle();
-    expect(find.text('Свернуть'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      await tester.tap(find.byTooltip('Развернуть'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Свернуть'), findsOneWidget);
+      expect(find.byKey(const ValueKey('magic-dialog-desktop')), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('shared-task-title')),
+        'Задача с телефона',
+      );
+      await tester.tap(find.text('На весь день').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Начало').hitTestable());
+      await tester.pumpAndSettle();
+      final dateContext = tester.element(find.byType(DatePickerDialog));
+      await tester.tap(
+        find
+            .text(MaterialLocalizations.of(dateContext).okButtonLabel)
+            .hitTestable(),
+      );
+      await tester.pumpAndSettle();
+      final timeContext = tester.element(find.byType(TimePickerDialog));
+      await tester.tap(
+        find
+            .text(MaterialLocalizations.of(timeContext).okButtonLabel)
+            .hitTestable(),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(TimePickerDialog), findsNothing);
+
+      await _scrollTaskFormTo(tester, find.text('Сотрудники'));
+      await tester.tap(find.text('Сотрудники').hitTestable());
+      await tester.pumpAndSettle();
+      final audience = find.byKey(const Key('shared-task-audience-target'));
+      await _scrollTaskFormTo(tester, audience);
+      await tester.tap(audience.hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Анна Петрова').last.hitTestable());
+      await tester.pumpAndSettle();
+      await _scrollTaskFormTo(tester, find.text('Добавить получателя'));
+      await tester.tap(find.text('Добавить получателя').hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.text('Сейчас получат: 1'), findsOneWidget);
+
+      await _scrollTaskFormTo(tester, find.text('Напомнить в приложении'));
+      await tester.tap(find.text('Напомнить в приложении').hitTestable());
+      await tester.pumpAndSettle();
+      final reminder = find.byKey(const Key('shared-task-reminder-at'));
+      await _scrollTaskFormTo(tester, reminder);
+      expect(reminder.hitTestable(), findsOneWidget);
+      final create = find.widgetWithText(FilledButton, 'Создать');
+      await _scrollTaskFormTo(tester, create);
+      await tester.tap(create.hitTestable());
+      await tester.pumpAndSettle();
+      expect(source.createCalls, 1);
+      expect(source.lastCreateData?['allDay'], isFalse);
+      expect(source.lastCreateData?['reminders'], hasLength(1));
+      expect(source.lastCreateData?['audiences'], [
+        {'type': 'user', 'targetId': '22222222-2222-4222-8222-222222222222'},
+      ]);
+      expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('editor exposes every audience and time mode', (tester) async {
     tester.view.physicalSize = const Size(1000, 1000);
@@ -642,6 +727,7 @@ void main() {
     final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
         home: Scaffold(
           body: SharedTaskEditor(
             dataSource: source,
@@ -749,6 +835,7 @@ void main() {
     final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
         home: Scaffold(
           body: SharedTaskEditor(
             dataSource: source,

@@ -7,7 +7,6 @@ extension _ClientCardLoaders on _ClientCardState {
   // unavailable; family loads independently via [_fetchFamily].
   Future<void> _fetchStudentData({
     String? studentId,
-    VoidCallback? then,
     bool preserveVisibleContent = false,
   }) async {
     final id = studentId ?? _studentId;
@@ -114,7 +113,7 @@ extension _ClientCardLoaders on _ClientCardState {
       });
       if (applyIdentity) {
         _syncWorkspaceTitle();
-        then?.call();
+        _resolveLeadCounterpart();
       }
       _tryApplyRestoredWorkspaceDraft();
     } catch (e) {
@@ -157,7 +156,6 @@ extension _ClientCardLoaders on _ClientCardState {
 
   Future<void> _fetchCard({
     String? leadId,
-    VoidCallback? then,
     bool preserveVisibleContent = false,
   }) async {
     final id = leadId ?? _leadId;
@@ -202,7 +200,7 @@ extension _ClientCardLoaders on _ClientCardState {
       });
       if (applyIdentity) {
         _syncWorkspaceTitle();
-        then?.call();
+        _resolveStudentCounterpart();
       }
       _tryApplyRestoredWorkspaceDraft();
     } catch (e) {

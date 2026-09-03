@@ -241,7 +241,10 @@ Widget _paymentsView(
               _PaymentMetric(
                 width: width,
                 label: 'Личный счёт',
-                value: formatPaymentMinor(balanceMinor),
+                value: formatPaymentMinor(
+                  balanceMinor,
+                  currencyCode: account?.currencyCode ?? 'RUB',
+                ),
                 icon: Icons.account_balance_wallet_outlined,
                 color: balanceMinor.isNegative ? cs.error : AppTheme.success,
               ),
@@ -251,6 +254,7 @@ Widget _paymentsView(
                 value: formatPaymentMinor(
                   (account?.actualPaymentsMinor ?? BigInt.zero) +
                       (account?.adjustmentsMinor ?? BigInt.zero),
+                  currencyCode: account?.currencyCode ?? 'RUB',
                 ),
                 icon: Icons.payments_outlined,
                 color: AppTheme.success,
@@ -258,14 +262,20 @@ Widget _paymentsView(
               _PaymentMetric(
                 width: width,
                 label: 'Ожидает подтверждения',
-                value: formatPaymentMinor(account?.pendingMinor ?? BigInt.zero),
+                value: formatPaymentMinor(
+                  account?.pendingMinor ?? BigInt.zero,
+                  currencyCode: account?.currencyCode ?? 'RUB',
+                ),
                 icon: Icons.hourglass_top_rounded,
                 color: AppColor.actionBlue,
               ),
               _PaymentMetric(
                 width: width,
                 label: 'Долг',
-                value: formatPaymentMinor(account?.debtMinor ?? BigInt.zero),
+                value: formatPaymentMinor(
+                  account?.debtMinor ?? BigInt.zero,
+                  currencyCode: account?.currencyCode ?? 'RUB',
+                ),
                 icon: Icons.warning_amber_rounded,
                 color: (account?.debtMinor ?? BigInt.zero) > BigInt.zero
                     ? cs.error
@@ -349,7 +359,10 @@ Widget _paymentsView(
                         EntityPresentationReference(
                           primary: [
                             payment.paymentDate,
-                            '${payment.amountRaw} ₽',
+                            formatPaymentMajor(
+                              payment.amountRaw ?? payment.amount,
+                              currencyCode: payment.currency ?? 'RUB',
+                            ),
                           ].whereType<String>().join(' · '),
                         ),
                         target,
@@ -403,7 +416,12 @@ Widget _paymentsView(
                     ).format(event.occurredAt.toLocal()),
                   ].whereType<String>().join(' · '),
                 ),
-                trailing: Text(formatPaymentMinor(event.amountMinor)),
+                trailing: Text(
+                  formatPaymentMinor(
+                    event.amountMinor,
+                    currencyCode: event.currencyCode,
+                  ),
+                ),
               ),
           ],
         ),
@@ -418,7 +436,7 @@ EntityPresentationReference _movementPresentation(CommerceMovement movement) {
     primary: identifier?.isNotEmpty == true
         ? '№ $identifier'
         : '${DateFormat('dd.MM.yyyy').format(movement.occurredAt.toLocal())} · '
-              '${formatPaymentMinor(movement.amountMinor)}',
+              '${formatPaymentMinor(movement.amountMinor, currencyCode: movement.currencyCode)}',
     context: [
       movement.branchName,
       if (movement.kind == CommerceMovementKind.paymentRecord)
@@ -629,7 +647,7 @@ class _PaymentMovementRow extends StatelessWidget {
       ],
     );
     final amount = Text(
-      '${credit ? '+' : '−'}${formatPaymentMinor(movement.amountMinor)}',
+      '${credit ? '+' : '−'}${formatPaymentMinor(movement.amountMinor.abs(), currencyCode: movement.currencyCode)}',
       style: TextStyle(
         color: credit ? AppTheme.success : cs.error,
         fontWeight: FontWeight.w800,
@@ -691,7 +709,8 @@ class _PaymentMovementRow extends StatelessWidget {
     return Semantics(
       key: ValueKey('commerce-movement-${movement.id}'),
       container: true,
-      label: '$title, ${formatPaymentMinor(movement.amountMinor)}',
+      label:
+          '$title, ${formatPaymentMinor(movement.amountMinor, currencyCode: movement.currencyCode)}',
       child: Padding(
         padding: const EdgeInsets.only(bottom: AppSpace.sm),
         child: Material(
@@ -847,9 +866,17 @@ class _LegacyPaymentRow extends StatelessWidget {
           : null,
       leading: const Icon(Icons.payments_outlined, color: AppTheme.success),
       title: onOpen == null
-          ? Text('${payment.amountRaw} ₽')
+          ? Text(
+              formatPaymentMajor(
+                payment.amountRaw ?? payment.amount,
+                currencyCode: payment.currency ?? 'RUB',
+              ),
+            )
           : EntityLinkText(
-              text: '${payment.amountRaw} ₽',
+              text: formatPaymentMajor(
+                payment.amountRaw ?? payment.amount,
+                currencyCode: payment.currency ?? 'RUB',
+              ),
               onPressed: () => onOpen!(context, EntityOpenTarget.current),
             ),
       subtitle: Text(payment.paymentDate ?? 'Дата не указана'),

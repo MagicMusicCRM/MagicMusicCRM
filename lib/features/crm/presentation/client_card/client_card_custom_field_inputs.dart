@@ -179,7 +179,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.control),
         onTap: () async {
-          final picked = await showDatePicker(
+          final picked = await showMagicDatePicker(
             context: context,
             initialDate: dt ?? DateTime.now(),
             firstDate: DateTime(1950),
@@ -231,7 +231,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
         borderRadius: BorderRadius.circular(AppRadius.control),
         onTap: () async {
           final pickerContext = context;
-          final date = await showDatePicker(
+          final date = await showMagicDatePicker(
             context: pickerContext,
             initialDate: current ?? DateTime.now(),
             firstDate: DateTime(1950),
@@ -239,7 +239,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
             initialEntryMode: DatePickerEntryMode.input,
           );
           if (date == null || !pickerContext.mounted) return;
-          final time = await showTimePicker(
+          final time = await showMagicTimePicker(
             context: pickerContext,
             initialTime: current == null
                 ? TimeOfDay.now()

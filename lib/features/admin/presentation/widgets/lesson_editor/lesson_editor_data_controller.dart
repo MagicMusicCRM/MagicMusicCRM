@@ -1,5 +1,8 @@
 import '../../../../../core/services/magic_crm_service.dart';
 import '../lesson_decision/lesson_decision_models.dart';
+import '../lesson_decision/lesson_decision_controller.dart';
+import 'lesson_editor_decision_policy.dart';
+import 'lesson_editor_initial_mapper.dart';
 import 'lesson_editor_models.dart';
 
 typedef LessonEditorRowsById =
@@ -30,10 +33,11 @@ class LessonEditorLoadPatch {
 }
 
 class LessonEditorLoadResult {
-  const LessonEditorLoadResult({this.patch, this.error});
+  const LessonEditorLoadResult({this.patch, this.error, this.session});
 
   final LessonEditorLoadPatch? patch;
   final Object? error;
+  final LessonEditorSession? session;
 }
 
 abstract interface class LessonEditorDataLoader {
@@ -73,16 +77,21 @@ class LessonEditorDataController implements LessonEditorDataLoader {
     LessonEditorRows listBranches = _emptyRows,
     LessonEditorClientSearch searchClients = _emptyClientSearch,
     LessonEditorClientResolver resolveClient = _emptyResolvedClient,
+    LessonEditorRowsById? listLessons,
+    MagicCrmService? crm,
   }) : _listRooms = listRooms,
        _loadCatalog = loadCatalog,
        _listSubscriptions = listSubscriptions,
        _listTeachers = listTeachers,
        _listBranches = listBranches,
        _searchClients = searchClients,
-       _resolveClient = resolveClient;
+       _resolveClient = resolveClient,
+       _listLessons = listLessons,
+       _crm = crm;
 
   LessonEditorDataController.fromCrm(MagicCrmService crm)
     : this.forTesting(
+        crm: crm,
         listRooms: (branchId) => crm.listRooms(branchId: branchId, limit: 100),
         loadCatalog: (branchId) async => LessonDecisionCatalog.fromJson(
           await crm.getLessonDecisionCatalog(branchId: branchId),
@@ -95,6 +104,7 @@ class LessonEditorDataController implements LessonEditorDataLoader {
         searchClients: (query) => crm.searchClientRefs(q: query, limit: 50),
         resolveClient: ({required type, required id}) =>
             crm.resolveClientRef(type: type, id: id),
+        listLessons: (id) => crm.listLessons(lessonId: id, limit: 1),
       );
 
   final LessonEditorRowsById _listRooms;
@@ -104,6 +114,30 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   final LessonEditorRows _listBranches;
   final LessonEditorClientSearch _searchClients;
   final LessonEditorClientResolver _resolveClient;
+  final LessonEditorRowsById? _listLessons;
+  final MagicCrmService? _crm;
+  List<LessonDecisionParticipant> _knownPayers = const [];
+
+  List<LessonDecisionParticipant> get knownPayers => _knownPayers;
+
+  LessonDecisionFormLifecycle? fundingFor(
+    LessonEditorSession session,
+    LessonEditorDraft draft,
+    bool canManageTeacherCompensation,
+  ) => _crm == null
+      ? null
+      : LessonDecisionController(
+          crm: _crm,
+          operation: LessonDecisionOperation.plannedSettlement,
+          canManageTeacherCompensation: canManageTeacherCompensation,
+          lesson:
+              session.snapshot?.rawLesson ??
+              {
+                'student_id': draft.client?.id,
+                'student_name': draft.client?.label,
+                'branch_id': draft.branchId,
+              },
+        );
 
   int _branchRevision = 0;
   int _catalogRevision = 0;
@@ -112,6 +146,82 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   String? _activeBranchId;
   String? _activeStudentId;
   String? _activeClientKey;
+
+  Future<LessonEditorLoadResult> loadEditor(
+    LessonEditorInitialSource source,
+    LessonEditorSession session,
+  ) async {
+    invalidateClientSelection();
+    final revision = _clientRevision;
+    try {
+      final current = await hydrateSession(source, session);
+      if (revision != _clientRevision) return const LessonEditorLoadResult();
+      final patch = await loadInitial(current);
+      final payers = patch == null
+          ? const <LessonDecisionParticipant>[]
+          : await _resolvePayers(patch.draft ?? current.draft);
+      if (revision != _clientRevision) return const LessonEditorLoadResult();
+      _knownPayers = payers;
+      return LessonEditorLoadResult(session: current, patch: patch);
+    } catch (error) {
+      return LessonEditorLoadResult(error: error);
+    }
+  }
+
+  Future<LessonEditorSession> hydrateSession(
+    LessonEditorInitialSource source,
+    LessonEditorSession session,
+  ) async {
+    final snapshot = session.snapshot;
+    if (snapshot == null) return session;
+    final rows = await _listLessons!(snapshot.lessonId);
+    final exact = rows
+        .where((row) => row['id'] == snapshot.lessonId)
+        .firstOrNull;
+    if (exact == null) {
+      throw StateError('Занятие недоступно. Обновите расписание.');
+    }
+    return const LessonEditorInitialMapper().fromSource(
+      source,
+      lessonOverride: {...snapshot.rawLesson, ...exact},
+    );
+  }
+
+  Future<LessonEditorSession> reloadAfterConflict(
+    LessonEditorInitialSource source,
+    LessonEditorSession session,
+    LessonEditorReferenceState references,
+  ) async {
+    final current = await hydrateSession(source, session);
+    // Only replace the baseline; the dialog keeps the operator's draft.
+    return const LessonEditorDecisionPolicy()
+        .applyReferenceDefaults(current, current.draft, references, false)
+        .session;
+  }
+
+  Future<List<LessonDecisionParticipant>> _resolvePayers(
+    LessonEditorDraft draft,
+  ) => Future.wait(
+    draft.clientDecisions
+        .map((row) => row['payerStudentId']?.toString())
+        .whereType<String>()
+        .where((id) => id != draft.client?.id)
+        .toSet()
+        .map((id) async {
+          try {
+            final row = await _resolveClient(type: 'student', id: id);
+            return LessonDecisionParticipant(
+              id: id,
+              name: row?['label']?.toString() ?? 'Плательщик',
+            );
+          } catch (_) {
+            return LessonDecisionParticipant(
+              id: id,
+              name: 'Плательщик недоступен',
+            );
+          }
+        }),
+  );
 
   Future<LessonEditorLoadResult> loadInitialSafely(
     LessonEditorSession session,
@@ -334,7 +444,8 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   @override
   Future<List<LessonClientRef>> searchClients(String query) async =>
       List.unmodifiable([
-        for (final row in await _searchClients(query)) ?_clientFromRow(row),
+        for (final row in _canonicalClientRows(await _searchClients(query)))
+          ?_clientFromRow(row),
       ]);
 
   @override
@@ -356,10 +467,21 @@ class LessonEditorDataController implements LessonEditorDataLoader {
         seededClient.type == 'group') {
       return (client: seededClient, row: null);
     }
-    final row = await _resolveClient(
+    var row = await _resolveClient(
       type: seededClient.type,
       id: seededClient.id,
     );
+    if (row != null && _clientFromRow(row)?.type == 'lead') {
+      final studentId = _convertedStudentId(row);
+      if (studentId != null) {
+        row =
+            await _resolveClient(type: 'student', id: studentId) ??
+            {
+              ...row,
+              'ref': {'type': 'student', 'id': studentId},
+            };
+      }
+    }
     return (
       client: row == null
           ? seededClient
@@ -514,7 +636,58 @@ List<LessonEditorReferenceItem> _simpleItems(List<Map<String, dynamic>> rows) =>
     ]);
 
 List<LessonEditorReferenceItem> _clientItems(List<Map<String, dynamic>> rows) =>
-    List.unmodifiable([for (final row in rows) ?_clientItemOrNull(row)]);
+    List.unmodifiable([
+      for (final row in _canonicalClientRows(rows)) ?_clientItemOrNull(row),
+    ]);
+
+Iterable<Map<String, dynamic>> _canonicalClientRows(
+  List<Map<String, dynamic>> rows,
+) sync* {
+  final studentsById = <String, Map<String, dynamic>>{};
+  final studentsByClientId = <String, Map<String, dynamic>>{};
+  for (final row in rows) {
+    final client = _clientFromRow(row);
+    if (client?.type != 'student') continue;
+    studentsById[client!.id] = row;
+    final clientId = _text(row['clientId']);
+    if (clientId != null) studentsByClientId[clientId] = row;
+  }
+
+  final seen = <String>{};
+  for (final row in rows) {
+    final client = _clientFromRow(row);
+    if (client == null) continue;
+    var canonicalRow = row;
+    if (client.type == 'lead') {
+      final studentId = _convertedStudentId(row);
+      canonicalRow =
+          studentsById[studentId] ??
+          studentsByClientId[_text(row['clientId'])] ??
+          (studentId == null
+              ? row
+              : {
+                  ...row,
+                  'ref': {'type': 'student', 'id': studentId},
+                });
+    }
+    final key = _clientFromRow(canonicalRow)!.key;
+    if (seen.add(key)) yield canonicalRow;
+  }
+}
+
+String? _convertedStudentId(Map<String, dynamic> row) {
+  final links = row['links'];
+  if (links is! List) return null;
+  for (final link in links.whereType<Map>()) {
+    final ref = link['ref'];
+    if (link['rel'] == 'convertedStudent' &&
+        ref is Map &&
+        ref['type'] == 'student') {
+      return _text(ref['id']);
+    }
+  }
+  return null;
+}
 
 LessonEditorReferenceItem? _clientItemOrNull(Map<String, dynamic> row) {
   final client = _clientFromRow(row);

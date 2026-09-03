@@ -260,7 +260,7 @@ void main() {
           tester,
           find.byKey(const Key('subscription-replace-financial')),
         ),
-        contains('2 000 ₽'),
+        contains('2 000,00 ₽'),
       );
       expect(
         find.text('Фактические платежи останутся неизменными.'),

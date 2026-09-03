@@ -1,10 +1,15 @@
 import 'lesson_editor_models.dart';
+import '../lesson_decision/lesson_decision_models.dart';
 
 class LessonEditorInitialMapper {
   const LessonEditorInitialMapper();
 
-  LessonEditorSession fromSource(LessonEditorInitialSource source) =>
-      map(LessonEditorInitialInput.fromSource(source));
+  LessonEditorSession fromSource(
+    LessonEditorInitialSource source, {
+    Map<String, dynamic>? lessonOverride,
+  }) => map(
+    LessonEditorInitialInput.fromSource(source, lessonOverride: lessonOverride),
+  );
 
   LessonEditorSession map(LessonEditorInitialInput input) {
     final lesson = input.lesson;
@@ -14,34 +19,83 @@ class LessonEditorInitialMapper {
         : _editClient(lesson) ?? constructorClient;
     final localStart = _localStart(input, lesson);
     final durationMinutes = _durationMinutes(input, lesson);
-    final compensationRuleKey = _text(
-      lesson,
-      'teacher_compensation_rule_key',
-      'teacherCompensationRuleKey',
-    );
-    final compensationValueMinor = _text(
-      lesson,
-      'teacher_compensation_value_minor',
-      'teacherCompensationValueMinor',
-    );
+    final rawDecision =
+        lesson?['financial_decision'] ?? lesson?['financialDecision'];
+    final decision = rawDecision is Map
+        ? Map<String, dynamic>.from(rawDecision)
+        : null;
+    final clientDecisions = <Map<String, dynamic>>[
+      for (final item in decision?['clientDecisions'] as List? ?? const [])
+        if (item is Map)
+          normalizeLessonClientDecision(Map<String, dynamic>.from(item)),
+    ];
+    if (clientDecisions.isEmpty &&
+        client != null &&
+        client.type != 'group' &&
+        (_text(lesson, 'subscription_id') != null ||
+            [
+              'subscription',
+              'personal_account',
+            ].contains(_text(lesson, 'client_charge_type')))) {
+      final source = _text(lesson, 'subscription_id') != null
+          ? 'subscription'
+          : _text(lesson, 'client_charge_type');
+      final oldPrice = num.tryParse(
+        lesson?['client_charge_value']?.toString() ?? '',
+      );
+      clientDecisions.add({
+        'clientId': client.id,
+        if (client.type == 'student') 'payerStudentId': client.id,
+        'chargeType': source,
+        if (source == 'subscription')
+          'subscriptionId': _text(lesson, 'subscription_id'),
+        if (source == 'personal_account' && oldPrice != null)
+          'basePriceMinor': (oldPrice * 100).round().toString(),
+      });
+    }
+    final funding = clientDecisions
+        .where((item) => item['clientId'] == client?.id)
+        .firstOrNull;
+    final compensationRuleKey =
+        _text(decision, 'teacherCompensationRuleKey') ??
+        _text(
+          lesson,
+          'teacher_compensation_rule_key',
+          'teacherCompensationRuleKey',
+        );
+    final compensationValueMinor =
+        _text(decision, 'teacherCompensationValueMinor') ??
+        _text(
+          lesson,
+          'teacher_compensation_value_minor',
+          'teacherCompensationValueMinor',
+        );
     final draft = LessonEditorDraft(
       localStart: localStart,
       durationMinutes: durationMinutes,
       isTrial: lesson == null
           ? input.initialIsTrial
           : lesson['snapshot_trial'] == true || lesson['is_trial'] == true,
-      completionType: _text(lesson, 'completion_type') ?? 'standard.success',
-      clientChargeType: _text(lesson, 'client_charge_type') ?? 'none',
+      completionType: 'standard.success',
+      clientChargeType:
+          _text(funding, 'chargeType') ??
+          (_text(funding, 'subscriptionId') != null ? 'subscription' : null) ??
+          _text(lesson, 'client_charge_type') ??
+          'none',
       client: client,
       teacherId: _text(lesson, 'teacher_id'),
       branchId: _text(lesson, 'branch_id') ?? input.initialBranchId,
       roomId: _text(lesson, 'room_id') ?? input.initialRoomId,
-      subscriptionId: _text(lesson, 'subscription_id'),
-      settlementTypeKey: _text(
-        lesson,
-        'settlement_type_key',
-        'settlementTypeKey',
-      ),
+      subscriptionId:
+          funding?['chargeType'] == 'personal_account' ||
+              funding?['chargeType'] == 'none'
+          ? null
+          : _text(funding, 'subscriptionId') ??
+                _text(lesson, 'subscription_id'),
+      clientDecisions: clientDecisions,
+      settlementTypeKey:
+          _text(decision, 'settlementTypeKey') ??
+          _text(lesson, 'settlement_type_key', 'settlementTypeKey'),
       compensationRuleKey: compensationRuleKey,
       compensationValueMinor: compensationValueMinor,
       notes: _text(lesson, 'notes') ?? '',
@@ -101,7 +155,16 @@ class LessonEditorInitialMapper {
         label: _text(lesson, 'group_name', 'groupName') ?? 'Группа',
       );
     }
-    final leadId = _text(lesson, 'lead_id');
+    final studentId = _text(lesson, 'student_id', 'studentId');
+    if (studentId != null) {
+      return LessonClientRef(
+        type: 'student',
+        id: studentId,
+        label:
+            _text(lesson, 'student_name', 'studentName') ?? 'Ученик без имени',
+      );
+    }
+    final leadId = _text(lesson, 'lead_id', 'leadId');
     if (leadId != null) {
       return LessonClientRef(
         type: 'lead',
@@ -109,13 +172,7 @@ class LessonEditorInitialMapper {
         label: _text(lesson, 'lead_name') ?? 'Лид без имени',
       );
     }
-    final studentId = _text(lesson, 'student_id');
-    if (studentId == null) return null;
-    return LessonClientRef(
-      type: 'student',
-      id: studentId,
-      label: _text(lesson, 'student_name') ?? 'Ученик без имени',
-    );
+    return null;
   }
 
   DateTime _localStart(

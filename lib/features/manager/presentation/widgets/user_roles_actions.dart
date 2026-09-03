@@ -201,7 +201,7 @@ extension _UserRolesActions on _UserRolesWidgetState {
     final leads = (candidates['leads'] as List?) ?? const [];
     final teachers = (candidates['teachers'] as List?) ?? const [];
     final staff = (candidates['staff'] as List?) ?? const [];
-    showDialog(
+    showMagicDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,

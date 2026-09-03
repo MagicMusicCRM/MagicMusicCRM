@@ -1,4 +1,6 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -96,7 +98,7 @@ class _ClientPaymentCorrectionEditorState
   }
 
   Future<void> _pickDate() async {
-    final value = await showDatePicker(
+    final value = await showMagicDatePicker(
       context: context,
       initialDate: _date,
       firstDate: DateTime(2000),
@@ -488,10 +490,5 @@ String _minorForInput(BigInt value) {
 }
 
 String _money(BigInt value, String currencyCode) {
-  final sign = value.isNegative ? '−' : '';
-  final absolute = value.abs();
-  final whole = absolute ~/ BigInt.from(100);
-  final fraction = (absolute % BigInt.from(100)).toString().padLeft(2, '0');
-  final suffix = currencyCode == 'RUB' ? '₽' : currencyCode;
-  return '$sign$whole,$fraction $suffix';
+  return formatPaymentMinor(value, currencyCode: currencyCode);
 }

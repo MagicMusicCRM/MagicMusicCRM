@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_models.dart';
 
@@ -9,7 +10,7 @@ Future<TeacherStatsRateChange?> showTeacherStatsRateDialog({
   required List<String> lessonIds,
   num? initialRate,
 }) {
-  return showDialog<TeacherStatsRateChange>(
+  return showMagicDialog<TeacherStatsRateChange>(
     context: context,
     builder: (_) => _TeacherStatsRateDialog(
       title: title,
@@ -25,7 +26,7 @@ Future<TeacherStatsGroupRateChange?> showTeacherStatsGroupRateDialog({
   required String groupName,
   required num? currentRate,
 }) {
-  return showDialog<TeacherStatsGroupRateChange>(
+  return showMagicDialog<TeacherStatsGroupRateChange>(
     context: context,
     builder: (_) => _TeacherStatsGroupRateDialog(
       groupName: groupName,
