@@ -172,7 +172,9 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     ["standard", 45, null, 0.75, 750],
     ["fixed", 60, null, 1, 750],
     ["hourly", 90, null, 1.5, 1125],
+    ["percent", 30, "7500", 0.38, 375],
     ["percent", 60, "7500", 0.75, 750],
+    ["percent", 90, "7500", 1.13, 1125],
   ])(
     "derives credited hours from the effective %s compensation fact",
     (
@@ -238,6 +240,104 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
         hoursTotal: 0.75,
         accruedTotal: 750,
       }),
+    ]);
+  });
+
+  it("separates settled lessons with different effective standard rates", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          lessonRow({
+            id: "l-700",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-700",
+            settled_amount_minor: 70000,
+            compensation_type: "standard",
+            compensation_rule_key: "standard",
+            compensation_rule_label: "Полная стандартная ставка",
+            teacher_snapshot_rate: 700,
+          }),
+          lessonRow({
+            id: "l-900",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-900",
+            settled_amount_minor: 90000,
+            compensation_type: "standard",
+            compensation_rule_key: "standard",
+            compensation_rule_label: "Полная стандартная ставка",
+            teacher_snapshot_rate: 900,
+          }),
+        ],
+      },
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+
+    const report = await service.getTeacherStatsReport(directorActor, {
+      from: "2026-01-01",
+      to: "2027-01-01",
+    });
+    const item = report.items[0]!;
+
+    expect(item.units).toEqual([
+      expect.objectContaining({ rate: 700, accruedTotal: 700, hoursTotal: 1 }),
+      expect.objectContaining({ rate: 900, accruedTotal: 900, hoursTotal: 1 }),
+    ]);
+    expect(item).toMatchObject({
+      scheduledHoursTotal: 2,
+      hoursTotal: 2,
+      accruedTotal: 1600,
+    });
+    expect(report.totals).toMatchObject({ accruedTotal: 1600 });
+
+    const { service: exportService } = createServiceWithQueryResults([
+      {
+        rows: [
+          lessonRow({
+            id: "l-700",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-700",
+            settled_amount_minor: 70000,
+            compensation_type: "standard",
+            compensation_rule_key: "standard",
+            compensation_rule_label: "Полная стандартная ставка",
+            teacher_snapshot_rate: 700,
+          }),
+          lessonRow({
+            id: "l-900",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-900",
+            settled_amount_minor: 90000,
+            compensation_type: "standard",
+            compensation_rule_key: "standard",
+            compensation_rule_label: "Полная стандартная ставка",
+            teacher_snapshot_rate: 900,
+          }),
+        ],
+      },
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+    const bytes = Buffer.from(
+      await exportService.exportTeacherStatsReport(directorActor, {
+        from: "2026-01-01",
+        to: "2027-01-01",
+      }),
+    );
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
+    const sheet = workbook.worksheets[0]!;
+    expect([sheet.getCell("I2").value, sheet.getCell("I3").value]).toEqual([
+      "700",
+      "900",
+    ]);
+    expect([sheet.getCell("J2").value, sheet.getCell("J3").value]).toEqual([
+      700,
+      900,
     ]);
   });
 

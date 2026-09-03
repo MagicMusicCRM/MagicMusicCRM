@@ -206,6 +206,7 @@ export class TeacherStatsReportService {
       compensationKey,
       lesson.compensation_rule_label,
       lesson.compensation_override_reason ?? null,
+      accrual.rate,
     ]);
     const unit = teacher.units.get(key) ?? this.newUnit(lesson, accrual.rate);
     teacher.units.set(key, unit);
