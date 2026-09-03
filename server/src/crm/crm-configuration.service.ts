@@ -224,12 +224,21 @@ export class CrmConfigurationService {
     const revision = target.rows[0];
     if (!revision)
       throw new NotFoundException("Версия конфигурации не найдена.");
-    const snapshot = dto.branchId
+    const historicalSnapshot = dto.branchId
       ? applyCrmConfigurationBranchPatch(
           (await resolveSchoolCrmConfiguration(this.database)).snapshot,
           revision.patch as ConfigBranchPatch,
         )
       : revision.effective_snapshot;
+    const current = await resolveEffectiveCrmConfiguration(
+      this.database,
+      dto.branchId,
+    );
+    const snapshot = {
+      ...historicalSnapshot,
+      lessonSettlementTypes: current.snapshot.lessonSettlementTypes,
+      teacherCompensationRules: current.snapshot.teacherCompensationRules,
+    };
     return this.publishRevision(
       actor,
       {
@@ -260,13 +269,13 @@ export class CrmConfigurationService {
       await client.query("select pg_advisory_xact_lock(hashtext($1))", [
         `crm-configuration:${dto.branchId ?? "school"}`,
       ]);
-       if (dto.branchId) {
-         await assertCrmConfigurationBranch(client, dto.branchId);
-       }
-       const effective = await resolveEffectiveCrmConfiguration(
-         client,
-         dto.branchId,
-       );
+      if (dto.branchId) {
+        await assertCrmConfigurationBranch(client, dto.branchId);
+      }
+      const effective = await resolveEffectiveCrmConfiguration(
+        client,
+        dto.branchId,
+      );
       const currentVersion = dto.branchId
         ? effective.branchVersion
         : effective.schoolVersion;
@@ -283,7 +292,7 @@ export class CrmConfigurationService {
         current: effective.snapshot,
         school: dto.branchId ? effective.schoolSnapshot : undefined,
         hasStoredClientFieldValues: (definitionId) =>
-           hasStoredCrmClientFieldValues(client, definitionId),
+          hasStoredCrmClientFieldValues(client, definitionId),
       });
       if (!impact.valid) {
         throw new UnprocessableEntityException({
@@ -294,12 +303,12 @@ export class CrmConfigurationService {
       }
       const snapshot = dto.branchId
         ? requested
-         : await syncCrmClientFields(client, requested);
+        : await syncCrmClientFields(client, requested);
       const nextVersion = currentVersion + 1;
       const patch = dto.branchId
         ? createCrmConfigurationBranchPatch(effective.schoolSnapshot, snapshot)
         : snapshot;
-       const inserted = await client.query<CrmConfigurationRevisionRow>(
+      const inserted = await client.query<CrmConfigurationRevisionRow>(
         `insert into app.crm_configuration_revisions (
            branch_id, version, patch, effective_snapshot, impact, reason,
            rollback_from_version, created_by
@@ -397,5 +406,4 @@ export class CrmConfigurationService {
       code: "SYSTEM_SETTLEMENT_POLICY_READ_ONLY",
     });
   }
-
 }
