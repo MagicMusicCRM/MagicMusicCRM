@@ -245,6 +245,111 @@ void main() {
       },
     );
   }
+
+  testWidgets('existing row displays frozen keys removed from the catalog', (
+    tester,
+  ) async {
+    await _openEditor(
+      tester,
+      width: 840,
+      editor: const PreferredScheduleEditor(
+        branches: _branches,
+        teachers: _teachers,
+        rooms: _rooms,
+        defaultBranchId: 'branch-a',
+        planMode: true,
+        initialTitle: 'Историческая строка',
+        canManageTeacherCompensation: true,
+        decisionCatalogs: _partialCatalogs,
+        series: {
+          'id': 'series-a',
+          'branch_id': 'branch-a',
+          'weekday': 1,
+          'begin_time': '10:00',
+          'duration_minutes': 60,
+          'valid_from': '2026-09-01',
+          'valid_until': '2026-12-01',
+          'teacher_id': 'teacher-a',
+          'room_id': 'room-a',
+          'financial_decision': {
+            'settlementTypeKey': 'archived-partial',
+            'teacherCompensationRuleKey': 'archived-percent',
+            'teacherCreditedDurationMinutes': 37,
+            'teacherCompensationSource': 'manual',
+            'clientDecisions': [
+              {'clientId': 'student-a', 'chargeDurationMinutes': 19},
+            ],
+          },
+        },
+      ),
+    );
+
+    expect(find.text('Сохранено: archived-partial'), findsOneWidget);
+    expect(find.text('Сохранено: archived-percent'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final width in const [360.0, 840.0]) {
+    testWidgets(
+      'four participant minute fields stay usable at ${width.toInt()}',
+      (tester) async {
+        const clientIds = ['student-a', 'student-b', 'student-c', 'student-d'];
+        await _openEditor(
+          tester,
+          width: width,
+          editor: PreferredScheduleEditor(
+            branches: _branches,
+            teachers: _teachers,
+            rooms: _rooms,
+            defaultBranchId: 'branch-a',
+            planMode: true,
+            initialTitle: 'Групповое частичное занятие',
+            canManageTeacherCompensation: true,
+            decisionCatalogs: _partialCatalogs,
+            participantLabels: const {
+              'student-a': 'Александра Смирнова',
+              'student-b': 'Владислав Кузнецов',
+              'student-c': 'Екатерина Морозова',
+              'student-d': 'Константин Волков',
+            },
+            initialDraft: PreferredScheduleDraft(
+              branchId: 'branch-a',
+              weekdays: const {DateTime.monday},
+              beginTime: '10:00',
+              durationMinutes: 60,
+              lessonsPerDay: 1,
+              validFrom: DateTime(2026, 9, 1),
+              validUntil: DateTime(2026, 12, 1),
+              teacherId: 'teacher-a',
+              roomId: 'room-a',
+              notes: '',
+              settlementTypeKey: 'partial',
+              teacherCompensationRuleKey: 'percent',
+              teacherCreditedDurationMinutes: 45,
+              teacherCompensationSource: 'manual',
+              clientDecisions: [
+                for (final clientId in clientIds)
+                  {'clientId': clientId, 'chargeDurationMinutes': 30},
+              ],
+            ),
+          ),
+        );
+
+        for (final clientId in clientIds) {
+          final field = find.byKey(
+            ValueKey('schedule-plan-client-minutes-$clientId'),
+          );
+          expect(field, findsOneWidget);
+          expect(tester.getSize(field).width, greaterThanOrEqualTo(220));
+          final input = tester.widget<InputDecorator>(
+            find.descendant(of: field, matching: find.byType(InputDecorator)),
+          );
+          expect(input.decoration.labelText, isNot(contains('\n')));
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
 
 const _partialCatalogs = {

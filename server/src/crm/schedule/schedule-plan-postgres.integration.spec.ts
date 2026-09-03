@@ -48,6 +48,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   let constraints: ScheduleConstraintEngine;
   let reservations: SubscriptionReservationService;
   let lifecycle: LessonLifecycleRepository;
+  let settlement: LessonSettlementService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
@@ -89,7 +90,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     );
     const repository = new SchedulePlanRepository(database);
     const definition = new SchedulePlanDefinitionService(repository);
-    const settlement = new LessonSettlementService(database);
+    settlement = new LessonSettlementService(database);
     const previewTokens = new SubscriptionPreviewTokenService({
       get: (key: string, fallback: string) =>
         key === "COMMERCE_PREVIEW_SECRET"
@@ -233,6 +234,121 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         reservations.rows.map(() => "0.50"),
       );
     } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects missing, duplicate, and unrelated clients before creating new plan rows", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const participants = fixture.studentIds.map((studentId, index) => ({
+      studentId,
+      subscriptionId: fixture.subscriptionIds[index]!,
+    }));
+    const groupDto = (clientDecisions: Array<{ clientId: string }>) => ({
+      kind: "group" as const,
+      title: "Проверка клиентов решения",
+      groupId: fixture.groupId,
+      activeFrom: fixture.today,
+      activeUntil: fixture.until60,
+      participants,
+      rows: [{
+        ...row(fixture, 2, "11:00"),
+        financialDecision: {
+          settlementTypeKey: "lesson",
+          teacherCompensationRuleKey: "standard",
+          clientDecisions,
+        },
+      }],
+    });
+    try {
+      await expect(plans.create(actor, {
+        kind: "individual",
+        title: "Нет решения ученика",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [{
+          ...row(fixture, 1, "10:00"),
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "standard",
+            clientDecisions: [],
+          },
+        }],
+      }, {
+        idempotencyKey: `plan-client-missing-${randomUUID()}`,
+        requestId: randomUUID(),
+      })).rejects.toMatchObject({
+        status: 422,
+        response: { code: "CLIENT_DECISION_MISSING" },
+      });
+      await expect(plans.create(actor, groupDto([
+        { clientId: fixture.studentIds[0]! },
+      ]), {
+        idempotencyKey: `plan-group-client-missing-${randomUUID()}`,
+        requestId: randomUUID(),
+      })).rejects.toMatchObject({
+        status: 422,
+        response: { code: "CLIENT_DECISION_MISSING" },
+      });
+      await expect(plans.create(actor, groupDto([
+        { clientId: fixture.studentIds[0]! },
+        { clientId: fixture.studentIds[0]! },
+      ]), {
+        idempotencyKey: `plan-group-client-duplicate-${randomUUID()}`,
+        requestId: randomUUID(),
+      })).rejects.toMatchObject({
+        status: 422,
+        response: { code: "DUPLICATE_CLIENT_DECISION" },
+      });
+      await expect(plans.create(actor, groupDto([
+        { clientId: fixture.studentIds[0]! },
+        { clientId: randomUUID() },
+      ]), {
+        idempotencyKey: `plan-group-client-unrelated-${randomUUID()}`,
+        requestId: randomUUID(),
+      })).rejects.toMatchObject({
+        status: 422,
+        response: { code: "UNKNOWN_LESSON_CLIENT" },
+      });
+      const inserted = await pool.query<{ count: string }>(
+        `select count(*)::text from app.schedule_plans
+         where title in ('Нет решения ученика', 'Проверка клиентов решения')`,
+      );
+      expect(inserted.rows[0]!.count).toBe("0");
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("previews a recurring row through the atomic resolved plan operation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const resolveSpy = jest.spyOn(settlement, "resolvePlannedPlan");
+    try {
+      const preview = await plans.previewConstraints(actor, {
+        kind: "individual",
+        title: "Единый снимок каталога",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [{
+          ...row(fixture, 1, "10:00"),
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "standard",
+            clientDecisions: [{ clientId: fixture.studentIds[0]! }],
+          },
+        }],
+      });
+
+      expect(preview.valid).toBe(true);
+      expect(resolveSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      resolveSpy.mockRestore();
       await cleanup(pool, fixture);
     }
   });

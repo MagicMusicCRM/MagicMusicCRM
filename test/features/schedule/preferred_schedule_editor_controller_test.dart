@@ -253,6 +253,41 @@ void main() {
     ]);
   });
 
+  test('keeps historical frozen keys absent from the current catalog', () {
+    final controller = _controller(
+      series: const {
+        'id': 'series-a',
+        'branch_id': 'branch-a',
+        'weekday': 1,
+        'begin_time': '15:00',
+        'duration_minutes': 60,
+        'valid_from': '2026-08-28',
+        'valid_until': '2026-11-26',
+        'teacher_id': 'teacher-a',
+        'room_id': 'room-a',
+        'financial_decision': {
+          'settlementTypeKey': 'archived-partial',
+          'teacherCompensationRuleKey': 'archived-percent',
+          'teacherCreditedDurationMinutes': 37,
+          'teacherCompensationSource': 'manual',
+          'clientDecisions': [
+            {'clientId': 'student-a', 'chargeDurationMinutes': 19},
+          ],
+        },
+      },
+      decisionCatalogs: _durationCatalogs,
+      canManageTeacherCompensation: true,
+    )..initialize(now: DateTime(2026, 8, 27));
+
+    expect(controller.state.settlementTypeKey, 'archived-partial');
+    expect(controller.state.teacherCompensationRuleKey, 'archived-percent');
+    expect(controller.state.teacherCreditedDurationInput, '37');
+    expect(controller.state.teacherCompensationSource, 'manual');
+    expect(controller.state.clientDecisions, [
+      {'clientId': 'student-a', 'chargeDurationMinutes': 19},
+    ]);
+  });
+
   test(
     'settlement changes recompute inherited client and untouched teacher minutes',
     () {

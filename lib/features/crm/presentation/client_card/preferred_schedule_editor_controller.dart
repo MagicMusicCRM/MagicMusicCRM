@@ -120,7 +120,9 @@ class PreferredScheduleEditorController extends ChangeNotifier {
               ? initialDraft?.openEnded ?? true
               : series?['valid_until'] == null),
     );
-    _syncDecisionForBranch();
+    if (seriesDecision.isEmpty) {
+      _syncDecisionForBranch();
+    }
     _clearInvalidResources();
   }
 

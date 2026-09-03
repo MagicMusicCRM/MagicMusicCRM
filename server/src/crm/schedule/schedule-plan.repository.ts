@@ -36,6 +36,8 @@ export interface SchedulePlanSeriesSnapshot {
   duration_minutes: number;
   notes: string | null;
   planned_financial_decision: LessonFinancialDecision | null;
+  settlement_revision_id: string;
+  compensation_revision_id: string;
 }
 
 export interface SchedulePlanEndImpact {
@@ -394,7 +396,8 @@ export class SchedulePlanRepository {
     return client.query<SchedulePlanSeriesSnapshot>(
       `select id, valid_from::text, teacher_id, room_id, branch_id, weekday,
          to_char(begin_time, 'HH24:MI') as begin_time, duration_minutes, notes,
-         planned_financial_decision
+         planned_financial_decision, settlement_revision_id,
+         compensation_revision_id
        from app.schedule_series
        where plan_id = $1 and deleted_at is null and superseded_by is null
        order by id for update`,

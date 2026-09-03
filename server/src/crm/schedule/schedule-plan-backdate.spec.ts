@@ -56,6 +56,8 @@ describe("schedule Plan backdate shape", () => {
           begin_time: "18:00",
           duration_minutes: 60,
           notes: null,
+          settlement_revision_id: "settlement-revision-a",
+          compensation_revision_id: "compensation-revision-a",
           planned_financial_decision: null,
         },
       ],

@@ -36,8 +36,22 @@ export async function prepareLessonSettlementPlan(
   decision: LessonFinancialDecision,
   actorUserId?: string,
 ): Promise<PreparedLessonSettlementPlan> {
-  await assertLessonPayers(client, decision, actorUserId);
   const catalog = await loadLessonSettlementCatalog(client, branchId);
+  return prepareLessonSettlementPlanWithCatalog(
+    client,
+    catalog,
+    decision,
+    actorUserId,
+  );
+}
+
+export async function prepareLessonSettlementPlanWithCatalog(
+  client: PoolClient,
+  catalog: LessonSettlementCatalog,
+  decision: LessonFinancialDecision,
+  actorUserId?: string,
+): Promise<PreparedLessonSettlementPlan> {
+  await assertLessonPayers(client, decision, actorUserId);
   assertPlannedLessonSettlementDecision(catalog, decision);
   return {
     decision: JSON.parse(JSON.stringify(decision)) as LessonFinancialDecision,

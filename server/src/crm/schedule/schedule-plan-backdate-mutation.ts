@@ -9,7 +9,10 @@ import type {
   PreparedSchedulePlanUpdate,
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
-import type { SchedulePlanRepository } from "./schedule-plan.repository";
+import type {
+  SchedulePlanRepository,
+  SchedulePlanSeriesSnapshot,
+} from "./schedule-plan.repository";
 import type { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
 interface BackdateMutationReference extends Record<string, unknown> {
@@ -34,7 +37,7 @@ export const extendSchedulePlanBackwards = async (input: {
       Parameters<SchedulePlanRepository["insertSeries"]>[1],
       "settlementPlan"
     >,
-    storedDecision: SchedulePlanRowDto["financialDecision"] | null,
+    storedSeries: SchedulePlanSeriesSnapshot | undefined,
   ) => Promise<void>;
 }): Promise<BackdateMutationReference> => {
   const prefixUntil = input.prepared.prefixUntil!;
@@ -70,7 +73,7 @@ export const extendSchedulePlanBackwards = async (input: {
         subscriptionId: input.prepared.subscriptionId,
         supersededBy: row.seriesId!,
       },
-      stored?.planned_financial_decision ?? null,
+      stored,
     );
     seriesIds.push(seriesId);
   }

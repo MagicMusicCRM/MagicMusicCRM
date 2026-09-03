@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
 import type {
@@ -21,7 +22,10 @@ import {
 } from "./schedule-plan-definition.service";
 import { assertSchedulePlanMetadata as assertMetadata } from "./schedule-plan-definition.service";
 import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
-import { SchedulePlanRepository } from "./schedule-plan.repository";
+import {
+  SchedulePlanRepository,
+  type SchedulePlanSeriesSnapshot,
+} from "./schedule-plan.repository";
 import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
 export interface SchedulePlanMutationResult {
@@ -231,8 +235,14 @@ export class SchedulePlanMutationService {
         series: this.series,
         materializer: this.materializer,
         definition: this.definition,
-        insertSeries: (input, storedDecision) =>
-          this.insertSeries(client, input, actor, storedDecision),
+        insertSeries: (input, storedSeries) =>
+          this.insertSeries(
+            client,
+            input,
+            actor,
+            prepared.studentIds,
+            storedSeries,
+          ),
       });
     }
     await lockSchedulePlanSeries(
@@ -326,6 +336,7 @@ export class SchedulePlanMutationService {
           subscriptionId: normalized.subscriptionId,
         },
         actor,
+        studentIds,
       );
       await this.materializer.materializePlanSeries(client, seriesId, {
         includePast,
@@ -349,6 +360,9 @@ export class SchedulePlanMutationService {
     const seriesIds: string[] = [];
     for (const [index, row] of rows.entries()) {
       const seriesId = this.definition.seriesId(planId, version, index);
+      const storedSeries = prepared.activeSeries.find(
+        (series) => series.id === row.seriesId,
+      );
       await this.insertSeries(
         client,
         {
@@ -364,8 +378,8 @@ export class SchedulePlanMutationService {
           subscriptionId: prepared.subscriptionId,
         },
         actor,
-        prepared.activeSeries.find((series) => series.id === row.seriesId)
-          ?.planned_financial_decision ?? null,
+        prepared.studentIds,
+        storedSeries,
       );
       seriesIds.push(seriesId);
     }
@@ -379,8 +393,10 @@ export class SchedulePlanMutationService {
       "settlementPlan"
     >,
     actor: ActorContext,
-    storedDecision: SchedulePlanRowDto["financialDecision"] | null = null,
+    allowedClientIds: string[],
+    storedSeries?: SchedulePlanSeriesSnapshot,
   ) {
+    const storedDecision = storedSeries?.planned_financial_decision ?? null;
     const requestedDecision = await this.authorizedFinancialDecision(
       client,
       actor,
@@ -391,7 +407,10 @@ export class SchedulePlanMutationService {
         sameTeacherDecision(requestedDecision, storedDecision)
       ? teacherDecision(storedDecision)
       : undefined;
-    const financialDecision = await this.settlement.resolvePlannedDecision(
+    const usesStoredCatalog = storedDecision !== null &&
+      fingerprintPayload(requestedDecision) ===
+        fingerprintPayload(storedDecision);
+    const settlementPlan = await this.settlement.resolvePlannedPlan(
       client,
       {
         branchId: input.row.branchId,
@@ -401,15 +420,21 @@ export class SchedulePlanMutationService {
         authorization:
           this.policy.teacherCompensationMutationAuthorization(actor),
         reasonText: input.row.plannedSettlementReason,
+        ...(storedSeries && usesStoredCatalog
+          ? {
+              configurationRevisionIds: {
+                settlementRevisionId: storedSeries.settlement_revision_id,
+                compensationRevisionId: storedSeries.compensation_revision_id,
+              },
+            }
+          : {}),
+        ...(!storedSeries || storedDecision?.clientDecisions?.length
+          ? { requiredClientIds: allowedClientIds }
+          : {}),
         ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
       },
     );
-    const settlementPlan = await this.settlement.preparePlan(
-      client,
-      input.row.branchId,
-      financialDecision,
-      actor.userId,
-    );
+    const financialDecision = settlementPlan.decision;
     await this.repository.insertSeries(client, {
       ...input,
       row: { ...input.row, financialDecision },

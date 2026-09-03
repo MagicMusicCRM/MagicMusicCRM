@@ -93,6 +93,7 @@ export class SchedulePlanConstraintPreviewService {
         client,
         actor,
         normalized.rows,
+        studentIds,
       );
       const rows = await this.previewRows(
         client,
@@ -135,6 +136,7 @@ export class SchedulePlanConstraintPreviewService {
         client,
         actor,
         dto.rows,
+        prepared.studentIds,
         prepared,
       );
       const rows = await this.previewUpdateRows(
@@ -172,6 +174,7 @@ export class SchedulePlanConstraintPreviewService {
       client,
       actor,
       normalized.rows,
+      this.createStudentIds(normalized),
     );
     const rows = await this.previewRows(
       client,
@@ -204,6 +207,7 @@ export class SchedulePlanConstraintPreviewService {
       client,
       actor,
       dto.rows,
+      prepared.studentIds,
       prepared,
     );
     const rows = await this.previewUpdateRows(client, authorizedRows, prepared);
@@ -229,13 +233,15 @@ export class SchedulePlanConstraintPreviewService {
     client: PoolClient,
     actor: ActorContext,
     rows: SchedulePlanRowDto[],
+    allowedClientIds: string[],
     prepared?: PreparedSchedulePlanUpdate,
   ): Promise<SchedulePlanRowDto[]> {
     return Promise.all(
       rows.map(async (row) => {
-        const stored = prepared?.activeSeries.find(
+        const storedSeries = prepared?.activeSeries.find(
           (series) => series.id === row.seriesId,
-        )?.planned_financial_decision;
+        );
+        const stored = storedSeries?.planned_financial_decision;
         const requestedDecision = this.policy.canManageTeacherCompensation(actor)
           ? row.financialDecision
           : stored
@@ -264,7 +270,10 @@ export class SchedulePlanConstraintPreviewService {
               teacherCompensationSource: stored.teacherCompensationSource,
             }
           : undefined;
-        const financialDecision = await this.settlement.resolvePlannedDecision(
+        const usesStoredCatalog = stored !== null && stored !== undefined &&
+          fingerprintPayload(requestedDecision) ===
+            fingerprintPayload(stored);
+        const settlementPlan = await this.settlement.resolvePlannedPlan(
           client,
           {
             branchId: row.branchId,
@@ -274,9 +283,23 @@ export class SchedulePlanConstraintPreviewService {
             authorization:
               this.policy.teacherCompensationMutationAuthorization(actor),
             reasonText: row.plannedSettlementReason,
+            ...(storedSeries && usesStoredCatalog
+              ? {
+                  configurationRevisionIds: {
+                    settlementRevisionId:
+                      storedSeries.settlement_revision_id,
+                    compensationRevisionId:
+                      storedSeries.compensation_revision_id,
+                  },
+                }
+              : {}),
+            ...(!storedSeries || stored?.clientDecisions?.length
+              ? { requiredClientIds: allowedClientIds }
+              : {}),
             ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
           },
         );
+        const financialDecision = settlementPlan.decision;
         return { ...row, financialDecision };
       }),
     );
@@ -323,11 +346,6 @@ export class SchedulePlanConstraintPreviewService {
     );
     const previews: SchedulePlanRowPreview[] = [];
     for (const [index, row] of rows.entries()) {
-      await this.settlement.preparePlan(
-        client,
-        row.branchId,
-        row.financialDecision,
-      );
       previews.push({
         index,
         ...(await this.series.previewPlanRow(

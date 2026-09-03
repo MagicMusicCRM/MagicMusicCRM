@@ -461,7 +461,10 @@ class _DecisionFields extends StatelessWidget {
               label: 'Тип списания *',
               helperText: 'Применится после окончания занятия',
               value: state.settlementTypeKey,
-              items: catalog?.settlementTypes ?? const [],
+              items: _itemsWithStoredValue(
+                catalog?.settlementTypes ?? const [],
+                state.settlementTypeKey,
+              ),
               onChanged: onSettlementChanged,
             ),
             if (canManageTeacherCompensation)
@@ -470,7 +473,10 @@ class _DecisionFields extends StatelessWidget {
                 label: 'Оплата преподавателю *',
                 helperText: 'Сотрудник выбирает правило явно',
                 value: state.teacherCompensationRuleKey,
-                items: catalog?.compensationRules ?? const [],
+                items: _itemsWithStoredValue(
+                  catalog?.compensationRules ?? const [],
+                  state.teacherCompensationRuleKey,
+                ),
                 onChanged: onCompensationChanged,
               ),
             if (canManageTeacherCompensation &&
@@ -532,15 +538,38 @@ class _DecisionFields extends StatelessWidget {
     required ValueChanged<String?> onChanged,
   }) => DropdownButtonFormField<String>(
     menuMaxHeight: 256,
+    isExpanded: true,
     key: key,
     initialValue: value,
     decoration: InputDecoration(labelText: label, helperText: helperText),
     items: [
       for (final item in items)
-        DropdownMenuItem(value: item.key, child: Text(item.label)),
+        DropdownMenuItem(
+          value: item.key,
+          child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
     ],
     onChanged: onChanged,
   );
+
+  List<LessonDecisionCatalogItem> _itemsWithStoredValue(
+    List<LessonDecisionCatalogItem> items,
+    String? value,
+  ) {
+    if (value == null ||
+        value.isEmpty ||
+        items.any((item) => item.key == value)) {
+      return items;
+    }
+    return [
+      LessonDecisionCatalogItem(
+        key: value,
+        label: 'Сохранено: $value',
+        order: -1,
+      ),
+      ...items,
+    ];
+  }
 }
 
 class _MinutesField extends StatefulWidget {
@@ -622,13 +651,19 @@ class _ResponsiveFields extends StatelessWidget {
           ],
         );
       }
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      const spacing = AppSpace.sm;
+      const minimumWidth = 240.0;
+      final columns =
+          ((constraints.maxWidth + spacing) / (minimumWidth + spacing))
+              .floor()
+              .clamp(1, fields.length);
+      final fieldWidth =
+          (constraints.maxWidth - spacing * (columns - 1)) / columns;
+      return Wrap(
+        spacing: spacing,
+        runSpacing: AppSpace.md,
         children: [
-          for (var index = 0; index < fields.length; index++) ...[
-            if (index > 0) const SizedBox(width: AppSpace.sm),
-            Expanded(child: fields[index]),
-          ],
+          for (final field in fields) SizedBox(width: fieldWidth, child: field),
         ],
       );
     },

@@ -222,7 +222,17 @@ describe("Schedule plan semantic owners", () => {
           subscriptionId: null,
           activeUntil: null,
           studentIds: ["student-a"],
-          activeSeries: [{ id: "series-old" }],
+          activeSeries: [{
+            id: "series-old",
+            duration_minutes: 60,
+            settlement_revision_id: "settlement-a",
+            compensation_revision_id: "compensation-a",
+            planned_financial_decision: {
+              settlementTypeKey: "lesson",
+              teacherCompensationRuleKey: "none",
+              clientDecisions: [{ clientId: "student-a" }],
+            },
+          }],
           effectiveFrom: "2026-09-01",
         };
       }),
@@ -254,18 +264,17 @@ describe("Schedule plan semantic owners", () => {
       ),
     } as unknown as ScheduleSeriesMaterializerService;
     const settlement = {
-      resolvePlannedDecision: jest.fn(async (_client, input) => ({
-        ...input.decision,
-        teacherCreditedDurationMinutes: 45,
-        teacherCompensationSource: "manual",
-        clientDecisions: [
-          { clientId: "student-a", chargeDurationMinutes: 30 },
-        ],
-      })),
-      preparePlan: jest.fn(async () => ({
-        decision: {},
-        settlementRevisionId: null,
-        compensationRevisionId: null,
+      resolvePlannedPlan: jest.fn(async (_client, input) => ({
+        decision: {
+          ...input.decision,
+          teacherCreditedDurationMinutes: 45,
+          teacherCompensationSource: "manual",
+          clientDecisions: [
+            { clientId: "student-a", chargeDurationMinutes: 30 },
+          ],
+        },
+        settlementRevisionId: "settlement-a",
+        compensationRevisionId: "compensation-a",
       })),
     } as unknown as LessonSettlementService;
     const policy = {
@@ -306,7 +315,14 @@ describe("Schedule plan semantic owners", () => {
           participants: [
             { studentId: "student-a", subscriptionId: "subscription-a" },
           ],
-          rows: [scheduleRow({ seriesId: "series-old" })],
+          rows: [scheduleRow({
+            seriesId: "series-old",
+            financialDecision: {
+              settlementTypeKey: "lesson",
+              teacherCompensationRuleKey: "none",
+              clientDecisions: [{ clientId: "student-a" }],
+            },
+          })],
         },
         metadata,
       );
@@ -328,17 +344,25 @@ describe("Schedule plan semantic owners", () => {
       "validate-new-series",
       "materialize-new-series",
     ]);
-    expect(settlement.resolvePlannedDecision).toHaveBeenCalledWith(client, {
+    expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({
       branchId: "branch-a",
       durationMinutes: 60,
       decision: expect.objectContaining({ settlementTypeKey: "lesson" }),
+      requiredClientIds: ["student-a"],
+      configurationRevisionIds: {
+        settlementRevisionId: "settlement-a",
+        compensationRevisionId: "compensation-a",
+      },
       actorUserId: actor.userId,
       authorization: {
         actor,
         capabilityKey: "config.commerce.manage",
       },
       reasonText: undefined,
-    });
+      }),
+    );
     expect(repository.insertSeries).toHaveBeenCalledWith(
       client,
       expect.objectContaining({

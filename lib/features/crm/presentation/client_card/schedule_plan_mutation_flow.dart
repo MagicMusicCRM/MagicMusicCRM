@@ -187,6 +187,9 @@ class SchedulePlanMutationFlow {
         series: source,
         decisionCatalogs: references.decisionCatalogs,
         canManageTeacherCompensation: canManageTeacherCompensation,
+        initialClientDecisions: row == null
+            ? initialClientDecisionsForPlan(plan)
+            : const [],
         participantLabels: _decisionParticipantLabels,
       ),
     );
@@ -523,6 +526,27 @@ class SchedulePlanMutationFlow {
     }
     return rows;
   }
+
+  static List<Map<String, dynamic>> initialClientDecisionsForPlan(
+    SchedulePlan plan,
+  ) => plan.isGroup
+      ? [
+          for (final participant in plan.currentParticipants)
+            {
+              'clientId': participant.studentId,
+              'chargeType': 'subscription',
+              'subscriptionId': participant.subscriptionId,
+            },
+        ]
+      : [
+          if (plan.studentId != null)
+            {
+              'clientId': plan.studentId,
+              'chargeType': 'subscription',
+              if (plan.subscriptionId != null)
+                'subscriptionId': plan.subscriptionId,
+            },
+        ];
 
   Map<String, String> get _decisionParticipantLabels => {
     ..._participantLabels,

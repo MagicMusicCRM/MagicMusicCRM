@@ -9,39 +9,46 @@ const actor = (role: "admin" | "director") => ({
     : "schedule.lesson.write" as const,
 });
 
+function catalogRow(
+  settlementRevisionId = "settlement-revision",
+  compensationRevisionId = "compensation-revision",
+) {
+  return {
+    settlement_revision_id: settlementRevisionId,
+    compensation_revision_id: compensationRevisionId,
+    settlement_types: [
+      {
+        stableKey: "lesson", label: "Занятие", active: true, order: 0,
+        allowedContexts: ["settle"], hourShareBasisPoints: 10_000,
+        clientDurationMode: "full", teacherDurationMode: "full",
+        defaultTeacherCompensationRuleKey: "standard", colorToken: "blue",
+      },
+      {
+        stableKey: "free_lesson", label: "Бесплатно", active: true, order: 1,
+        allowedContexts: ["settle"], hourShareBasisPoints: 0,
+        clientDurationMode: "zero", teacherDurationMode: "zero",
+        defaultTeacherCompensationRuleKey: "none", colorToken: "neutral",
+      },
+      {
+        stableKey: "partially_paid_lesson", label: "Частично", active: true, order: 2,
+        allowedContexts: ["settle"], hourShareBasisPoints: 5_000,
+        clientDurationMode: "manual", teacherDurationMode: "manual",
+        defaultTeacherCompensationRuleKey: "percent", colorToken: "warning",
+      },
+    ],
+    compensation_rules: [
+      { stableKey: "none", label: "Нет", active: true, order: 0, mode: "none", value: "0" },
+      { stableKey: "standard", label: "Стандарт", active: true, order: 1, mode: "standard", value: "0" },
+      { stableKey: "percent", label: "Процент", active: true, order: 2, mode: "percent", value: "5000" },
+      { stableKey: "fixed", label: "Фиксировано", active: true, order: 3, mode: "fixed", value: "100000" },
+    ],
+  };
+}
+
 function catalogClient(): PoolClient {
   return {
     query: jest.fn().mockResolvedValue({
-      rows: [{
-        settlement_revision_id: "settlement-revision",
-        compensation_revision_id: "compensation-revision",
-        settlement_types: [
-          {
-            stableKey: "lesson", label: "Занятие", active: true, order: 0,
-            allowedContexts: ["settle"], hourShareBasisPoints: 10_000,
-            clientDurationMode: "full", teacherDurationMode: "full",
-            defaultTeacherCompensationRuleKey: "standard", colorToken: "blue",
-          },
-          {
-            stableKey: "free_lesson", label: "Бесплатно", active: true, order: 1,
-            allowedContexts: ["settle"], hourShareBasisPoints: 0,
-            clientDurationMode: "zero", teacherDurationMode: "zero",
-            defaultTeacherCompensationRuleKey: "none", colorToken: "neutral",
-          },
-          {
-            stableKey: "partially_paid_lesson", label: "Частично", active: true, order: 2,
-            allowedContexts: ["settle"], hourShareBasisPoints: 5_000,
-            clientDurationMode: "manual", teacherDurationMode: "manual",
-            defaultTeacherCompensationRuleKey: "percent", colorToken: "warning",
-          },
-        ],
-        compensation_rules: [
-          { stableKey: "none", label: "Нет", active: true, order: 0, mode: "none", value: "0" },
-          { stableKey: "standard", label: "Стандарт", active: true, order: 1, mode: "standard", value: "0" },
-          { stableKey: "percent", label: "Процент", active: true, order: 2, mode: "percent", value: "5000" },
-          { stableKey: "fixed", label: "Фиксировано", active: true, order: 3, mode: "fixed", value: "100000" },
-        ],
-      }],
+      rows: [catalogRow()],
     }),
   } as unknown as PoolClient;
 }
@@ -256,6 +263,83 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
       teacherCreditedDurationMinutes: 60,
       teacherCompensationSource: "manual",
     });
+  });
+
+  it.each([
+    {
+      name: "missing individual",
+      requiredClientIds: ["student-a"],
+      clientDecisions: [],
+      code: "CLIENT_DECISION_MISSING",
+    },
+    {
+      name: "missing group participant",
+      requiredClientIds: ["student-a", "student-b"],
+      clientDecisions: [{ clientId: "student-a" }],
+      code: "CLIENT_DECISION_MISSING",
+    },
+    {
+      name: "duplicate participant",
+      requiredClientIds: ["student-a"],
+      clientDecisions: [{ clientId: "student-a" }, { clientId: "student-a" }],
+      code: "DUPLICATE_CLIENT_DECISION",
+    },
+    {
+      name: "unrelated participant",
+      requiredClientIds: ["student-a"],
+      clientDecisions: [{ clientId: "student-a" }, { clientId: "student-b" }],
+      code: "UNKNOWN_LESSON_CLIENT",
+    },
+  ])("rejects $name before resolving a recurring decision", async ({
+    requiredClientIds,
+    clientDecisions,
+    code,
+  }) => {
+    await expect(service.resolvePlannedDecision(catalogClient(), {
+      branchId: "branch-a",
+      durationMinutes: 60,
+      decision: {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "standard",
+        clientDecisions,
+      },
+      requiredClientIds,
+      actorUserId: "admin-a",
+      authorization: actor("admin"),
+    })).rejects.toMatchObject({ status: 422, response: { code } });
+  });
+
+  it("resolves and freezes revision ids from one catalog load", async () => {
+    const client = catalogClient();
+    const query = client.query as jest.Mock;
+    query
+      .mockResolvedValueOnce({ rows: [catalogRow("settlement-a", "compensation-a")] })
+      .mockResolvedValue({ rows: [catalogRow("settlement-b", "compensation-b")] });
+
+    const prepared = await service.resolvePlannedPlan(client, {
+      branchId: "branch-a",
+      durationMinutes: 60,
+      decision: {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "standard",
+        clientDecisions: [{ clientId: "student-a" }],
+      },
+      requiredClientIds: ["student-a"],
+      actorUserId: "admin-a",
+      authorization: actor("admin"),
+    });
+
+    expect(prepared).toMatchObject({
+      settlementRevisionId: "settlement-a",
+      compensationRevisionId: "compensation-a",
+      decision: {
+        clientDecisions: [{
+          clientId: "student-a",
+          chargeDurationMinutes: 60,
+        }],
+      },
+    });
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it.each([

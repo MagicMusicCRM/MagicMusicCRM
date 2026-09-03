@@ -30,6 +30,7 @@ import {
   markLessonSettlementPlanState,
   plannedLessonSubscriptionAllocations,
   prepareLessonSettlementPlan,
+  prepareLessonSettlementPlanWithCatalog,
   replaceLessonSettlementPlan,
 } from "./lesson-settlement-plan.persistence";
 
@@ -44,6 +45,20 @@ type PreservedTeacherDecision = Pick<
   | "teacherCreditedDurationMinutes"
   | "teacherCompensationSource"
 >;
+
+interface ResolvePlannedDecisionInput {
+  branchId: string;
+  durationMinutes: number;
+  decision: LessonFinancialDecision;
+  actorUserId: string;
+  authorization: TeacherCompensationMutationAuthorization;
+  reasonText?: string;
+  preservedTeacherDecision?: PreservedTeacherDecision;
+  requiredClientIds?: string[];
+  configurationRevisionIds?: NonNullable<
+    LessonSettlementInput["configurationRevisionIds"]
+  >;
+}
 
 @Injectable()
 export class LessonSettlementService implements LessonSettlementPort {
@@ -72,27 +87,63 @@ export class LessonSettlementService implements LessonSettlementPort {
 
   async resolvePlannedDecision(
     client: PoolClient,
-    input: {
-      branchId: string;
-      durationMinutes: number;
-      decision: LessonFinancialDecision;
-      actorUserId: string;
-      authorization: TeacherCompensationMutationAuthorization;
-      reasonText?: string;
-      preservedTeacherDecision?: PreservedTeacherDecision;
-    },
+    input: ResolvePlannedDecisionInput,
   ): Promise<LessonFinancialDecision> {
+    this.assertPlannedActor(input);
+    const catalog = await loadLessonSettlementCatalog(
+      client,
+      input.branchId,
+      input.configurationRevisionIds,
+    );
+    assertExactClientDecisions(
+      catalog,
+      input.decision,
+      input.requiredClientIds,
+    );
+    return this.resolvePlannedDecisionWithCatalog(catalog, input);
+  }
+
+  async resolvePlannedPlan(
+    client: PoolClient,
+    input: ResolvePlannedDecisionInput,
+  ): Promise<PreparedLessonSettlementPlan> {
+    this.assertPlannedActor(input);
+    const catalog = await loadLessonSettlementCatalog(
+      client,
+      input.branchId,
+      input.configurationRevisionIds,
+    );
+    assertExactClientDecisions(
+      catalog,
+      input.decision,
+      input.requiredClientIds,
+    );
+    const decision = this.resolvePlannedDecisionWithCatalog(catalog, input);
+    return prepareLessonSettlementPlanWithCatalog(
+      client,
+      catalog,
+      decision,
+      input.actorUserId,
+    );
+  }
+
+  private assertPlannedActor(input: ResolvePlannedDecisionInput): void {
     if (input.authorization.actor.userId !== input.actorUserId) {
       throw new ForbiddenException({
         code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED",
       });
     }
+  }
+
+  private resolvePlannedDecisionWithCatalog(
+    catalog: Awaited<ReturnType<typeof loadLessonSettlementCatalog>>,
+    input: ResolvePlannedDecisionInput,
+  ): LessonFinancialDecision {
     assertDurationWithinLesson(
       input.durationMinutes,
       input.durationMinutes,
       "durationMinutes",
     );
-    const catalog = await loadLessonSettlementCatalog(client, input.branchId);
     const clientDecisions = input.decision.clientDecisions?.map((decision) => {
       const policy = resolveSettlementPolicy(
         catalog,
@@ -450,6 +501,42 @@ function resolveDurationMinutes(
   if (mode === "zero") return 0;
   if (mode === "full") return durationMinutes;
   return selectedMinutes!;
+}
+
+function assertExactClientDecisions(
+  catalog: Awaited<ReturnType<typeof loadLessonSettlementCatalog>>,
+  decision: LessonFinancialDecision,
+  requiredClientIds: string[] | undefined,
+): void {
+  if (requiredClientIds === undefined) return;
+  const required = new Set(requiredClientIds);
+  const seen = new Set<string>();
+  for (const clientDecision of decision.clientDecisions ?? []) {
+    if (seen.has(clientDecision.clientId)) {
+      invalidLessonSettlementDecision(
+        "DUPLICATE_CLIENT_DECISION",
+        "clientDecisions",
+      );
+    }
+    seen.add(clientDecision.clientId);
+    if (!required.has(clientDecision.clientId)) {
+      invalidLessonSettlementDecision(
+        "UNKNOWN_LESSON_CLIENT",
+        "clientDecisions",
+      );
+    }
+  }
+  const policy = resolveSettlementPolicy(catalog, decision.settlementTypeKey);
+  const requiresCompleteDecisions =
+    decision.clientDecisions !== undefined ||
+    policy.clientDurationMode === "manual";
+  if (!requiresCompleteDecisions) return;
+  if ([...required].some((clientId) => !seen.has(clientId))) {
+    invalidLessonSettlementDecision(
+      "CLIENT_DECISION_MISSING",
+      "clientDecisions",
+    );
+  }
 }
 
 function assertDurationWithinLesson(
