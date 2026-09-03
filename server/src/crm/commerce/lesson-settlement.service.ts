@@ -90,15 +90,11 @@ export class LessonSettlementService implements LessonSettlementPort {
     input: ResolvePlannedDecisionInput,
   ): Promise<LessonFinancialDecision> {
     this.assertPlannedActor(input);
+    assertExactClientDecisions(input.decision, input.requiredClientIds);
     const catalog = await loadLessonSettlementCatalog(
       client,
       input.branchId,
       input.configurationRevisionIds,
-    );
-    assertExactClientDecisions(
-      catalog,
-      input.decision,
-      input.requiredClientIds,
     );
     return this.resolvePlannedDecisionWithCatalog(catalog, input);
   }
@@ -108,15 +104,11 @@ export class LessonSettlementService implements LessonSettlementPort {
     input: ResolvePlannedDecisionInput,
   ): Promise<PreparedLessonSettlementPlan> {
     this.assertPlannedActor(input);
+    assertExactClientDecisions(input.decision, input.requiredClientIds);
     const catalog = await loadLessonSettlementCatalog(
       client,
       input.branchId,
       input.configurationRevisionIds,
-    );
-    assertExactClientDecisions(
-      catalog,
-      input.decision,
-      input.requiredClientIds,
     );
     const decision = this.resolvePlannedDecisionWithCatalog(catalog, input);
     return prepareLessonSettlementPlanWithCatalog(
@@ -504,7 +496,6 @@ function resolveDurationMinutes(
 }
 
 function assertExactClientDecisions(
-  catalog: Awaited<ReturnType<typeof loadLessonSettlementCatalog>>,
   decision: LessonFinancialDecision,
   requiredClientIds: string[] | undefined,
 ): void {
@@ -526,11 +517,6 @@ function assertExactClientDecisions(
       );
     }
   }
-  const policy = resolveSettlementPolicy(catalog, decision.settlementTypeKey);
-  const requiresCompleteDecisions =
-    decision.clientDecisions !== undefined ||
-    policy.clientDurationMode === "manual";
-  if (!requiresCompleteDecisions) return;
   if ([...required].some((clientId) => !seen.has(clientId))) {
     invalidLessonSettlementDecision(
       "CLIENT_DECISION_MISSING",

@@ -269,14 +269,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         subscriptionId: fixture.subscriptionIds[0],
         activeFrom: fixture.today,
         activeUntil: fixture.until60,
-        rows: [{
-          ...row(fixture, 1, "10:00"),
-          financialDecision: {
-            settlementTypeKey: "lesson",
-            teacherCompensationRuleKey: "standard",
-            clientDecisions: [],
-          },
-        }],
+        rows: [row(fixture, 1, "10:00", { omitClientDecisions: true })],
       }, {
         idempotencyKey: `plan-client-missing-${randomUUID()}`,
         requestId: randomUUID(),
@@ -1686,7 +1679,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         studentId,
         subscriptionId: fixture.subscriptionIds[index]!,
       }));
-      const groupRow = row(fixture, 3, "18:00");
+      const groupRow = row(fixture, 3, "18:00", {
+        clientIds: fixture.studentIds,
+      });
       const movableGroup = await plans.create(
         actor,
         {
@@ -2016,7 +2011,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   it("rolls a group prefix back on reservation failure and inserts non-overlapping old-start assignments", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
-    const sourceRow = row(fixture, 3, "14:00");
+    const sourceRow = row(fixture, 3, "14:00", {
+      clientIds: fixture.studentIds,
+    });
     const newStart = addDays(fixture.today, -14);
     const prefixUntil = addDays(fixture.today, -1);
     const participants = fixture.studentIds.map((studentId, index) => ({
@@ -2374,7 +2371,10 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         activeFrom: fixture.today,
         activeUntil: fixture.until400,
         participants: participantAssignments,
-        rows: [row(fixture, 3, "14:00"), row(fixture, 3, "14:30")],
+        rows: [
+          row(fixture, 3, "14:00", { clientIds: fixture.studentIds }),
+          row(fixture, 3, "14:30", { clientIds: fixture.studentIds }),
+        ],
       });
       expect(groupPreview.valid).toBe(false);
       expect(
@@ -2394,7 +2394,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           activeFrom: fixture.today,
           activeUntil: fixture.until400,
           participants: participantAssignments,
-          rows: [row(fixture, 3, "14:00")],
+          rows: [
+            row(fixture, 3, "14:00", { clientIds: fixture.studentIds }),
+          ],
         },
         {
           idempotencyKey: `plan-group-${randomUUID()}`,
@@ -2479,7 +2481,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           effectiveFrom: fixture.effectiveFrom,
           rows: [
             {
-              ...row(fixture, 3, "15:00"),
+              ...row(fixture, 3, "15:00", {
+                clientIds: fixture.studentIds,
+              }),
               seriesId: created.seriesIds[0],
             },
           ],
@@ -3519,7 +3523,12 @@ function row(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   weekday: number,
   beginTime: string,
-  resources: { teacherId?: string; roomId?: string } = {},
+  resources: {
+    teacherId?: string;
+    roomId?: string;
+    clientIds?: string[];
+    omitClientDecisions?: boolean;
+  } = {},
 ) {
   return {
     teacherId: resources.teacherId ?? fixture.teacherId,
@@ -3530,6 +3539,15 @@ function row(
     durationMinutes: 60,
     financialDecision: {
       settlementTypeKey: "lesson",
+      ...(resources.omitClientDecisions
+        ? {}
+        : {
+            clientDecisions: (resources.clientIds ?? [fixture.studentIds[0]!])
+              .map((clientId) => ({
+                clientId,
+                chargeDurationMinutes: 60,
+              })),
+          }),
     } as ConfiguredLessonFinancialDecisionDto,
   };
 }

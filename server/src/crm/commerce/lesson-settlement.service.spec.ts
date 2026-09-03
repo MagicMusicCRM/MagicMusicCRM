@@ -309,6 +309,26 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
     })).rejects.toMatchObject({ status: 422, response: { code } });
   });
 
+  it("rejects an omitted client decision list when clients are required", async () => {
+    await expect(service.resolvePlannedDecision(catalogClient(), {
+      branchId: "branch-a",
+      durationMinutes: 60,
+      decision: {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "standard",
+      },
+      requiredClientIds: ["student-a"],
+      actorUserId: "admin-a",
+      authorization: actor("admin"),
+    })).rejects.toMatchObject({
+      status: 422,
+      response: {
+        code: "CLIENT_DECISION_MISSING",
+        field: "clientDecisions",
+      },
+    });
+  });
+
   it("resolves and freezes revision ids from one catalog load", async () => {
     const client = catalogClient();
     const query = client.query as jest.Mock;
