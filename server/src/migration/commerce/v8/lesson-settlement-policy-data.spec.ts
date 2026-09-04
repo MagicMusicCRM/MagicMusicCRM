@@ -5,6 +5,7 @@ import {
   type SettlementPolicyCandidateInput,
   type SettlementPolicyScheduleGroupItem,
   verifyScheduleGroupSnapshot,
+  withLegacyClientDecisions,
 } from "./lesson-settlement-policy-data";
 import {
   createSettlementPolicyReport,
@@ -13,6 +14,27 @@ import {
 } from "./lesson-settlement-policy-report";
 
 const LESSON_ID = "11111111-1111-4111-8111-111111111111";
+
+describe("legacy reconciliation client identity", () => {
+  it("adds frozen clients without replacing snapshot funding defaults", () => {
+    expect(withLegacyClientDecisions({
+      settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+    }, ["student-b", "student-a", "student-b"])).toEqual({
+      settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+      clientDecisions: [{ clientId: "student-a" }, { clientId: "student-b" }],
+    });
+  });
+
+  it("preserves explicit payer, funding and partial-minute choices", () => {
+    const decision: LessonFinancialDecision = {
+      settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+      clientDecisions: [{ clientId: "student-a", payerStudentId: "payer-b",
+        chargeType: "personal_account", basePriceMinor: "120000",
+        chargeDurationMinutes: 30 }],
+    };
+    expect(withLegacyClientDecisions(decision, ["student-a"])).toBe(decision);
+  });
+});
 
 function candidate(
   override: Partial<SettlementPolicyCandidateInput> = {},

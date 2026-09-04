@@ -668,6 +668,23 @@ async function repairLessonPlan(
   decision: LessonFinancialDecision,
   idempotencyKey: string,
 ): Promise<void> {
+  if (!decision.clientDecisions?.length) {
+    const clients = await runQuery<{ client_id: string }>(runtime.database, `
+      select client_id from app.lesson_snapshots
+      where lesson_id = $1 and client_type in ('student', 'lead')
+      union
+      select participant.student_id as client_id
+      from app.lesson_snapshot_participants participant
+      where participant.lesson_id = $1 and not exists (
+        select 1 from app.lesson_participant_exclusions exclusion
+        where exclusion.lesson_id = participant.lesson_id
+          and exclusion.student_id = participant.student_id
+      )
+    `, [current.entityId]);
+    decision = withLegacyClientDecisions(
+      decision, clients.rows.map((row) => row.client_id),
+    );
+  }
   const reasonText = "Автоматическое восстановление политики расчёта";
   const preview = await runtime.lessonCommands.previewSettlementPlan(
     runtime.actor,
@@ -699,6 +716,7 @@ interface SchedulePlanRepairRow extends QueryResultRow {
   active_from: string;
   active_until: string | null;
   subscription_id: string | null;
+  student_id: string | null;
   kind: "individual" | "group";
   series_id: string;
   teacher_id: string;
@@ -742,6 +760,7 @@ async function repairScheduleSeriesGroup(
   const rows = await runQuery<SchedulePlanRepairRow>(runtime.database, `
     select plan.id as plan_id, plan.version as plan_version, plan.title,
       plan.active_from::text, plan.active_until::text, plan.subscription_id,
+      plan.student_id,
       plan.kind, series.id as series_id, series.teacher_id, series.room_id,
       series.branch_id, series.weekday,
       to_char(series.begin_time, 'HH24:MI') as begin_time,
@@ -779,6 +798,13 @@ async function repairScheduleSeriesGroup(
     ? await activePlanParticipants(runtime.database, plan.plan_id,
         plan.local_today)
     : undefined;
+  for (const [seriesId, decision] of proposed) {
+    proposed.set(seriesId, withLegacyClientDecisions(
+      decision,
+      participants?.map((participant) => participant.studentId) ??
+        (plan.student_id ? [plan.student_id] : []),
+    ));
+  }
   const idempotencyKey = scheduleGroupIdempotencyKey(planId, items);
   try {
     await runtime.scheduleCommands.update(
@@ -815,6 +841,19 @@ async function repairScheduleSeriesGroup(
     }
     throw error;
   }
+}
+
+export function withLegacyClientDecisions(
+  decision: LessonFinancialDecision,
+  clientIds: string[],
+): LessonFinancialDecision {
+  if (decision.clientDecisions?.length) return decision;
+  return {
+    ...decision,
+    clientDecisions: [...new Set(clientIds)].sort().map((clientId) => ({
+      clientId,
+    })),
+  };
 }
 
 function scheduleGroupIdempotencyKey(
