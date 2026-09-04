@@ -9,6 +9,7 @@ import type { SubscriptionPreviewTokenService } from "../commerce/subscription-p
 import type { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
 import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
+import type { LessonCommandRepository } from "./lesson-command.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import type { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { LessonTransitionCommitService } from "./lesson-transition-commit.service";
@@ -127,6 +128,9 @@ const preparationWith = (
   settlement,
   {} as SubscriptionReservationService,
   {} as LessonTransitionFinancialService,
+  {
+    loadEffectiveTeacherRate: jest.fn(async () => 700),
+  } as unknown as LessonCommandRepository,
 );
 
 describe("lesson transition exact frozen clients", () => {
@@ -350,7 +354,7 @@ describe("lesson transition exact frozen clients", () => {
     const financial = {
       previewFinancial: jest.fn(),
       applyCompletedRescheduleCorrection: jest.fn(),
-      assignAndAllocateSuccessor: jest.fn(),
+      commitRescheduleFinancials: jest.fn(),
     } as unknown as LessonTransitionFinancialService;
     const preview = new LessonTransitionPreviewService(
       database,
@@ -385,6 +389,6 @@ describe("lesson transition exact frozen clients", () => {
     expect(reservations.lockSettlementCoverage).not.toHaveBeenCalled();
     expect(financial.previewFinancial).not.toHaveBeenCalled();
     expect(financial.applyCompletedRescheduleCorrection).not.toHaveBeenCalled();
-    expect(financial.assignAndAllocateSuccessor).not.toHaveBeenCalled();
+    expect(financial.commitRescheduleFinancials).not.toHaveBeenCalled();
   });
 });

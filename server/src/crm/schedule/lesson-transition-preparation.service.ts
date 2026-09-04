@@ -14,6 +14,7 @@ import { CrmPolicy } from "../crm.policy";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import type { LessonDraftInput } from "./lesson-draft.contracts";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
+import { LessonCommandRepository } from "./lesson-command.repository";
 import {
   prepareResolvedRescheduleTransition,
   previewDecisionProjection,
@@ -79,6 +80,7 @@ export class LessonTransitionPreparationService {
     private readonly settlement: LessonSettlementPort,
     private readonly reservations: SubscriptionReservationService,
     private readonly financial: LessonTransitionFinancialService,
+    private readonly lessonCommands: LessonCommandRepository,
   ) {}
 
   async loadSource(
@@ -324,11 +326,10 @@ export class LessonTransitionPreparationService {
     dto: NormalizedReschedulePreview,
   ): Promise<ResolvedRescheduleTransitionDto> {
     const successor = this.successorDraft(dto.successor, source);
-    const preservedTeacherDecision = await this.teacherDecisionToPreserve(
+    const teacherRate = await this.lessonCommands.loadEffectiveTeacherRate(
       client,
-      actor,
-      source,
-      "reschedule",
+      successor.teacherId,
+      successor.scheduledAt,
     );
     return prepareResolvedRescheduleTransition(
       client,
@@ -338,7 +339,7 @@ export class LessonTransitionPreparationService {
       source,
       successor,
       dto,
-      preservedTeacherDecision,
+      { type: "hourly", value: teacherRate.toString() },
     );
   }
 

@@ -497,13 +497,13 @@ export function assertLessonSettleable(
   source: LessonSettlementSource,
   context?: LessonSettlementInput["context"],
 ): void {
-  const expectedState = expectedSettlementLifecycleState(context);
-  if (source.lifecycle_state !== expectedState) {
+  const expectedStates = expectedSettlementLifecycleStates(context);
+  if (!expectedStates.includes(source.lifecycle_state)) {
     throw new ConflictException({
       code: "LESSON_NOT_IN_SETTLEMENT_STATE",
       lessonId: source.lesson_id,
       state: source.lifecycle_state,
-      expectedState,
+      expectedState: expectedStates.join(" or "),
     });
   }
   if (!hasCompleteLessonSettlementSnapshot(source)) {
@@ -514,12 +514,12 @@ export function assertLessonSettleable(
   }
 }
 
-function expectedSettlementLifecycleState(
+function expectedSettlementLifecycleStates(
   context?: LessonSettlementInput["context"],
-): string {
-  if (context === "reschedule") return "rescheduled";
-  if (context === "cancel") return "cancelled";
-  return "successfully_completed";
+): string[] {
+  if (context === "reschedule") return ["scheduled", "settlement_pending"];
+  if (context === "cancel") return ["cancelled"];
+  return ["successfully_completed"];
 }
 
 function hasCompleteLessonSettlementSnapshot(

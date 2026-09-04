@@ -306,6 +306,34 @@ export class SubscriptionReservationService {
     return result.rowCount ?? 0;
   }
 
+  async transferActiveReservation(
+    client: PoolClient,
+    input: {
+      reservationId: string;
+      sourceLessonId: string;
+      successorLessonId: string;
+      subscriptionId: string;
+      units: number;
+    },
+  ): Promise<string | null> {
+    const transferred = await client.query<{ id: string }>(
+      `update app.lesson_reservations
+       set lesson_id = $3, state = 'reserved', units = $5::numeric,
+           financial_fact_id = null
+       where id = $1 and lesson_id = $2 and subscription_id = $4
+         and state = 'reserved' and financial_fact_id is null
+       returning id`,
+      [
+        input.reservationId,
+        input.sourceLessonId,
+        input.successorLessonId,
+        input.subscriptionId,
+        input.units,
+      ],
+    );
+    return transferred.rows[0]?.id ?? null;
+  }
+
   async publishPostCommit(input: {
     studentId: string;
     payerStudentId?: string;

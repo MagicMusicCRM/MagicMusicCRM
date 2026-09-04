@@ -118,6 +118,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         settlementPort,
         reservations,
         financial,
+        new LessonCommandRepository(database),
       );
       const commits = new LessonTransitionCommitService(
         preparation,
@@ -283,12 +284,15 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       const beforeUnauthorized = await completedEvidence();
       const reversalRequestDecision = {
         settlementTypeKey: "paid_miss",
+        clientDecisions: [{ clientId: fixture.studentId }],
       } as never;
       const forbiddenTeacherDecision = {
         settlementTypeKey: "paid_miss",
         teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "70000",
         teacherCreditedDurationMinutes: 60,
         teacherCompensationSource: "manual" as const,
+        clientDecisions: [{ clientId: fixture.studentId }],
       };
       const completedReschedule = {
         expectedVersion: 3,
@@ -317,9 +321,13 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       );
       expect(reschedulePreview).toMatchObject({
         canConfirm: true,
-        financialDecision: {
+        sourceFinancialDecision: {
           settlementTypeKey: "free_lesson",
           teacherCompensationRuleKey: "none",
+        },
+        successorFinancialDecision: {
+          settlementTypeKey: "paid_miss",
+          teacherCompensationRuleKey: "standard",
         },
         warnings: ["COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED"],
       });
@@ -396,16 +404,18 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           financialDecision: forbiddenTeacherDecision,
         },
       );
-      expect(authorizedPreview.financialDecision).toEqual({
-        settlementTypeKey: "free_lesson",
-        teacherCompensationRuleKey: "none",
-        clientDecisions: [{
-          clientId: fixture.studentId,
-          chargeType: "none",
-          chargeDurationMinutes: 0,
-        }],
-        teacherCreditedDurationMinutes: 0,
-        teacherCompensationSource: "automatic",
+      expect(authorizedPreview).toMatchObject({
+        sourceFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          teacherCompensationSource: "automatic",
+        },
+        successorFinancialDecision: {
+          settlementTypeKey: "paid_miss",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "70000",
+          teacherCompensationSource: "manual",
+        },
       });
       const moved = await service.reschedule(
         director,
@@ -418,16 +428,24 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         },
         metadata("completed-reschedule"),
       );
-      expect(moved.financialDecision).toEqual({
-        settlementTypeKey: "free_lesson",
-        teacherCompensationRuleKey: "none",
-        clientDecisions: [{
-          clientId: fixture.studentId,
-          chargeType: "none",
-          chargeDurationMinutes: 0,
-        }],
-        teacherCreditedDurationMinutes: 0,
-        teacherCompensationSource: "automatic",
+      expect(moved).toMatchObject({
+        sourceFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          teacherCompensationSource: "automatic",
+        },
+        successorFinancialDecision: {
+          settlementTypeKey: "paid_miss",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "70000",
+          teacherCompensationSource: "manual",
+        },
+        financialDecision: {
+          settlementTypeKey: "paid_miss",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "70000",
+          teacherCompensationSource: "manual",
+        },
       });
       const successorId = moved.successor!.id;
       const state = await pool.query<{
@@ -665,11 +683,15 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       });
       expect(preview).toMatchObject({
         canConfirm: true,
-        financialDecision: {
+        sourceFinancialDecision: {
           settlementTypeKey: "free_lesson",
           teacherCompensationRuleKey: "none",
         },
-        financialPreview: {
+        successorFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+        },
+        sourceFinancialPreview: {
           clientFacts: [
             expect.objectContaining({
               settlementTypeKey: "free_lesson",
@@ -681,6 +703,12 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             compensationRuleKey: "none",
             amountMinor: "0",
           }),
+        },
+        successorPlannedSettlementPreview: {
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "none",
+          },
         },
       });
       expect(preview.previewToken).toBeTruthy();
@@ -734,6 +762,16 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         replayed: true,
       });
 
+      await database.transaction((client) => settlement.assignPlan(client, {
+        lessonId: fixture.cancelId,
+        branchId: fixture.branchId,
+        decision: {
+          ...paidMissDecision,
+          teacherCompensationSource: "automatic",
+        },
+        selectedBy: fixture.managerId,
+        reasonText: "Автоматический план для проверки отмены",
+      }));
       const cancelPreview = await service.previewCancel(
         actor,
         fixture.cancelId,
@@ -1019,6 +1057,16 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         teacherCompensationRuleKey: "none",
         clientDecisions: [{ clientId: fixture.studentId }],
       };
+      await database.transaction((client) => settlement.assignPlan(client, {
+        lessonId: fixture.sourceId,
+        branchId: fixture.branchId,
+        decision: {
+          ...legacyAutomatic,
+          teacherCompensationSource: "automatic",
+        },
+        selectedBy: fixture.managerId,
+        reasonText: "Автоматический план для проверки provenance",
+      }));
       const automaticPreview = await service.previewCancel(
         manager,
         fixture.sourceId,
@@ -1058,6 +1106,306 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       ).resolves.toMatchObject({
         rows: [{ compensation_source: "automatic" }],
       });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("plans a partial personal-account successor from its new teacher date and replays once", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const successorDecision = {
+      settlementTypeKey: "partially_paid_lesson",
+      clientDecisions: [{
+        clientId: fixture.studentId,
+        chargeType: "personal_account" as const,
+        basePriceMinor: "180000",
+        chargeDurationMinutes: 30,
+      }],
+      teacherCompensationRuleKey: "standard",
+      teacherCreditedDurationMinutes: 45,
+    };
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      await pool.query(
+        `insert into app.teacher_rates (teacher_id, rate, effective_from) values
+           ($1, 700, '2026-01-01'),
+           ($2, 900, '2026-01-01'),
+           ($2, 1200, '2026-08-01')`,
+        [fixture.teacherId, fixture.replacementTeacherId],
+      );
+      const draft = {
+        scheduledAt: "2026-08-03T08:00:00.000Z",
+        teacherId: fixture.replacementTeacherId,
+        roomId: fixture.replacementRoomId,
+      };
+      const preview = await service.previewReschedule(
+        actor,
+        fixture.cancelId,
+        {
+          expectedVersion: 1,
+          reasonCode: "client.requested",
+          reasonText: "Частичный перенос на нового преподавателя",
+          successor: draft,
+          successorFinancialDecision: successorDecision,
+        },
+      );
+
+      expect(preview).toMatchObject({
+        canConfirm: true,
+        sourceFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+        },
+        successorFinancialDecision: {
+          ...successorDecision,
+          teacherCompensationRuleKey: "percent",
+          teacherRateSnapshot: { type: "hourly", value: "1200" },
+          teacherCompensationSource: "manual",
+        },
+      });
+
+      const command = {
+        expectedVersion: 1,
+        reasonCode: "client.requested",
+        reasonText: "Частичный перенос на нового преподавателя",
+        successor: draft,
+        successorFinancialDecision: successorDecision,
+        previewToken: preview.previewToken!,
+        confirm: true as const,
+      };
+      const metadata = {
+        idempotencyKey: `partial-personal-move-${randomUUID()}`,
+        requestId: `partial-personal-request-${randomUUID()}`,
+      };
+      const moved = await service.reschedule(
+        actor,
+        fixture.cancelId,
+        command,
+        metadata,
+      );
+      const replay = await service.reschedule(
+        actor,
+        fixture.cancelId,
+        command,
+        metadata,
+      );
+      expect(replay).toMatchObject({
+        successor: { id: moved.successor!.id },
+        transitionId: moved.transitionId,
+        replayed: true,
+      });
+
+      const persisted = await pool.query<{
+        source_client_amount: string;
+        source_client_share: number;
+        source_teacher_amount: string;
+        source_teacher_type: string;
+        successor_teacher_id: string;
+        successor_teacher_rate: string;
+        successor_snapshot_rate: string;
+        successor_decision: typeof successorDecision & {
+          teacherRateSnapshot: { type: string; value: string };
+          teacherCompensationSource: string;
+        };
+        successor_plan_revisions: number;
+        successor_client_facts: number;
+        successor_teacher_facts: number;
+      }>(
+        `select
+           source_client.amount_minor::text as source_client_amount,
+           source_client.hour_share_basis_points as source_client_share,
+           source_teacher.amount_minor::text as source_teacher_amount,
+           source_teacher.compensation_type as source_teacher_type,
+           successor.teacher_id as successor_teacher_id,
+           successor.teacher_rate::text as successor_teacher_rate,
+           successor_snapshot.teacher_compensation_value::text as successor_snapshot_rate,
+           successor_plan.decision as successor_decision,
+           (select count(*)::int from app.lesson_settlement_plan_revisions
+             where lesson_id = successor.id) as successor_plan_revisions,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = successor.id) as successor_client_facts,
+           (select count(*)::int from app.lesson_teacher_compensation_facts
+             where lesson_id = successor.id) as successor_teacher_facts
+         from app.lessons source
+         join app.lessons successor on successor.id = source.successor_id
+         join app.lesson_client_charge_facts_effective source_client
+           on source_client.lesson_id = source.id
+         join app.lesson_teacher_compensation_facts_effective source_teacher
+           on source_teacher.lesson_id = source.id
+         join app.lesson_snapshots successor_snapshot
+           on successor_snapshot.lesson_id = successor.id
+         join app.lesson_settlement_plans successor_plan
+           on successor_plan.lesson_id = successor.id
+         where source.id = $1`,
+        [fixture.cancelId],
+      );
+      expect(persisted.rows[0]).toEqual({
+        source_client_amount: "0",
+        source_client_share: 0,
+        source_teacher_amount: "0",
+        source_teacher_type: "none",
+        successor_teacher_id: fixture.replacementTeacherId,
+        successor_teacher_rate: "1200.00",
+        successor_snapshot_rate: "1200.00",
+        successor_decision: expect.objectContaining({
+          ...successorDecision,
+          teacherCompensationRuleKey: "percent",
+          teacherRateSnapshot: { type: "hourly", value: "1200" },
+          teacherCompensationSource: "manual",
+        }),
+        successor_plan_revisions: 1,
+        successor_client_facts: 0,
+        successor_teacher_facts: 0,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("moves the active subscription reservation to the successor exactly once", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const successorDecision = {
+      settlementTypeKey: "lesson",
+      teacherCompensationRuleKey: "standard",
+      clientDecisions: [{
+        clientId: fixture.studentId,
+        chargeType: "subscription" as const,
+        subscriptionId: fixture.subscriptionId,
+      }],
+    };
+    try {
+      const before = await pool.query<{ id: string }>(
+        `select id from app.lesson_reservations
+         where lesson_id = $1 and state = 'reserved'`,
+        [fixture.capacityId],
+      );
+      const preview = await service.previewReschedule(
+        actor,
+        fixture.capacityId,
+        {
+          expectedVersion: 1,
+          reasonCode: "client.requested",
+          reasonText: "Перенос брони абонемента",
+          successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+          successorFinancialDecision: successorDecision,
+        },
+      );
+      const command = {
+        expectedVersion: 1,
+        reasonCode: "client.requested",
+        reasonText: "Перенос брони абонемента",
+        successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+        successorFinancialDecision: successorDecision,
+        previewToken: preview.previewToken!,
+        confirm: true as const,
+      };
+      const metadata = {
+        idempotencyKey: `subscription-move-${randomUUID()}`,
+        requestId: `subscription-move-request-${randomUUID()}`,
+      };
+      const moved = await service.reschedule(
+        actor,
+        fixture.capacityId,
+        command,
+        metadata,
+      );
+      const replay = await service.reschedule(
+        actor,
+        fixture.capacityId,
+        command,
+        metadata,
+      );
+
+      const reservations = await pool.query<{
+        id: string;
+        lesson_id: string;
+        state: string;
+        units: string;
+      }>(
+        `select id, lesson_id, state, units::text
+         from app.lesson_reservations
+         where lesson_id = any($1::uuid[])
+         order by id`,
+        [[fixture.capacityId, moved.successor!.id]],
+      );
+      expect(reservations.rows).toEqual([{
+        id: before.rows[0]!.id,
+        lesson_id: moved.successor!.id,
+        state: "reserved",
+        units: "1.00",
+      }]);
+      expect(replay).toMatchObject({
+        successor: { id: moved.successor!.id },
+        replayed: true,
+      });
+      const integrity = await pool.query<{
+        source_state: string;
+        source_version: string;
+        source_successor_id: string;
+        successor_version: string;
+        successor_predecessor_id: string;
+        transitions: number;
+        plan_revisions: number;
+        audits: number;
+        outbox: number;
+        outbox_successor_id: string;
+        idempotency: number;
+      }>(
+        `select
+           source.lifecycle_state as source_state,
+           source.version::text as source_version,
+           source.successor_id as source_successor_id,
+           successor.version::text as successor_version,
+           successor.predecessor_id as successor_predecessor_id,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = source.id) as transitions,
+           (select count(*)::int from app.lesson_settlement_plan_revisions
+             where lesson_id = successor.id) as plan_revisions,
+           (select count(*)::int from app.audit_events
+             where request_id = $2) as audits,
+           (select count(*)::int from app.platform_outbox_events
+             where request_id = $2) as outbox,
+           (select payload->>'successorId' from app.platform_outbox_events
+             where request_id = $2 limit 1) as outbox_successor_id,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $3 and operation = 'schedule.lesson.reschedule'
+               and idempotency_key = $4) as idempotency
+         from app.lessons source
+         join app.lessons successor on successor.id = source.successor_id
+         where source.id = $1`,
+        [
+          fixture.capacityId,
+          metadata.requestId,
+          `user:${fixture.managerId}`,
+          metadata.idempotencyKey,
+        ],
+      );
+      expect(integrity.rows[0]).toEqual({
+        source_state: "rescheduled",
+        source_version: "2",
+        source_successor_id: moved.successor!.id,
+        successor_version: "1",
+        successor_predecessor_id: fixture.capacityId,
+        transitions: 1,
+        plan_revisions: 1,
+        audits: 1,
+        outbox: 1,
+        outbox_successor_id: moved.successor!.id,
+        idempotency: 1,
+      });
+      await expect(
+        effectiveSubscriptionUnits(pool, fixture.subscriptionId),
+      ).resolves.toBe("0.00");
     } finally {
       await cleanup(pool, fixture);
     }
@@ -1179,6 +1527,16 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             clientId: fixture.studentId,
           }],
         };
+        await database.transaction((client) => settlement.assignPlan(client, {
+          lessonId,
+          branchId: fixture.branchId,
+          decision: {
+            ...financialDecision,
+            teacherCompensationSource: "automatic",
+          },
+          selectedBy: fixture.managerId,
+          reasonText: `Автоматический план: ${item.label}`,
+        }));
         const reasonText = `Отмена: ${item.label}`;
         const preview = await service.previewCancel(actor, lessonId, {
           expectedVersion: 1,
@@ -1500,7 +1858,11 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(preview).toMatchObject({
         canConfirm: true,
         source: { state: "scheduled" },
-        financialDecision: {
+        sourceFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+        },
+        successorFinancialDecision: {
           settlementTypeKey: "free_lesson",
           teacherCompensationRuleKey: "none",
         },
@@ -1508,7 +1870,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           subject: { type: "group", id: fixture.groupId },
           startAt: "2026-08-03T09:00:00.000Z",
         },
-        financialPreview: {
+        sourceFinancialPreview: {
           clientFacts: expect.arrayContaining([
             expect.objectContaining({
               clientId: fixture.studentId,
@@ -1527,6 +1889,12 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             compensationRuleKey: "none",
             amountMinor: "0",
           }),
+        },
+        successorPlannedSettlementPreview: {
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "none",
+          },
         },
       });
       const command = {
@@ -3716,6 +4084,10 @@ async function cleanup(
     );
     await client.query(
       "delete from app.teacher_branches where teacher_id = any($1::uuid[])",
+      [[fixture.teacherId, fixture.replacementTeacherId]],
+    );
+    await client.query(
+      "delete from app.teacher_rates where teacher_id = any($1::uuid[])",
       [[fixture.teacherId, fixture.replacementTeacherId]],
     );
     await client.query("delete from app.teachers where id = any($1::uuid[])", [

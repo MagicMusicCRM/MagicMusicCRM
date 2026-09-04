@@ -132,9 +132,35 @@ export class LessonTransitionCommitService {
         input.lessonId,
         successor,
         input.actor.userId,
+        dto.operation === "reschedule"
+          ? dto.successorFinancialDecision.teacherRateSnapshot
+          : undefined,
       );
     }
-    const settled = await this.settleSource(client, input, source, dto);
+    let settled: LessonSettlementResult;
+    if (dto.operation === "reschedule") {
+      const rescheduleFinancials = await this.financial.commitRescheduleFinancials(
+        client,
+        source,
+        input.successorId!,
+        {
+          actor: input.actor,
+          reasonText: dto.reasonText,
+          sourceFinancialDecision: dto.sourceFinancialDecision,
+          successorFinancialDecision: dto.successorFinancialDecision,
+          sourceConfigurationRevisionIds: dto.sourceConfigurationRevisionIds,
+          successorConfigurationRevisionIds:
+            dto.successorConfigurationRevisionIds,
+          coverage,
+          correctionId: stableTransitionId(
+            `schedule.lesson.completed-reschedule-correction\0${input.lessonId}\0${input.successorId}`,
+          ),
+        },
+      );
+      settled = rescheduleFinancials.sourceSettlement;
+    } else {
+      settled = await this.settleSource(client, input, dto);
+    }
     const fingerprint = transitionFingerprint({
       operation: input.operation,
       source,
@@ -145,17 +171,15 @@ export class LessonTransitionCommitService {
     });
     this.assertExpectedFingerprint(input.expectedFingerprint, fingerprint);
     if (dto.operation === "reschedule") {
-      await this.financial.assignAndAllocateSuccessor(
+      await this.updateSource(
         client,
-        input.successorId!,
-        input.actor,
-        dto.reasonText,
-        dto.successorFinancialDecision,
-        dto.successorConfigurationRevisionIds,
+        input.lessonId,
+        input.dto.expectedVersion,
+        input.nextVersion,
+        targetTransitionState(input.operation),
+        input.successorId,
+        input.operation,
       );
-    }
-    if (source.lifecycleState === "successfully_completed") {
-      await this.updateCompletedSource(client, input);
     }
     const toState = targetTransitionState(input.operation);
     const transition = await this.lifecycle.appendTransition(client, {
@@ -212,26 +236,8 @@ export class LessonTransitionCommitService {
   private async settleSource(
     client: PoolClient,
     input: CommitTransitionInput,
-    source: TransitionSource,
     dto: ResolvedTransitionDto,
   ): Promise<LessonSettlementResult> {
-    if (source.lifecycleState === "successfully_completed") {
-      if (dto.operation !== "reschedule") {
-        throw new ConflictException({
-          code: "COMPLETED_LESSON_RESCHEDULE_NOT_ALLOWED",
-          lessonId: source.id,
-        });
-      }
-      return this.financial.applyCompletedRescheduleCorrection(
-        client,
-        source,
-        input.actor,
-        dto,
-        stableTransitionId(
-          `schedule.lesson.completed-reschedule-correction\0${input.lessonId}\0${input.successorId}`,
-        ),
-      );
-    }
     await this.updateSource(
       client,
       input.lessonId,
@@ -241,12 +247,11 @@ export class LessonTransitionCommitService {
       input.successorId,
       input.operation,
     );
-    const decision = dto.operation === "reschedule"
-      ? dto.sourceFinancialDecision
-      : dto.financialDecision;
-    const configurationRevisionIds = dto.operation === "reschedule"
-      ? dto.sourceConfigurationRevisionIds
-      : dto.configurationRevisionIds;
+    if (dto.operation === "reschedule") {
+      throw new Error("Reschedule financials must use the atomic commit path.");
+    }
+    const decision = dto.financialDecision;
+    const configurationRevisionIds = dto.configurationRevisionIds;
     const settled = await this.settlement.settle(client, input.lessonId, {
       context: input.operation,
       decision,
@@ -258,21 +263,6 @@ export class LessonTransitionCommitService {
       await this.settlement.markPlanState(client, input.lessonId, "settled");
     }
     return settled;
-  }
-
-  private updateCompletedSource(
-    client: PoolClient,
-    input: CommitTransitionInput,
-  ): Promise<void> {
-    return this.updateSource(
-      client,
-      input.lessonId,
-      input.dto.expectedVersion,
-      input.nextVersion,
-      targetTransitionState(input.operation),
-      input.successorId,
-      input.operation,
-    );
   }
 
   private async acquireLocks(
@@ -294,6 +284,7 @@ export class LessonTransitionCommitService {
     sourceId: string,
     draft: TransitionSuccessor,
     actorUserId: string,
+    teacherRateSnapshot?: { type: "hourly"; value: string },
   ): Promise<void> {
     await client.query(
       `
@@ -320,28 +311,37 @@ export class LessonTransitionCommitService {
         draft.durationMinutes,
         draft.isTrial,
         draft.notes,
-        draft.teacherCompensationType === "none"
+        teacherRateSnapshot?.value ?? (draft.teacherCompensationType === "none"
           ? null
-          : draft.teacherCompensationValue,
+          : draft.teacherCompensationValue),
         sourceId,
         actorUserId,
       ],
     );
-    await this.createSuccessorSnapshot(client, successorId, draft);
+    await this.createSuccessorSnapshot(
+      client,
+      successorId,
+      draft,
+      teacherRateSnapshot,
+    );
   }
 
   private async createSuccessorSnapshot(
     client: PoolClient,
     successorId: string,
     draft: TransitionSuccessor,
+    teacherRateSnapshot?: { type: "hourly"; value: string },
   ): Promise<void> {
     if (draft.kind === "group") {
       await this.lifecycle.createGroupSnapshot(client, {
         lessonId: successorId,
         groupId: draft.groupId,
         completionType: draft.completionType,
-        teacherCompensationType: draft.teacherCompensationType,
-        teacherCompensationValue: draft.teacherCompensationValue,
+        teacherCompensationType:
+          teacherRateSnapshot?.type ?? draft.teacherCompensationType,
+        teacherCompensationValue: teacherRateSnapshot
+          ? Number(teacherRateSnapshot.value)
+          : draft.teacherCompensationValue,
         trial: draft.isTrial,
         participants: draft.participants.map((participant) => ({
           studentId: participant.studentId,
@@ -359,8 +359,11 @@ export class LessonTransitionCommitService {
       completionType: draft.completionType,
       clientChargeType: draft.clientChargeType,
       clientChargeValue: draft.clientChargeValue,
-      teacherCompensationType: draft.teacherCompensationType,
-      teacherCompensationValue: draft.teacherCompensationValue,
+      teacherCompensationType:
+        teacherRateSnapshot?.type ?? draft.teacherCompensationType,
+      teacherCompensationValue: teacherRateSnapshot
+        ? Number(teacherRateSnapshot.value)
+        : draft.teacherCompensationValue,
       subscriptionId: draft.subscriptionId ?? undefined,
       trial: draft.isTrial,
     });

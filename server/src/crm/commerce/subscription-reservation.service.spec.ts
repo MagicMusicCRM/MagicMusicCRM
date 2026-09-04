@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import type { DatabaseService } from "../../db/database.service";
 import type { RealtimeBus } from "../../realtime/realtime-bus";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
@@ -86,5 +87,39 @@ describe("SubscriptionReservationService post-commit invalidation", () => {
       "user-recipient", "user-old-payer", "user-new-payer",
     ]);
     expect(realtime.emitCrmChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("transfers one active reservation to the successor without changing its id", async () => {
+    const reservationId = "33333333-3333-4333-8333-333333333333";
+    const successorLessonId = "44444444-4444-4444-8444-444444444444";
+    const query = jest.fn(async (_sql: string, _params?: unknown[]) => ({
+      rows: [{ id: reservationId }],
+    }));
+    const service = new SubscriptionReservationService(
+      {} as DatabaseService,
+      {} as RealtimeBus,
+    );
+
+    await expect(service.transferActiveReservation(
+      { query } as unknown as PoolClient,
+      {
+        reservationId,
+        sourceLessonId: lessonId,
+        successorLessonId,
+        subscriptionId,
+        units: 0.5,
+      },
+    )).resolves.toBe(reservationId);
+
+    expect(String(query.mock.calls[0]?.[0])).toContain(
+      "state = 'reserved' and financial_fact_id is null",
+    );
+    expect(query.mock.calls[0]?.[1]).toEqual([
+      reservationId,
+      lessonId,
+      successorLessonId,
+      subscriptionId,
+      0.5,
+    ]);
   });
 });

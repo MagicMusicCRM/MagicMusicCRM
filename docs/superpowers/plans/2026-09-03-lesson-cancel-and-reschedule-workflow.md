@@ -169,7 +169,7 @@ git commit -m "refactor: separate reschedule source and successor finances"
 - Consumes: Task 1 `PreparedRescheduleFinancials` and existing transaction context.
 - Produces: `commitRescheduleFinancials(client, source, successorId, financials)` that records a zero source fact, writes the successor planned decision, and transfers reservation ownership once.
 
-- [ ] **Step 1: Write failing PostgreSQL assertions for no double charge**
+- [x] **Step 1: Write failing PostgreSQL assertions for no double charge**
 
 ```ts
 it("moves a covered lesson without consuming twice", async () => {
@@ -193,13 +193,13 @@ Add a completed-source case proving that the existing correction reverses the
 effective client/teacher facts append-only before the zero-effect source move
 and successor plan are committed.
 
-- [ ] **Step 2: Run financial and reschedule integration tests**
+- [x] **Step 2: Run financial and reschedule integration tests**
 
 Run: `cd server; npm test -- --runTestsByPath src/crm/schedule/reschedule-postgres.integration.spec.ts src/crm/schedule/lesson-transition-order.spec.ts src/crm/commerce/subscription-reservation.service.spec.ts`
 
 Expected: FAIL because the existing command applies the same decision during source transition and successor planning.
 
-- [ ] **Step 3: Implement the two-phase financial write inside one transaction**
+- [x] **Step 3: Implement the two-phase financial write inside one transaction**
 
 ```ts
 export interface CommittedRescheduleFinancials {
@@ -218,7 +218,7 @@ async commitRescheduleFinancials(
 
 Order the transaction as: lock source and relevant resources, validate successor, insert successor with `predecessor_id`, write successor snapshot, settle/reverse source to zero-effect append-only facts, write successor planned settlement, transfer/recreate the active reservation against successor, append source lifecycle `rescheduled`, enqueue source/successor outbox records, commit. Any failure rolls back all steps.
 
-- [ ] **Step 4: Resolve the successor’s current teacher rate**
+- [x] **Step 4: Resolve the successor’s current teacher rate**
 
 Call the existing teacher-rate resolver using successor `teacherId` and `scheduledAt`. Store its rule/rate snapshot in the successor plan; never copy the source teacher amount when the teacher or effective date changed. Explicit operator overrides still require the existing teacher-compensation capability and reason.
 
@@ -232,7 +232,7 @@ Run: `cd server; npm test -- --runTestsByPath src/crm/schedule/reschedule-postgr
 
 Expected: PASS; one subscription unit is reserved before and after the move, and only the eventual completed successor consumes it.
 
-- [ ] **Step 5: Commit atomic reschedule finances**
+- [x] **Step 5: Commit atomic reschedule finances**
 
 ```powershell
 git add server/src/crm/schedule/lesson-transition-financial.service.ts server/src/crm/schedule/lesson-transition-commit.service.ts server/src/crm/schedule/lesson-transition-command.service.ts server/src/crm/commerce/lesson-settlement-execution.ts server/src/crm/schedule/lesson-transition-order.spec.ts server/src/crm/schedule/reschedule-postgres.integration.spec.ts server/src/crm/commerce/subscription-reservation.service.spec.ts

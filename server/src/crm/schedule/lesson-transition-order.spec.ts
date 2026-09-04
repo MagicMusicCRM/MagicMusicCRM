@@ -146,6 +146,7 @@ describe("Lesson transition runtime ordering", () => {
       settlement,
       {} as never,
       {} as never,
+      { loadEffectiveTeacherRate: jest.fn(async () => 700) } as never,
     );
     const successorFinancialDecision = {
       settlementTypeKey: "partial_lesson",
@@ -189,6 +190,7 @@ describe("Lesson transition runtime ordering", () => {
     });
     expect(prepared.successorFinancialDecision).toEqual({
       ...successorFinancialDecision,
+      teacherRateSnapshot: { type: "hourly", value: "700" },
       teacherCompensationSource: "automatic",
     });
   });
@@ -336,15 +338,18 @@ describe("Lesson transition runtime ordering", () => {
       }),
     } as unknown as LessonTransitionPreparationService;
     const financial = {
-      assignAndAllocateSuccessor: jest.fn(async () => {
+      commitRescheduleFinancials: jest.fn(async () => {
+        events.push("source-settlement");
         events.push("successor-allocation");
+        return {
+          sourceSettlement: settlementResult,
+          successorPlanId: "successor-plan-id",
+          transferredReservationId: null,
+        };
       }),
     } as unknown as LessonTransitionFinancialService;
     const settlement = {
-      settle: jest.fn(async () => {
-        events.push("source-settlement");
-        return settlementResult;
-      }),
+      settle: jest.fn(async () => settlementResult),
     } as unknown as LessonSettlementPort;
     const reservations = {
       lockSettlementCoverage: jest.fn(async () => {
@@ -439,16 +444,26 @@ describe("Lesson transition runtime ordering", () => {
       expect(result.sourceFinancialDecision).toEqual(sourceFinancialDecision);
       expect(result.successorFinancialDecision).toEqual(successorFinancialDecision);
       expect(result.financialDecision).toEqual(successorFinancialDecision);
-      expect(financial.assignAndAllocateSuccessor).toHaveBeenCalledWith(
+      expect(financial.commitRescheduleFinancials).toHaveBeenCalledWith(
         client,
+        source,
         expect.any(String),
-        { userId: "actor", role: "manager" },
-        "reason",
-        successorFinancialDecision,
-        {
-          settlementRevisionId: "successor-settlement-revision",
-          compensationRevisionId: "successor-compensation-revision",
-        },
+        expect.objectContaining({
+          actor: { userId: "actor", role: "manager" },
+          reasonText: "reason",
+          sourceFinancialDecision,
+          successorFinancialDecision,
+          sourceConfigurationRevisionIds: {
+            settlementRevisionId: "source-settlement-revision",
+            compensationRevisionId: "source-compensation-revision",
+          },
+          successorConfigurationRevisionIds: {
+            settlementRevisionId: "successor-settlement-revision",
+            compensationRevisionId: "successor-compensation-revision",
+          },
+          coverage: {},
+          correctionId: expect.any(String),
+        }),
       );
       expect(committedRef?.transitionFingerprint).toBe("fingerprint");
       expect(JSON.stringify(committedRef)).not.toContain(
@@ -469,8 +484,8 @@ describe("Lesson transition runtime ordering", () => {
       "coverage-lock",
       "successor-insert",
       "source-settlement",
-      "fingerprint-check",
       "successor-allocation",
+      "fingerprint-check",
       "transition-append",
       "mutation-resolved",
       "publish-source",

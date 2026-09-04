@@ -85,6 +85,9 @@ export async function prepareRescheduleFinancialPlans(
   source: TransitionSource,
   successor: TransitionSuccessor,
   successorFinancialDecision: LessonFinancialDecision,
+  successorTeacherRateSnapshot: NonNullable<
+    LessonFinancialDecision["teacherRateSnapshot"]
+  >,
   reasonText: string | undefined,
   preservedTeacherDecision?: Parameters<
     LessonSettlementPort["resolvePlannedPlan"]
@@ -103,7 +106,10 @@ export async function prepareRescheduleFinancialPlans(
     branchId: successor.branchId,
     durationMinutes: successor.durationMinutes,
     decision: transitionDecisionForResolution(
-      successorFinancialDecision,
+      {
+        ...successorFinancialDecision,
+        teacherRateSnapshot: successorTeacherRateSnapshot,
+      },
       Boolean(preservedTeacherDecision),
     ),
     reasonText,
@@ -126,6 +132,9 @@ export async function prepareResolvedRescheduleTransition(
   source: TransitionSource,
   successor: TransitionSuccessor,
   dto: NormalizedReschedulePreview,
+  successorTeacherRateSnapshot: NonNullable<
+    LessonFinancialDecision["teacherRateSnapshot"]
+  >,
   preservedTeacherDecision?: Parameters<
     LessonSettlementPort["resolvePlannedPlan"]
   >[1]["preservedTeacherDecision"],
@@ -138,6 +147,7 @@ export async function prepareResolvedRescheduleTransition(
     source,
     successor,
     dto.successorFinancialDecision,
+    successorTeacherRateSnapshot,
     dto.reasonText,
     preservedTeacherDecision,
   );
