@@ -9,6 +9,7 @@ import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
@@ -45,6 +46,7 @@ export class LessonPlannedSettlementCommandService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     const calculated = await this.database.transaction(async (client) => {
+      await acquireLessonSettlementCoordinationGate(client);
       await client.query("savepoint lesson_planned_settlement_preview");
       try {
         return await this.calculateSettlementPlanChange(
@@ -124,6 +126,7 @@ export class LessonPlannedSettlementCommandService {
         type: "schedule.lesson.changed",
         payload: { lessonId, action: "settlement-plan-updated" },
       },
+      beforeVersionAdvance: acquireLessonSettlementCoordinationGate,
       mutate: async (client, nextVersion) => {
         const calculated = await this.calculateSettlementPlanChange(
           client,

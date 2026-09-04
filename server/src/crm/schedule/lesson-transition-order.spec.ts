@@ -275,6 +275,7 @@ describe("Lesson transition runtime ordering", () => {
         lifecycle,
       );
       type MutationInput = {
+        beforeVersionAdvance?: (client: PoolClient) => Promise<void>;
         mutate: (
           transactionClient: PoolClient,
           nextVersion: number,
@@ -282,6 +283,7 @@ describe("Lesson transition runtime ordering", () => {
       };
       const platform = {
         executeVersionedMutation: jest.fn(async (input: MutationInput) => {
+          await input.beforeVersionAdvance?.(client);
           const resultRef = await input.mutate(client, 2);
           committedRef = resultRef;
           events.push("mutation-resolved");

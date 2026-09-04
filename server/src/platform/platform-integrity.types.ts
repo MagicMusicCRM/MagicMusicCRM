@@ -42,6 +42,7 @@ export interface VersionedMutationCommand<
     actor: ActorContext;
     capabilityKey: CapabilityKey;
   };
+  beforeVersionAdvance?: (client: PoolClient) => Promise<void>;
   mutate: (
     client: PoolClient,
     nextVersion: number,

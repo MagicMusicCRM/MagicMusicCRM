@@ -143,14 +143,14 @@ export class LessonBulkTransitionService {
           type: "schedule.lessons.changed",
           payload: { entityIds: items.map((item) => item.lessonId) },
         },
+        ...(this.needsSettlementCoordinationGate(items)
+          ? { beforeVersionAdvance: acquireLessonSettlementCoordinationGate }
+          : {}),
         mutate: async (client) => {
           const signed = this.previewTokens.verifyLessonTransition(
             dto.previewToken,
           );
           this.assertBulkPreview(signed, actor, previewId);
-          if (this.needsSettlementCoordinationGate(items)) {
-            await acquireLessonSettlementCoordinationGate(client);
-          }
           const committed: CommittedTransition[] = [];
           for (const item of items) {
             committed.push(

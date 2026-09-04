@@ -122,14 +122,14 @@ export class LessonTransitionCommandService {
             successorId,
           },
         },
+        ...(operation === "reschedule"
+          ? { beforeVersionAdvance: acquireLessonSettlementCoordinationGate }
+          : {}),
         mutate: async (client, nextVersion) => {
           const signed = this.previewTokens.verifyLessonTransition(
             dto.previewToken,
           );
           this.assertSignedPreview(signed, actor, lessonId, dto, operation);
-          if (operation === "reschedule") {
-            await acquireLessonSettlementCoordinationGate(client);
-          }
           return this.commits.commit(client, {
             actor,
             lessonId,
