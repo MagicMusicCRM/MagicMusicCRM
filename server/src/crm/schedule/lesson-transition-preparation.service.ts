@@ -20,6 +20,7 @@ import {
   draftProjection,
   effectiveTransitionDto,
   hasTransitionClientCharge,
+  legacySnapshotTeacherDecision,
   requiredTransitionClientIds,
   selectedTransitionSubscriptionIds,
   sourceProjection,
@@ -373,7 +374,7 @@ export class LessonTransitionPreparationService {
           current.decision.teacherCompensationSource ?? "manual",
       };
     }
-    return undefined;
+    return legacySnapshotTeacherDecision(source);
   }
 
   private mapSource(row: TransitionLessonRow): TransitionSource {

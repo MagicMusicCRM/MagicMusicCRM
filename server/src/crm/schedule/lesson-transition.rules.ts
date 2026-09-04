@@ -1,6 +1,7 @@
 import { UnprocessableEntityException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
+import { rublesToMinor } from "../commerce/lesson-settlement.calculation";
 import type { LessonFinancialDecision } from "../commerce/lesson-settlement.port";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import type {
@@ -329,6 +330,26 @@ export const legacyPlanTeacherSource = (
       !["none", "standard"].includes(decision.teacherCompensationRuleKey)
     ? "manual"
     : "automatic";
+
+export const legacySnapshotTeacherDecision = (
+  source: TransitionSource,
+): Pick<
+  LessonFinancialDecision,
+  | "teacherCompensationRuleKey"
+  | "teacherCompensationValueMinor"
+  | "teacherCompensationSource"
+> | undefined => {
+  const snapshot = source.groupId ? source.groupSnapshot : source.snapshot;
+  if (!snapshot) return undefined;
+  return {
+    teacherCompensationRuleKey: snapshot.teacherCompensationType,
+    teacherCompensationValueMinor:
+      snapshot.teacherCompensationType === "none"
+        ? undefined
+        : rublesToMinor(snapshot.teacherCompensationValue.toString()).toString(),
+    teacherCompensationSource: "manual",
+  };
+};
 
 export const effectiveTransitionDto = (
   source: TransitionSource,

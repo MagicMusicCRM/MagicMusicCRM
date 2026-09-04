@@ -14,19 +14,52 @@ with latest_school as (
         select jsonb_agg(
           settlement_type.item || jsonb_build_object(
             'clientDurationMode', case
-              when (settlement_type.item->>'hourShareBasisPoints')::integer = 0 then 'zero'
-              when (settlement_type.item->>'hourShareBasisPoints')::integer = 10000 then 'full'
-              else 'manual'
+              when settlement_type.item->>'stableKey' in (
+                'lesson', 'paid_miss', 'penalty_lesson'
+              ) then 'full'
+              when settlement_type.item->>'stableKey' in (
+                'free_lesson', 'unpaid_miss'
+              ) then 'zero'
+              when settlement_type.item->>'stableKey' in (
+                'partially_paid_lesson', 'partially_paid_miss'
+              ) then 'manual'
+              else coalesce(
+                nullif(settlement_type.item->>'clientDurationMode', ''),
+                'manual'
+              )
             end,
             'teacherDurationMode', case
-              when (settlement_type.item->>'hourShareBasisPoints')::integer = 0 then 'zero'
-              when (settlement_type.item->>'hourShareBasisPoints')::integer = 10000 then 'full'
-              else 'manual'
+              when settlement_type.item->>'stableKey' in (
+                'lesson', 'paid_miss', 'penalty_lesson'
+              ) then 'full'
+              when settlement_type.item->>'stableKey' in (
+                'free_lesson', 'unpaid_miss'
+              ) then 'zero'
+              when settlement_type.item->>'stableKey' in (
+                'partially_paid_lesson', 'partially_paid_miss'
+              ) then 'manual'
+              else coalesce(
+                nullif(settlement_type.item->>'teacherDurationMode', ''),
+                'manual'
+              )
             end,
             'defaultTeacherCompensationRuleKey', case
-              when (settlement_type.item->>'hourShareBasisPoints')::integer = 0 then 'none'
-              when (settlement_type.item->>'hourShareBasisPoints')::integer = 10000 then 'standard'
-              else 'percent'
+              when settlement_type.item->>'stableKey' in (
+                'lesson', 'paid_miss', 'penalty_lesson'
+              ) then 'standard'
+              when settlement_type.item->>'stableKey' in (
+                'free_lesson', 'unpaid_miss'
+              ) then 'none'
+              when settlement_type.item->>'stableKey' in (
+                'partially_paid_lesson', 'partially_paid_miss'
+              ) then 'percent'
+              else coalesce(
+                nullif(
+                  settlement_type.item->>'defaultTeacherCompensationRuleKey',
+                  ''
+                ),
+                'percent'
+              )
             end,
             'active', case
               when settlement_type.item->>'stableKey' = 'penalty_lesson' then false

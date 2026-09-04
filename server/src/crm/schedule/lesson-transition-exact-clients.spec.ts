@@ -240,6 +240,59 @@ describe("lesson transition exact frozen clients", () => {
   });
 
   it.each([
+    ["none", 0, "none", undefined],
+    ["fixed", 700, "fixed", "70000"],
+  ] as const)(
+    "preserves a no-plan legacy %s teacher snapshot as an ambiguous manual decision",
+    async (legacyType, legacyValue, expectedRule, expectedValue) => {
+      const manager = { userId: "manager-a", role: "manager" as const };
+      const policy = {
+        canManageTeacherCompensation: jest.fn(() => false),
+        teacherCompensationMutationAuthorization: jest.fn(() => ({
+          actor: manager,
+          capabilityKey: "schedule.lesson.write" as const,
+        })),
+      } as unknown as CrmPolicy;
+      const settlement = {
+        loadPlan: jest.fn(async () => null),
+        resolvePlannedPlan: jest.fn(async (_client, input) => ({
+          decision: {
+            ...input.decision,
+            ...input.preservedTeacherDecision,
+          },
+          settlementRevisionId: "settlement-revision",
+          compensationRevisionId: "compensation-revision",
+        })),
+      } as unknown as LessonSettlementPort;
+      const source = individualSource("student", studentA);
+      source.snapshot = {
+        ...source.snapshot!,
+        teacherCompensationType: legacyType,
+        teacherCompensationValue: legacyValue,
+      };
+
+      await preparationWith(settlement, policy).resolvedEffectiveTransitionDto(
+        {} as PoolClient,
+        manager,
+        source,
+        "cancel",
+        dto(decision([studentA])),
+      );
+
+      expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          preservedTeacherDecision: {
+            teacherCompensationRuleKey: expectedRule,
+            teacherCompensationValueMinor: expectedValue,
+            teacherCompensationSource: "manual",
+          },
+        }),
+      );
+    },
+  );
+
+  it.each([
     ["missing", decision([studentA]), "CLIENT_DECISION_MISSING"],
     ["duplicate", decision([studentA, studentA, studentB]), "DUPLICATE_CLIENT_DECISION"],
     ["unrelated", decision([studentA, studentB, leadA]), "UNKNOWN_LESSON_CLIENT"],

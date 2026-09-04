@@ -25,18 +25,6 @@ export function createCrmConfigurationBranchPatch(
     businessSettings: desired.businessSettings.filter(
       (setting) => setting.value !== defaults.get(setting.key)?.value,
     ),
-    ...(!sameCrmConfigurationValue(
-      desired.lessonSettlementTypes,
-      school.lessonSettlementTypes,
-    )
-      ? { lessonSettlementTypes: desired.lessonSettlementTypes }
-      : {}),
-    ...(!sameCrmConfigurationValue(
-      desired.teacherCompensationRules,
-      school.teacherCompensationRules,
-    )
-      ? { teacherCompensationRules: desired.teacherCompensationRules }
-      : {}),
   };
 }
 
@@ -52,10 +40,8 @@ export function applyCrmConfigurationBranchPatch(
     businessSettings: school.businessSettings.map(
       (setting) => overrides.get(setting.key) ?? setting,
     ),
-    lessonSettlementTypes:
-      patch.lessonSettlementTypes ?? school.lessonSettlementTypes,
-    teacherCompensationRules:
-      patch.teacherCompensationRules ?? school.teacherCompensationRules,
+    lessonSettlementTypes: school.lessonSettlementTypes,
+    teacherCompensationRules: school.teacherCompensationRules,
   };
 }
 
@@ -73,23 +59,7 @@ export function getCrmConfigurationSettingSources(
         ? "school"
         : "branch_override",
     ]),
-    [
-      "lessonSettlementTypes",
-      sameCrmConfigurationValue(
-        snapshot.lessonSettlementTypes,
-        school.lessonSettlementTypes,
-      )
-        ? "school"
-        : "branch_override",
-    ],
-    [
-      "teacherCompensationRules",
-      sameCrmConfigurationValue(
-        snapshot.teacherCompensationRules,
-        school.teacherCompensationRules,
-      )
-        ? "school"
-        : "branch_override",
-    ],
+    ["lessonSettlementTypes", "school"],
+    ["teacherCompensationRules", "school"],
   ]) as Record<string, "school" | "branch_override">;
 }

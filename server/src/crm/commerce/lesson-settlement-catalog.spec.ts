@@ -108,7 +108,7 @@ describe("lesson settlement catalog", () => {
     ]);
   });
 
-  it("loads the effective branch catalog through the supplied executor", async () => {
+  it("loads the protected school catalog for an effective branch decision", async () => {
     const calls: Array<{ text: string; values?: unknown[] }> = [];
     const expected = catalog();
     const client = {
@@ -122,7 +122,8 @@ describe("lesson settlement catalog", () => {
       loadLessonSettlementCatalog(client, "branch-a"),
     ).resolves.toEqual(expected);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.values).toEqual(["branch-a"]);
+    expect(calls[0]!.values).toBeUndefined();
+    expect(calls[0]!.text).not.toContain("branch.patch");
   });
 
   it("accepts an active planned decision", () => {

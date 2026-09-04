@@ -6,7 +6,7 @@ import {
 } from "./crm-configuration-branch.policy";
 
 describe("CRM configuration branch policy", () => {
-  it("stores only changed branch settings and commerce catalogs", () => {
+  it("stores only changed branch-overridable settings", () => {
     const school = buildCrmConfigurationBaseline([]);
     const desired = structuredClone(school);
     desired.businessSettings[0].value = 45;
@@ -16,7 +16,6 @@ describe("CRM configuration branch policy", () => {
 
     expect(patch).toEqual({
       businessSettings: [desired.businessSettings[0]],
-      lessonSettlementTypes: desired.lessonSettlementTypes,
     });
   });
 
@@ -29,22 +28,27 @@ describe("CRM configuration branch policy", () => {
     expect(getCrmConfigurationSettingSources(desired, school)).toMatchObject({
       default_lesson_duration_minutes: "branch_override",
       payment_reminder_days: "school",
-      lessonSettlementTypes: "branch_override",
+      lessonSettlementTypes: "school",
       teacherCompensationRules: "school",
     });
   });
 
-  it("round-trips a sparse patch over its school snapshot", () => {
+  it("ignores a legacy protected-catalog patch over the school snapshot", () => {
     const school = buildCrmConfigurationBaseline([]);
     const desired = structuredClone(school);
     desired.businessSettings[1].value = 7;
     desired.teacherCompensationRules[0].label = "Без оплаты";
 
-    expect(
-      applyCrmConfigurationBranchPatch(
-        school,
-        createCrmConfigurationBranchPatch(school, desired),
-      ),
-    ).toEqual(desired);
+    const effective = applyCrmConfigurationBranchPatch(school, {
+      businessSettings: [desired.businessSettings[1]],
+      teacherCompensationRules: desired.teacherCompensationRules,
+    });
+
+    expect(effective.businessSettings[1]).toEqual(
+      desired.businessSettings[1],
+    );
+    expect(effective.teacherCompensationRules).toEqual(
+      school.teacherCompensationRules,
+    );
   });
 });
