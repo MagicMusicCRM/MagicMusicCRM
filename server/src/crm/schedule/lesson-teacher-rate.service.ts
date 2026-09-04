@@ -134,7 +134,8 @@ export class LessonTeacherRateService {
              compensation_rule_key, compensation_rule_label,
              compensation_mode, compensation_default_value,
              compensation_actual_value, compensation_override_reason,
-             configuration_revision_id, supersedes_fact_id
+             compensation_source, configuration_revision_id,
+             supersedes_fact_id
            )
            select lesson.id, current_fact.teacher_id,
              case when $2::numeric = 0 then 'none' else 'hourly' end,
@@ -157,6 +158,7 @@ export class LessonTeacherRateService {
                then null else round($2::numeric * 100)::bigint end,
              case when current_fact.configuration_revision_id is null
                then null else $3 end,
+             'manual',
              current_fact.configuration_revision_id,
              current_fact.id
            from app.lessons lesson

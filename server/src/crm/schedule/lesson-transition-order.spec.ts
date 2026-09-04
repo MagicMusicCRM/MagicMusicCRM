@@ -106,6 +106,7 @@ const settlementResult: LessonSettlementResult = {
     compensationDefaultValue: null,
     compensationActualValue: null,
     compensationOverrideReason: null,
+    compensationSource: "automatic",
     configurationRevisionId: null,
   },
 };

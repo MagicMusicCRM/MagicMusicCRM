@@ -119,6 +119,7 @@ export interface LessonSettlementResult {
     compensationDefaultValue: string | null;
     compensationActualValue: string | null;
     compensationOverrideReason: string | null;
+    compensationSource: "automatic" | "manual";
     configurationRevisionId: string | null;
   };
 }

@@ -345,7 +345,12 @@ function calculateConfiguredTeacherFact(
   } catch (error) {
     rethrowLessonSettlementCalculation(error);
   }
-  return { rule, calculation };
+  return {
+    rule,
+    calculation,
+    compensationSource:
+      input.decision.teacherCompensationSource ?? "automatic",
+  };
 }
 
 async function assertExistingLessonSettlementDecision(
@@ -411,6 +416,9 @@ async function assertExistingLessonSettlementDecision(
     }) &&
     existing.teacherFact.compensationRuleKey ===
       input.decision.teacherCompensationRuleKey &&
+    (input.decision.teacherCompensationSource === undefined ||
+      existing.teacherFact.compensationSource ===
+        input.decision.teacherCompensationSource) &&
     (!input.decision.teacherCompensationValueMinor ||
       existing.teacherFact.compensationActualValue ===
         input.decision.teacherCompensationValueMinor);

@@ -284,7 +284,10 @@ describe("LessonTeacherRateService", () => {
         lessonIds: ["lesson-a"],
       });
 
-      expect(String(query.mock.calls[2][0])).toContain("supersedes_fact_id");
+      const correctionSql = String(query.mock.calls[2][0]);
+      expect(correctionSql).toContain("supersedes_fact_id");
+      expect(correctionSql).toContain("compensation_source");
+      expect(correctionSql).toContain("'manual'");
       expect(platform.executeVersionedMutation).toHaveBeenCalledTimes(1);
     });
   });

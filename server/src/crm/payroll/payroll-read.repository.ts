@@ -45,7 +45,8 @@ export class PayrollReadRepository {
           compensation.compensation_rule_label,
           compensation.compensation_actual_value,
           compensation.snapshot_rate as teacher_snapshot_rate,
-          compensation.compensation_override_reason
+          compensation.compensation_override_reason,
+          compensation.compensation_source
         from app.lessons l
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
         left join app.students s on s.id = l.student_id and s.deleted_at is null

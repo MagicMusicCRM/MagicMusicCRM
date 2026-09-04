@@ -31,7 +31,12 @@ describe("schedule read contract", () => {
       id: "lesson-1", reservation_state: "reserved",
       financial_decision: {
         settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
-        clientDecisions: [{ clientId: "student-1", payerStudentId: "payer-1" }],
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: "manual",
+        clientDecisions: [{
+          clientId: "student-1", payerStudentId: "payer-1",
+          chargeDurationMinutes: 0,
+        }],
       },
       group_participants: [{ clientId: "student-1", clientName: "Анна" }],
     }]);
@@ -40,7 +45,12 @@ describe("schedule read contract", () => {
       reservationState: "reserved",
       financialDecision: {
         settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
-        clientDecisions: [{ clientId: "student-1", payerStudentId: "payer-1" }],
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: "manual",
+        clientDecisions: [{
+          clientId: "student-1", payerStudentId: "payer-1",
+          chargeDurationMinutes: 0,
+        }],
       },
       groupParticipants: [{ clientId: "student-1", clientName: "Анна" }],
     });

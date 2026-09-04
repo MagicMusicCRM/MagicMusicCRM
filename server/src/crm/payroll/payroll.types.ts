@@ -41,6 +41,7 @@ export interface PayrollLessonRow {
   compensation_actual_value?: string | number | null;
   teacher_snapshot_rate?: string | number | null;
   compensation_override_reason?: string | null;
+  compensation_source?: "automatic" | "manual" | null;
 }
 
 export interface PayrollLessonAccrual {

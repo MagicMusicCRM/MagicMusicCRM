@@ -53,6 +53,7 @@ export interface CalculatedLessonClientFact {
 
 export interface CalculatedLessonTeacherFact {
   rule: TeacherCompensationRuleConfig;
+  compensationSource: "automatic" | "manual";
   calculation: {
     snapshotRate: string;
     rateMinor: string;
@@ -98,6 +99,7 @@ interface EffectiveTeacherFactRow {
   compensation_default_value: string | null;
   compensation_actual_value: string | null;
   compensation_override_reason: string | null;
+  compensation_source: "automatic" | "manual" | null;
   configuration_revision_id: string | null;
 }
 
@@ -216,7 +218,8 @@ async function loadEffectiveTeacherFacts(
        amount_minor as teacher_amount_minor, currency_code as teacher_currency_code,
        compensation_rule_key, compensation_rule_label, compensation_mode,
        compensation_default_value, compensation_actual_value,
-       compensation_override_reason, configuration_revision_id
+       compensation_override_reason, compensation_source,
+       configuration_revision_id
      from app.lesson_teacher_compensation_facts_effective
      where lesson_id = $1`,
     [lessonId],
@@ -284,6 +287,11 @@ function mapEffectiveTeacherFact(
     compensationDefaultValue: row.compensation_default_value,
     compensationActualValue: row.compensation_actual_value,
     compensationOverrideReason: row.compensation_override_reason,
+    // Facts written before migration 0148 have no explicit provenance.
+    // Preserve their historical display without deriving new facts from values.
+    compensationSource:
+      row.compensation_source ??
+      (row.compensation_override_reason === null ? "automatic" : "manual"),
     configurationRevisionId: row.configuration_revision_id,
   };
 }
@@ -458,7 +466,8 @@ export async function insertLegacyLessonSettlementFacts(
         snapshot_rate,
         rate_minor,
         duration_minutes,
-        amount_minor
+        amount_minor,
+        compensation_source
       )
       values (
         $1, $2, $3,
@@ -476,7 +485,8 @@ export async function insertLegacyLessonSettlementFacts(
               $4::text::numeric * 100 * $5::integer / 60
             )::bigint
           else 0
-        end
+        end,
+        'automatic'
       )
     `,
     [
@@ -578,7 +588,9 @@ export function projectConfiguredLessonTeacherFact(
     compensationRuleLabel: fact.rule.label, compensationMode: fact.rule.mode,
     compensationDefaultValue: fact.calculation.defaultValue,
     compensationActualValue: fact.calculation.actualValue,
-    compensationOverrideReason: fact.calculation.overrideReason, configurationRevisionId,
+    compensationOverrideReason: fact.calculation.overrideReason,
+    compensationSource: fact.compensationSource,
+    configurationRevisionId,
   };
 }
 
@@ -600,11 +612,12 @@ export async function insertConfiguredLessonTeacherFact(
         rate_minor, duration_minutes, amount_minor,
         compensation_rule_key, compensation_rule_label, compensation_mode,
         compensation_default_value, compensation_actual_value,
-        compensation_override_reason, configuration_revision_id,
+        compensation_override_reason, compensation_source,
+        configuration_revision_id,
         correction_id, supersedes_fact_id
       ) values (
         $1, $2, $3, $4::numeric, $5::bigint, $6, $7::bigint,
-        $8, $9, $3, $10::bigint, $11::bigint, $12, $13, $14, $15
+        $8, $9, $3, $10::bigint, $11::bigint, $12, $13, $14, $15, $16
       )
     `,
     [
@@ -620,6 +633,7 @@ export async function insertConfiguredLessonTeacherFact(
       projected.compensationDefaultValue,
       projected.compensationActualValue,
       projected.compensationOverrideReason,
+      projected.compensationSource,
       projected.configurationRevisionId,
       input.correctionId,
       input.supersededFactId,

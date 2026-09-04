@@ -201,14 +201,17 @@ export class TeacherStatsReportService {
     teachers.set(lesson.teacher_id, teacher);
     const compensationKey =
       lesson.compensation_rule_key ?? lesson.compensation_type ?? "hourly";
+    const compensationSource = this.compensationSource(lesson);
     const key = JSON.stringify([
       this.calculator.unitKeyFor(lesson),
       compensationKey,
       lesson.compensation_rule_label,
       lesson.compensation_override_reason ?? null,
+      compensationSource,
       accrual.rate,
     ]);
-    const unit = teacher.units.get(key) ?? this.newUnit(lesson, accrual.rate);
+    const unit = teacher.units.get(key) ??
+      this.newUnit(lesson, accrual.rate, compensationSource);
     teacher.units.set(key, unit);
     unit.lessonIds.push(lesson.id);
     if (lesson.settlement_fact_id == null)
@@ -230,7 +233,11 @@ export class TeacherStatsReportService {
     teacher.accruedTotal += accrual.amount;
   }
 
-  private newUnit(lesson: PayrollLessonRow, rate: number): UnitAccumulator {
+  private newUnit(
+    lesson: PayrollLessonRow,
+    rate: number,
+    compensationSource: "automatic" | "manual",
+  ): UnitAccumulator {
     const labels: Record<string, string> = {
       none: "Не оплачивать",
       standard: "Полная стандартная ставка",
@@ -244,8 +251,7 @@ export class TeacherStatsReportService {
       compensationLabel:
         lesson.compensation_rule_label ??
         labels[lesson.compensation_type ?? "hourly"] ?? "Тип не указан",
-      compensationSource:
-        lesson.compensation_override_reason == null ? "automatic" : "manual",
+      compensationSource,
       unitType: this.calculator.unitTypeFor(lesson),
       groupId: lesson.group_id,
       studentId: lesson.group_id ? null : lesson.student_id,
@@ -266,6 +272,13 @@ export class TeacherStatsReportService {
       scheduledHoursTotal: 0,
       accruedTotal: 0,
     };
+  }
+
+  private compensationSource(
+    lesson: PayrollLessonRow,
+  ): "automatic" | "manual" {
+    return lesson.compensation_source ??
+      (lesson.compensation_override_reason == null ? "automatic" : "manual");
   }
 
   private projectTeachers(

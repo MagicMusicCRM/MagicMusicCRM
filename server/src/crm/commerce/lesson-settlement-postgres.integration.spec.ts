@@ -54,6 +54,7 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     try {
       const decision = {
         settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+        teacherCompensationSource: "automatic" as const,
         clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.secondStudentId,
           chargeType: "personal_account" as const, basePriceMinor: "100001",
           discount: { type: "percent" as const, percent: 10, reason: "Скидка" },
@@ -76,17 +77,37 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
       const connection = await pool.connect();
       try {
         await connection.query("begin");
-        const corrected = { ...decision, clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId, chargeType: "personal_account" as const, basePriceMinor: "50000" }] };
+        const corrected = {
+          ...decision,
+          teacherCompensationSource: "manual" as const,
+          clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId, chargeType: "personal_account" as const, basePriceMinor: "50000" }],
+        };
         const plan = await service.preparePlan(connection, fixture.branchId, corrected);
         const correctionId = randomUUID();
         await connection.query("insert into app.lesson_settlement_corrections (id, lesson_id, version, decision, settlement_revision_id, compensation_revision_id, reason_text, actor_user_id) values ($1,$2,1,$3::jsonb,$4,$5,'Исправление плательщика',$6)", [correctionId, fixture.subscriptionLessonId, JSON.stringify(corrected), plan.settlementRevisionId, plan.compensationRevisionId, fixture.managerId]);
         const result = await service.settle(connection, fixture.subscriptionLessonId, { context: "settle", decision: corrected, correction: { id: correctionId } });
         expect(result.clientFact).toMatchObject({ payerStudentId: fixture.studentId, amountMinor: "50000" });
+        expect(result.teacherFact).toMatchObject({
+          compensationOverrideReason: null,
+          compensationSource: "manual",
+        });
+        expect(result.teacherFact.compensationActualValue)
+          .toBe(result.teacherFact.compensationDefaultValue);
         const balances = await connection.query("select student_id, balance_minor::text from app.commerce_student_account_projection where student_id = any($1::uuid[])", [[fixture.studentId, fixture.secondStudentId]]);
         expect(balances.rows).toContainEqual({ student_id: fixture.studentId, balance_minor: "-50000" });
         expect(balances.rows.some((row) => row.student_id === fixture.secondStudentId && row.balance_minor !== "0")).toBe(false);
         const history = await connection.query("select count(*)::int as count from app.lesson_client_charge_facts where lesson_id=$1", [fixture.subscriptionLessonId]);
         expect(history.rows[0].count).toBe(2);
+        const teacherHistory = await connection.query(
+          `select compensation_source, supersedes_fact_id is not null as supersedes
+           from app.lesson_teacher_compensation_facts
+           where lesson_id = $1 order by created_at, id`,
+          [fixture.subscriptionLessonId],
+        );
+        expect(teacherHistory.rows).toEqual([
+          { compensation_source: "automatic", supersedes: false },
+          { compensation_source: "manual", supersedes: true },
+        ]);
       } finally { await connection.query("rollback"); connection.release(); }
     } finally { await cleanupFixture(pool, fixture); }
   });

@@ -171,6 +171,7 @@ describe("lesson settlement execution", () => {
       teacherFact: {
         compensationActualValue: expectedTeacherBasisPoints,
         amountMinor: expectedTeacherAmount,
+        compensationSource: "manual",
       },
     });
     }
@@ -328,5 +329,62 @@ describe("lesson settlement execution", () => {
     expect(calls.some((text) => text.includes("from app.lessons lesson"))).toBe(
       false,
     );
+  });
+
+  it("does not replay an automatic fact as the same explicit manual decision", async () => {
+    const responses = [
+      queryResult([]),
+      queryResult([{
+        client_fact_id: "client-fact-a",
+        client_type: "student",
+        client_id: "student-a",
+        charge_type: "subscription",
+        client_snapshot_value: "1.00",
+        subscription_id: "subscription-a",
+        client_amount_minor: "0",
+        units: "1.00",
+        client_currency_code: "RUB",
+        settlement_type_key: "completed",
+        settlement_label: "Проведено",
+        settlement_color_token: "success",
+        hour_share_basis_points: 10_000,
+        fixed_penalty_minor: "0",
+        configuration_revision_id: "settlement-revision",
+      }]),
+      queryResult([{
+        teacher_fact_id: "teacher-fact-a",
+        teacher_id: "teacher-a",
+        compensation_type: "standard",
+        teacher_snapshot_rate: "1000",
+        rate_minor: "100000",
+        duration_minutes: 60,
+        teacher_amount_minor: "100000",
+        teacher_currency_code: "RUB",
+        compensation_rule_key: "standard",
+        compensation_rule_label: "Стандарт",
+        compensation_mode: "standard",
+        compensation_default_value: "0",
+        compensation_actual_value: "0",
+        compensation_override_reason: null,
+        compensation_source: "automatic",
+        configuration_revision_id: "compensation-revision",
+      }]),
+      queryResult([]),
+      queryResult([{ id: "subscription-a", student_id: "student-a" }]),
+    ];
+    const client = {
+      query: async () => responses.shift()!,
+    } as unknown as PoolClient;
+
+    await expect(settleLesson(client, "lesson-a", {
+      context: "settle",
+      decision: {
+        settlementTypeKey: "completed",
+        teacherCompensationRuleKey: "standard",
+        teacherCompensationSource: "manual",
+      },
+    })).rejects.toMatchObject({
+      response: { code: "LESSON_ALREADY_SETTLED_WITH_DIFFERENT_DECISION" },
+    });
   });
 });

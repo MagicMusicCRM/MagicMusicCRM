@@ -151,11 +151,11 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
            duration_minutes, amount_minor, compensation_rule_key,
            compensation_rule_label, compensation_mode, compensation_default_value,
            compensation_actual_value, compensation_override_reason,
-           configuration_revision_id
+           configuration_revision_id, compensation_source
          ) values (
            $1, $2, 'percent', 1000, 100000, 60, 75000, 'percent',
            'Процент от стандартной ставки', 'percent', 100000, 7500,
-           'Согласовано директором', $3
+           null, $3, 'manual'
          )`,
         [lesson.rows[0]!.id, teacherId, revision.rows[0]!.id],
       );

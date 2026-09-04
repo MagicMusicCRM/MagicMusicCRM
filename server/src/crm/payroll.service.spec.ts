@@ -243,6 +243,90 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     ]);
   });
 
+  it("keeps explicit same-value sources separate and falls back only for legacy facts", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          lessonRow({
+            id: "l-explicit-manual",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-explicit-manual",
+            settled_amount_minor: 100000,
+            compensation_type: "fixed",
+            compensation_rule_key: "fixed",
+            compensation_rule_label: "Фиксированная сумма",
+            compensation_actual_value: "100000",
+            teacher_snapshot_rate: 1000,
+            compensation_source: "manual",
+            compensation_override_reason: null,
+          }),
+          lessonRow({
+            id: "l-explicit-automatic",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-explicit-automatic",
+            settled_amount_minor: 100000,
+            compensation_type: "fixed",
+            compensation_rule_key: "fixed",
+            compensation_rule_label: "Фиксированная сумма",
+            compensation_actual_value: "100000",
+            teacher_snapshot_rate: 1000,
+            compensation_source: "automatic",
+            compensation_override_reason: null,
+          }),
+          lessonRow({
+            id: "l-legacy-manual",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-legacy-manual",
+            settled_amount_minor: 100000,
+            compensation_type: "fixed",
+            compensation_rule_key: "fixed",
+            compensation_rule_label: "Фиксированная сумма",
+            compensation_actual_value: "100000",
+            teacher_snapshot_rate: 1000,
+            compensation_source: null,
+            compensation_override_reason: "Историческая ручная корректировка",
+          }),
+          lessonRow({
+            id: "l-legacy-automatic",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-legacy-automatic",
+            settled_amount_minor: 100000,
+            compensation_type: "fixed",
+            compensation_rule_key: "fixed",
+            compensation_rule_label: "Фиксированная сумма",
+            compensation_actual_value: "100000",
+            teacher_snapshot_rate: 1000,
+            compensation_source: null,
+            compensation_override_reason: null,
+          }),
+        ],
+      },
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+
+    const report = await service.getTeacherStatsReport(directorActor, {
+      from: "2026-01-01",
+      to: "2027-01-01",
+    });
+    const sourceByLesson = new Map(
+      report.items[0]!.units.flatMap((unit) =>
+        unit.lessonIds.map((lessonId) => [lessonId, unit.compensationSource] as const),
+      ),
+    );
+
+    expect(sourceByLesson).toEqual(new Map([
+      ["l-explicit-manual", "manual"],
+      ["l-explicit-automatic", "automatic"],
+      ["l-legacy-manual", "manual"],
+      ["l-legacy-automatic", "automatic"],
+    ]));
+  });
+
   it("separates settled lessons with different effective standard rates", async () => {
     const { service } = createServiceWithQueryResults([
       {
@@ -864,7 +948,10 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
 
   it("экспортирует месячные начисления в валидный XLSX без выплат", async () => {
     const { service } = createServiceWithQueryResults([
-      { rows: [lessonRow({ id: "l-1", student_id: "s-1", is_trial: true })] },
+      { rows: [lessonRow({
+        id: "l-1", student_id: "s-1", is_trial: true,
+        compensation_source: "manual", compensation_override_reason: null,
+      })] },
       {
         rows: [{ teacher_id: "t-1", rate: "0", effective_from: "2026-01-01" }],
       },
@@ -904,7 +991,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(sheet.getCell("I2").value).toBe("Входит в оклад");
     expect(sheet.getCell("J2").value).toBe(0);
     expect(sheet.getCell("K2").value).toBe('Почасовая ставка');
-    expect(sheet.getCell("L2").value).toBe('Автоматически');
+    expect(sheet.getCell("L2").value).toBe('Вручную');
     expect(headers.map((value) => String(value))).not.toContain("Оплачено");
     expect(headers.map((value) => String(value))).not.toContain("Доплаты");
     expect(headers.map((value) => String(value))).not.toContain("Вычеты");
