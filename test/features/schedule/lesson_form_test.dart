@@ -1269,6 +1269,7 @@ void main() {
           {'clientId': _leadId, 'chargeType': 'none'},
         ],
         'teacherCompensationRuleKey': 'standard',
+        'teacherCompensationSource': 'manual',
       });
       expect(dialogResult.value, isTrue);
       expect(find.text('Пробное занятие'), findsNothing);
@@ -1309,6 +1310,7 @@ void main() {
         {'clientId': _leadId, 'chargeType': 'none'},
       ],
       'teacherCompensationRuleKey': 'none',
+      'teacherCompensationSource': 'manual',
     });
     expect(body['roomId'], _roomId);
     expect(body, isNot(contains('studentId')));
@@ -1376,6 +1378,7 @@ void main() {
         ],
         'teacherCompensationRuleKey': 'hourly',
         'teacherCompensationValueMinor': '125050',
+        'teacherCompensationSource': 'manual',
       });
       expect(
         client.lessonPosts.single['plannedSettlementReason'],
@@ -1464,6 +1467,7 @@ void main() {
         {'clientId': _studentId, 'chargeType': 'none'},
       ],
       'teacherCompensationRuleKey': 'none',
+      'teacherCompensationSource': 'manual',
     });
   });
 
@@ -1675,6 +1679,7 @@ void main() {
           },
         ],
         'teacherCompensationRuleKey': 'standard',
+        'teacherCompensationSource': 'manual',
       });
       expect(body['clientChargeType'], 'personal_account');
       expect(body, isNot(contains('subscriptionId')));
@@ -2334,6 +2339,7 @@ void main() {
         'financialDecision': {
           'settlementTypeKey': 'free_lesson',
           'teacherCompensationRuleKey': 'none',
+          'teacherCompensationSource': 'manual',
         },
         'previewToken': 'signed-lesson-preview',
         'confirm': true,
