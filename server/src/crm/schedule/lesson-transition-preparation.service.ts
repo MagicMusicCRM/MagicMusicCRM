@@ -24,6 +24,7 @@ import {
   effectiveTransitionDto,
   hasTransitionClientCharge,
   legacyPlanTeacherSource,
+  requiredTransitionClientIds,
   selectedTransitionSubscriptionIds,
   sourceProjection,
   transitionDecisionForResolution,
@@ -99,7 +100,8 @@ export class LessonTransitionPreparationService {
             ) order by participant.student_id)
             from app.lesson_snapshot_participants participant
             where participant.lesson_id = lesson.id
-          ), '[]'::jsonb) as participants
+          ), '[]'::jsonb) as participants,
+          coalesce((select jsonb_agg(exclusion.student_id order by exclusion.student_id) from app.lesson_participant_exclusions exclusion where exclusion.lesson_id = lesson.id), '[]'::jsonb) as excluded_participant_ids
         from app.lessons lesson
         left join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
         where lesson.id = $1 and lesson.deleted_at is null
@@ -313,9 +315,9 @@ export class LessonTransitionPreparationService {
         Boolean(preservedTeacherDecision),
       ),
       actorUserId: actor.userId,
-      authorization:
-        this.policy.teacherCompensationMutationAuthorization(actor),
+      authorization: this.policy.teacherCompensationMutationAuthorization(actor),
       reasonText: dto.reasonText,
+      requiredClientIds: requiredTransitionClientIds(source),
       ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
     });
     const teacherCompensationSource =
@@ -406,6 +408,7 @@ export class LessonTransitionPreparationService {
         ...participant,
         chargeValue: Number(participant.chargeValue),
       })),
+      excludedParticipantIds: row.excluded_participant_ids ?? [],
     };
   }
 

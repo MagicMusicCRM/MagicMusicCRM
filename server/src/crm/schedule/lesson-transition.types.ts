@@ -58,6 +58,7 @@ export interface TransitionLessonRow {
   snapshot_trial: boolean | null;
   validation_state: "valid" | "legacy_incomplete" | null;
   participants: GroupParticipantSnapshot[];
+  excluded_participant_ids: string[];
 }
 
 export interface GroupLessonDraft {
@@ -92,6 +93,7 @@ export type TransitionSource = ExistingLessonDraft & {
     validationState: "valid" | "legacy_incomplete";
   } | null;
   participants: GroupParticipantSnapshot[];
+  excludedParticipantIds: string[];
 };
 
 /** Internal workflow contract. Transport DTO classes are adapters to this shape. */

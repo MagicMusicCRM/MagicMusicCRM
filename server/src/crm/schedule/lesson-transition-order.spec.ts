@@ -48,6 +48,7 @@ const source: TransitionSource = {
   },
   groupSnapshot: null,
   participants: [],
+  excludedParticipantIds: [],
 };
 
 const successor: TransitionSuccessor = {

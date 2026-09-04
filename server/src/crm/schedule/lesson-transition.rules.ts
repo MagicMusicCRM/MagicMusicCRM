@@ -276,9 +276,28 @@ export const transitionFinancialProjection = (
   teacherFact: (({ id: _id, ...fact }) => fact)(settled.teacherFact) as TransitionFinancialProjection["teacherFact"],
 });
 
-export const completedTransitionReversalDecision = (): LessonFinancialDecision => ({
+export const requiredTransitionClientIds = (source: TransitionSource) => {
+  const excluded = new Set(source.excludedParticipantIds);
+  const ids = source.groupId
+    ? source.participants
+      .map((participant) => participant.studentId)
+      .filter((studentId) => !excluded.has(studentId))
+    : source.snapshot
+      ? [source.snapshot.clientId]
+      : [];
+  return [...new Set(ids)].sort();
+};
+
+export const completedTransitionReversalDecision = (
+  requiredClientIds: string[],
+): LessonFinancialDecision => ({
   settlementTypeKey: "free_lesson",
   teacherCompensationRuleKey: "none",
+  clientDecisions: requiredClientIds.map((clientId) => ({
+    clientId,
+    chargeType: "none",
+    chargeDurationMinutes: 0,
+  })),
 });
 
 export const transitionDecisionForResolution = (
@@ -317,7 +336,12 @@ export const effectiveTransitionDto = (
   operation: TransitionOperation,
 ): TransitionPreviewDto =>
   operation === "reschedule" && source.lifecycleState === "successfully_completed"
-    ? { ...dto, financialDecision: completedTransitionReversalDecision() }
+    ? {
+        ...dto,
+        financialDecision: completedTransitionReversalDecision(
+          requiredTransitionClientIds(source),
+        ),
+      }
     : dto;
 
 export const hasTransitionClientCharge = (financial: TransitionFinancialProjection) =>
