@@ -160,6 +160,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       },
       preparePlan: settlement.preparePlan.bind(settlement),
       assignPlan: settlement.assignPlan.bind(settlement),
+      assignPreparedPlan: settlement.assignPreparedPlan.bind(settlement),
       clonePlan: settlement.clonePlan.bind(settlement),
       loadPlan: settlement.loadPlan.bind(settlement),
       markPlanState: settlement.markPlanState.bind(settlement),

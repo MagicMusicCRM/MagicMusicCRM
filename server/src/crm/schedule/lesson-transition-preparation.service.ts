@@ -28,12 +28,10 @@ import {
 } from "./lesson-transition-source-rules";
 import {
   draftProjection,
-  effectiveTransitionDto,
   hasTransitionClientCharge,
   legacySnapshotTeacherDecision,
   plannedSettlementProjection,
   requiredTransitionClientIds,
-  resolveSuccessorFinancialDecision,
   selectedTransitionSubscriptionIds,
   sourceProjection,
   transitionDecisionForResolution,
@@ -42,6 +40,10 @@ import {
 } from "./lesson-transition.rules";
 import type {
   CalculatedTransitionPreview,
+  FinancialTransitionPreviewDto,
+  NormalizedReschedulePreview,
+  ResolvedFinancialTransitionDto,
+  ResolvedRescheduleTransitionDto,
   ResolvedTransitionDto,
   TransitionLessonRow,
   TransitionOperation,
@@ -290,15 +292,14 @@ export class LessonTransitionPreparationService {
       operation,
       dto,
     );
-    if (operation === "reschedule") {
+    if (dto.operation === "reschedule") {
       return this.prepareRescheduleFinancials(client, actor, source, dto);
     }
     return this.resolvedTransitionDto(
       client,
       actor,
       source,
-      operation,
-      effectiveTransitionDto(source, dto, operation),
+      dto,
     );
   }
 
@@ -308,10 +309,11 @@ export class LessonTransitionPreparationService {
     operation: TransitionOperation,
     dto: TransitionPreviewDto,
   ): void {
-    if (!isCompletedReschedule(source, operation)) return;
+    if (!isCompletedReschedule(source, operation) ||
+      dto.operation !== "reschedule") return;
     this.policy.assertCanSupplyTeacherCompensation(
       actor,
-      resolveSuccessorFinancialDecision(dto),
+      dto.successorFinancialDecision,
     );
   }
 
@@ -319,9 +321,9 @@ export class LessonTransitionPreparationService {
     client: PoolClient,
     actor: ActorContext,
     source: TransitionSource,
-    dto: TransitionPreviewDto,
-  ): Promise<ResolvedTransitionDto> {
-    const successor = this.successorDraft(dto.successor!, source);
+    dto: NormalizedReschedulePreview,
+  ): Promise<ResolvedRescheduleTransitionDto> {
+    const successor = this.successorDraft(dto.successor, source);
     const preservedTeacherDecision = await this.teacherDecisionToPreserve(
       client,
       actor,
@@ -335,7 +337,7 @@ export class LessonTransitionPreparationService {
       this.settlement,
       source,
       successor,
-      { ...dto, successorFinancialDecision: resolveSuccessorFinancialDecision(dto) },
+      dto,
       preservedTeacherDecision,
     );
   }
@@ -344,14 +346,13 @@ export class LessonTransitionPreparationService {
     client: PoolClient,
     actor: ActorContext,
     source: TransitionSource,
-    operation: TransitionOperation,
-    dto: TransitionPreviewDto,
-  ): Promise<ResolvedTransitionDto> {
+    dto: FinancialTransitionPreviewDto,
+  ): Promise<ResolvedFinancialTransitionDto> {
     const preservedTeacherDecision = await this.teacherDecisionToPreserve(
       client,
       actor,
       source,
-      operation,
+      dto.operation,
     );
     const prepared = await this.settlement.resolvePlannedPlan(client, {
       branchId: source.branchId!,
@@ -372,13 +373,8 @@ export class LessonTransitionPreparationService {
         code: "TEACHER_COMPENSATION_SOURCE_UNRESOLVED",
       });
     }
-    const {
-      sourceFinancialDecision: _sourceFinancialDecision,
-      successorFinancialDecision: _successorFinancialDecision,
-      ...ordinaryDto
-    } = dto;
     return {
-      ...ordinaryDto,
+      ...dto,
       financialDecision: { ...prepared.decision, teacherCompensationSource },
       configurationRevisionIds: {
         settlementRevisionId: prepared.settlementRevisionId,

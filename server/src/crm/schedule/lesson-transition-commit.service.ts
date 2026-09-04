@@ -35,6 +35,37 @@ import type {
   TransitionSuccessor,
 } from "./lesson-transition.types";
 
+type CommittedTransitionFacts = Pick<
+  CommittedTransition,
+  | "lessonId"
+  | "transitionId"
+  | "clientFinancialFactIds"
+  | "teacherFinancialFactId"
+>;
+
+const committedTransition = (
+  facts: CommittedTransitionFacts,
+  successorId: string | null,
+  dto: ResolvedTransitionDto,
+  fingerprint: string,
+): CommittedTransition => dto.operation === "reschedule"
+  ? {
+      ...facts,
+      state: "rescheduled",
+      successorId: successorId!,
+      financialDecision: dto.successorFinancialDecision,
+      sourceFinancialDecision: dto.sourceFinancialDecision,
+      successorFinancialDecision: dto.successorFinancialDecision,
+      transitionFingerprint: fingerprint,
+    }
+  : {
+      ...facts,
+      state: dto.operation === "cancel" ? "cancelled" : "successfully_completed",
+      successorId: null,
+      financialDecision: dto.financialDecision,
+      transitionFingerprint: fingerprint,
+    };
+
 @Injectable()
 export class LessonTransitionCommitService {
   constructor(
@@ -94,10 +125,10 @@ export class LessonTransitionCommitService {
       input.lessonId,
       selectedTransitionSubscriptionIds(dto),
     );
-    if (successor && input.successorId) {
+    if (successor) {
       await this.insertSuccessor(
         client,
-        input.successorId,
+        input.successorId!,
         input.lessonId,
         successor,
         input.actor.userId,
@@ -113,15 +144,14 @@ export class LessonTransitionCommitService {
       financial: transitionFinancialProjection(settled),
     });
     this.assertExpectedFingerprint(input.expectedFingerprint, fingerprint);
-    if (successor && input.successorId) {
-      await this.financial.cloneAndAllocateSuccessor(
+    if (dto.operation === "reschedule") {
+      await this.financial.assignAndAllocateSuccessor(
         client,
-        input.lessonId,
-        input.successorId,
+        input.successorId!,
         input.actor,
         dto.reasonText,
-        dto.financialDecision,
-        dto.configurationRevisionIds,
+        dto.successorFinancialDecision,
+        dto.successorConfigurationRevisionIds,
       );
     }
     if (source.lifecycleState === "successfully_completed") {
@@ -142,15 +172,12 @@ export class LessonTransitionCommitService {
       clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
       teacherFinancialFactId: settled.teacherFact.id,
     });
-    const committed = {
+    const committed = committedTransition({
       lessonId: input.lessonId,
-      state: toState,
-      successorId: input.successorId,
       transitionId: String(transition.rows[0]!.id),
       clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
       teacherFinancialFactId: settled.teacherFact.id,
-      financialDecision: dto.financialDecision,
-    } as CommittedTransition;
+    }, input.successorId, dto, fingerprint);
     // Bulk validation reads the fingerprint before Platform Integrity serializes
     // the result. Keeping it non-enumerable preserves that reconciliation input
     // without copying the hash into audit or idempotency JSON.
@@ -189,6 +216,12 @@ export class LessonTransitionCommitService {
     dto: ResolvedTransitionDto,
   ): Promise<LessonSettlementResult> {
     if (source.lifecycleState === "successfully_completed") {
+      if (dto.operation !== "reschedule") {
+        throw new ConflictException({
+          code: "COMPLETED_LESSON_RESCHEDULE_NOT_ALLOWED",
+          lessonId: source.id,
+        });
+      }
       return this.financial.applyCompletedRescheduleCorrection(
         client,
         source,
@@ -208,11 +241,17 @@ export class LessonTransitionCommitService {
       input.successorId,
       input.operation,
     );
+    const decision = dto.operation === "reschedule"
+      ? dto.sourceFinancialDecision
+      : dto.financialDecision;
+    const configurationRevisionIds = dto.operation === "reschedule"
+      ? dto.sourceConfigurationRevisionIds
+      : dto.configurationRevisionIds;
     const settled = await this.settlement.settle(client, input.lessonId, {
       context: input.operation,
-      decision: dto.financialDecision,
+      decision,
       reasonText: dto.reasonText?.trim(),
-      configurationRevisionIds: dto.configurationRevisionIds,
+      configurationRevisionIds,
     });
     await this.reservations.terminalize(client, settled);
     if (input.operation === "settle") {

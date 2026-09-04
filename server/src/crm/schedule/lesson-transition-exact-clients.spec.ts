@@ -1,12 +1,15 @@
 import type { PoolClient } from "pg";
 import type { DatabaseService } from "../../db/database.service";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
-import type { LessonSettlementPort } from "../commerce/lesson-settlement.port";
+import type {
+  LessonFinancialDecision,
+  LessonSettlementPort,
+} from "../commerce/lesson-settlement.port";
 import type { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import type { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
 import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
-import type { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
+import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import type { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { LessonTransitionCommitService } from "./lesson-transition-commit.service";
 import type { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
@@ -14,6 +17,7 @@ import { LessonTransitionPreparationService } from "./lesson-transition-preparat
 import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
 import type {
   TransitionOperation,
+  FinancialTransitionPreviewDto,
   TransitionPreviewDto,
   TransitionSource,
 } from "./lesson-transition.types";
@@ -78,7 +82,7 @@ const groupSource = (): TransitionSource => ({
   excludedParticipantIds: [excludedStudent],
 } as TransitionSource);
 
-const decision = (clientIds: string[]): TransitionPreviewDto["financialDecision"] => ({
+const decision = (clientIds: string[]): LessonFinancialDecision => ({
   settlementTypeKey: "free_lesson",
   teacherCompensationRuleKey: "none",
   clientDecisions: clientIds.map((clientId) => ({
@@ -88,10 +92,26 @@ const decision = (clientIds: string[]): TransitionPreviewDto["financialDecision"
   })),
 });
 
-const dto = (financialDecision: TransitionPreviewDto["financialDecision"]): TransitionPreviewDto => ({
+const dto = (
+  financialDecision: LessonFinancialDecision,
+): FinancialTransitionPreviewDto => ({
+  operation: "cancel",
   expectedVersion: 1,
   reasonText: "Точная проверка клиентов",
   financialDecision,
+});
+
+const rescheduleDto = (
+  financialDecision: LessonFinancialDecision,
+): TransitionPreviewDto => ({
+  operation: "reschedule",
+  expectedVersion: 1,
+  reasonText: "Точная проверка клиентов",
+  successor: { scheduledAt: "2026-09-05T09:00:00.000Z" },
+  sourceFinancialDecision: decision(
+    financialDecision.clientDecisions?.map(({ clientId }) => clientId) ?? [],
+  ),
+  successorFinancialDecision: financialDecision,
 });
 
 const actor = { userId: "director-a", role: "director" as const };
@@ -102,7 +122,7 @@ const preparationWith = (
 ) => new LessonTransitionPreparationService(
   {} as DatabaseService,
   policy,
-  {} as LessonRequiredFieldValidator,
+  new LessonRequiredFieldValidator(),
   {} as ScheduleConstraintEngine,
   settlement,
   {} as SubscriptionReservationService,
@@ -132,7 +152,9 @@ describe("lesson transition exact frozen clients", () => {
       actor,
       source,
       operation as TransitionOperation,
-      dto(decision([...expectedIds])),
+      operation === "reschedule"
+        ? rescheduleDto(decision([...expectedIds]))
+        : dto(decision([...expectedIds])),
     );
 
     expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
@@ -172,7 +194,7 @@ describe("lesson transition exact frozen clients", () => {
         actor,
         source,
         "reschedule",
-        dto({
+        rescheduleDto({
           settlementTypeKey: "lesson",
           teacherCompensationRuleKey: "fixed",
           teacherCompensationValueMinor: "100000",
@@ -181,10 +203,22 @@ describe("lesson transition exact frozen clients", () => {
         }),
       );
 
-    expect(events).toEqual(["raw-authorization", "resolve"]);
-    expect(resolved.financialDecision.clientDecisions).toEqual([
-      { clientId: studentA, chargeType: "none", chargeDurationMinutes: 0 },
-      { clientId: studentB, chargeType: "none", chargeDurationMinutes: 0 },
+    expect(events).toEqual(["raw-authorization", "resolve", "resolve"]);
+    expect(resolved.operation).toBe("reschedule");
+    if (resolved.operation !== "reschedule") throw new Error("unreachable");
+    expect(resolved.sourceFinancialDecision.clientDecisions).toEqual([
+      {
+        clientId: studentA,
+        settlementTypeKey: "free_lesson",
+        chargeType: "none",
+        chargeDurationMinutes: 0,
+      },
+      {
+        clientId: studentB,
+        settlementTypeKey: "free_lesson",
+        chargeType: "none",
+        chargeDurationMinutes: 0,
+      },
     ]);
   });
 
@@ -316,7 +350,7 @@ describe("lesson transition exact frozen clients", () => {
     const financial = {
       previewFinancial: jest.fn(),
       applyCompletedRescheduleCorrection: jest.fn(),
-      cloneAndAllocateSuccessor: jest.fn(),
+      assignAndAllocateSuccessor: jest.fn(),
     } as unknown as LessonTransitionFinancialService;
     const preview = new LessonTransitionPreviewService(
       database,
@@ -351,6 +385,6 @@ describe("lesson transition exact frozen clients", () => {
     expect(reservations.lockSettlementCoverage).not.toHaveBeenCalled();
     expect(financial.previewFinancial).not.toHaveBeenCalled();
     expect(financial.applyCompletedRescheduleCorrection).not.toHaveBeenCalled();
-    expect(financial.cloneAndAllocateSuccessor).not.toHaveBeenCalled();
+    expect(financial.assignAndAllocateSuccessor).not.toHaveBeenCalled();
   });
 });

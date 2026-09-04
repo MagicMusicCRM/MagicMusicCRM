@@ -1,4 +1,5 @@
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
@@ -10,6 +11,7 @@ import type {
   LessonRescheduleCommandDto,
   LessonSettleCommandDto,
 } from "../dto/lesson-transition.dto";
+import { normalizeRescheduleDto } from "../dto/lesson-transition.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import { LessonTransitionCommitService } from "./lesson-transition-commit.service";
 import {
@@ -43,7 +45,11 @@ export class LessonTransitionCommandService {
     dto: LessonRescheduleCommandDto,
     metadata: LessonCommandMetadata,
   ): Promise<LessonTransitionCommandResult> {
-    return this.execute(actor, lessonId, dto, metadata, "reschedule");
+    return this.execute(actor, lessonId, {
+      ...normalizeRescheduleDto(dto),
+      previewToken: dto.previewToken,
+      confirm: dto.confirm,
+    }, metadata);
   }
 
   cancel(
@@ -52,7 +58,10 @@ export class LessonTransitionCommandService {
     dto: LessonCancelCommandDto,
     metadata: LessonCommandMetadata,
   ): Promise<LessonTransitionCommandResult> {
-    return this.execute(actor, lessonId, dto, metadata, "cancel");
+    return this.execute(actor, lessonId, {
+      ...dto,
+      operation: "cancel",
+    }, metadata);
   }
 
   settle(
@@ -61,7 +70,10 @@ export class LessonTransitionCommandService {
     dto: LessonSettleCommandDto,
     metadata: LessonCommandMetadata,
   ): Promise<LessonTransitionCommandResult> {
-    return this.execute(actor, lessonId, dto, metadata, "settle");
+    return this.execute(actor, lessonId, {
+      ...dto,
+      operation: "settle",
+    }, metadata);
   }
 
   private async execute(
@@ -69,8 +81,8 @@ export class LessonTransitionCommandService {
     lessonId: string,
     dto: TransitionCommandDto,
     metadata: LessonCommandMetadata,
-    operation: TransitionOperation,
   ): Promise<LessonTransitionCommandResult> {
+    const operation: TransitionOperation = dto.operation;
     this.policy.assertCanWriteCrm(actor);
     assertTransitionConfirmed(dto.confirm);
     assertTransitionMetadata(metadata);
@@ -130,21 +142,28 @@ export class LessonTransitionCommandService {
             dto.previewToken,
           );
           this.assertSignedPreview(signed, actor, lessonId, dto, operation);
-          return this.commits.commit(client, {
+          return this.commitConfirmed(
+            client,
             actor,
             lessonId,
             dto,
-            operation,
             successorId,
             nextVersion,
-            expectedFingerprint: signed.transitionFingerprint,
-          });
+            signed.transitionFingerprint,
+          );
         },
       });
     await this.reservations.publishLessonSettlementPostCommit(lessonId);
     if (successorId) {
       await this.reservations.publishLessonSettlementPostCommit(successorId);
     }
+    const financialProjection = mutation.resultRef.state === "rescheduled"
+      ? {
+          financialDecision: mutation.resultRef.successorFinancialDecision,
+          sourceFinancialDecision: mutation.resultRef.sourceFinancialDecision,
+          successorFinancialDecision: mutation.resultRef.successorFinancialDecision,
+        }
+      : { financialDecision: mutation.resultRef.financialDecision };
     return {
       source: { id: lessonId, state: toState, version: mutation.version },
       successor:
@@ -154,9 +173,40 @@ export class LessonTransitionCommandService {
       transitionId: mutation.resultRef.transitionId,
       clientFinancialFactIds: mutation.resultRef.clientFinancialFactIds,
       teacherFinancialFactId: mutation.resultRef.teacherFinancialFactId,
-      financialDecision: mutation.resultRef.financialDecision,
+      ...financialProjection,
       replayed: mutation.replayed,
     };
+  }
+
+  private commitConfirmed(
+    client: PoolClient,
+    actor: ActorContext,
+    lessonId: string,
+    dto: TransitionCommandDto,
+    successorId: string | null,
+    nextVersion: number,
+    expectedFingerprint: string,
+  ): Promise<CommittedTransition> {
+    const common = {
+      actor,
+      lessonId,
+      nextVersion,
+      expectedFingerprint,
+    };
+    if (dto.operation === "reschedule") {
+      return this.commits.commit(client, {
+        ...common,
+        dto,
+        operation: "reschedule",
+        successorId: successorId!,
+      });
+    }
+    return this.commits.commit(client, {
+      ...common,
+      dto,
+      operation: dto.operation,
+      successorId: null,
+    });
   }
 
   private assertSignedPreview(

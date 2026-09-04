@@ -4,6 +4,8 @@ import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { rublesToMinor } from "../commerce/lesson-settlement.calculation";
 import type { LessonFinancialDecision } from "../commerce/lesson-settlement.port";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
+import { draftProjection } from "./lesson-transition-draft-projection";
+export { draftProjection } from "./lesson-transition-draft-projection";
 import type {
   BulkFingerprintItem,
   BulkTransitionDto,
@@ -173,17 +175,6 @@ export const sourceProjection = (source: TransitionSource) => ({
   id: source.id,
   version: source.version,
   state: source.lifecycleState,
-});
-
-export const draftProjection = (draft: TransitionSuccessor) => ({
-  subject: draft.kind === "individual"
-    ? { type: draft.clientRef.type, id: draft.clientRef.id }
-    : { type: "group", id: draft.groupId },
-  teacherId: draft.teacherId,
-  branchId: draft.branchId,
-  roomId: draft.roomId,
-  startAt: draft.scheduledAt,
-  endAt: draft.endAt,
 });
 
 export const transitionAdvisoryKeys = (
@@ -374,10 +365,22 @@ export function bulkTransitionFingerprint(
   });
 }
 
-export const bulkTransitionItemDto = (
+export function bulkTransitionItemDto(
+  bulk: BulkTransitionDto,
+  item: Extract<BulkTransitionItem, { operation: "reschedule" }>,
+): Extract<TransitionPreviewDto, { operation: "reschedule" }>;
+export function bulkTransitionItemDto(
+  bulk: BulkTransitionDto,
+  item: Extract<BulkTransitionItem, { operation: "cancel" | "settle" }>,
+): Extract<TransitionPreviewDto, { operation: "cancel" | "settle" }>;
+export function bulkTransitionItemDto(
   bulk: BulkTransitionDto,
   item: BulkTransitionItem,
-): TransitionPreviewDto => {
+): TransitionPreviewDto;
+export function bulkTransitionItemDto(
+  bulk: BulkTransitionDto,
+  item: BulkTransitionItem,
+): TransitionPreviewDto {
   const common = {
     expectedVersion: item.expectedVersion,
     reasonCode: bulk.reasonCode,
@@ -429,7 +432,7 @@ export const requiredTransitionClientIds = (source: TransitionSource) => {
       ? [source.snapshot.clientId]
       : [];
   return [...new Set(ids)].sort();
-};
+}
 
 export const completedTransitionReversalDecision = (
   requiredClientIds: string[],

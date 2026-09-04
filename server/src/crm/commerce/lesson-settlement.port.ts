@@ -176,6 +176,14 @@ export interface LessonSettlementPort {
       reasonText?: string;
     },
   ): Promise<PreparedLessonSettlementPlan>;
+  assignPreparedPlan(
+    client: PoolClient,
+    input: PreparedLessonSettlementPlan & {
+      lessonId: string;
+      selectedBy: string;
+      reasonText?: string;
+    },
+  ): Promise<PreparedLessonSettlementPlan>;
   clonePlan(
     client: PoolClient,
     input: {

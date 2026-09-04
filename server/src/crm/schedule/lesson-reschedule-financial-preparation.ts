@@ -15,10 +15,11 @@ import type {
   CalculatedTransitionPreview,
   PlannedSettlementProjection,
   PreparedRescheduleFinancials,
+  ResolvedRescheduleTransitionDto,
   ResolvedTransitionDto,
   TransitionFinancialProjection,
   TransitionOperation,
-  TransitionPreviewDto,
+  NormalizedReschedulePreview,
   TransitionSource,
   TransitionSuccessor,
 } from "./lesson-transition.types";
@@ -124,11 +125,11 @@ export async function prepareResolvedRescheduleTransition(
   settlement: LessonSettlementPort,
   source: TransitionSource,
   successor: TransitionSuccessor,
-  dto: TransitionPreviewDto,
+  dto: NormalizedReschedulePreview,
   preservedTeacherDecision?: Parameters<
     LessonSettlementPort["resolvePlannedPlan"]
   >[1]["preservedTeacherDecision"],
-): Promise<ResolvedTransitionDto> {
+): Promise<ResolvedRescheduleTransitionDto> {
   const prepared = await prepareRescheduleFinancialPlans(
     client,
     actor,
@@ -136,26 +137,24 @@ export async function prepareResolvedRescheduleTransition(
     settlement,
     source,
     successor,
-    dto.successorFinancialDecision ?? dto.financialDecision!,
+    dto.successorFinancialDecision,
     dto.reasonText,
     preservedTeacherDecision,
   );
   return {
     ...dto,
     operation: "reschedule",
-    financialDecision: prepared.sourceFinancialDecision,
     ...prepared,
-    configurationRevisionIds: prepared.sourceConfigurationRevisionIds,
   };
 }
 
 export const previewDecisionProjection = (
-  operation: TransitionOperation,
+  _operation: TransitionOperation,
   dto: ResolvedTransitionDto,
 ): Pick<
   CalculatedTransitionPreview,
   "financialDecision" | "sourceFinancialDecision" | "successorFinancialDecision"
-> => operation === "reschedule"
+> => dto.operation === "reschedule"
   ? {
       sourceFinancialDecision: dto.sourceFinancialDecision,
       successorFinancialDecision: dto.successorFinancialDecision,

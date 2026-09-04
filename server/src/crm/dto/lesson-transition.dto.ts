@@ -16,7 +16,10 @@ import {
   ValidateNested,
 } from "class-validator";
 import { UnprocessableEntityException } from "@nestjs/common";
-import type { NormalizedReschedulePreview } from "../schedule/lesson-transition.types";
+import type {
+  BulkTransitionInputItem,
+  NormalizedReschedulePreview,
+} from "../schedule/lesson-transition.types";
 import {
   ConfiguredLessonFinancialDecisionDto,
   lessonFinancialDecisionCanonicalHash,
@@ -169,7 +172,7 @@ export class LessonBulkTransitionPreviewDto {
   @ArrayMaxSize(500)
   @ValidateNested({ each: true })
   @Type(() => LessonBulkTransitionItemDto)
-  items!: LessonBulkTransitionItemDto[];
+  items!: BulkTransitionInputItem[];
 }
 
 export class LessonBulkTransitionCommandDto extends LessonBulkTransitionPreviewDto {

@@ -20,6 +20,7 @@ import {
 import type {
   TransitionOperation,
   ResolvedTransitionDto,
+  ResolvedRescheduleTransitionDto,
   TransitionSource,
 } from "./lesson-transition.types";
 
@@ -42,6 +43,12 @@ export class LessonTransitionFinancialService {
     await client.query("savepoint lesson_transition_preview");
     try {
       if (source.lifecycleState === "successfully_completed") {
+        if (dto.operation !== "reschedule") {
+          throw new ConflictException({
+            code: "COMPLETED_LESSON_RESCHEDULE_NOT_ALLOWED",
+            lessonId: source.id,
+          });
+        }
         return await this.applyCompletedRescheduleCorrection(
           client,
           source,
@@ -56,11 +63,17 @@ export class LessonTransitionFinancialService {
         "update app.lessons set lifecycle_state = $2 where id = $1",
         [lessonId, targetTransitionState(operation)],
       );
+      const sourceDecision = dto.operation === "reschedule"
+        ? dto.sourceFinancialDecision
+        : dto.financialDecision;
+      const sourceConfigurationRevisionIds = dto.operation === "reschedule"
+        ? dto.sourceConfigurationRevisionIds
+        : dto.configurationRevisionIds;
       const settled = await this.settlement.settle(client, lessonId, {
         context: operation,
-        decision: dto.financialDecision,
+        decision: sourceDecision,
         reasonText: dto.reasonText?.trim(),
-        configurationRevisionIds: dto.configurationRevisionIds,
+        configurationRevisionIds: sourceConfigurationRevisionIds,
       });
       await this.reservations.terminalize(client, settled);
       return settled;
@@ -74,7 +87,7 @@ export class LessonTransitionFinancialService {
     client: PoolClient,
     source: TransitionSource,
     actor: ActorContext,
-    dto: ResolvedTransitionDto,
+    dto: ResolvedRescheduleTransitionDto,
     correctionId: string,
   ): Promise<LessonSettlementResult> {
     if (!source.branchId || source.lifecycleState !== "successfully_completed") {
@@ -106,45 +119,44 @@ export class LessonTransitionFinancialService {
         source.id,
         Number(previous.rows[0]?.version ?? 0) + 1,
         previous.rows[0]?.id ?? null,
-        JSON.stringify(dto.financialDecision),
-        dto.configurationRevisionIds.settlementRevisionId,
-        dto.configurationRevisionIds.compensationRevisionId,
+        JSON.stringify(dto.sourceFinancialDecision),
+        dto.sourceConfigurationRevisionIds.settlementRevisionId,
+        dto.sourceConfigurationRevisionIds.compensationRevisionId,
         reasonText,
         actor.userId,
       ],
     );
     return this.settlement.settle(client, source.id, {
       context: "settle",
-      decision: dto.financialDecision,
+      decision: dto.sourceFinancialDecision,
       reasonText,
       configurationRevisionIds: {
-        settlementRevisionId: dto.configurationRevisionIds.settlementRevisionId,
-        compensationRevisionId: dto.configurationRevisionIds.compensationRevisionId,
+        settlementRevisionId:
+          dto.sourceConfigurationRevisionIds.settlementRevisionId,
+        compensationRevisionId:
+          dto.sourceConfigurationRevisionIds.compensationRevisionId,
       },
       correction: { id: correctionId },
     });
   }
 
-  async cloneAndAllocateSuccessor(
+  async assignAndAllocateSuccessor(
     client: PoolClient,
-    sourceLessonId: string,
     successorId: string,
     actor: ActorContext,
-    reasonText?: string,
-    fallbackDecision?: LessonFinancialDecision,
-    configurationRevisionIds?: ResolvedTransitionDto["configurationRevisionIds"],
+    reasonText: string | undefined,
+    decision: LessonFinancialDecision,
+    configurationRevisionIds: {
+      settlementRevisionId: string;
+      compensationRevisionId: string;
+    },
   ): Promise<void> {
-    const plan = await this.settlement.clonePlan(client, {
-      sourceLessonId,
-      targetLessonId: successorId,
+    const plan = await this.settlement.assignPreparedPlan(client, {
+      lessonId: successorId,
       selectedBy: actor.userId,
       reasonText,
-      fallback: fallbackDecision && configurationRevisionIds
-        ? {
-            decision: fallbackDecision,
-            ...configurationRevisionIds,
-          }
-        : undefined,
+      decision,
+      ...configurationRevisionIds,
     });
     const allocations = await this.settlement.plannedSubscriptionAllocations(
       client,

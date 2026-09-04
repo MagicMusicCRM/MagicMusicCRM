@@ -11,11 +11,17 @@ import type { CrmPolicy } from "../crm.policy";
 import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonTransitionCommandService } from "./lesson-transition-command.service";
 import { LessonTransitionCommitService } from "./lesson-transition-commit.service";
+import { LessonBulkTransitionService } from "./lesson-bulk-transition.service";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
 import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
 import * as transitionRules from "./lesson-transition.rules";
-import { transitionAdvisoryKeys } from "./lesson-transition.rules";
+import {
+  bulkTransitionPreviewId,
+  bulkTransitionFingerprint,
+  normalizeBulkTransitionItems,
+  transitionAdvisoryKeys,
+} from "./lesson-transition.rules";
 import type {
   CommittedTransition,
   TransitionSource,
@@ -157,11 +163,16 @@ describe("Lesson transition runtime ordering", () => {
       source,
       "reschedule",
       {
+        operation: "reschedule",
         expectedVersion: 1,
         reasonText: "Перенос",
         successor: {} as never,
+        sourceFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+        },
         successorFinancialDecision,
-      } as never,
+      },
     ) as unknown as {
       sourceFinancialDecision: Record<string, unknown>;
       successorFinancialDecision: typeof successorFinancialDecision;
@@ -234,6 +245,27 @@ describe("Lesson transition runtime ordering", () => {
   it("preserves commit and post-commit publication order", async () => {
     const events: string[] = [];
     let committedRef: CommittedTransition | undefined;
+    const sourceFinancialDecision = {
+      settlementTypeKey: "free_lesson",
+      clientDecisions: [{
+        clientId: source.studentId!,
+        chargeType: "none" as const,
+        chargeDurationMinutes: 0,
+      }],
+      teacherCompensationRuleKey: "none",
+      teacherCreditedDurationMinutes: 0,
+      teacherCompensationSource: "automatic" as const,
+    };
+    const successorFinancialDecision = {
+      settlementTypeKey: "partially_paid_lesson",
+      clientDecisions: [{
+        clientId: source.studentId!,
+        chargeDurationMinutes: 30,
+      }],
+      teacherCompensationRuleKey: "standard",
+      teacherCreditedDurationMinutes: 45,
+      teacherCompensationSource: "automatic" as const,
+    };
     let advisoryRecorded = false;
     const client = {
       query: jest.fn(async (query: string, params?: unknown[]) => {
@@ -284,14 +316,15 @@ describe("Lesson transition runtime ordering", () => {
           events.push("catalog-resolution");
           return {
             ...(dto as Record<string, unknown>),
-            financialDecision: {
-              ...((dto as { financialDecision: Record<string, unknown> })
-                .financialDecision),
-              teacherCompensationSource: "automatic",
+            sourceFinancialDecision,
+            successorFinancialDecision,
+            sourceConfigurationRevisionIds: {
+              settlementRevisionId: "source-settlement-revision",
+              compensationRevisionId: "source-compensation-revision",
             },
-            configurationRevisionIds: {
-              settlementRevisionId: "settlement-revision",
-              compensationRevisionId: "compensation-revision",
+            successorConfigurationRevisionIds: {
+              settlementRevisionId: "successor-settlement-revision",
+              compensationRevisionId: "successor-compensation-revision",
             },
           };
         },
@@ -303,7 +336,7 @@ describe("Lesson transition runtime ordering", () => {
       }),
     } as unknown as LessonTransitionPreparationService;
     const financial = {
-      cloneAndAllocateSuccessor: jest.fn(async () => {
+      assignAndAllocateSuccessor: jest.fn(async () => {
         events.push("successor-allocation");
       }),
     } as unknown as LessonTransitionFinancialService;
@@ -394,10 +427,7 @@ describe("Lesson transition runtime ordering", () => {
         {
           expectedVersion: 1,
           reasonText: "reason",
-          financialDecision: {
-            settlementTypeKey: "free_lesson",
-            teacherCompensationRuleKey: "none",
-          },
+          successorFinancialDecision,
           successor: {} as never,
           previewToken: "signed-preview",
           confirm: true,
@@ -406,6 +436,20 @@ describe("Lesson transition runtime ordering", () => {
       );
       expect(result.replayed).toBe(false);
       expect(result.successor?.state).toBe("scheduled");
+      expect(result.sourceFinancialDecision).toEqual(sourceFinancialDecision);
+      expect(result.successorFinancialDecision).toEqual(successorFinancialDecision);
+      expect(result.financialDecision).toEqual(successorFinancialDecision);
+      expect(financial.assignAndAllocateSuccessor).toHaveBeenCalledWith(
+        client,
+        expect.any(String),
+        { userId: "actor", role: "manager" },
+        "reason",
+        successorFinancialDecision,
+        {
+          settlementRevisionId: "successor-settlement-revision",
+          compensationRevisionId: "successor-compensation-revision",
+        },
+      );
       expect(committedRef?.transitionFingerprint).toBe("fingerprint");
       expect(JSON.stringify(committedRef)).not.toContain(
         "transitionFingerprint",
@@ -432,6 +476,104 @@ describe("Lesson transition runtime ordering", () => {
       "publish-source",
       "publish-successor",
     ]);
+  });
+
+  it("returns both financial decisions from a bulk reschedule commit", async () => {
+    const sourceFinancialDecision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+    };
+    const successorFinancialDecision = {
+      settlementTypeKey: "lesson",
+      teacherCompensationRuleKey: "standard",
+    };
+    const committed = {
+      lessonId: source.id,
+      state: "rescheduled",
+      successorId: "00000000-0000-4000-8000-000000000099",
+      transitionId: "transition-id",
+      clientFinancialFactIds: ["client-fact"],
+      teacherFinancialFactId: "teacher-fact",
+      financialDecision: successorFinancialDecision,
+      sourceFinancialDecision,
+      successorFinancialDecision,
+      transitionFingerprint: "item-fingerprint",
+    } as CommittedTransition;
+    const command = {
+      reasonText: "Перенос",
+      items: [{
+        lessonId: source.id,
+        operation: "reschedule" as const,
+        expectedVersion: 1,
+        successor: {} as never,
+        successorFinancialDecision,
+      }],
+      previewToken: "signed-preview",
+      confirm: true as const,
+    };
+    const previewId = bulkTransitionPreviewId(
+      normalizeBulkTransitionItems(command),
+    );
+    const bulkFingerprint = bulkTransitionFingerprint(command, [{
+      lessonId: source.id,
+      operation: "reschedule",
+      preview: { transitionFingerprint: "item-fingerprint" },
+    }]);
+    const tokens = {
+      verifyLessonTransition: jest.fn(() => ({
+        actorUserId: "actor",
+        operation: "bulk",
+        lessonId: previewId,
+        expectedVersion: 1,
+        transitionFingerprint: bulkFingerprint,
+      })),
+    } as unknown as SubscriptionPreviewTokenService;
+    const platform = {
+      executeVersionedMutation: jest.fn(async (input) => ({
+        version: 1,
+        resultRef: await input.mutate({} as PoolClient),
+        replayed: false,
+      })),
+    } as unknown as PlatformIntegrityService;
+    const commits = {
+      commit: jest.fn(async () => committed),
+    } as unknown as LessonTransitionCommitService;
+    const service = new LessonBulkTransitionService(
+      {} as DatabaseService,
+      platform,
+      {
+        assertCanWriteCrm: jest.fn(),
+        teacherCompensationMutationAuthorization: jest.fn(() => ({})),
+      } as unknown as CrmPolicy,
+      tokens,
+      {} as LessonTransitionPreparationService,
+      commits,
+      {
+        publishLessonSettlementPostCommit: jest.fn(),
+      } as unknown as SubscriptionReservationService,
+    );
+    const result = await service.bulk(
+      { userId: "actor", role: "manager" },
+      command,
+      { idempotencyKey: "bulk-result-key", requestId: "request-id" },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      financialDecision: successorFinancialDecision,
+      sourceFinancialDecision,
+      successorFinancialDecision,
+    });
+    expect(commits.commit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        dto: expect.objectContaining({
+          sourceFinancialDecision: expect.objectContaining({
+            settlementTypeKey: "free_lesson",
+          }),
+          successorFinancialDecision,
+        }),
+      }),
+    );
   });
 
   it("sorts advisory resources and always restores preview savepoints", async () => {
@@ -468,6 +610,7 @@ describe("Lesson transition runtime ordering", () => {
       source.id,
       "cancel",
       {
+        operation: "cancel",
         expectedVersion: 1,
         reasonText: "reason",
         financialDecision: {

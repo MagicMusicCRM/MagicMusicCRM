@@ -153,21 +153,28 @@ export class LessonBulkTransitionService {
           this.assertBulkPreview(signed, actor, previewId);
           const committed: CommittedTransition[] = [];
           for (const item of items) {
-            committed.push(
-              await this.commits.commit(client, {
+            const common = {
                 actor,
                 lessonId: item.lessonId,
-                dto: bulkTransitionItemDto(dto, item),
-                operation: item.operation,
-                successorId:
-                  item.operation === "reschedule"
-                    ? stableTransitionId(
-                        `schedule.lesson.bulk-successor\0${bulkId}\0${item.lessonId}`,
-                      )
-                    : null,
                 nextVersion: item.expectedVersion + 1,
-              }),
-            );
+            };
+            if (item.operation === "reschedule") {
+              committed.push(await this.commits.commit(client, {
+                ...common,
+                dto: bulkTransitionItemDto(dto, item),
+                operation: "reschedule",
+                successorId: stableTransitionId(
+                  `schedule.lesson.bulk-successor\0${bulkId}\0${item.lessonId}`,
+                ),
+              }));
+              continue;
+            }
+            committed.push(await this.commits.commit(client, {
+              ...common,
+              dto: bulkTransitionItemDto(dto, item),
+              operation: item.operation,
+              successorId: null,
+            }));
           }
           this.assertBulkFingerprint(
             signed.transitionFingerprint,
