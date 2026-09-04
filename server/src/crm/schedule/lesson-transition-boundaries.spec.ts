@@ -16,6 +16,7 @@ import {
   bulkTransitionFingerprint,
   normalizeBulkTransitionItems,
   plannedSettlementProjection,
+  targetTransitionState,
   transitionFingerprint,
 } from "./lesson-transition.rules";
 
@@ -42,6 +43,7 @@ const otherNewSources = [
 ];
 const transitionTypesSource = readSource("lesson-transition.types.ts");
 const requiredFieldValidatorSource = readSource("lesson-required-field.validator.ts");
+const constraintSource = readSource("constraint-engine.repository.ts");
 
 const compileBoundaryDecision = {
   settlementTypeKey: "free_lesson",
@@ -312,6 +314,16 @@ describe("Lesson transition owner boundaries", () => {
     teacherCompensationRuleKey: "standard",
     teacherCreditedDurationMinutes: 45,
   };
+
+  it("removes cancelled lessons from teacher and room occupancy before settlement", () => {
+    expect(targetTransitionState("cancel")).toBe("cancelled");
+    expect(sources.commit).toMatch(
+      /await this\.updateSource\([\s\S]+await this\.settlement\.settle\(/,
+    );
+    expect(
+      constraintSource.match(/lesson\.lifecycle_state = 'scheduled'/g),
+    ).toHaveLength(3);
+  });
 
   it("rejects a client-supplied source financial decision for reschedule", async () => {
     const errors = await validate(

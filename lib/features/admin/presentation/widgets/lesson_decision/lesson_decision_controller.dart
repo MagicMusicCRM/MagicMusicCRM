@@ -47,31 +47,53 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
 
   @override
   String? get initialSettlementTypeKey =>
-      _initialSettlementTypeKey ??
-      _initialFinancialDecision?['settlementTypeKey']?.toString();
+      operation == LessonDecisionOperation.cancel
+      ? 'unpaid_miss'
+      : _initialSettlementTypeKey ??
+            _initialFinancialDecision?['settlementTypeKey']?.toString();
 
   @override
   String? get initialCompensationRuleKey =>
-      _initialCompensationRuleKey ??
-      _initialFinancialDecision?['teacherCompensationRuleKey']?.toString();
+      operation == LessonDecisionOperation.cancel
+      ? 'none'
+      : _initialCompensationRuleKey ??
+            _initialFinancialDecision?['teacherCompensationRuleKey']
+                ?.toString();
 
   @override
   String? get initialCompensationValueMinor =>
-      _initialCompensationValueMinor ??
-      _initialFinancialDecision?['teacherCompensationValueMinor']?.toString();
+      operation == LessonDecisionOperation.cancel
+      ? null
+      : _initialCompensationValueMinor ??
+            _initialFinancialDecision?['teacherCompensationValueMinor']
+                ?.toString();
 
   @override
   int? get initialTeacherCreditedDurationMinutes =>
-      lessonDecisionIntegerMinutes(
-        _initialFinancialDecision?['teacherCreditedDurationMinutes'],
-      );
+      operation == LessonDecisionOperation.cancel
+      ? 0
+      : lessonDecisionIntegerMinutes(
+          _initialFinancialDecision?['teacherCreditedDurationMinutes'],
+        );
 
   @override
   String? get initialTeacherCompensationSource =>
-      _initialFinancialDecision?['teacherCompensationSource']?.toString();
+      operation == LessonDecisionOperation.cancel
+      ? 'automatic'
+      : _initialFinancialDecision?['teacherCompensationSource']?.toString();
 
   @override
   List<Map<String, dynamic>> get initialClientDecisions {
+    if (operation == LessonDecisionOperation.cancel) {
+      return List.unmodifiable([
+        for (final participant in settlementClients)
+          Map<String, dynamic>.unmodifiable({
+            'clientId': participant.id,
+            'chargeType': 'none',
+            'chargeDurationMinutes': 0,
+          }),
+      ]);
+    }
     final stored = [
       for (final item
           in _initialFinancialDecision?['clientDecisions'] as List? ?? const [])

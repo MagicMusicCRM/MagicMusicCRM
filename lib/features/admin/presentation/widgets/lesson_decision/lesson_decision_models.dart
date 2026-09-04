@@ -153,6 +153,86 @@ class LessonDecisionParticipant {
   final bool isStudent;
 }
 
+class LessonDecisionClientDraft {
+  const LessonDecisionClientDraft({
+    required this.clientId,
+    required this.chargeType,
+    required this.chargeDurationMinutes,
+  });
+
+  final String clientId;
+  final String chargeType;
+  final int? chargeDurationMinutes;
+
+  Map<String, dynamic> toJson() => {
+    'clientId': clientId,
+    'chargeType': chargeType,
+    if (chargeDurationMinutes != null)
+      'chargeDurationMinutes': chargeDurationMinutes,
+  };
+}
+
+class LessonDecisionDraft {
+  const LessonDecisionDraft({
+    required this.settlementTypeKey,
+    required this.teacherCompensationRuleKey,
+    required this.clientDecisions,
+    required this.teacherCreditedDurationMinutes,
+  });
+
+  final String settlementTypeKey;
+  final String teacherCompensationRuleKey;
+  final List<LessonDecisionClientDraft> clientDecisions;
+  final int? teacherCreditedDurationMinutes;
+
+  factory LessonDecisionDraft.forCancel({
+    required LessonDecisionCatalog catalog,
+    required Map<String, dynamic> lesson,
+    required List<LessonDecisionParticipant> clients,
+  }) {
+    final settlement = catalog.settlementTypes.where(
+      (item) => item.key == 'unpaid_miss',
+    );
+    if (settlement.isEmpty) {
+      throw StateError('Не найден тип расчёта для неоплачиваемого пропуска.');
+    }
+    final policy = settlement.single;
+    final durationMinutes =
+        lessonDecisionIntegerMinutes(
+          lesson['duration_minutes'] ?? lesson['durationMinutes'],
+        ) ??
+        catalog.defaultDurationMinutes ??
+        60;
+    final teacherRuleKey = policy.defaultTeacherCompensationRuleKey ?? 'none';
+    return LessonDecisionDraft(
+      settlementTypeKey: policy.key,
+      teacherCompensationRuleKey: teacherRuleKey,
+      clientDecisions: List.unmodifiable([
+        for (final client in clients)
+          LessonDecisionClientDraft(
+            clientId: client.id,
+            chargeType: 'none',
+            chargeDurationMinutes: _recommendedDuration(
+              policy.clientDurationMode,
+              durationMinutes,
+            ),
+          ),
+      ]),
+      teacherCreditedDurationMinutes: _recommendedDuration(
+        policy.teacherDurationMode,
+        durationMinutes,
+      ),
+    );
+  }
+}
+
+int? _recommendedDuration(String? mode, int lessonDurationMinutes) =>
+    switch (mode) {
+      'zero' => 0,
+      'full' => lessonDurationMinutes,
+      _ => null,
+    };
+
 class LessonDecisionSubscription {
   const LessonDecisionSubscription({required this.id, required this.label});
 

@@ -122,4 +122,98 @@ describe("SubscriptionReservationService post-commit invalidation", () => {
       0.5,
     ]);
   });
+
+  it("reuses an unpaid cancellation unit while a paid cancellation consumes it once", async () => {
+    const nextLessonId = "55555555-5555-4555-8555-555555555555";
+    let reservationState: "reserved" | "released" | "consumed" = "reserved";
+    let reservationLessonId = lessonId;
+    let allocations = 0;
+    const query = jest.fn(async (sql: string, params?: unknown[]) => {
+      const normalized = sql.trim().replace(/\s+/g, " ").toLowerCase();
+      if (normalized.startsWith("update app.lesson_reservations") &&
+        normalized.includes("set state = 'consumed'")) {
+        if (reservationState !== "reserved") return { rows: [], rowCount: 0 };
+        reservationState = "consumed";
+        return { rows: [], rowCount: 1 };
+      }
+      if (normalized.startsWith("update app.lesson_reservations") &&
+        normalized.includes("set state = 'released'")) {
+        if (reservationState !== "reserved") return { rows: [], rowCount: 0 };
+        reservationState = "released";
+        return { rows: [], rowCount: 1 };
+      }
+      if (normalized.includes("from app.subscriptions") &&
+        normalized.includes("for update")) {
+        return {
+          rows: [{
+            id: subscriptionId,
+            student_id: "student-a",
+            status: "active",
+            lessons_total: "1",
+            lessons_used: "0",
+            starts_at: null,
+            expires_at: null,
+          }],
+        };
+      }
+      if (normalized.startsWith("select exists")) {
+        return { rows: [{ covered: true }] };
+      }
+      if (normalized.includes("as used_units") &&
+        normalized.includes("as reserved_units")) {
+        return {
+          rows: [{
+            used_units: "0",
+            reserved_units: reservationState === "reserved" ? "1" : "0",
+          }],
+        };
+      }
+      if (normalized.startsWith("insert into app.lesson_reservations")) {
+        allocations += 1;
+        reservationLessonId = String(params?.[0]);
+        reservationState = "reserved";
+        return { rows: [{ id: "replacement-reservation" }] };
+      }
+      return { rows: [] };
+    });
+    const service = new SubscriptionReservationService(
+      {} as DatabaseService,
+      {} as RealtimeBus,
+    );
+    const client = { query } as unknown as PoolClient;
+
+    await service.terminalize(client, {
+      lessonId,
+      clientFacts: [],
+      clientFact: undefined as never,
+      teacherFact: {} as never,
+    });
+    await service.allocate(client, {
+      lessonId: nextLessonId,
+      clientType: "student",
+      clientId: "student-a",
+      chargeType: "subscription",
+      subscriptionId,
+      units: 1,
+    });
+
+    expect(reservationState).toBe("reserved");
+    expect(reservationLessonId).toBe(nextLessonId);
+
+    const paidFact = {
+      id: "paid-client-fact",
+      chargeType: "subscription",
+      subscriptionId,
+      units: "1",
+    };
+    await service.terminalize(client, {
+      lessonId: nextLessonId,
+      clientFacts: [paidFact],
+      clientFact: paidFact,
+      teacherFact: {} as never,
+    } as never);
+
+    expect(reservationState).toBe("consumed");
+    expect(allocations).toBe(1);
+  });
 });

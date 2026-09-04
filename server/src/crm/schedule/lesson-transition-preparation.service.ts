@@ -391,9 +391,9 @@ export class LessonTransitionPreparationService {
     operation: TransitionOperation,
   ) {
     if (this.policy.canManageTeacherCompensation(actor)) return undefined;
-    if (
-      isCompletedReschedule(source, operation)
-    ) return undefined;
+    if (operation === "cancel" || isCompletedReschedule(source, operation)) {
+      return undefined;
+    }
     return this.preservedTeacherDecision(client, source);
   }
 

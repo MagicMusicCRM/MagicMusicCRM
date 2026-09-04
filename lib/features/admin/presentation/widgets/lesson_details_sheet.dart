@@ -4,6 +4,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/responsive_detail_row.dart';
@@ -33,23 +34,8 @@ Widget detailRow(
 }
 
 /// Human-readable RU label for a lesson status. Pure.
-String lessonStatusLabel(String? status) {
-  switch (status) {
-    case 'completed':
-    case 'done':
-    case 'successfully_completed':
-      return 'Завершено';
-    case 'settlement_pending':
-      return 'Конфликт';
-    case 'cancelled':
-      return 'Отменено';
-    case 'scheduled':
-    case 'planned':
-      return 'Забронировано';
-    default:
-      return status ?? 'Забронировано';
-  }
-}
+String lessonStatusLabel(String? status) =>
+    LessonStateProjection.fromMap({'status': status}).label;
 
 /// Safe staff-facing explanation for an automatic settlement failure.
 /// Backend failure identifiers and exception messages must never be rendered

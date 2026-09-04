@@ -3,6 +3,44 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decis
 
 void main() {
   test(
+    'cancel draft starts as unpaid miss with zero client and teacher time',
+    () {
+      final draft = LessonDecisionDraft.forCancel(
+        catalog: const LessonDecisionCatalog(
+          settlementTypes: [
+            LessonDecisionCatalogItem(
+              key: 'unpaid_miss',
+              label: 'Неоплачиваемый пропуск',
+              order: 0,
+              clientDurationMode: 'zero',
+              teacherDurationMode: 'zero',
+              defaultTeacherCompensationRuleKey: 'none',
+            ),
+          ],
+          compensationRules: [
+            LessonDecisionCatalogItem(
+              key: 'none',
+              label: 'Не оплачивать',
+              order: 0,
+              mode: 'none',
+            ),
+          ],
+        ),
+        lesson: const {'durationMinutes': 60, 'studentId': 'student-1'},
+        clients: const [
+          LessonDecisionParticipant(id: 'student-1', name: 'Анна'),
+        ],
+      );
+
+      expect(draft.settlementTypeKey, 'unpaid_miss');
+      expect(draft.teacherCompensationRuleKey, 'none');
+      expect(draft.clientDecisions.single.chargeDurationMinutes, 0);
+      expect(draft.clientDecisions.single.chargeType, 'none');
+      expect(draft.teacherCreditedDurationMinutes, 0);
+    },
+  );
+
+  test(
     'normalizes editor pricing into the existing commercial HTTP contract',
     () {
       final draft = normalizeLessonClientDecision({

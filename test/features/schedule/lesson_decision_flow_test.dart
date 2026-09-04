@@ -85,6 +85,39 @@ class _LessonDecisionApi extends MagicApiClient {
               'active': true,
               'order': 1,
             },
+            {
+              'stableKey': 'paid_miss',
+              'label': 'Оплачиваемый пропуск',
+              'colorToken': 'info',
+              'clientDurationMode': 'full',
+              'teacherDurationMode': 'full',
+              'defaultTeacherCompensationRuleKey': 'standard',
+              'allowedContexts': ['cancel'],
+              'active': true,
+              'order': 2,
+            },
+            {
+              'stableKey': 'partially_paid_miss',
+              'label': 'Частично оплачиваемый пропуск',
+              'colorToken': 'warning',
+              'clientDurationMode': 'manual',
+              'teacherDurationMode': 'manual',
+              'defaultTeacherCompensationRuleKey': 'percent',
+              'allowedContexts': ['cancel'],
+              'active': true,
+              'order': 3,
+            },
+            {
+              'stableKey': 'unpaid_miss',
+              'label': 'Неоплачиваемый пропуск',
+              'colorToken': 'warning',
+              'clientDurationMode': 'zero',
+              'teacherDurationMode': 'zero',
+              'defaultTeacherCompensationRuleKey': 'none',
+              'allowedContexts': ['cancel'],
+              'active': true,
+              'order': 4,
+            },
           ],
           'teacherCompensationRules': const [
             {
@@ -525,6 +558,180 @@ Future<void> _openAndFill(
 }
 
 void main() {
+  testWidgets(
+    'cancel opens unpaid and paid miss autofills full duration once',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = _LessonDecisionApi(operationKey: 'cancel');
+      await tester.pumpWidget(
+        _host(
+          api,
+          operation: LessonDecisionOperation.cancel,
+          lesson: const {
+            ..._lesson,
+            'studentId': _firstGroupStudentId,
+            'studentName': 'Анна Иванова',
+            'durationMinutes': 60,
+            'financialDecision': {
+              'settlementTypeKey': 'lesson',
+              'teacherCompensationRuleKey': 'standard',
+              'teacherCreditedDurationMinutes': 60,
+              'teacherCompensationSource': 'automatic',
+            },
+          },
+        ),
+      );
+      await tester.tap(find.text('Открыть'));
+      await tester.pumpAndSettle();
+
+      final settlement = tester.widget<DropdownButtonFormField<String>>(
+        find.byKey(const Key('lesson-decision-settlement')),
+      );
+      expect(settlement.initialValue, 'unpaid_miss');
+
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Отмена по просьбе клиента',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+      expect(api.previews.single['financialDecision'], {
+        'settlementTypeKey': 'unpaid_miss',
+        'clientDecisions': [
+          {
+            'clientId': _firstGroupStudentId,
+            'chargeDurationMinutes': 0,
+            'chargeType': 'none',
+          },
+        ],
+        'teacherCompensationRuleKey': 'none',
+        'teacherCreditedDurationMinutes': 0,
+        'teacherCompensationSource': 'automatic',
+      });
+
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+      final paidApi = _LessonDecisionApi(operationKey: 'cancel');
+      await tester.pumpWidget(
+        _host(
+          paidApi,
+          operation: LessonDecisionOperation.cancel,
+          lesson: const {
+            ..._lesson,
+            'studentId': _firstGroupStudentId,
+            'durationMinutes': 60,
+          },
+        ),
+      );
+      await tester.tap(find.text('Открыть'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Оплачиваемый пропуск').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Оплачиваемый пропуск по правилу',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+      expect(paidApi.previews.single['financialDecision'], {
+        'settlementTypeKey': 'paid_miss',
+        'clientDecisions': [
+          {
+            'clientId': _firstGroupStudentId,
+            'chargeDurationMinutes': 60,
+            'chargeType': 'none',
+          },
+        ],
+        'teacherCompensationRuleKey': 'standard',
+        'teacherCreditedDurationMinutes': 60,
+        'teacherCompensationSource': 'automatic',
+      });
+    },
+  );
+
+  testWidgets(
+    'switching cancellation type after manual edits asks before preserving them',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = _LessonDecisionApi(operationKey: 'cancel');
+      await tester.pumpWidget(
+        _host(
+          api,
+          operation: LessonDecisionOperation.cancel,
+          lesson: const {
+            ..._lesson,
+            'studentId': _firstGroupStudentId,
+            'durationMinutes': 60,
+          },
+        ),
+      );
+      await tester.tap(find.text('Открыть'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Частично оплачиваемый пропуск').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(
+          const Key('lesson-decision-client-duration-$_firstGroupStudentId'),
+        ),
+        '30',
+      );
+      await tester.enterText(
+        find.byKey(const Key('teacher-credited-duration-minutes')),
+        '45',
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Оплачиваемый пропуск').last);
+      await tester.pump();
+
+      expect(
+        find.text('Применить рекомендованные значения для нового типа?'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Оставить мои значения'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Согласованы отдельные часы',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+
+      expect(api.previews, hasLength(1));
+      expect(api.previews.single['financialDecision'], {
+        'settlementTypeKey': 'paid_miss',
+        'clientDecisions': [
+          {
+            'clientId': _firstGroupStudentId,
+            'chargeDurationMinutes': 30,
+            'chargeType': 'none',
+          },
+        ],
+        'teacherCompensationRuleKey': 'percent',
+        'teacherCompensationValueMinor': '6250',
+        'teacherCreditedDurationMinutes': 45,
+        'teacherCompensationSource': 'manual',
+      });
+    },
+  );
+
   test('individual lead identity survives snake and camel read shapes', () {
     for (final fixture in [
       (
@@ -613,7 +820,9 @@ void main() {
     LessonDecisionOperation.reschedule,
   ]) {
     testWidgets(
-      'stored lead decision round-trips through ${operation.apiKey}',
+      operation == LessonDecisionOperation.cancel
+          ? 'cancel replaces a stored lead decision with the unpaid default'
+          : 'stored lead decision round-trips through ${operation.apiKey}',
       (tester) async {
         final settlementKey = switch (operation) {
           LessonDecisionOperation.plannedSettlement ||
@@ -657,16 +866,25 @@ void main() {
         await tester.tap(find.byKey(const Key('lesson-decision-submit')));
         await tester.pumpAndSettle();
 
-        expect(
-          (api.previews.single['financialDecision'] as Map)['clientDecisions'],
-          [
+        final preview = api.previews.single['financialDecision'] as Map;
+        if (operation == LessonDecisionOperation.cancel) {
+          expect(preview['settlementTypeKey'], 'unpaid_miss');
+          expect(preview['clientDecisions'], [
+            {
+              'clientId': _leadId,
+              'chargeDurationMinutes': 0,
+              'chargeType': 'none',
+            },
+          ]);
+        } else {
+          expect(preview['clientDecisions'], [
             {
               'clientId': _leadId,
               'settlementTypeKey': settlementKey,
               'chargeType': 'none',
             },
-          ],
-        );
+          ]);
+        }
       },
     );
   }

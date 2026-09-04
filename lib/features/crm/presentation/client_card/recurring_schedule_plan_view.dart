@@ -624,9 +624,10 @@ class _StudentTimelineItem extends StatelessWidget {
       item.teacher?.name ?? 'Педагог не указан',
       item.room?.name ?? 'Аудитория не указана',
     ];
-    final relation = item.reschedule.successorId != null
-        ? 'Исходное занятие переноса'
-        : item.reschedule.predecessorId != null
+    final hasActionableSuccessor =
+        item.lifecycleState == StudentLessonLifecycleState.rescheduled &&
+        item.reschedule.successorId != null;
+    final relation = item.reschedule.predecessorId != null
         ? 'Новое занятие после переноса'
         : null;
     return InkWell(
@@ -646,11 +647,7 @@ class _StudentTimelineItem extends StatelessWidget {
             final compact = constraints.maxWidth < 620;
             final title = Row(
               children: [
-                Icon(
-                  _stateIcon(item.lifecycleState),
-                  size: 17,
-                  color: state.token.accent,
-                ),
+                Icon(state.token.icon, size: 17, color: state.token.accent),
                 const SizedBox(width: AppSpace.xs),
                 Expanded(
                   child: Text(
@@ -680,6 +677,21 @@ class _StudentTimelineItem extends StatelessWidget {
                 ),
                 if (relation != null)
                   Text(relation, style: const TextStyle(fontSize: 12)),
+                if (hasActionableSuccessor)
+                  TextButton(
+                    key: ValueKey('student-timeline-successor-${item.id}'),
+                    onPressed: onTap,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColor.text2,
+                      minimumSize: Size.zero,
+                      padding: EdgeInsets.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Открыть актуальное занятие',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
               ],
             );
             return compact
@@ -801,14 +813,6 @@ String _lifecycleWire(StudentLessonLifecycleState state) => switch (state) {
   StudentLessonLifecycleState.successfullyCompleted => 'successfully_completed',
   StudentLessonLifecycleState.cancelled => 'cancelled',
   StudentLessonLifecycleState.rescheduled => 'rescheduled',
-};
-
-IconData _stateIcon(StudentLessonLifecycleState state) => switch (state) {
-  StudentLessonLifecycleState.successfullyCompleted => Icons.check_rounded,
-  StudentLessonLifecycleState.settlementPending => Icons.hourglass_top_rounded,
-  StudentLessonLifecycleState.cancelled => Icons.close_rounded,
-  StudentLessonLifecycleState.rescheduled => Icons.swap_horiz_rounded,
-  StudentLessonLifecycleState.scheduled => Icons.event_rounded,
 };
 
 String _groupLessonDate(Map<String, dynamic> lesson) {

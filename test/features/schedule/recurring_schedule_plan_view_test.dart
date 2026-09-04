@@ -19,6 +19,8 @@ void main() {
       );
       expect(find.text('Разовое занятие'), findsOneWidget);
       expect(find.text('Абонемент'), findsOneWidget);
+      expect(find.text('Отменено'), findsOneWidget);
+      expect(find.text('Перенесено'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('student-timeline-lesson-cancelled')),
         findsOneWidget,
@@ -304,6 +306,12 @@ final _timeline = StudentLessonTimelinePage.fromJson({
       'generated',
       planId: 'plan-a',
       state: 'cancelled',
+    ),
+    _lesson(
+      'lesson-rescheduled',
+      'generated',
+      planId: 'plan-a',
+      state: 'rescheduled',
       successorId: 'lesson-successor',
     ),
     _lesson(

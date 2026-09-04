@@ -28,6 +28,8 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   final Map<String, Map<String, dynamic>> _clientDecisionsById = {};
   final Map<String, List<LessonDecisionSubscription>> _subscriptions = {};
   final Set<String> _loadingSubscriptions = {};
+  final Set<String> _clientDecisionTouched = {};
+  final Set<String> _clientDurationTouched = {};
 
   LessonDecisionCatalog? _catalog;
   LessonDecisionPreview? _preview;
@@ -85,13 +87,37 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     });
     try {
       final catalog = await widget.controller.loadCatalog();
-      final defaults = _resolveDefaults(widget.controller, catalog);
+      final cancellationDraft =
+          widget.controller.operation == LessonDecisionOperation.cancel
+          ? LessonDecisionDraft.forCancel(
+              catalog: catalog,
+              lesson: widget.controller.lesson,
+              clients: widget.controller.settlementClients,
+            )
+          : null;
+      final defaults = cancellationDraft == null
+          ? _resolveDefaults(widget.controller, catalog)
+          : (
+              settlementKey: cancellationDraft.settlementTypeKey,
+              compensationKey: cancellationDraft.teacherCompensationRuleKey,
+              compensationValue: '',
+            );
       final settlement = _catalogItem(
         catalog.settlementTypes,
         defaults.settlementKey ?? '',
       );
-      final initialSource = widget.controller.initialTeacherCompensationSource;
-      final initialClientDecisions = widget.controller.initialClientDecisions;
+      final initialSource = cancellationDraft == null
+          ? widget.controller.initialTeacherCompensationSource
+          : 'automatic';
+      final initialTeacherMinutes = cancellationDraft == null
+          ? widget.controller.initialTeacherCreditedDurationMinutes
+          : cancellationDraft.teacherCreditedDurationMinutes;
+      final initialClientDecisions = cancellationDraft == null
+          ? widget.controller.initialClientDecisions
+          : [
+              for (final decision in cancellationDraft.clientDecisions)
+                decision.toJson(),
+            ];
       final participants = {
         for (final participant in widget.controller.settlementClients)
           participant.id: participant,
@@ -136,8 +162,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
               durationMinutes: _lessonDurationMinutes,
               compensationTouched: initialSource == 'manual',
               currentRuleKey: defaults.compensationKey,
-              currentTeacherMinutes:
-                  widget.controller.initialTeacherCreditedDurationMinutes,
+              currentTeacherMinutes: initialTeacherMinutes,
             );
       if (!mounted) return;
       setState(() {
@@ -151,8 +176,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
             : _recommendedCompensationInput(catalog, recommendation);
         _teacherDurationController.text =
             recommendation?.teacherCreditedDurationMinutes?.toString() ??
-            widget.controller.initialTeacherCreditedDurationMinutes
-                ?.toString() ??
+            initialTeacherMinutes?.toString() ??
             '';
         _teacherCompensationSource = recommendation?.source ?? initialSource;
         _compensationTouched = initialSource == 'manual';
@@ -225,6 +249,8 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
         _subscriptions
           ..clear()
           ..addAll(initialSubscriptions);
+        _clientDecisionTouched.clear();
+        _clientDurationTouched.clear();
         _loading = false;
       });
     } catch (error) {
@@ -245,21 +271,50 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     });
   }
 
-  void _selectSettlement(String? value) {
+  Future<void> _selectSettlement(String? value) async {
+    if (value == null || value == _settlementKey) return;
+    var applyRecommendation = true;
+    if (widget.controller.operation == LessonDecisionOperation.cancel &&
+        (_compensationTouched || _clientDecisionTouched.isNotEmpty)) {
+      final choice = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          content: const Text(
+            'Применить рекомендованные значения для нового типа?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Оставить мои значения'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Применить'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || choice == null) return;
+      applyRecommendation = choice;
+    }
     setState(() {
       _settlementKey = value;
       final settlement = _settlement;
       if (settlement?.defaultTeacherCompensationRuleKey != null) {
+        if (applyRecommendation) {
+          _compensationTouched = false;
+        }
         final recommendation = const LessonFinancialAutofill().apply(
           settlement: settlement!,
           durationMinutes: _lessonDurationMinutes,
-          compensationTouched: _compensationTouched,
+          compensationTouched: !applyRecommendation && _compensationTouched,
           currentRuleKey: _compensationKey,
           currentTeacherMinutes: int.tryParse(_teacherDurationController.text),
         );
         _applyRecommendation(
           recommendation,
-          preserveCompensationValue: _compensationTouched,
+          preserveCompensationValue:
+              !applyRecommendation && _compensationTouched,
         );
         final clientMinutes = const LessonFinancialAutofill()
             .recommendedClientMinutes(
@@ -267,7 +322,15 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
               durationMinutes: _lessonDurationMinutes,
             );
         for (final participant in widget.controller.settlementClients) {
-          if (_clientSettlementKeys[participant.id] == null) {
+          if (applyRecommendation) {
+            _clientSettlementKeys[participant.id] = null;
+            _writeClientDecision(participant.id, 'settlementTypeKey', null);
+          }
+          final preserveClientMinutes =
+              !applyRecommendation &&
+              (_clientSettlementKeys[participant.id] != null ||
+                  _clientDurationTouched.contains(participant.id));
+          if (!preserveClientMinutes) {
             _clientDurationMinutes[participant.id] = clientMinutes;
             _writeClientDecision(
               participant.id,
@@ -275,6 +338,10 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
               clientMinutes,
             );
           }
+        }
+        if (applyRecommendation) {
+          _clientDecisionTouched.clear();
+          _clientDurationTouched.clear();
         }
       }
       _clearPreview();
@@ -296,6 +363,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
 
   void _selectClientSettlement(String clientId, String? settlementKey) {
     setState(() {
+      _clientDecisionTouched.add(clientId);
       _clientSettlementKeys[clientId] = settlementKey;
       _writeClientDecision(clientId, 'settlementTypeKey', settlementKey);
       final settlement = _catalogItem(
@@ -320,6 +388,8 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
 
   void _selectClientDuration(String clientId, String value) {
     setState(() {
+      _clientDecisionTouched.add(clientId);
+      _clientDurationTouched.add(clientId);
       _clientDurationMinutes[clientId] = int.tryParse(value);
       _writeClientDecision(
         clientId,

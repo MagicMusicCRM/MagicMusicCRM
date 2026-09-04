@@ -67,8 +67,21 @@ void main() {
         lifecycleState: 'settlement_pending',
       );
 
-      expect(projection.token, LessonStateToken.conflict);
-      expect(projection.label, 'Конфликт');
+      expect(projection.semantic, LessonSemantic.warning);
+      expect(projection.token.accent, AppColor.warning);
+      expect(projection.label, 'Нужно проверить расчёт');
+    });
+
+    test('cancelled and rescheduled retain distinct lifecycle semantics', () {
+      final cancelled = lessonStateProjection(lifecycleState: 'cancelled');
+      final rescheduled = lessonStateProjection(lifecycleState: 'rescheduled');
+
+      expect(cancelled.semantic, LessonSemantic.cancelled);
+      expect(cancelled.token.accent, AppColor.danger);
+      expect(cancelled.label, 'Отменено');
+      expect(rescheduled.semantic, LessonSemantic.rescheduled);
+      expect(rescheduled.token.accent, AppColor.text2);
+      expect(rescheduled.label, 'Перенесено');
     });
 
     test('schedule conflict overrides completed state', () {

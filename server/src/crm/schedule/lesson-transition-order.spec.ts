@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { DatabaseService } from "../../db/database.service";
 import type { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import type {
+  LessonFinancialDecision,
   LessonSettlementPort,
   LessonSettlementResult,
 } from "../commerce/lesson-settlement.port";
@@ -122,6 +123,167 @@ const settlementResult: LessonSettlementResult = {
 settlementResult.clientFact = settlementResult.clientFacts[0]!;
 
 describe("Lesson transition runtime ordering", () => {
+  it("zeroes a whole group cancellation but preserves its teacher decision for one absence", async () => {
+    const firstStudentId = source.studentId!;
+    const secondStudentId = "00000000-0000-4000-8000-000000000006";
+    const groupSource: TransitionSource = {
+      ...source,
+      studentId: null,
+      groupId: "00000000-0000-4000-8000-000000000007",
+      snapshot: null,
+      groupSnapshot: {
+        completionType: "regular",
+        teacherCompensationType: "fixed",
+        teacherCompensationValue: 1_500,
+        trial: false,
+        validationState: "valid",
+      },
+      participants: [firstStudentId, secondStudentId].map((studentId) => ({
+        studentId,
+        chargeType: "subscription" as const,
+        chargeValue: 1,
+        subscriptionId: null,
+      })),
+    };
+    const settlement = {
+      loadPlan: jest.fn(async () => ({
+        decision: {
+          settlementTypeKey: "lesson",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "150000",
+          teacherCreditedDurationMinutes: 60,
+          teacherCompensationSource: "manual" as const,
+        },
+      })),
+      resolvePlannedPlan: jest.fn(async (_client, input) => ({
+        decision: input.preservedTeacherDecision
+          ? { ...input.decision, ...input.preservedTeacherDecision }
+          : {
+              ...input.decision,
+              clientDecisions: input.decision.clientDecisions?.map(
+                (decision: NonNullable<LessonFinancialDecision["clientDecisions"]>[number]) => ({
+                  ...decision,
+                  chargeDurationMinutes: 0,
+                }),
+              ),
+              teacherCompensationRuleKey: "none",
+              teacherCreditedDurationMinutes: 0,
+              teacherCompensationSource: "automatic" as const,
+            },
+        settlementRevisionId: "current-settlement-revision",
+        compensationRevisionId: "current-compensation-revision",
+      })),
+    } as unknown as LessonSettlementPort;
+    const preparation = new LessonTransitionPreparationService(
+      {} as never,
+      {
+        canManageTeacherCompensation: jest.fn(() => false),
+        teacherCompensationMutationAuthorization: jest.fn((actor) => ({
+          actor,
+          capabilityKey: "schedule.lesson.write",
+        })),
+      } as never,
+      {} as never,
+      {} as never,
+      settlement,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const prepared = await preparation.resolvedEffectiveTransitionDto(
+      {} as PoolClient,
+      { userId: "actor", role: "manager" },
+      groupSource,
+      "cancel",
+      {
+        operation: "cancel",
+        expectedVersion: 1,
+        reasonText: "Отмена всей группы",
+        financialDecision: {
+          settlementTypeKey: "unpaid_miss",
+          teacherCompensationRuleKey: "standard",
+          clientDecisions: [firstStudentId, secondStudentId].map(
+            (clientId) => ({ clientId, chargeType: "none" as const }),
+          ),
+        },
+      },
+    );
+
+    expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.not.objectContaining({
+        preservedTeacherDecision: expect.anything(),
+      }),
+    );
+    expect(prepared.financialDecision).toMatchObject({
+      settlementTypeKey: "unpaid_miss",
+      clientDecisions: [
+        { clientId: firstStudentId, chargeDurationMinutes: 0 },
+        { clientId: secondStudentId, chargeDurationMinutes: 0 },
+      ],
+      teacherCompensationRuleKey: "none",
+      teacherCreditedDurationMinutes: 0,
+      teacherCompensationSource: "automatic",
+    });
+
+    const participantAbsence = await preparation.resolvedEffectiveTransitionDto(
+      {} as PoolClient,
+      { userId: "actor", role: "manager" },
+      groupSource,
+      "settle",
+      {
+        operation: "settle",
+        expectedVersion: 1,
+        reasonText: "Частичный пропуск одного участника",
+        financialDecision: {
+          settlementTypeKey: "lesson",
+          teacherCompensationRuleKey: "none",
+          clientDecisions: [
+            {
+              clientId: firstStudentId,
+              settlementTypeKey: "partially_paid_miss",
+              chargeType: "subscription",
+              chargeDurationMinutes: 30,
+            },
+            {
+              clientId: secondStudentId,
+              chargeType: "subscription",
+              chargeDurationMinutes: 60,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(settlement.resolvePlannedPlan).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        preservedTeacherDecision: expect.objectContaining({
+          teacherCompensationRuleKey: "fixed",
+          teacherCreditedDurationMinutes: 60,
+          teacherCompensationSource: "manual",
+        }),
+      }),
+    );
+    expect(participantAbsence.financialDecision).toMatchObject({
+      clientDecisions: [
+        {
+          clientId: firstStudentId,
+          settlementTypeKey: "partially_paid_miss",
+          chargeDurationMinutes: 30,
+        },
+        {
+          clientId: secondStudentId,
+          chargeDurationMinutes: 60,
+        },
+      ],
+      teacherCompensationRuleKey: "fixed",
+      teacherCreditedDurationMinutes: 60,
+      teacherCompensationSource: "manual",
+    });
+  });
+
   it("prepares a server-owned zero source and editable partial successor", async () => {
     const settlement = {
       loadPlan: jest.fn(async () => null),

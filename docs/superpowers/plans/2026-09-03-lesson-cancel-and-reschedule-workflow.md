@@ -327,7 +327,7 @@ git commit -m "feat: route lesson actions through reschedule chains"
 - Consumes: `resolveSettlementPolicy("unpaid_miss")` and the one-time autofill helper from the settlement-policy plan.
 - Produces: cancellation preview initialized to zero client/teacher duration, editable settlement selection, and stable markers `cancelled`/`rescheduled` for all schedule views.
 
-- [ ] **Step 1: Write failing default and override tests**
+- [x] **Step 1: Write failing default and override tests**
 
 ```dart
 test('cancel opens with unpaid miss and no teacher payment', () {
@@ -354,17 +354,17 @@ Add a group case proving whole-group cancellation creates one zero teacher
 fact, while a paid or partial absence for one participant changes only that
 participant's client fact and leaves the lesson-level teacher decision intact.
 
-- [ ] **Step 2: Run cancellation policy tests**
+- [x] **Step 2: Run cancellation policy tests**
 
 Run: `flutter test test/features/schedule/lesson_decision_flow_test.dart test/features/schedule/lesson_decision_models_test.dart; cd server; npm test -- --runTestsByPath src/crm/schedule/lesson-transition-boundaries.spec.ts src/crm/schedule/lesson-transition-order.spec.ts`
 
 Expected: FAIL on current manually inherited defaults.
 
-- [ ] **Step 3: Resolve defaults on server and mirror them in Flutter**
+- [x] **Step 3: Resolve defaults on server and mirror them in Flutter**
 
 The server remains authoritative when the client omits a recommendation revision or sends an obsolete one. The form applies the catalog recommendation once, then preserves every user-touched field. Switching type after manual edits prompts `Применить рекомендованные значения для нового типа?`; declining keeps the edits and still allows preview validation.
 
-- [ ] **Step 4: Normalize lesson markers and copy**
+- [x] **Step 4: Normalize lesson markers and copy**
 
 Use one mapping in all lesson cards/details:
 
@@ -384,7 +384,7 @@ Run: `flutter test test/features/schedule/lesson_decision_flow_test.dart test/fe
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit cancellation defaults and status mapping**
+- [x] **Step 5: Commit cancellation defaults and status mapping**
 
 ```powershell
 git add server/src/crm/schedule/lesson-transition-preparation.service.ts server/src/crm/schedule/lesson-transition-financial.service.ts server/src/crm/schedule/lesson-transition-boundaries.spec.ts server/src/crm/schedule/lesson-transition-order.spec.ts lib/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart lib/features/admin/presentation/widgets/lesson_decision/lesson_decision_controller.dart lib/features/admin/presentation/widgets/lesson_decision/lesson_decision_form.dart test/features/schedule/lesson_decision_flow_test.dart test/features/schedule/lesson_decision_models_test.dart
