@@ -328,6 +328,16 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     widget.onDirtyChanged?.call(true);
   }
 
+  Future<void> _finishSuccessfulCommit() async {
+    if (!mounted) return;
+    _dirty = false;
+    widget.onDirtyChanged?.call(false);
+    if (widget.onDirtyChanged != null) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (mounted) Navigator.pop(context, true);
+  }
+
   Future<void> _selectSettlement(String? value) async {
     if (value == null || value == _settlementKey) return;
     var applyRecommendation = true;
@@ -689,7 +699,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     });
     try {
       await widget.controller.commit(preview);
-      if (mounted) Navigator.pop(context, true);
+      await _finishSuccessfulCommit();
     } catch (error) {
       if (mounted) {
         final recovered = await widget.controller.recoverStaleCommit(error);

@@ -2261,6 +2261,60 @@ void main() {
     },
   );
 
+  testWidgets(
+    'successful cancellation commit closes cleanly and returns success',
+    (tester) async {
+      tester.view.physicalSize = const Size(1440, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = _LessonDecisionApi(operationKey: 'cancel');
+      bool? result;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                onPressed: () async {
+                  result = await showLessonDecisionFlow(
+                    context,
+                    crm: MagicCrmService(api),
+                    operation: LessonDecisionOperation.cancel,
+                    lesson: Map<String, dynamic>.from(_lesson),
+                    canManageTeacherCompensation: true,
+                  );
+                },
+                child: const Text('Открыть успешную отмену'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Открыть успешную отмену'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Клиент подтвердил отмену',
+      );
+      await tester.pump();
+      final submit = find.byKey(const Key('lesson-decision-submit'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
+
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+
+      expect(api.commits, hasLength(1));
+      expect(result, isTrue);
+      expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+      expect(find.text('Отменить изменения?'), findsNothing);
+    },
+  );
+
   for (final surfaceCase in const [
     (width: 390.0, platform: TargetPlatform.android, mobile: true),
     (width: 1440.0, platform: TargetPlatform.windows, mobile: false),
