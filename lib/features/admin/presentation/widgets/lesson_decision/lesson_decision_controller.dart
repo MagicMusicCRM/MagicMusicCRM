@@ -15,11 +15,14 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     required this.canManageTeacherCompensation,
     this.successor,
     this.resources,
-    this.initialSettlementTypeKey,
-    this.initialCompensationRuleKey,
-    this.initialCompensationValueMinor,
+    String? initialSettlementTypeKey,
+    String? initialCompensationRuleKey,
+    String? initialCompensationValueMinor,
     this.afterCommit,
   }) : _crm = crm,
+       _initialSettlementTypeKey = initialSettlementTypeKey,
+       _initialCompensationRuleKey = initialCompensationRuleKey,
+       _initialCompensationValueMinor = initialCompensationValueMinor,
        _expectedVersion = (lesson['version'] as num?)?.toInt();
 
   final MagicCrmService _crm;
@@ -31,12 +34,9 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   final bool canManageTeacherCompensation;
   @override
   final Map<String, dynamic>? successor;
-  @override
-  final String? initialSettlementTypeKey;
-  @override
-  final String? initialCompensationRuleKey;
-  @override
-  final String? initialCompensationValueMinor;
+  final String? _initialSettlementTypeKey;
+  final String? _initialCompensationRuleKey;
+  final String? _initialCompensationValueMinor;
   final LessonDecisionCommitted? afterCommit;
   final Map<String, dynamic>? resources;
 
@@ -44,6 +44,21 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     final value = lesson['financial_decision'] ?? lesson['financialDecision'];
     return value is Map ? Map<String, dynamic>.from(value) : null;
   }
+
+  @override
+  String? get initialSettlementTypeKey =>
+      _initialSettlementTypeKey ??
+      _initialFinancialDecision?['settlementTypeKey']?.toString();
+
+  @override
+  String? get initialCompensationRuleKey =>
+      _initialCompensationRuleKey ??
+      _initialFinancialDecision?['teacherCompensationRuleKey']?.toString();
+
+  @override
+  String? get initialCompensationValueMinor =>
+      _initialCompensationValueMinor ??
+      _initialFinancialDecision?['teacherCompensationValueMinor']?.toString();
 
   @override
   int? get initialTeacherCreditedDurationMinutes =>
@@ -54,6 +69,16 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   @override
   String? get initialTeacherCompensationSource =>
       _initialFinancialDecision?['teacherCompensationSource']?.toString();
+
+  @override
+  List<Map<String, dynamic>> get initialClientDecisions => List.unmodifiable([
+    for (final item
+        in _initialFinancialDecision?['clientDecisions'] as List? ?? const [])
+      if (item is Map)
+        Map<String, dynamic>.unmodifiable(
+          normalizeLessonClientDecision(Map<String, dynamic>.from(item)),
+        ),
+  ]);
 
   @override
   bool get isGroupLesson {

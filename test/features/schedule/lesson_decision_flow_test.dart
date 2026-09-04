@@ -243,9 +243,10 @@ class _LessonDecisionApi extends MagicApiClient {
 }
 
 class _GroupLessonDecisionApi extends MagicApiClient {
-  _GroupLessonDecisionApi()
+  _GroupLessonDecisionApi({this.operationKey = 'planned-settlement'})
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
+  final String operationKey;
   final previews = <Map<String, dynamic>>[];
   final commits = <Map<String, dynamic>>[];
   final payerQueries = <Map<String, dynamic>>[];
@@ -290,7 +291,7 @@ class _GroupLessonDecisionApi extends MagicApiClient {
               'stableKey': 'lesson',
               'label': 'Занятие',
               'colorToken': 'success',
-              'allowedContexts': ['settle'],
+              'allowedContexts': ['settle', 'reschedule'],
               'active': true,
               'order': 0,
             },
@@ -301,7 +302,7 @@ class _GroupLessonDecisionApi extends MagicApiClient {
               'clientDurationMode': 'manual',
               'teacherDurationMode': 'manual',
               'defaultTeacherCompensationRuleKey': 'percent',
-              'allowedContexts': ['settle'],
+              'allowedContexts': ['settle', 'reschedule'],
               'active': true,
               'order': 1,
             },
@@ -312,7 +313,7 @@ class _GroupLessonDecisionApi extends MagicApiClient {
               'clientDurationMode': 'manual',
               'teacherDurationMode': 'manual',
               'defaultTeacherCompensationRuleKey': 'percent',
-              'allowedContexts': ['settle'],
+              'allowedContexts': ['settle', 'reschedule'],
               'active': true,
               'order': 2,
             },
@@ -346,7 +347,7 @@ class _GroupLessonDecisionApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    expect(path, '/crm/lessons/$_groupLessonId/planned-settlement/preview');
+    expect(path, '/crm/lessons/$_groupLessonId/$operationKey/preview');
     previews.add(Map<String, dynamic>.from(data as Map));
     return <String, dynamic>{
           'canConfirm': true,
@@ -389,7 +390,7 @@ class _GroupLessonDecisionApi extends MagicApiClient {
     MagicMutationIdentity? mutationIdentity,
   }) async {
     expect(method, 'PUT');
-    expect(path, '/crm/lessons/$_groupLessonId/planned-settlement');
+    expect(path, '/crm/lessons/$_groupLessonId/$operationKey');
     expect(mutationIdentity, isNotNull);
     commits.add(Map<String, dynamic>.from(data as Map));
     return <String, dynamic>{'lessonId': _groupLessonId, 'version': 5} as T;
@@ -1323,4 +1324,370 @@ void main() {
       );
     },
   );
+
+  test('reschedule and correction expose the complete stored decision', () {
+    const storedClients = [
+      {
+        'clientId': _firstGroupStudentId,
+        'settlementTypeKey': 'partially_paid_lesson',
+        'chargeDurationMinutes': 0,
+        'payerStudentId': _firstGroupStudentId,
+        'chargeType': 'subscription',
+        'subscriptionId': _crossPayerSubscriptionId,
+      },
+    ];
+    for (final operation in [
+      LessonDecisionOperation.reschedule,
+      LessonDecisionOperation.correction,
+    ]) {
+      final controller = LessonDecisionController(
+        crm: MagicCrmService(_GroupLessonDecisionApi()),
+        canManageTeacherCompensation: true,
+        operation: operation,
+        lesson: const {
+          'id': _groupLessonId,
+          'version': 4,
+          'financial_decision': {
+            'settlementTypeKey': 'partially_paid_lesson',
+            'teacherCompensationRuleKey': 'percent',
+            'teacherCompensationValueMinor': '7500',
+            'teacherCreditedDurationMinutes': 41,
+            'teacherCompensationSource': 'manual',
+            'clientDecisions': storedClients,
+          },
+        },
+      );
+
+      expect(controller.initialSettlementTypeKey, 'partially_paid_lesson');
+      expect(controller.initialCompensationRuleKey, 'percent');
+      expect(controller.initialCompensationValueMinor, '7500');
+      expect(controller.initialClientDecisions, storedClients);
+      expect(
+        controller.initialClientDecisions.single['chargeDurationMinutes'],
+        0,
+      );
+    }
+  });
+
+  testWidgets(
+    'correction reopens one partial subscription decision without semantic edits',
+    (tester) async {
+      final api = _GroupLessonDecisionApi(
+        operationKey: 'settlement-correction',
+      );
+      await _openStoredDecision(
+        tester,
+        api: api,
+        operation: LessonDecisionOperation.correction,
+        lesson: const {
+          'id': _groupLessonId,
+          'version': 4,
+          'branchId': _branchId,
+          'studentId': _firstGroupStudentId,
+          'studentName': 'Анна Иванова',
+          'durationMinutes': 60,
+          'scheduledAt': '2026-08-13T09:00:00.000Z',
+          'financialDecision': {
+            'settlementTypeKey': 'partially_paid_lesson',
+            'teacherCompensationRuleKey': 'percent',
+            'teacherCompensationValueMinor': '7500',
+            'teacherCreditedDurationMinutes': 41,
+            'teacherCompensationSource': 'manual',
+            'clientDecisions': [
+              {
+                'clientId': _firstGroupStudentId,
+                'settlementTypeKey': 'partially_paid_lesson',
+                'chargeDurationMinutes': 19,
+                'payerStudentId': _firstGroupStudentId,
+                'chargeType': 'subscription',
+                'subscriptionId': _crossPayerSubscriptionId,
+              },
+            ],
+          },
+        },
+      );
+
+      expect(
+        _fieldText(
+          tester,
+          const Key('lesson-decision-client-duration-$_firstGroupStudentId'),
+        ),
+        '19',
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+              find.byKey(
+                const Key('lesson-decision-charge-type-$_firstGroupStudentId'),
+              ),
+            )
+            .initialValue,
+        'subscription',
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+              find.byKey(
+                const Key('lesson-decision-subscription-$_firstGroupStudentId'),
+              ),
+            )
+            .initialValue,
+        _crossPayerSubscriptionId,
+      );
+
+      await _previewStoredDecision(tester, 'Без изменений');
+      expect(api.previews.single['financialDecision'], {
+        'settlementTypeKey': 'partially_paid_lesson',
+        'clientDecisions': [
+          {
+            'clientId': _firstGroupStudentId,
+            'settlementTypeKey': 'partially_paid_lesson',
+            'chargeDurationMinutes': 19,
+            'chargeType': 'subscription',
+            'payerStudentId': _firstGroupStudentId,
+            'subscriptionId': _crossPayerSubscriptionId,
+          },
+        ],
+        'teacherCompensationRuleKey': 'percent',
+        'teacherCompensationValueMinor': '7500',
+        'teacherCreditedDurationMinutes': 41,
+        'teacherCompensationSource': 'manual',
+      });
+    },
+  );
+
+  testWidgets(
+    'reschedule keeps independent group payer source settlement and minutes',
+    (tester) async {
+      final api = _GroupLessonDecisionApi(operationKey: 'reschedule');
+      await _openStoredDecision(
+        tester,
+        api: api,
+        operation: LessonDecisionOperation.reschedule,
+        lesson: const {
+          'id': _groupLessonId,
+          'version': 4,
+          'branchId': _branchId,
+          'groupId': '60000000-0000-4000-8000-000000000001',
+          'durationMinutes': 60,
+          'scheduledAt': '2026-08-13T09:00:00.000Z',
+          'groupParticipants': [
+            {'clientId': _firstGroupStudentId, 'clientName': 'Анна Иванова'},
+            {'clientId': _secondGroupStudentId, 'clientName': 'Борис Петров'},
+          ],
+          'financialDecision': {
+            'settlementTypeKey': 'partially_paid_lesson',
+            'teacherCompensationRuleKey': 'percent',
+            'teacherCompensationValueMinor': '7500',
+            'teacherCreditedDurationMinutes': 41,
+            'teacherCompensationSource': 'manual',
+            'clientDecisions': [
+              {
+                'clientId': _firstGroupStudentId,
+                'chargeDurationMinutes': 0,
+                'payerStudentId': _firstGroupStudentId,
+                'chargeType': 'subscription',
+                'subscriptionId': _crossPayerSubscriptionId,
+              },
+              {
+                'clientId': _secondGroupStudentId,
+                'settlementTypeKey': 'partially_paid_lesson_alt',
+                'chargeDurationMinutes': 25,
+                'payerStudentId': _secondGroupStudentId,
+                'chargeType': 'personal_account',
+                'basePriceMinor': '100000',
+                'discount': {
+                  'type': 'percent',
+                  'percent': 12.5,
+                  'reason': 'Семейная скидка',
+                },
+                'surcharge': {'amountMinor': '5000', 'reason': 'Материалы'},
+              },
+            ],
+          },
+        },
+      );
+
+      expect(
+        _fieldText(
+          tester,
+          const Key('lesson-decision-client-duration-$_firstGroupStudentId'),
+        ),
+        '0',
+      );
+      expect(
+        _fieldText(
+          tester,
+          const Key('lesson-decision-client-duration-$_secondGroupStudentId'),
+        ),
+        '25',
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+              find.byKey(
+                const Key('lesson-decision-charge-type-$_secondGroupStudentId'),
+              ),
+            )
+            .initialValue,
+        'personal_account',
+      );
+      expect(
+        find.byKey(
+          const Key('lesson-decision-subscription-$_secondGroupStudentId'),
+        ),
+        findsNothing,
+      );
+
+      await _previewStoredDecision(tester, 'Группа без изменений');
+      expect(api.previews.single['financialDecision'], {
+        'settlementTypeKey': 'partially_paid_lesson',
+        'clientDecisions': [
+          {
+            'clientId': _firstGroupStudentId,
+            'chargeDurationMinutes': 0,
+            'chargeType': 'subscription',
+            'payerStudentId': _firstGroupStudentId,
+            'subscriptionId': _crossPayerSubscriptionId,
+          },
+          {
+            'clientId': _secondGroupStudentId,
+            'settlementTypeKey': 'partially_paid_lesson_alt',
+            'chargeDurationMinutes': 25,
+            'chargeType': 'personal_account',
+            'payerStudentId': _secondGroupStudentId,
+            'basePriceMinor': '100000',
+            'discount': {
+              'type': 'percent',
+              'percent': 12.5,
+              'reason': 'Семейная скидка',
+            },
+            'surcharge': {'amountMinor': '5000', 'reason': 'Материалы'},
+          },
+        ],
+        'teacherCompensationRuleKey': 'percent',
+        'teacherCompensationValueMinor': '7500',
+        'teacherCreditedDurationMinutes': 41,
+        'teacherCompensationSource': 'manual',
+      });
+    },
+  );
+
+  testWidgets('legacy stored subscription reopens without a funding source', (
+    tester,
+  ) async {
+    final api = _GroupLessonDecisionApi(operationKey: 'settlement-correction');
+    await _openStoredDecision(
+      tester,
+      api: api,
+      operation: LessonDecisionOperation.correction,
+      lesson: const {
+        'id': _groupLessonId,
+        'version': 4,
+        'branchId': _branchId,
+        'studentId': _firstGroupStudentId,
+        'studentName': 'Анна Иванова',
+        'durationMinutes': 60,
+        'scheduledAt': '2026-08-13T09:00:00.000Z',
+        'financialDecision': {
+          'settlementTypeKey': 'partially_paid_lesson',
+          'teacherCompensationRuleKey': 'percent',
+          'teacherCompensationValueMinor': '7500',
+          'teacherCreditedDurationMinutes': 41,
+          'teacherCompensationSource': 'manual',
+          'clientDecisions': [
+            {
+              'clientId': _firstGroupStudentId,
+              'chargeDurationMinutes': 0,
+              'payerStudentId': _firstGroupStudentId,
+              'subscriptionId': _crossPayerSubscriptionId,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(
+      find.byKey(
+        const Key('lesson-decision-charge-type-$_firstGroupStudentId'),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byKey(
+              const Key('lesson-decision-subscription-$_firstGroupStudentId'),
+            ),
+          )
+          .initialValue,
+      _crossPayerSubscriptionId,
+    );
+    expect(find.textContaining('Семейный абонемент'), findsOneWidget);
+    await _previewStoredDecision(tester, 'Старый формат без изменений');
+    expect(
+      (api.previews.single['financialDecision'] as Map)['clientDecisions'],
+      [
+        {
+          'clientId': _firstGroupStudentId,
+          'chargeDurationMinutes': 0,
+          'payerStudentId': _firstGroupStudentId,
+          'subscriptionId': _crossPayerSubscriptionId,
+        },
+      ],
+    );
+  });
 }
+
+Future<void> _openStoredDecision(
+  WidgetTester tester, {
+  required _GroupLessonDecisionApi api,
+  required LessonDecisionOperation operation,
+  required Map<String, dynamic> lesson,
+}) async {
+  tester.view.physicalSize = const Size(1500, 1800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: ThemeData(platform: TargetPlatform.windows),
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => showLessonDecisionFlow(
+              context,
+              crm: MagicCrmService(api),
+              operation: operation,
+              lesson: lesson,
+              successor: operation == LessonDecisionOperation.reschedule
+                  ? _successor
+                  : null,
+              canManageTeacherCompensation: true,
+            ),
+            child: const Text('Открыть сохранённый расчёт'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('Открыть сохранённый расчёт'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _previewStoredDecision(WidgetTester tester, String reason) async {
+  await tester.enterText(
+    find.byKey(const Key('lesson-decision-reason')),
+    reason,
+  );
+  final submit = find.byKey(const Key('lesson-decision-submit'));
+  await tester.ensureVisible(submit);
+  await tester.tap(submit);
+  await tester.pumpAndSettle();
+}
+
+String _fieldText(WidgetTester tester, Key key) => tester
+    .widget<EditableText>(
+      find.descendant(of: find.byKey(key), matching: find.byType(EditableText)),
+    )
+    .controller
+    .text;

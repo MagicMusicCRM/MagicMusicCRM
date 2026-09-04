@@ -24,6 +24,8 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   final Map<String, String?> _payerIds = {};
   final Map<String, String?> _payerNames = {};
   final Map<String, String?> _subscriptionIds = {};
+  final Map<String, String?> _chargeTypes = {};
+  final Map<String, Map<String, dynamic>> _clientDecisionsById = {};
   final Map<String, List<LessonDecisionSubscription>> _subscriptions = {};
   final Set<String> _loadingSubscriptions = {};
 
@@ -89,6 +91,43 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
         defaults.settlementKey ?? '',
       );
       final initialSource = widget.controller.initialTeacherCompensationSource;
+      final initialClientDecisions = widget.controller.initialClientDecisions;
+      final participants = {
+        for (final participant in widget.controller.settlementClients)
+          participant.id: participant,
+      };
+      final initialById = <String, Map<String, dynamic>>{
+        for (final row in initialClientDecisions)
+          if (row['clientId']?.toString() case final String id
+              when participants.containsKey(id))
+            id: Map<String, dynamic>.from(row),
+      };
+      final initialSubscriptions = <String, List<LessonDecisionSubscription>>{};
+      await Future.wait([
+        for (final entry in initialById.entries)
+          if ((entry.value['chargeType'] == 'subscription' ||
+                  (entry.value['chargeType'] == null &&
+                      entry.value['subscriptionId'] != null)) &&
+              entry.value['payerStudentId'] != null)
+            () async {
+              final payerId = entry.value['payerStudentId'].toString();
+              final subscriptionId = entry.value['subscriptionId']?.toString();
+              try {
+                final values = await widget.controller.loadSubscriptions(
+                  payerId,
+                );
+                initialSubscriptions[entry.key] = _withStoredSubscription(
+                  values,
+                  subscriptionId,
+                );
+              } catch (_) {
+                initialSubscriptions[entry.key] = _withStoredSubscription(
+                  const [],
+                  subscriptionId,
+                );
+              }
+            }(),
+      ]);
       final recommendation =
           settlement?.defaultTeacherCompensationRuleKey == null
           ? null
@@ -106,7 +145,8 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
         _settlementKey = defaults.settlementKey;
         _compensationKey =
             recommendation?.compensationRuleKey ?? defaults.compensationKey;
-        _compensationValueController.text = recommendation == null
+        _compensationValueController.text =
+            recommendation == null || initialSource == 'manual'
             ? defaults.compensationValue
             : _recommendedCompensationInput(catalog, recommendation);
         _teacherDurationController.text =
@@ -116,6 +156,75 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
             '';
         _teacherCompensationSource = recommendation?.source ?? initialSource;
         _compensationTouched = initialSource == 'manual';
+        _clientDecisionsById
+          ..clear()
+          ..addAll(initialById);
+        _clientSettlementKeys
+          ..clear()
+          ..addEntries(
+            initialById.entries.map(
+              (entry) => MapEntry(
+                entry.key,
+                entry.value['settlementTypeKey']?.toString(),
+              ),
+            ),
+          );
+        _clientDurationMinutes
+          ..clear()
+          ..addEntries(
+            initialById.entries.map(
+              (entry) => MapEntry(
+                entry.key,
+                lessonDecisionIntegerMinutes(
+                  entry.value['chargeDurationMinutes'],
+                ),
+              ),
+            ),
+          );
+        _payerIds
+          ..clear()
+          ..addEntries(
+            initialById.entries.map(
+              (entry) => MapEntry(
+                entry.key,
+                entry.value['payerStudentId']?.toString(),
+              ),
+            ),
+          );
+        _payerNames
+          ..clear()
+          ..addEntries(
+            initialById.entries.map((entry) {
+              final payerId = entry.value['payerStudentId']?.toString();
+              return MapEntry(
+                entry.key,
+                payerId == null
+                    ? null
+                    : participants[payerId]?.name ?? 'Другой плательщик',
+              );
+            }),
+          );
+        _subscriptionIds
+          ..clear()
+          ..addEntries(
+            initialById.entries.map(
+              (entry) => MapEntry(
+                entry.key,
+                entry.value['subscriptionId']?.toString(),
+              ),
+            ),
+          );
+        _chargeTypes
+          ..clear()
+          ..addEntries(
+            initialById.entries.map(
+              (entry) =>
+                  MapEntry(entry.key, entry.value['chargeType']?.toString()),
+            ),
+          );
+        _subscriptions
+          ..clear()
+          ..addAll(initialSubscriptions);
         _loading = false;
       });
     } catch (error) {
@@ -160,6 +269,11 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
         for (final participant in widget.controller.settlementClients) {
           if (_clientSettlementKeys[participant.id] == null) {
             _clientDurationMinutes[participant.id] = clientMinutes;
+            _writeClientDecision(
+              participant.id,
+              'chargeDurationMinutes',
+              clientMinutes,
+            );
           }
         }
       }
@@ -183,6 +297,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   void _selectClientSettlement(String clientId, String? settlementKey) {
     setState(() {
       _clientSettlementKeys[clientId] = settlementKey;
+      _writeClientDecision(clientId, 'settlementTypeKey', settlementKey);
       final settlement = _catalogItem(
         _catalog?.settlementTypes ?? const [],
         settlementKey ?? _settlementKey ?? '',
@@ -193,6 +308,11 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
               settlement: settlement,
               durationMinutes: _lessonDurationMinutes,
             );
+        _writeClientDecision(
+          clientId,
+          'chargeDurationMinutes',
+          _clientDurationMinutes[clientId],
+        );
       }
       _clearPreview();
     });
@@ -201,6 +321,11 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   void _selectClientDuration(String clientId, String value) {
     setState(() {
       _clientDurationMinutes[clientId] = int.tryParse(value);
+      _writeClientDecision(
+        clientId,
+        'chargeDurationMinutes',
+        _clientDurationMinutes[clientId],
+      );
       _clearPreview();
     });
   }
@@ -271,6 +396,8 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       _subscriptions.remove(clientId);
       _loadingSubscriptions.remove(clientId);
       if (payerId != null) _loadingSubscriptions.add(clientId);
+      _writeClientDecision(clientId, 'payerStudentId', payerId);
+      _writeClientDecision(clientId, 'subscriptionId', null);
     });
     _invalidatePreview();
     if (payerId == null) return;
@@ -292,8 +419,41 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _selectSubscription(String clientId, String? subscriptionId) {
-    setState(() => _subscriptionIds[clientId] = subscriptionId);
+    setState(() {
+      _subscriptionIds[clientId] = subscriptionId;
+      _writeClientDecision(clientId, 'subscriptionId', subscriptionId);
+    });
     _invalidatePreview();
+  }
+
+  void _selectChargeType(String clientId, String? chargeType) {
+    setState(() {
+      _chargeTypes[clientId] = chargeType;
+      _writeClientDecision(clientId, 'chargeType', chargeType);
+      if (chargeType != 'subscription') {
+        _subscriptionIds.remove(clientId);
+        _writeClientDecision(clientId, 'subscriptionId', null);
+      }
+      if (chargeType == 'none') {
+        _payerIds.remove(clientId);
+        _payerNames.remove(clientId);
+        _writeClientDecision(clientId, 'payerStudentId', null);
+      }
+      _clearPreview();
+    });
+  }
+
+  void _writeClientDecision(String clientId, String key, Object? value) {
+    final decision = _clientDecisionsById.putIfAbsent(
+      clientId,
+      () => <String, dynamic>{'clientId': clientId},
+    );
+    if (value == null) {
+      decision.remove(key);
+    } else {
+      decision[key] = value;
+    }
+    if (decision.length == 1) _clientDecisionsById.remove(clientId);
   }
 
   Future<void> _calculate() async {
@@ -326,10 +486,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
             : null,
         clientDecisions: _clientDecisions(
           widget.controller.settlementClients,
-          _clientSettlementKeys,
-          _payerIds,
-          _subscriptionIds,
-          _clientDurationMinutes,
+          _clientDecisionsById,
         ),
       );
       if (!mounted) return;
@@ -408,6 +565,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       payerIds: _payerIds,
       payerNames: _payerNames,
       subscriptionIds: _subscriptionIds,
+      chargeTypes: _chargeTypes,
       subscriptions: _subscriptions,
       loadingSubscriptions: _loadingSubscriptions,
       groupLesson: widget.controller.isGroupLesson,
@@ -429,6 +587,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       searchPayers: widget.controller.searchPayers,
       onPayerChanged: _selectPayer,
       onSubscriptionChanged: _selectSubscription,
+      onChargeTypeChanged: _selectChargeType,
       compensationValidator: (_) =>
           widget.controller.canManageTeacherCompensation &&
               _compensationValueMinor(
@@ -514,23 +673,21 @@ String? _compensationValueMinor(LessonDecisionCatalogItem? rule, String input) {
 
 List<Map<String, dynamic>> _clientDecisions(
   List<LessonDecisionParticipant> participants,
-  Map<String, String?> selectedKeys,
-  Map<String, String?> payerIds,
-  Map<String, String?> subscriptionIds,
-  Map<String, int?> durationMinutes,
+  Map<String, Map<String, dynamic>> decisionsById,
 ) => [
   for (final participant in participants)
-    if (selectedKeys[participant.id] != null ||
-        payerIds[participant.id] != null ||
-        durationMinutes[participant.id] != null)
-      {
-        'clientId': participant.id,
-        'settlementTypeKey': ?selectedKeys[participant.id],
-        'payerStudentId': ?payerIds[participant.id],
-        'subscriptionId': ?subscriptionIds[participant.id],
-        'chargeDurationMinutes': ?durationMinutes[participant.id],
-      },
+    if (decisionsById[participant.id] case final decision?)
+      Map<String, dynamic>.from(decision),
 ];
+
+List<LessonDecisionSubscription> _withStoredSubscription(
+  List<LessonDecisionSubscription> values,
+  String? storedId,
+) => List.unmodifiable([
+  ...values,
+  if (storedId != null && !values.any((value) => value.id == storedId))
+    LessonDecisionSubscription(id: storedId, label: 'Сохранённый абонемент'),
+]);
 
 String _recommendedCompensationInput(
   LessonDecisionCatalog catalog,

@@ -63,6 +63,7 @@ class LessonDecisionFormContent extends StatelessWidget {
     required this.payerIds,
     required this.payerNames,
     required this.subscriptionIds,
+    required this.chargeTypes,
     required this.subscriptions,
     required this.loadingSubscriptions,
     required this.groupLesson,
@@ -83,6 +84,7 @@ class LessonDecisionFormContent extends StatelessWidget {
     required this.searchPayers,
     required this.onPayerChanged,
     required this.onSubscriptionChanged,
+    required this.onChargeTypeChanged,
     required this.compensationValidator,
     required this.durationMinutes,
     required this.compensationTouched,
@@ -111,6 +113,7 @@ class LessonDecisionFormContent extends StatelessWidget {
   final Map<String, String?> payerIds;
   final Map<String, String?> payerNames;
   final Map<String, String?> subscriptionIds;
+  final Map<String, String?> chargeTypes;
   final Map<String, List<LessonDecisionSubscription>> subscriptions;
   final Set<String> loadingSubscriptions;
   final bool groupLesson;
@@ -135,6 +138,7 @@ class LessonDecisionFormContent extends StatelessWidget {
   onPayerChanged;
   final void Function(String clientId, String? subscriptionId)
   onSubscriptionChanged;
+  final void Function(String clientId, String? chargeType) onChargeTypeChanged;
   final FormFieldValidator<String> compensationValidator;
   final int durationMinutes;
   final bool compensationTouched;
@@ -176,6 +180,7 @@ class LessonDecisionFormContent extends StatelessWidget {
             payerIds: payerIds,
             payerNames: payerNames,
             subscriptionIds: subscriptionIds,
+            chargeTypes: chargeTypes,
             subscriptions: subscriptions,
             loadingSubscriptions: loadingSubscriptions,
             groupLesson: groupLesson,
@@ -193,6 +198,7 @@ class LessonDecisionFormContent extends StatelessWidget {
             searchPayers: searchPayers,
             onPayerChanged: onPayerChanged,
             onSubscriptionChanged: onSubscriptionChanged,
+            onChargeTypeChanged: onChargeTypeChanged,
           ),
         if (canManageTeacherCompensation)
           LessonDecisionCompensationSection(
@@ -280,6 +286,7 @@ class LessonDecisionOptionsSection extends StatelessWidget {
     required this.payerIds,
     required this.payerNames,
     required this.subscriptionIds,
+    required this.chargeTypes,
     required this.subscriptions,
     required this.loadingSubscriptions,
     required this.groupLesson,
@@ -297,6 +304,7 @@ class LessonDecisionOptionsSection extends StatelessWidget {
     required this.searchPayers,
     required this.onPayerChanged,
     required this.onSubscriptionChanged,
+    required this.onChargeTypeChanged,
     super.key,
   });
 
@@ -309,6 +317,7 @@ class LessonDecisionOptionsSection extends StatelessWidget {
   final Map<String, String?> payerIds;
   final Map<String, String?> payerNames;
   final Map<String, String?> subscriptionIds;
+  final Map<String, String?> chargeTypes;
   final Map<String, List<LessonDecisionSubscription>> subscriptions;
   final Set<String> loadingSubscriptions;
   final bool groupLesson;
@@ -330,6 +339,7 @@ class LessonDecisionOptionsSection extends StatelessWidget {
   onPayerChanged;
   final void Function(String clientId, String? subscriptionId)
   onSubscriptionChanged;
+  final void Function(String clientId, String? chargeType) onChargeTypeChanged;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -363,6 +373,7 @@ class LessonDecisionOptionsSection extends StatelessWidget {
           payerIds: payerIds,
           payerNames: payerNames,
           subscriptionIds: subscriptionIds,
+          chargeTypes: chargeTypes,
           subscriptions: subscriptions,
           loadingSubscriptions: loadingSubscriptions,
           showSettlementOverrides: groupLesson,
@@ -372,6 +383,7 @@ class LessonDecisionOptionsSection extends StatelessWidget {
           searchPayers: searchPayers,
           onPayerChanged: onPayerChanged,
           onSubscriptionChanged: onSubscriptionChanged,
+          onChargeTypeChanged: onChargeTypeChanged,
         ),
         const SizedBox(height: AppSpace.md),
       ],
@@ -483,6 +495,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
     required this.payerIds,
     required this.payerNames,
     required this.subscriptionIds,
+    required this.chargeTypes,
     required this.subscriptions,
     required this.loadingSubscriptions,
     required this.showSettlementOverrides,
@@ -492,6 +505,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
     required this.searchPayers,
     required this.onPayerChanged,
     required this.onSubscriptionChanged,
+    required this.onChargeTypeChanged,
     super.key,
   });
 
@@ -504,6 +518,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
   final Map<String, String?> payerIds;
   final Map<String, String?> payerNames;
   final Map<String, String?> subscriptionIds;
+  final Map<String, String?> chargeTypes;
   final Map<String, List<LessonDecisionSubscription>> subscriptions;
   final Set<String> loadingSubscriptions;
   final bool showSettlementOverrides;
@@ -516,6 +531,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
   onPayerChanged;
   final void Function(String clientId, String? subscriptionId)
   onSubscriptionChanged;
+  final void Function(String clientId, String? chargeType) onChargeTypeChanged;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -613,6 +629,29 @@ class LessonDecisionClientOverrides extends StatelessWidget {
             ),
             const SizedBox(height: AppSpace.sm),
           ],
+          if (chargeTypes[participants[index].id] != null) ...[
+            DropdownButtonFormField<String>(
+              key: Key('lesson-decision-charge-type-${participants[index].id}'),
+              initialValue: chargeTypes[participants[index].id],
+              decoration: const InputDecoration(labelText: 'Источник средств'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'subscription',
+                  child: Text('С абонемента'),
+                ),
+                DropdownMenuItem(
+                  value: 'personal_account',
+                  child: Text('С личного счёта'),
+                ),
+                DropdownMenuItem(value: 'none', child: Text('Без списания')),
+              ],
+              onChanged: enabled
+                  ? (value) =>
+                        onChargeTypeChanged(participants[index].id, value)
+                  : null,
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
           SearchablePickerField(
             key: Key('lesson-decision-payer-${participants[index].id}'),
             label: showSettlementOverrides
@@ -636,7 +675,9 @@ class LessonDecisionClientOverrides extends StatelessWidget {
                   : LessonDecisionParticipant(id: item.id, name: item.label),
             ),
           ),
-          if (payerIds[participants[index].id] != null) ...[
+          if (payerIds[participants[index].id] != null &&
+              chargeTypes[participants[index].id] != 'personal_account' &&
+              chargeTypes[participants[index].id] != 'none') ...[
             const SizedBox(height: AppSpace.sm),
             DropdownButtonFormField<String>(
               menuMaxHeight: 256,

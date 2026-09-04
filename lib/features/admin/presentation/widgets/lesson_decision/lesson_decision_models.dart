@@ -189,6 +189,7 @@ abstract interface class LessonDecisionFormLifecycle {
   String? get initialCompensationValueMinor;
   int? get initialTeacherCreditedDurationMinutes;
   String? get initialTeacherCompensationSource;
+  List<Map<String, dynamic>> get initialClientDecisions;
   bool get isGroupLesson;
   List<LessonDecisionParticipant> get groupParticipants;
   List<LessonDecisionParticipant> get settlementClients;
