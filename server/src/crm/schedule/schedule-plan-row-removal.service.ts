@@ -161,7 +161,7 @@ export class SchedulePlanRowRemovalService {
       authorization: { actor, capabilityKey: "schedule.lesson.write" },
       operation: "schedule.plan.row.remove",
       idempotencyKey: metadata.idempotencyKey,
-      payload: dto,
+      payload: { ...dto, seriesId },
       aggregateType: "schedule:plan",
       aggregateId: planId,
       expectedVersion: dto.expectedVersion,
@@ -190,7 +190,7 @@ export class SchedulePlanRowRemovalService {
     });
     return {
       id: planId,
-      seriesId,
+      seriesId: mutation.resultRef.seriesId as string,
       status: mutation.resultRef.status as "active" | "ended",
       version: mutation.version,
       endsPlan: mutation.resultRef.endsPlan as boolean,

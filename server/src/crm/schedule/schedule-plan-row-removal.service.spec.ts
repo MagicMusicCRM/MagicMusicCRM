@@ -160,14 +160,48 @@ const createHarness = (overrides: HarnessOverrides = {}) => {
       preservedChangedLessons: impact.preservedChangedLessonIds.length,
     })),
   } as unknown as SchedulePlanEndService;
+  const idempotency = new Map<
+    string,
+    {
+      fingerprint: string;
+      result: {
+        version: number;
+        replayed: boolean;
+        resultRef: Record<string, unknown>;
+        auditId: string;
+        eventId: string;
+      };
+    }
+  >();
   const platform = {
-    executeVersionedMutation: jest.fn(async (command) => ({
-      version: 5,
-      replayed: false,
-      resultRef: await command.mutate(client, 5),
-      auditId: "audit-row-remove",
-      eventId: "outbox-row-remove",
-    })),
+    executeVersionedMutation: jest.fn(async (command) => {
+      const requestFingerprint = fingerprintPayload({
+        operation: command.operation,
+        aggregateType: command.aggregateType,
+        aggregateId: command.aggregateId,
+        expectedVersion: command.expectedVersion,
+        payload: command.payload,
+      });
+      const existing = idempotency.get(command.idempotencyKey);
+      if (existing) {
+        if (existing.fingerprint !== requestFingerprint) {
+          throw new ConflictException({ code: "IDEMPOTENCY_KEY_REUSED" });
+        }
+        return { ...existing.result, replayed: true };
+      }
+      const result = {
+        version: 5,
+        replayed: false,
+        resultRef: await command.mutate(client, 5),
+        auditId: "audit-row-remove",
+        eventId: "outbox-row-remove",
+      };
+      idempotency.set(command.idempotencyKey, {
+        fingerprint: requestFingerprint,
+        result,
+      });
+      return result;
+    }),
   } as unknown as PlatformIntegrityService;
   const database = {
     transaction: jest.fn((work: (target: PoolClient) => Promise<unknown>) =>
@@ -354,6 +388,53 @@ describe("SchedulePlanRowRemovalService", () => {
         }),
         outbox: expect.objectContaining({ type: "schedule.plan.changed" }),
       }),
+    );
+  });
+
+  it("rejects a same-key cross-series replay without reporting or changing row B", async () => {
+    const { service, repository } = createHarness();
+    const preview = await service.previewRemoveRow(actor, PLAN_ID, SERIES_ID, {
+      expectedVersion: 4,
+      effectiveFrom: "2026-09-04",
+      reasonText: "Смена преподавателя",
+    });
+    const command = {
+      expectedVersion: 4,
+      effectiveFrom: "2026-09-04",
+      reasonText: "Смена преподавателя",
+      previewToken: preview.previewToken,
+      confirm: true as const,
+    };
+
+    const removed = await service.removeRow(
+      actor,
+      PLAN_ID,
+      SERIES_ID,
+      command,
+      metadata,
+    );
+    expect(removed.seriesId).toBe(SERIES_ID);
+
+    await expect(
+      service.removeRow(
+        actor,
+        PLAN_ID,
+        OTHER_SERIES_ID,
+        command,
+        metadata,
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "IDEMPOTENCY_KEY_REUSED" },
+    });
+    expect(repository.retireRow).toHaveBeenCalledTimes(1);
+    expect(repository.retireRow).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ seriesId: SERIES_ID }),
+    );
+    expect(repository.retireRow).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ seriesId: OTHER_SERIES_ID }),
     );
   });
 
