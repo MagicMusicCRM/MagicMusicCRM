@@ -75,8 +75,16 @@ void main() {
     await tester.tap(find.text('Отменить занятие'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsOneWidget);
-    expect(find.text('Редактор: Отменить занятие'), findsOneWidget);
+    expect(find.byKey(const Key('lesson-decision-reason')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('lesson-decision-reason')),
+      'Проверка закрытия отмены',
+    );
+    await tester.pump();
     await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+    expect(find.text('Отменить изменения?'), findsOneWidget);
+    await tester.tap(find.text('Отменить изменения'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Выбрать клиента'));
@@ -786,7 +794,13 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
               onEdit: () => _openQuickEditor('Изменить занятие'),
               onMove: () => _openQuickEditor('Перенести'),
               onCancel: () async {
-                await _openQuickEditor('Отменить занятие');
+                await showLessonDecisionFlow(
+                  context,
+                  crm: MagicCrmService(_cancelDecisionApi),
+                  canManageTeacherCompensation: true,
+                  operation: LessonDecisionOperation.cancel,
+                  lesson: _cancelLesson,
+                );
               },
             ),
             child: const Text('Быстрый просмотр'),

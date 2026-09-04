@@ -82,6 +82,6 @@ Future<bool?> showLessonDecisionFlow(
     title: operation.title,
     subtitle: 'Сначала расчёт, затем подтверждение',
     icon: Icons.rule_rounded,
-    builder: (_) => LessonDecisionForm(controller: controller),
+    builder: (_) => GuardedLessonDecisionForm(controller: controller),
   );
 }

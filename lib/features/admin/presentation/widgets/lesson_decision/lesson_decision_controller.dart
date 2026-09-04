@@ -373,11 +373,18 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
         'successor': successor ?? const <String, dynamic>{},
       if (resources != null) 'resources': resources,
     };
-    final response = await _crm.previewLessonDecision(
-      lessonId: lesson['id'].toString(),
-      operationKey: operation.apiKey,
-      data: payload,
-    );
+    late final Map<String, dynamic> response;
+    try {
+      response = await _crm.previewLessonDecision(
+        lessonId: lesson['id'].toString(),
+        operationKey: operation.apiKey,
+        data: payload,
+      );
+    } catch (error) {
+      final recovered = await recoverStaleCommit(error);
+      if (recovered != null) throw recovered;
+      throw mapLessonTransitionFailure(error);
+    }
     _previewPayload = payload;
     _commitIdentity = MagicMutationIdentity.create(
       'lesson-${operation.apiKey}-${lesson['id']}',

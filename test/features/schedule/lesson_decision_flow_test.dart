@@ -44,6 +44,8 @@ class _LessonDecisionApi extends MagicApiClient {
     this.completed = false,
     this.catalogBranchId = _branchId,
     this.operationKey = 'reschedule',
+    this.previewFailureCode,
+    this.previewFailureAttempt = 1,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool conflict;
@@ -52,10 +54,16 @@ class _LessonDecisionApi extends MagicApiClient {
   final bool completed;
   final String catalogBranchId;
   final String operationKey;
+  final String? previewFailureCode;
+  final int previewFailureAttempt;
+  final actionableLessonId = '10000000-0000-4000-8000-000000000009';
   final previews = <Map<String, dynamic>>[];
   final normalizedDecisions = <Map<String, dynamic>>[];
   final commits = <Map<String, dynamic>>[];
   final identities = <MagicMutationIdentity>[];
+  var previewAttempts = 0;
+  var previewRedirected = false;
+  var reloadAttempts = 0;
 
   @override
   Future<T> get<T>(
@@ -63,6 +71,22 @@ class _LessonDecisionApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    if (path == '/crm/lessons') {
+      reloadAttempts += 1;
+      expect(queryParameters?['lessonId'], actionableLessonId);
+      return <String, dynamic>{
+            'items': [
+              {
+                'id': actionableLessonId,
+                'version': 9,
+                'lifecycleState': 'scheduled',
+                'branchId': _branchId,
+                'scheduledAt': '2026-08-09T09:00:00.000Z',
+              },
+            ],
+          }
+          as T;
+    }
     if (path == '/crm/students/$_firstGroupStudentId/commerce') {
       return _studentCommerce(
             _firstGroupStudentId,
@@ -180,8 +204,23 @@ class _LessonDecisionApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    expect(path, '/crm/lessons/$_lessonId/$operationKey/preview');
+    final expectedLessonId = previewRedirected ? actionableLessonId : _lessonId;
+    expect(path, '/crm/lessons/$expectedLessonId/$operationKey/preview');
+    previewAttempts += 1;
     previews.add(Map<String, dynamic>.from(data as Map));
+    if (previewFailureCode != null &&
+        previewAttempts == previewFailureAttempt) {
+      previewRedirected = true;
+      throw MagicApiException(
+        statusCode: 409,
+        message: 'typed conflict',
+        details: {
+          'code': previewFailureCode,
+          'actionableLessonId': actionableLessonId,
+          'currentVersion': 9,
+        },
+      );
+    }
     final decisionKey = operationKey == 'reschedule'
         ? 'successorFinancialDecision'
         : 'financialDecision';
@@ -2110,6 +2149,181 @@ void main() {
       ],
     );
   });
+
+  for (final conflict in const [
+    (
+      code: 'LESSON_VERSION_STALE',
+      message: 'Занятие уже изменилось. Я открыл актуальную версию.',
+    ),
+    (
+      code: 'LESSON_ALREADY_RESCHEDULED',
+      message:
+          'Это занятие уже перенесено. Я открыл последнее занятие в цепочке.',
+    ),
+    (
+      code: 'LESSON_TRANSITION_PREVIEW_STALE',
+      message:
+          'Расписание или расчёт изменились. Проверьте обновлённый предварительный расчёт.',
+    ),
+  ]) {
+    test(
+      'preview ${conflict.code} reloads actionable lesson and invalidates old token',
+      () async {
+        final lesson = Map<String, dynamic>.from(_lesson);
+        final api = _LessonDecisionApi(
+          operationKey: 'cancel',
+          previewFailureCode: conflict.code,
+          previewFailureAttempt: 2,
+        );
+        final controller = LessonDecisionController(
+          crm: MagicCrmService(api),
+          operation: LessonDecisionOperation.cancel,
+          lesson: lesson,
+          canManageTeacherCompensation: true,
+        );
+        final oldPreview = await controller.preview(
+          reason: 'Отмена по просьбе клиента',
+          settlementTypeKey: 'unpaid_miss',
+          compensationRuleKey: 'none',
+        );
+
+        Object? failure;
+        try {
+          await controller.preview(
+            reason: 'Обновлённая причина отмены',
+            settlementTypeKey: 'unpaid_miss',
+            compensationRuleKey: 'none',
+          );
+        } catch (error) {
+          failure = error;
+        }
+
+        expect(failure, isA<MagicApiException>());
+        expect(
+          (failure as MagicApiException).details,
+          containsPair('code', conflict.code),
+        );
+        expect(failure.message, conflict.message);
+        expect(api.reloadAttempts, 1);
+        expect(lesson['id'], api.actionableLessonId);
+        expect(lesson['version'], 9);
+        expect(lesson['lifecycle_state'], 'scheduled');
+        await expectLater(controller.commit(oldPreview), throwsStateError);
+
+        await controller.preview(
+          reason: 'Свежий предварительный расчёт',
+          settlementTypeKey: 'unpaid_miss',
+          compensationRuleKey: 'none',
+        );
+        expect(api.previews.last['expectedVersion'], 9);
+      },
+    );
+  }
+
+  test(
+    'preview chain-invalid error stays actionable without lesson mutation',
+    () async {
+      final lesson = Map<String, dynamic>.from(_lesson);
+      final original = Map<String, dynamic>.from(lesson);
+      final api = _LessonDecisionApi(
+        operationKey: 'cancel',
+        previewFailureCode: 'LESSON_RESCHEDULE_CHAIN_INVALID',
+      );
+      final controller = LessonDecisionController(
+        crm: MagicCrmService(api),
+        operation: LessonDecisionOperation.cancel,
+        lesson: lesson,
+        canManageTeacherCompensation: true,
+      );
+
+      Object? failure;
+      try {
+        await controller.preview(
+          reason: 'Отмена повреждённой цепочки',
+          settlementTypeKey: 'unpaid_miss',
+          compensationRuleKey: 'none',
+        );
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(failure, isA<MagicApiException>());
+      expect(
+        (failure as MagicApiException).details,
+        containsPair('code', 'LESSON_RESCHEDULE_CHAIN_INVALID'),
+      );
+      expect(
+        failure.message,
+        'Цепочка переносов повреждена. Изменения не сохранены; обратитесь администратору.',
+      );
+      expect(api.reloadAttempts, 0);
+      expect(lesson, original);
+    },
+  );
+
+  for (final surfaceCase in const [
+    (width: 390.0, platform: TargetPlatform.android, mobile: true),
+    (width: 1440.0, platform: TargetPlatform.windows, mobile: false),
+  ]) {
+    testWidgets(
+      'dirty cancellation uses guarded adaptive surface at ${surfaceCase.width.toInt()}',
+      (tester) async {
+        tester.view.physicalSize = Size(surfaceCase.width, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final api = _LessonDecisionApi(operationKey: 'cancel');
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(platform: surfaceCase.platform),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => FilledButton(
+                  onPressed: () => showLessonDecisionFlow(
+                    context,
+                    crm: MagicCrmService(api),
+                    operation: LessonDecisionOperation.cancel,
+                    lesson: Map<String, dynamic>.from(_lesson),
+                    canManageTeacherCompensation: true,
+                  ),
+                  child: const Text('Открыть отмену'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Открыть отмену'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('lesson-decision-reason')),
+          'Причина изменена',
+        );
+        await tester.pump();
+
+        if (surfaceCase.mobile) {
+          await tester.drag(
+            find.byKey(const Key('magic-sheet-handle')),
+            const Offset(0, 260),
+          );
+        } else {
+          await tester.tap(find.byTooltip('Закрыть'));
+        }
+        await tester.pumpAndSettle();
+
+        expect(find.text('Отменить изменения?'), findsOneWidget);
+        expect(find.text('Причина изменена'), findsOneWidget);
+        await tester.tap(find.text('Остаться'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('lesson-decision-reason')), findsOneWidget);
+
+        await tester.tapAt(const Offset(8, 8));
+        await tester.pumpAndSettle();
+        expect(find.text('Отменить изменения?'), findsOneWidget);
+        await tester.tap(find.text('Отменить изменения'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+      },
+    );
+  }
 
   for (final surfaceCase in const [
     (width: 390.0, platform: TargetPlatform.android, mobile: true),

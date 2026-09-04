@@ -5,11 +5,42 @@ import 'lesson_decision_models.dart';
 import 'lesson_decision_sections.dart';
 import '../lesson_editor/lesson_financial_autofill.dart';
 import '../lesson_editor/lesson_transition_error.dart';
+import '../lesson_editor/lesson_editor_view.dart';
 
-class LessonDecisionForm extends StatefulWidget {
-  const LessonDecisionForm({required this.controller, super.key});
+class GuardedLessonDecisionForm extends StatefulWidget {
+  const GuardedLessonDecisionForm({required this.controller, super.key});
 
   final LessonDecisionFormLifecycle controller;
+
+  @override
+  State<GuardedLessonDecisionForm> createState() =>
+      _GuardedLessonDecisionFormState();
+}
+
+class _GuardedLessonDecisionFormState extends State<GuardedLessonDecisionForm> {
+  bool _dirty = false;
+
+  @override
+  Widget build(BuildContext context) => LessonEditorDismissGuard(
+    isDirty: _dirty,
+    child: LessonDecisionForm(
+      controller: widget.controller,
+      onDirtyChanged: (dirty) {
+        if (dirty != _dirty) setState(() => _dirty = dirty);
+      },
+    ),
+  );
+}
+
+class LessonDecisionForm extends StatefulWidget {
+  const LessonDecisionForm({
+    required this.controller,
+    this.onDirtyChanged,
+    super.key,
+  });
+
+  final LessonDecisionFormLifecycle controller;
+  final ValueChanged<bool>? onDirtyChanged;
 
   @override
   State<LessonDecisionForm> createState() => _LessonDecisionFormState();
@@ -42,6 +73,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   bool _busy = false;
   bool _commitAttempted = false;
   bool _compensationTouched = false;
+  bool _dirty = false;
   String? _teacherCompensationSource;
 
   @override
@@ -290,6 +322,12 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     });
   }
 
+  void _markDirty() {
+    if (_dirty) return;
+    _dirty = true;
+    widget.onDirtyChanged?.call(true);
+  }
+
   Future<void> _selectSettlement(String? value) async {
     if (value == null || value == _settlementKey) return;
     var applyRecommendation = true;
@@ -316,6 +354,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       if (!mounted || choice == null) return;
       applyRecommendation = choice;
     }
+    _markDirty();
     setState(() {
       _settlementKey = value;
       final settlement = _settlement;
@@ -371,6 +410,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _selectCompensation(String? key) {
+    _markDirty();
     setState(() {
       _compensationKey = key;
       _preview = null;
@@ -384,6 +424,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _selectClientSettlement(String clientId, String? settlementKey) {
+    _markDirty();
     setState(() {
       _clientDecisionTouched.add(clientId);
       _clientSettlementKeys[clientId] = settlementKey;
@@ -410,6 +451,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _selectClientDuration(String clientId, String value) {
+    _markDirty();
     setState(() {
       _clientDecisionTouched.add(clientId);
       _clientDurationTouched.add(clientId);
@@ -424,6 +466,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _selectTeacherDuration(String value) {
+    _markDirty();
     setState(() {
       _compensationTouched = true;
       _teacherCompensationSource = 'manual';
@@ -432,6 +475,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _changeCompensationValue(String _) {
+    _markDirty();
     setState(() {
       _compensationTouched = true;
       _teacherCompensationSource = 'manual';
@@ -442,6 +486,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   void _restoreRecommendation() {
     final settlement = _settlement;
     if (settlement == null) return;
+    _markDirty();
     setState(() {
       _compensationTouched = false;
       _applyRecommendation(
@@ -482,6 +527,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     LessonDecisionParticipant? payer,
   ) async {
     final payerId = payer?.id;
+    _markDirty();
     setState(() {
       _clientDecisionTouched.add(clientId);
       _payerIds[clientId] = payerId;
@@ -513,6 +559,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _selectSubscription(String clientId, String? subscriptionId) {
+    _markDirty();
     setState(() {
       _clientDecisionTouched.add(clientId);
       _subscriptionIds[clientId] = subscriptionId;
@@ -522,6 +569,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 
   void _selectChargeType(String clientId, String? chargeType) {
+    _markDirty();
     setState(() {
       _clientDecisionTouched.add(clientId);
       if (chargeType == 'subscription' || chargeType == 'personal_account') {
@@ -710,7 +758,10 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       preview: _preview,
       error: _error,
       commitAttempted: _commitAttempted,
-      onReasonChanged: (_) => _invalidatePreview(),
+      onReasonChanged: (_) {
+        _markDirty();
+        _invalidatePreview();
+      },
       onSettlementChanged: _selectSettlement,
       onCompensationChanged: _selectCompensation,
       onCompensationValueChanged: _changeCompensationValue,
