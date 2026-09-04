@@ -108,6 +108,43 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     }
   });
 
+  it("blocks concurrent teacher-fact inserts until a rollback guard releases its lock", async () => {
+    const locker = await pool.connect();
+    const writer = await pool.connect();
+    const factId = randomUUID();
+    try {
+      await locker.query("begin");
+      await locker.query(
+        "lock table app.lesson_teacher_compensation_facts in share row exclusive mode",
+      );
+      await writer.query("begin");
+      await writer.query("set local lock_timeout = '150ms'");
+      await expect(
+        writer.query(
+          `insert into app.lesson_teacher_compensation_facts (
+             id, lesson_id, teacher_id, compensation_type, snapshot_rate,
+             rate_minor, duration_minutes, amount_minor
+           ) values ($1, $2, $3, 'fixed', 700, 70000, 60, 70000)`,
+          [factId, randomUUID(), randomUUID()],
+        ),
+      ).rejects.toMatchObject({ code: "55P03" });
+      await writer.query("rollback");
+      await locker.query("rollback");
+      await expect(
+        pool.query<{ count: string }>(
+          `select count(*)::text as count
+           from app.lesson_teacher_compensation_facts where id = $1`,
+          [factId],
+        ),
+      ).resolves.toMatchObject({ rows: [{ count: "0" }] });
+    } finally {
+      await writer.query("rollback").catch(() => undefined);
+      writer.release();
+      await locker.query("rollback").catch(() => undefined);
+      locker.release();
+    }
+  });
+
   it("deletes legacy subscriptions instead of leaving orphan rows", async () => {
     const client = await pool.connect();
     await client.query("begin");

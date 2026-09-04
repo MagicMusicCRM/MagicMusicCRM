@@ -141,6 +141,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       markPlanState: settlement.markPlanState.bind(settlement),
       plannedSubscriptionAllocations:
         settlement.plannedSubscriptionAllocations.bind(settlement),
+      resolvePlannedPlan: settlement.resolvePlannedPlan.bind(settlement),
     } satisfies LessonSettlementPort);
     const completionRepository = new LessonCompletionWorkerRepository(database);
     completionWorker = new LessonCompletionWorker(
@@ -295,6 +296,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(moved.financialDecision).toEqual({
         settlementTypeKey: "free_lesson",
         teacherCompensationRuleKey: "none",
+        teacherCreditedDurationMinutes: 0,
+        teacherCompensationSource: "automatic",
       });
       const successorId = moved.successor!.id;
       const state = await pool.query<{
@@ -780,6 +783,144 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         reason_text: "Клиент попросил другое время",
         settlement_plan_state: "settled",
         settlement_failure_code: null,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("resolves transition teacher provenance before preview and commit", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const manager = { userId: fixture.managerId, role: "manager" as const };
+    const director = { userId: fixture.managerId, role: "director" as const };
+    const metadata = (label: string) => ({
+      idempotencyKey: `${label}-${randomUUID()}`,
+      requestId: `request-${label}-${randomUUID()}`,
+    });
+    const manuallySourced = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "fixed",
+      teacherCompensationValueMinor: "70000",
+      teacherCompensationSource: "manual" as const,
+    };
+    try {
+      await expect(
+        service.previewCancel(manager, fixture.cancelId, {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Ручная оплата запрещена менеджеру",
+          financialDecision: manuallySourced,
+        }),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      await expect(transitionCounts(pool, fixture.cancelId)).resolves.toEqual({
+        lifecycle_state: "scheduled",
+        version: 1,
+        successors: 0,
+        transitions: 0,
+        client_facts: 0,
+        teacher_facts: 0,
+      });
+
+      const legacyManual = {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "70000",
+      };
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const manualPreview = await service.previewCancel(
+        director,
+        fixture.cancelId,
+        {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Та же сумма выбрана вручную директором",
+          financialDecision: legacyManual,
+        },
+      );
+      expect(manualPreview.financialDecision).toMatchObject({
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "70000",
+        teacherCompensationSource: "manual",
+      });
+      const manualCommit = await service.cancel(
+        director,
+        fixture.cancelId,
+        {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Та же сумма выбрана вручную директором",
+          financialDecision: legacyManual,
+          previewToken: manualPreview.previewToken!,
+          confirm: true,
+        },
+        metadata("manual-provenance"),
+      );
+      expect(manualCommit.financialDecision).toEqual(
+        manualPreview.financialDecision,
+      );
+      await expect(
+        pool.query<{ compensation_source: string }>(
+          `select compensation_source
+           from app.lesson_teacher_compensation_facts_effective
+           where lesson_id = $1`,
+          [fixture.cancelId],
+        ),
+      ).resolves.toMatchObject({ rows: [{ compensation_source: "manual" }] });
+
+      await pool.query("update app.users set role = 'manager' where id = $1", [
+        fixture.managerId,
+      ]);
+
+      const legacyAutomatic = {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+      };
+      const automaticPreview = await service.previewCancel(
+        manager,
+        fixture.sourceId,
+        {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Старый автоматический payload",
+          financialDecision: legacyAutomatic,
+        },
+      );
+      expect(automaticPreview.financialDecision).toMatchObject({
+        teacherCompensationSource: "automatic",
+      });
+      const automaticCommit = await service.cancel(
+        manager,
+        fixture.sourceId,
+        {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Старый автоматический payload",
+          financialDecision: legacyAutomatic,
+          previewToken: automaticPreview.previewToken!,
+          confirm: true,
+        },
+        metadata("automatic-provenance"),
+      );
+      expect(automaticCommit.financialDecision).toEqual(
+        automaticPreview.financialDecision,
+      );
+      await expect(
+        pool.query<{ compensation_source: string }>(
+          `select compensation_source
+           from app.lesson_teacher_compensation_facts_effective
+           where lesson_id = $1`,
+          [fixture.sourceId],
+        ),
+      ).resolves.toMatchObject({
+        rows: [{ compensation_source: "automatic" }],
       });
     } finally {
       await cleanup(pool, fixture);

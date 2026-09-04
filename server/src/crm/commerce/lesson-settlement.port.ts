@@ -1,4 +1,5 @@
 import { PoolClient } from "pg";
+import type { CrmPolicy } from "../crm.policy";
 import type { IssueSubscriptionDiscountDto, IssueSubscriptionSurchargeDto } from "../dto/issue-subscription.dto";
 import type { NormalizedDiscount, NormalizedSurcharge } from "./subscription-issue.contracts";
 
@@ -50,6 +51,26 @@ export interface PreparedLessonSettlementPlan {
   decision: LessonFinancialDecision;
   settlementRevisionId: string;
   compensationRevisionId: string;
+}
+
+export interface ResolvePlannedLessonSettlementInput {
+  branchId: string;
+  durationMinutes: number;
+  decision: LessonFinancialDecision;
+  actorUserId: string;
+  authorization: ReturnType<CrmPolicy["teacherCompensationMutationAuthorization"]>;
+  reasonText?: string;
+  preservedTeacherDecision?: Pick<
+    LessonFinancialDecision,
+    | "teacherCompensationRuleKey"
+    | "teacherCompensationValueMinor"
+    | "teacherCreditedDurationMinutes"
+    | "teacherCompensationSource"
+  >;
+  requiredClientIds?: string[];
+  configurationRevisionIds?: NonNullable<
+    LessonSettlementInput["configurationRevisionIds"]
+  >;
 }
 
 export interface PlannedSubscriptionAllocation {
@@ -130,6 +151,10 @@ export interface LessonSettlementPreview {
 }
 
 export interface LessonSettlementPort {
+  resolvePlannedPlan(
+    client: PoolClient,
+    input: ResolvePlannedLessonSettlementInput,
+  ): Promise<PreparedLessonSettlementPlan>;
   settle(
     client: PoolClient,
     lessonId: string,
@@ -158,10 +183,7 @@ export interface LessonSettlementPort {
       targetLessonId: string;
       selectedBy: string;
       reasonText?: string;
-      fallback?: {
-        branchId: string;
-        decision: LessonFinancialDecision;
-      };
+      fallback?: PreparedLessonSettlementPlan;
     },
   ): Promise<PreparedLessonSettlementPlan>;
   loadPlan(

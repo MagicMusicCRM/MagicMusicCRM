@@ -12,6 +12,7 @@ import {
   LessonSettlementInput,
   LessonSettlementResult,
   PreparedLessonSettlementPlan,
+  ResolvePlannedLessonSettlementInput,
 } from "./lesson-settlement.port";
 import { previewLessonSettlement, settleLesson } from "./lesson-settlement-execution";
 import {
@@ -38,28 +39,6 @@ import {
 export type TeacherCompensationMutationAuthorization = ReturnType<
   CrmPolicy["teacherCompensationMutationAuthorization"]
 >;
-
-type PreservedTeacherDecision = Pick<
-  LessonFinancialDecision,
-  | "teacherCompensationRuleKey"
-  | "teacherCompensationValueMinor"
-  | "teacherCreditedDurationMinutes"
-  | "teacherCompensationSource"
->;
-
-interface ResolvePlannedDecisionInput {
-  branchId: string;
-  durationMinutes: number;
-  decision: LessonFinancialDecision;
-  actorUserId: string;
-  authorization: TeacherCompensationMutationAuthorization;
-  reasonText?: string;
-  preservedTeacherDecision?: PreservedTeacherDecision;
-  requiredClientIds?: string[];
-  configurationRevisionIds?: NonNullable<
-    LessonSettlementInput["configurationRevisionIds"]
-  >;
-}
 
 @Injectable()
 export class LessonSettlementService implements LessonSettlementPort {
@@ -88,7 +67,7 @@ export class LessonSettlementService implements LessonSettlementPort {
 
   async resolvePlannedDecision(
     client: PoolClient,
-    input: ResolvePlannedDecisionInput,
+    input: ResolvePlannedLessonSettlementInput,
   ): Promise<LessonFinancialDecision> {
     this.assertPlannedActor(input);
     assertExactClientDecisions(input.decision, input.requiredClientIds);
@@ -102,7 +81,7 @@ export class LessonSettlementService implements LessonSettlementPort {
 
   async resolvePlannedPlan(
     client: PoolClient,
-    input: ResolvePlannedDecisionInput,
+    input: ResolvePlannedLessonSettlementInput,
   ): Promise<PreparedLessonSettlementPlan> {
     this.assertPlannedActor(input);
     assertExactClientDecisions(input.decision, input.requiredClientIds);
@@ -120,7 +99,7 @@ export class LessonSettlementService implements LessonSettlementPort {
     );
   }
 
-  private assertPlannedActor(input: ResolvePlannedDecisionInput): void {
+  private assertPlannedActor(input: ResolvePlannedLessonSettlementInput): void {
     if (input.authorization.actor.userId !== input.actorUserId) {
       throw new ForbiddenException({
         code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED",
@@ -130,7 +109,7 @@ export class LessonSettlementService implements LessonSettlementPort {
 
   private resolvePlannedDecisionWithCatalog(
     catalog: Awaited<ReturnType<typeof loadLessonSettlementCatalog>>,
-    input: ResolvePlannedDecisionInput,
+    input: ResolvePlannedLessonSettlementInput,
   ): LessonFinancialDecision {
     assertDurationWithinLesson(
       input.durationMinutes,
@@ -425,10 +404,7 @@ export class LessonSettlementService implements LessonSettlementPort {
       targetLessonId: string;
       selectedBy: string;
       reasonText?: string;
-      fallback?: {
-        branchId: string;
-        decision: LessonFinancialDecision;
-      };
+      fallback?: PreparedLessonSettlementPlan;
     },
   ) {
     return cloneLessonSettlementPlan(client, input);

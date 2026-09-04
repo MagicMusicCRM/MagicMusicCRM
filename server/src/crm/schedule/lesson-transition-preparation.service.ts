@@ -1,4 +1,3 @@
-import { assertLessonPayers } from "../commerce/lesson-funding";
 import {
   ConflictException,
   Inject,
@@ -31,6 +30,7 @@ import {
 } from "./lesson-transition.rules";
 import type {
   CalculatedTransitionPreview,
+  ResolvedTransitionDto,
   TransitionLessonRow,
   TransitionOperation,
   TransitionPreviewDto,
@@ -197,20 +197,17 @@ export class LessonTransitionPreparationService {
     const source = await this.loadSource(lessonId, client, true);
     this.assertSource(source, dto.expectedVersion, operation);
     await this.assertSettlementReviewPlan(client, lessonId, operation);
-    const authorizedDto = await this.authorizedTransitionDto(
+    const effectiveDto = effectiveTransitionDto(source, dto, operation);
+    const resolvedDto = await this.resolvedTransitionDto(
       client,
       actor,
       source,
-      dto,
-    );
-    const effectiveDto = effectiveTransitionDto(
-      source,
-      authorizedDto,
       operation,
+      effectiveDto,
     );
     const successor =
       operation === "reschedule"
-        ? this.successorDraft(authorizedDto.successor!, source)
+        ? this.successorDraft(dto.successor!, source)
         : null;
     const validation = successor
       ? await this.validateSuccessor(client, lessonId, successor)
@@ -219,7 +216,7 @@ export class LessonTransitionPreparationService {
       operation,
       source: sourceProjection(source),
       successor: successor ? draftProjection(successor) : null,
-      financialDecision: effectiveDto.financialDecision,
+      financialDecision: resolvedDto.financialDecision,
       violations: validation.violations,
       canConfirm: validation.valid,
       confirmRequired: true,
@@ -228,7 +225,7 @@ export class LessonTransitionPreparationService {
     const coverage = await this.reservations.lockSettlementCoverage(
       client,
       lessonId,
-      selectedTransitionSubscriptionIds(effectiveDto),
+      selectedTransitionSubscriptionIds(resolvedDto),
     );
     const settled = await this.financial.previewFinancial(
       client,
@@ -236,7 +233,7 @@ export class LessonTransitionPreparationService {
       source,
       lessonId,
       operation,
-      effectiveDto,
+      resolvedDto,
     );
     const financial = transitionFinancialProjection(settled);
     return {
@@ -252,35 +249,134 @@ export class LessonTransitionPreparationService {
         operation,
         source,
         successor,
-        dto: effectiveDto,
+        dto: resolvedDto,
         coverage,
         financial,
       }),
     };
   }
 
-  async authorizedTransitionDto(
+  async resolvedTransitionDto(
     client: PoolClient,
     actor: ActorContext,
     source: TransitionSource,
+    operation: TransitionOperation,
     dto: TransitionPreviewDto,
-  ): Promise<TransitionPreviewDto> {
-    await assertLessonPayers(client, dto.financialDecision, actor.userId);
-    if (this.policy.canManageTeacherCompensation(actor)) return dto;
-    const current = await this.settlement.loadPlan(client, source.id, true);
-    const snapshot = source.groupId ? source.groupSnapshot : source.snapshot;
-    const ruleKey =
-      current?.decision.teacherCompensationRuleKey ??
-      (snapshot?.teacherCompensationType === "none" ? "none" : "standard");
+  ): Promise<ResolvedTransitionDto> {
+    const preservedTeacherDecision = await this.teacherDecisionToPreserve(
+      client,
+      actor,
+      source,
+      operation,
+    );
+    const prepared = await this.settlement.resolvePlannedPlan(client, {
+      branchId: source.branchId!,
+      durationMinutes: source.durationMinutes,
+      decision: this.decisionForResolution(
+        dto.financialDecision,
+        Boolean(preservedTeacherDecision),
+      ),
+      actorUserId: actor.userId,
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
+      reasonText: dto.reasonText,
+      ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
+    });
+    const teacherCompensationSource =
+      prepared.decision.teacherCompensationSource;
+    if (!teacherCompensationSource) {
+      throw new ConflictException({
+        code: "TEACHER_COMPENSATION_SOURCE_UNRESOLVED",
+      });
+    }
     return {
       ...dto,
       financialDecision: {
-        ...dto.financialDecision,
-        teacherCompensationRuleKey: ruleKey,
-        teacherCompensationValueMinor:
-          current?.decision.teacherCompensationValueMinor,
+        ...prepared.decision,
+        teacherCompensationSource,
+      },
+      configurationRevisionIds: {
+        settlementRevisionId: prepared.settlementRevisionId,
+        compensationRevisionId: prepared.compensationRevisionId,
       },
     };
+  }
+
+  private async teacherDecisionToPreserve(
+    client: PoolClient,
+    actor: ActorContext,
+    source: TransitionSource,
+    operation: TransitionOperation,
+  ) {
+    if (this.policy.canManageTeacherCompensation(actor)) return undefined;
+    if (
+      operation === "reschedule" &&
+      source.lifecycleState === "successfully_completed"
+    ) return undefined;
+    return this.preservedTeacherDecision(client, source);
+  }
+
+  private decisionForResolution(
+    decision: TransitionPreviewDto["financialDecision"],
+    preservesTeacherDecision: boolean,
+  ): TransitionPreviewDto["financialDecision"] {
+    const legacyAutomatic =
+      decision.teacherCompensationSource === undefined &&
+      decision.teacherCompensationValueMinor === undefined &&
+      decision.teacherCreditedDurationMinutes === undefined &&
+      [undefined, "none", "standard"].includes(
+        decision.teacherCompensationRuleKey,
+      );
+    if (!preservesTeacherDecision || !legacyAutomatic) return decision;
+    const {
+      teacherCompensationRuleKey: _rule,
+      teacherCompensationValueMinor: _value,
+      teacherCreditedDurationMinutes: _duration,
+      teacherCompensationSource: _source,
+      ...clientDecision
+    } = decision;
+    return clientDecision as TransitionPreviewDto["financialDecision"];
+  }
+
+  private async preservedTeacherDecision(
+    client: PoolClient,
+    source: TransitionSource,
+  ): Promise<NonNullable<
+    Parameters<LessonSettlementPort["resolvePlannedPlan"]>[1]["preservedTeacherDecision"]
+  >> {
+    const current = await this.settlement.loadPlan(client, source.id, true);
+    if (current) {
+      return {
+        teacherCompensationRuleKey:
+          current.decision.teacherCompensationRuleKey,
+        teacherCompensationValueMinor:
+          current.decision.teacherCompensationValueMinor,
+        teacherCreditedDurationMinutes:
+          current.decision.teacherCreditedDurationMinutes,
+        teacherCompensationSource:
+          current.decision.teacherCompensationSource ??
+          this.legacyPlanTeacherSource(current.decision),
+      };
+    }
+    const snapshot = source.groupId ? source.groupSnapshot : source.snapshot;
+    return {
+      teacherCompensationRuleKey:
+        snapshot?.teacherCompensationType === "none" ? "none" : "standard",
+      teacherCompensationSource: "automatic",
+    };
+  }
+
+  private legacyPlanTeacherSource(
+    decision: Parameters<
+      LessonSettlementPort["resolvePlannedPlan"]
+    >[1]["decision"],
+  ): "automatic" | "manual" {
+    return decision.teacherCompensationValueMinor !== undefined ||
+        !["none", "standard"].includes(
+          decision.teacherCompensationRuleKey,
+        )
+      ? "manual"
+      : "automatic";
   }
 
   private mapSource(row: TransitionLessonRow): TransitionSource {

@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
 import type {
   LessonFinancialDecision,
+  LessonSettlementInput,
   LessonSettlementResult,
 } from "../commerce/lesson-settlement.port";
 import type { LessonSettlementCoverageSnapshot } from "../commerce/subscription-reservation.service";
@@ -100,6 +101,16 @@ export interface TransitionPreviewDto {
   reasonText?: string;
   financialDecision: LessonFinancialDecision;
   successor?: LessonDraftInput;
+}
+
+export interface ResolvedTransitionDto
+  extends Omit<TransitionPreviewDto, "financialDecision"> {
+  financialDecision: LessonFinancialDecision & {
+    teacherCompensationSource: "automatic" | "manual";
+  };
+  configurationRevisionIds: NonNullable<
+    LessonSettlementInput["configurationRevisionIds"]
+  >;
 }
 
 export interface TransitionCommandDto extends TransitionPreviewDto {

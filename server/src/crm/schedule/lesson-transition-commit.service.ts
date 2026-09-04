@@ -28,6 +28,7 @@ import {
 import type {
   CommitTransitionInput,
   CommittedTransition,
+  ResolvedTransitionDto,
   TerminalTransitionState,
   TransitionOperation,
   TransitionSource,
@@ -64,16 +65,21 @@ export class LessonTransitionCommitService {
       input.lessonId,
       input.operation,
     );
-    const authorizedDto = await this.preparation.authorizedTransitionDto(
+    const effectiveDto = effectiveTransitionDto(
+      source,
+      input.dto,
+      input.operation,
+    );
+    const dto = await this.preparation.resolvedTransitionDto(
       client,
       input.actor,
       source,
-      input.dto,
+      input.operation,
+      effectiveDto,
     );
-    const dto = effectiveTransitionDto(source, authorizedDto, input.operation);
     const successor =
       input.operation === "reschedule"
-        ? this.preparation.successorDraft(authorizedDto.successor!, source)
+        ? this.preparation.successorDraft(input.dto.successor!, source)
         : null;
     if (successor) {
       await this.acquireLocks(client, source, successor);
@@ -110,8 +116,8 @@ export class LessonTransitionCommitService {
         input.successorId,
         input.actor,
         dto.reasonText,
-        successor.branchId,
         dto.financialDecision,
+        dto.configurationRevisionIds,
       );
     }
     if (source.lifecycleState === "successfully_completed") {
@@ -176,7 +182,7 @@ export class LessonTransitionCommitService {
     client: PoolClient,
     input: CommitTransitionInput,
     source: TransitionSource,
-    dto: CommitTransitionInput["dto"],
+    dto: ResolvedTransitionDto,
   ): Promise<LessonSettlementResult> {
     if (source.lifecycleState === "successfully_completed") {
       return this.financial.applyCompletedRescheduleCorrection(
@@ -202,6 +208,7 @@ export class LessonTransitionCommitService {
       context: input.operation,
       decision: dto.financialDecision,
       reasonText: dto.reasonText?.trim(),
+      configurationRevisionIds: dto.configurationRevisionIds,
     });
     await this.reservations.terminalize(client, settled);
     if (input.operation === "settle") {

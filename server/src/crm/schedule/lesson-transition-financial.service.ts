@@ -19,7 +19,7 @@ import {
 } from "./lesson-transition.rules";
 import type {
   TransitionOperation,
-  TransitionPreviewDto,
+  ResolvedTransitionDto,
   TransitionSource,
 } from "./lesson-transition.types";
 
@@ -37,7 +37,7 @@ export class LessonTransitionFinancialService {
     source: TransitionSource,
     lessonId: string,
     operation: TransitionOperation,
-    dto: TransitionPreviewDto,
+    dto: ResolvedTransitionDto,
   ): Promise<LessonSettlementResult> {
     await client.query("savepoint lesson_transition_preview");
     try {
@@ -60,6 +60,7 @@ export class LessonTransitionFinancialService {
         context: operation,
         decision: dto.financialDecision,
         reasonText: dto.reasonText?.trim(),
+        configurationRevisionIds: dto.configurationRevisionIds,
       });
       await this.reservations.terminalize(client, settled);
       return settled;
@@ -73,7 +74,7 @@ export class LessonTransitionFinancialService {
     client: PoolClient,
     source: TransitionSource,
     actor: ActorContext,
-    dto: TransitionPreviewDto,
+    dto: ResolvedTransitionDto,
     correctionId: string,
   ): Promise<LessonSettlementResult> {
     if (!source.branchId || source.lifecycleState !== "successfully_completed") {
@@ -89,11 +90,6 @@ export class LessonTransitionFinancialService {
         fields: ["reasonText"],
       });
     }
-    const prepared = await this.settlement.preparePlan(
-      client,
-      source.branchId,
-      dto.financialDecision,
-    );
     const previous = await client.query<{ id: string; version: number | string }>(
       `select id, version from app.lesson_settlement_corrections
        where lesson_id = $1 order by version desc limit 1 for update`,
@@ -111,8 +107,8 @@ export class LessonTransitionFinancialService {
         Number(previous.rows[0]?.version ?? 0) + 1,
         previous.rows[0]?.id ?? null,
         JSON.stringify(dto.financialDecision),
-        prepared.settlementRevisionId,
-        prepared.compensationRevisionId,
+        dto.configurationRevisionIds.settlementRevisionId,
+        dto.configurationRevisionIds.compensationRevisionId,
         reasonText,
         actor.userId,
       ],
@@ -122,8 +118,8 @@ export class LessonTransitionFinancialService {
       decision: dto.financialDecision,
       reasonText,
       configurationRevisionIds: {
-        settlementRevisionId: prepared.settlementRevisionId,
-        compensationRevisionId: prepared.compensationRevisionId,
+        settlementRevisionId: dto.configurationRevisionIds.settlementRevisionId,
+        compensationRevisionId: dto.configurationRevisionIds.compensationRevisionId,
       },
       correction: { id: correctionId },
     });
@@ -135,16 +131,19 @@ export class LessonTransitionFinancialService {
     successorId: string,
     actor: ActorContext,
     reasonText?: string,
-    branchId?: string,
     fallbackDecision?: LessonFinancialDecision,
+    configurationRevisionIds?: ResolvedTransitionDto["configurationRevisionIds"],
   ): Promise<void> {
     const plan = await this.settlement.clonePlan(client, {
       sourceLessonId,
       targetLessonId: successorId,
       selectedBy: actor.userId,
       reasonText,
-      fallback: branchId && fallbackDecision
-        ? { branchId, decision: fallbackDecision }
+      fallback: fallbackDecision && configurationRevisionIds
+        ? {
+            decision: fallbackDecision,
+            ...configurationRevisionIds,
+          }
         : undefined,
     });
     const allocations = await this.settlement.plannedSubscriptionAllocations(

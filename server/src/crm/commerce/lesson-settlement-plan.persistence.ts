@@ -92,10 +92,7 @@ export async function cloneLessonSettlementPlan(
     targetLessonId: string;
     selectedBy: string;
     reasonText?: string;
-    fallback?: {
-      branchId: string;
-      decision: LessonFinancialDecision;
-    };
+    fallback?: PreparedLessonSettlementPlan;
   },
 ): Promise<PreparedLessonSettlementPlan> {
   const source = await loadLessonSettlementPlan(
@@ -111,12 +108,7 @@ export async function cloneLessonSettlementPlan(
   }
   const prepared = source
     ? preparedPlanFromStored(source)
-    : await prepareLessonSettlementPlan(
-        client,
-        input.fallback!.branchId,
-        input.fallback!.decision,
-        input.selectedBy,
-      );
+    : input.fallback!;
   await assertLessonPayers(client, prepared.decision, input.selectedBy);
   await insertPreparedLessonSettlementPlan(client, {
     lessonId: input.targetLessonId,

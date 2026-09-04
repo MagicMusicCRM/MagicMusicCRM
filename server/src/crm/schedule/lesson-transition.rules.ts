@@ -180,15 +180,21 @@ export const transitionAdvisoryKeys = (
   return [...new Set(keys)].sort();
 };
 
+const nullableDecisionValue = <T>(value: T | undefined): T | null =>
+  value === undefined ? null : value;
+
 export const normalizedTransitionDecision = (dto: TransitionPreviewDto) => ({
   settlementTypeKey: dto.financialDecision.settlementTypeKey,
   clientDecisions: [...(dto.financialDecision.clientDecisions ?? [])]
     .sort((left, right) => left.clientId.localeCompare(right.clientId))
     .map((decision) => ({
       clientId: decision.clientId,
-      settlementTypeKey: decision.settlementTypeKey ?? null,
-      subscriptionId: decision.subscriptionId ?? null,
-      payerStudentId: decision.payerStudentId ?? null,
+      settlementTypeKey: nullableDecisionValue(decision.settlementTypeKey),
+      subscriptionId: nullableDecisionValue(decision.subscriptionId),
+      payerStudentId: nullableDecisionValue(decision.payerStudentId),
+      chargeDurationMinutes: nullableDecisionValue(
+        decision.chargeDurationMinutes,
+      ),
       ...(decision.chargeType === undefined ? {} : { chargeType: decision.chargeType }),
       ...(decision.basePriceMinor === undefined ? {} : { basePriceMinor: decision.basePriceMinor }),
       ...(decision.discount === undefined ? {} : { discount: decision.discount }),
@@ -197,7 +203,13 @@ export const normalizedTransitionDecision = (dto: TransitionPreviewDto) => ({
   teacherCompensationRuleKey:
     dto.financialDecision.teacherCompensationRuleKey,
   teacherCompensationValueMinor:
-    dto.financialDecision.teacherCompensationValueMinor ?? null,
+    nullableDecisionValue(dto.financialDecision.teacherCompensationValueMinor),
+  teacherCreditedDurationMinutes:
+    nullableDecisionValue(
+      dto.financialDecision.teacherCreditedDurationMinutes,
+    ),
+  teacherCompensationSource:
+    nullableDecisionValue(dto.financialDecision.teacherCompensationSource),
 });
 
 export function transitionFingerprint(input: TransitionFingerprintInput): string {

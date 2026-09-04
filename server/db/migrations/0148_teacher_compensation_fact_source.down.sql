@@ -1,3 +1,5 @@
+lock table app.lesson_teacher_compensation_facts in share row exclusive mode;
+
 do $$
 begin
   if exists (

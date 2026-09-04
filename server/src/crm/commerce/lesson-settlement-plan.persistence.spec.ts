@@ -1,5 +1,6 @@
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 import {
+  cloneLessonSettlementPlan,
   loadLessonSettlementPlan,
   plannedLessonSubscriptionAllocations,
   replaceLessonSettlementPlan,
@@ -16,6 +17,50 @@ function queryResult<T extends QueryResultRow>(rows: T[]): QueryResult<T> {
 }
 
 describe("lesson settlement plan persistence", () => {
+  it("clones a prepared fallback without loading a second catalog revision", async () => {
+    const calls: Array<{ text: string; values?: unknown[] }> = [];
+    const client = {
+      query: async (text: string, values?: unknown[]) => {
+        calls.push({ text, values });
+        if (text.includes("from app.lesson_settlement_plans")) {
+          return queryResult([]);
+        }
+        if (text.includes("insert into app.lesson_settlement_plans")) {
+          return queryResult([{ lesson_id: "target-lesson" }]);
+        }
+        if (text.includes("insert into app.lesson_settlement_plan_revisions")) {
+          return queryResult([]);
+        }
+        throw new Error(`Unexpected clone query: ${text}`);
+      },
+    } as unknown as PoolClient;
+    const fallback = {
+      decision: {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+        teacherCreditedDurationMinutes: 0,
+        teacherCompensationSource: "automatic" as const,
+      },
+      settlementRevisionId: "settlement-revision",
+      compensationRevisionId: "compensation-revision",
+    };
+
+    await expect(cloneLessonSettlementPlan(client, {
+      sourceLessonId: "source-lesson",
+      targetLessonId: "target-lesson",
+      selectedBy: "actor-a",
+      fallback,
+    })).resolves.toEqual(fallback);
+
+    expect(calls.some(({ text }) =>
+      text.includes("from app.crm_configuration_revisions")
+    )).toBe(false);
+    expect(calls[1]!.values?.slice(2, 4)).toEqual([
+      "settlement-revision",
+      "compensation-revision",
+    ]);
+  });
+
   it("plans subscription units from exact client minutes", async () => {
     const client = {
       query: async (text: string) => {

@@ -30,8 +30,13 @@ describe("teacher compensation source migration", () => {
 
   it("refuses rollback after explicit provenance has been written", () => {
     const source = migration("down");
+    const lock = source.indexOf(
+      "lock table app.lesson_teacher_compensation_facts in share row exclusive mode",
+    );
     const guard = source.indexOf("compensation_source is not null");
     const drop = source.indexOf("drop column if exists compensation_source");
+    expect(lock).toBeGreaterThanOrEqual(0);
+    expect(guard).toBeGreaterThan(lock);
     expect(guard).toBeGreaterThan(0);
     expect(drop).toBeGreaterThan(guard);
     expect(source).toMatch(

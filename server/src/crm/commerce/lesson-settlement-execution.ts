@@ -258,7 +258,7 @@ function calculateConfiguredClientFact(
   if (
     policy.clientDurationMode === "manual" &&
     decision?.chargeDurationMinutes === undefined &&
-    input.decision.teacherCompensationSource !== undefined
+    decision !== undefined
   ) {
     invalidLessonSettlementDecision(
       "CLIENT_PARTIAL_DURATION_REQUIRED",

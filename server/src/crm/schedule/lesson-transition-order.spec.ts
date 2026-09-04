@@ -144,13 +144,25 @@ describe("Lesson transition runtime ordering", () => {
       assertSettlementReviewPlan: jest.fn(async () => {
         events.push("settlement-review");
       }),
-      authorizedTransitionDto: jest.fn(
+      resolvedTransitionDto: jest.fn(
         async (
           _client: PoolClient,
           _actor: unknown,
           _lessonId: string,
+          _operation: string,
           dto: unknown,
-        ) => dto,
+        ) => ({
+          ...(dto as Record<string, unknown>),
+          financialDecision: {
+            ...((dto as { financialDecision: Record<string, unknown> })
+              .financialDecision),
+            teacherCompensationSource: "automatic",
+          },
+          configurationRevisionIds: {
+            settlementRevisionId: "settlement-revision",
+            compensationRevisionId: "compensation-revision",
+          },
+        }),
       ),
       successorDraft: jest.fn(() => successor),
       validateSuccessor: jest.fn(async () => {
@@ -324,6 +336,11 @@ describe("Lesson transition runtime ordering", () => {
         financialDecision: {
           settlementTypeKey: "free_lesson",
           teacherCompensationRuleKey: "none",
+          teacherCompensationSource: "automatic",
+        },
+        configurationRevisionIds: {
+          settlementRevisionId: "settlement-revision",
+          compensationRevisionId: "compensation-revision",
         },
       },
     );
