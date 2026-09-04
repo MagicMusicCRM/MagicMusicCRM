@@ -58,6 +58,10 @@ import {
 } from "./dto/schedule-plan.dto";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
 import {
+  SchedulePlanRowRemovalCommandDto,
+  SchedulePlanRowRemovalPreviewDto,
+} from "./dto/schedule-plan-row-removal.dto";
+import {
   LessonSettlementPlanCommandDto,
   LessonSettlementPlanPreviewDto,
 } from "./dto/lesson-settlement-plan.dto";
@@ -151,6 +155,31 @@ export class CrmScheduleController {
     @Body() dto: SchedulePlanEndCommandDto,
   ) {
     return this.schedulePlans.end(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post("schedule-plans/:planId/rows/:seriesId/remove/preview")
+  previewSchedulePlanRowRemoval(
+    @CurrentActor() actor: ActorContext,
+    @Param("planId", ParseUUIDPipe) planId: string,
+    @Param("seriesId", ParseUUIDPipe) seriesId: string,
+    @Body() dto: SchedulePlanRowRemovalPreviewDto,
+  ) {
+    return this.schedulePlans.previewRemoveRow(actor, planId, seriesId, dto);
+  }
+
+  @Post("schedule-plans/:planId/rows/:seriesId/remove")
+  removeSchedulePlanRow(
+    @CurrentActor() actor: ActorContext,
+    @Param("planId", ParseUUIDPipe) planId: string,
+    @Param("seriesId", ParseUUIDPipe) seriesId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: SchedulePlanRowRemovalCommandDto,
+  ) {
+    return this.schedulePlans.removeRow(actor, planId, seriesId, dto, {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
     });

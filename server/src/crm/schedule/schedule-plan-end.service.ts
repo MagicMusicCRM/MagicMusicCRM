@@ -5,14 +5,13 @@ import { DatabaseService } from "../../db/database.service";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
-import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
 import type {
   SchedulePlanEndCommandDto,
   SchedulePlanEndPreviewDto,
 } from "../dto/schedule-plan.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
-import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
+import { FuturePlanLessonCancellationService } from "./future-plan-lesson-cancellation.service";
 import { lockSchedulePlanSeries } from "./schedule-locks";
 import {
   type NormalizedSchedulePlanEnd,
@@ -50,6 +49,16 @@ export interface SchedulePlanEndResult {
   replayed: boolean;
 }
 
+export interface LockedSchedulePlanEndInput {
+  plan: LockedSchedulePlan;
+  seriesIds: string[];
+  effectiveFrom: string;
+  actorUserId: string;
+  reasonText: string;
+  version: number;
+  cancellationMode?: "plan-end" | "row-removal";
+}
+
 interface EndMutationReference extends Record<string, unknown> {
   planId: string;
   endedLessons: number;
@@ -65,8 +74,7 @@ export class SchedulePlanEndService {
     private readonly repository: SchedulePlanRepository,
     private readonly database: DatabaseService,
     private readonly previewTokens: SubscriptionPreviewTokenService,
-    private readonly lifecycle: LessonLifecycleRepository,
-    private readonly reservations: SubscriptionReservationService,
+    private readonly cancellations: FuturePlanLessonCancellationService,
     private readonly definition: SchedulePlanDefinitionService,
   ) {}
 
@@ -192,22 +200,69 @@ export class SchedulePlanEndService {
       normalized,
       impactFingerprint,
     );
-    await this.finishPlan(client, actor.userId, planId, normalized, version);
-    await this.cancelLessons(
-      client,
-      actor.userId,
-      normalized.reasonText,
-      impact,
-    );
-    const releasedReservations = await this.reservations.releaseForLessons(
-      client,
-      impact.lessons.map((lesson) => lesson.id),
-    );
+    const ending = await this.endLockedInTransaction(client, {
+      plan,
+      seriesIds: currentSeries.rows.map((series) => series.id),
+      effectiveFrom: this.nextDate(normalized.lastDate),
+      actorUserId: actor.userId,
+      reasonText: normalized.reasonText,
+      version,
+    });
     return {
       planId,
-      endedLessons: impact.lessons.length,
-      releasedReservations,
-      preservedTerminalLessons: impact.terminalLessonCount,
+      endedLessons: ending.endedLessons,
+      releasedReservations: ending.releasedReservations,
+      preservedTerminalLessons: ending.preservedTerminalLessons,
+    };
+  }
+
+  async endLockedInTransaction(
+    client: PoolClient,
+    input: LockedSchedulePlanEndInput,
+  ): Promise<{
+    endedLessons: number;
+    releasedReservations: number;
+    preservedTerminalLessons: number;
+    preservedChangedLessons: number;
+  }> {
+    const lastDate = this.previousDate(input.effectiveFrom);
+    await this.finishPlan(
+      client,
+      input.actorUserId,
+      input.plan.id,
+      {
+        expectedVersion: Number(input.plan.version),
+        lastDate,
+        reasonText: input.reasonText,
+      },
+      input.version,
+    );
+    const planEndLifecycle =
+      input.cancellationMode === "row-removal"
+        ? {}
+        : {
+            lifecycleReasonCode: "schedule.plan.end",
+            lifecycleReasonText: input.reasonText,
+            lifecycleFinancialDecision: {
+              settlementTypeKey: "schedule.plan.end",
+              clientChargeType: "none",
+              teacherCompensationRuleKey: "none",
+            },
+          };
+    const cancellation = await this.cancellations.cancelEligible(client, {
+      planId: input.plan.id,
+      seriesIds: input.seriesIds,
+      effectiveFrom: input.effectiveFrom,
+      actorUserId: input.actorUserId,
+      reasonText: input.reasonText,
+      ...planEndLifecycle,
+    });
+    return {
+      endedLessons: cancellation.cancelledLessonIds.length,
+      releasedReservations: cancellation.releasedReservationIds.length,
+      preservedTerminalLessons:
+        cancellation.preservedTerminalLessonIds.length,
+      preservedChangedLessons: cancellation.preservedChangedLessonIds.length,
     };
   }
 
@@ -251,43 +306,6 @@ export class SchedulePlanEndService {
     }
   }
 
-  private async cancelLessons(
-    client: PoolClient,
-    actorUserId: string,
-    reasonText: string,
-    impact: SchedulePlanEndImpact,
-  ) {
-    for (const lesson of impact.lessons) {
-      const updated = await this.repository.cancelLesson(
-        client,
-        lesson.id,
-        lesson.version,
-      );
-      if (
-        !updated.rows[0] ||
-        Number(updated.rows[0].version) !== lesson.version + 1
-      ) {
-        throw new ConflictException({
-          code: "STALE_LESSON_VERSION",
-          lessonId: lesson.id,
-        });
-      }
-      await this.lifecycle.appendTransition(client, {
-        lessonId: lesson.id,
-        fromState: lesson.lifecycleState,
-        toState: "cancelled",
-        reasonCode: "schedule.plan.end",
-        reasonText,
-        actorUserId,
-        financialDecision: {
-          settlementTypeKey: "schedule.plan.end",
-          clientChargeType: "none",
-          teacherCompensationRuleKey: "none",
-        },
-      });
-    }
-  }
-
   private endFingerprint(
     plan: LockedSchedulePlan,
     input: NormalizedSchedulePlanEnd,
@@ -302,7 +320,20 @@ export class SchedulePlanEndService {
       lessons: impact.lessons,
       reservations: impact.reservations,
       terminalLessonCount: impact.terminalLessonCount,
+      changedLessonCount: impact.changedLessonCount,
     });
+  }
+
+  private nextDate(date: string) {
+    const value = new Date(`${date}T00:00:00.000Z`);
+    value.setUTCDate(value.getUTCDate() + 1);
+    return value.toISOString().slice(0, 10);
+  }
+
+  private previousDate(date: string) {
+    const value = new Date(`${date}T00:00:00.000Z`);
+    value.setUTCDate(value.getUTCDate() - 1);
+    return value.toISOString().slice(0, 10);
   }
 
   private endImpactProjection(impact: SchedulePlanEndImpact) {

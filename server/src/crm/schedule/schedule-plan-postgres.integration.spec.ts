@@ -30,6 +30,8 @@ import {
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
 import { SchedulePlanEndService } from "./schedule-plan-end.service";
+import { FuturePlanLessonCancellationService } from "./future-plan-lesson-cancellation.service";
+import { SchedulePlanRowRemovalService } from "./schedule-plan-row-removal.service";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
 import { SchedulePlanQueryService } from "./schedule-plan-query.service";
 import { SchedulePlanRepository } from "./schedule-plan.repository";
@@ -123,6 +125,29 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       realtime,
       materializer,
     );
+    const futureCancellations = new FuturePlanLessonCancellationService(
+      repository,
+      lifecycle,
+      reservations,
+    );
+    const ending = new SchedulePlanEndService(
+      platform,
+      policy,
+      repository,
+      database,
+      previewTokens,
+      futureCancellations,
+      definition,
+    );
+    const rowRemovals = new SchedulePlanRowRemovalService(
+      platform,
+      policy,
+      repository,
+      database,
+      previewTokens,
+      futureCancellations,
+      ending,
+    );
     plans = new SchedulePlanService(
       new SchedulePlanQueryService(repository),
       previews,
@@ -135,16 +160,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         definition,
         previews,
       ),
-      new SchedulePlanEndService(
-        platform,
-        policy,
-        repository,
-        database,
-        previewTokens,
-        lifecycle,
-        reservations,
-        definition,
-      ),
+      ending,
+      rowRemovals,
     );
   });
 
@@ -3680,6 +3697,351 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         scheduled: before.rows[0]!.scheduled,
         reserved: before.rows[0]!.reserved,
         transitions: "0",
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("removes one recurring row atomically while preserving terminal and changed lessons", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Удаление одной строки",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [
+            row(fixture, isoWeekday(fixture.effectiveFrom), "10:00"),
+            row(fixture, isoWeekday(addDays(fixture.effectiveFrom, 1)), "11:00"),
+          ],
+        },
+        {
+          idempotencyKey: `row-remove-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const seriesId = created.seriesIds[0]!;
+      const effectiveFrom = fixture.effectiveFrom;
+      const candidates = await pool.query<{
+        id: string;
+        lifecycle_state: string;
+      }>(
+        `select lesson.id, lesson.lifecycle_state
+         from app.lessons lesson
+         join app.schedule_series series on series.id = lesson.series_id
+         join app.branches branch on branch.id = series.branch_id
+         where lesson.series_id = $1
+           and timezone(branch.timezone_name, lesson.scheduled_at)::date >= $2::date
+         order by lesson.scheduled_at, lesson.id`,
+        [seriesId, effectiveFrom],
+      );
+      expect(candidates.rows.length).toBeGreaterThan(4);
+      const changedLessonId = candidates.rows[0]!.id;
+      const terminalLessonId = candidates.rows[1]!.id;
+      const racedChangedLessonId = candidates.rows[2]!.id;
+      await pool.query(
+        "update app.lessons set teacher_id = $2, updated_at = now() where id = $1",
+        [changedLessonId, additional.teacherId],
+      );
+      await pool.query(
+        "update app.lessons set lifecycle_state = 'cancelled', updated_at = now() where id = $1",
+        [terminalLessonId],
+      );
+      await pool.query(
+        "update app.lesson_reservations set state = 'released', updated_at = now() where lesson_id = $1",
+        [terminalLessonId],
+      );
+
+      const base = {
+        expectedVersion: 1,
+        effectiveFrom,
+        reasonText: "Смена преподавателя",
+      };
+      const stale = await plans.previewRemoveRow(
+        actor,
+        created.id,
+        seriesId,
+        base,
+      );
+      expect(stale.impact).toMatchObject({
+        terminalLessonsPreserved: 1,
+        changedLessonsPreserved: 1,
+        endsPlan: false,
+      });
+      await pool.query(
+        "update app.lessons set duration_minutes = duration_minutes - 15, updated_at = now() where id = $1",
+        [racedChangedLessonId],
+      );
+      await expect(
+        plans.removeRow(
+          actor,
+          created.id,
+          seriesId,
+          {
+            ...base,
+            previewToken: stale.previewToken,
+            confirm: true,
+          },
+          {
+            idempotencyKey: `row-remove-stale-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "SCHEDULE_PLAN_ROW_PREVIEW_INVALID" },
+      });
+      const afterStale = await pool.query<{
+        version: number;
+        valid_until: string | null;
+        deleted_at: Date | null;
+        cancelled: number;
+        audits: number;
+      }>(
+        `select plan.version::int as version, series.valid_until::text,
+           series.deleted_at,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = series.id
+               and lesson.lifecycle_state = 'cancelled') as cancelled,
+           (select count(*)::int from app.audit_events audit
+             where audit.entity_id = plan.id::text
+               and audit.action = 'crm.schedule_plan_row_removed') as audits
+         from app.schedule_plans plan
+         join app.schedule_series series on series.id = $2
+         where plan.id = $1`,
+        [created.id, seriesId],
+      );
+      expect(afterStale.rows[0]).toMatchObject({
+        version: 1,
+        valid_until: fixture.until60,
+        deleted_at: null,
+        cancelled: 1,
+        audits: 0,
+      });
+
+      const preview = await plans.previewRemoveRow(
+        actor,
+        created.id,
+        seriesId,
+        base,
+      );
+      expect(preview.impact).toMatchObject({
+        terminalLessonsPreserved: 1,
+        changedLessonsPreserved: 2,
+        endsPlan: false,
+      });
+      expect(preview.impact.futureUnfinishedLessons).toBeGreaterThan(0);
+      expect(preview.impact.activeReservationsToRelease).toBe(
+        preview.impact.futureUnfinishedLessons,
+      );
+      const command = {
+        ...base,
+        previewToken: preview.previewToken,
+        confirm: true as const,
+      };
+      const idempotencyKey = `row-remove-commit-${randomUUID()}`;
+      const removed = await plans.removeRow(
+        actor,
+        created.id,
+        seriesId,
+        command,
+        {
+          idempotencyKey,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const replay = await plans.removeRow(
+        actor,
+        created.id,
+        seriesId,
+        command,
+        {
+          idempotencyKey,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      expect(removed).toMatchObject({
+        status: "active",
+        version: 2,
+        endsPlan: false,
+        cancelledLessons: preview.impact.futureUnfinishedLessons,
+        releasedReservations: preview.impact.activeReservationsToRelease,
+        preservedTerminalLessons: 1,
+        preservedChangedLessons: 2,
+        replayed: false,
+      });
+      expect(replay).toEqual({ ...removed, replayed: true });
+
+      const evidence = await pool.query<{
+        plan_version: number;
+        valid_until: string;
+        deleted_lessons: number;
+        eligible_still_open: number;
+        system_transitions: number;
+        invalid_transition_facts: number;
+        reserved_cancelled: number;
+        changed_states: string[];
+        changed_reserved: number;
+        audit_count: number;
+        outbox_count: number;
+      }>(
+        `select plan.version::int as plan_version, series.valid_until::text,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = series.id and lesson.deleted_at is not null)
+             as deleted_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.branches branch on branch.id = series.branch_id
+             where lesson.series_id = series.id
+               and timezone(branch.timezone_name, lesson.scheduled_at)::date >= $3::date
+               and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
+               and lesson.id <> all($4::uuid[])) as eligible_still_open,
+           (select count(*)::int from app.lesson_transitions transition
+             join app.lessons lesson on lesson.id = transition.lesson_id
+             where lesson.series_id = series.id
+               and transition.reason_code = 'schedule.plan.row.remove'
+               and transition.reason_text = 'Строка постоянного расписания удалена')
+             as system_transitions,
+           (select count(*)::int from app.lesson_transitions transition
+             join app.lessons lesson on lesson.id = transition.lesson_id
+             where lesson.series_id = series.id
+               and transition.reason_code = 'schedule.plan.row.remove'
+               and (
+                 transition.financial_decision->>'settlementTypeKey' <> 'free_lesson'
+                 or transition.financial_decision->>'teacherCompensationRuleKey' <> 'none'
+                 or exists (
+                   select 1 from jsonb_array_elements(
+                     transition.financial_decision->'clientDecisions'
+                   ) decision
+                   where decision->>'chargeType' <> 'none'
+                     or (decision->>'chargeDurationMinutes')::int <> 0
+                 )
+               )) as invalid_transition_facts,
+           (select count(*)::int from app.lesson_reservations reservation
+             join app.lessons lesson on lesson.id = reservation.lesson_id
+             where lesson.series_id = series.id
+               and lesson.lifecycle_state = 'cancelled'
+               and reservation.state = 'reserved') as reserved_cancelled,
+           array(select lesson.lifecycle_state from app.lessons lesson
+             where lesson.id = any($4::uuid[]) order by lesson.id) as changed_states,
+           (select count(*)::int from app.lesson_reservations reservation
+             where reservation.lesson_id = any($4::uuid[])
+               and reservation.state = 'reserved') as changed_reserved,
+           (select count(*)::int from app.audit_events audit
+             where audit.entity_id = plan.id::text
+               and audit.action = 'crm.schedule_plan_row_removed') as audit_count,
+           (select count(*)::int from app.platform_outbox_events event
+             where event.aggregate_type = 'schedule:plan'
+               and event.aggregate_id = plan.id::text
+               and event.event_type = 'schedule.plan.changed') as outbox_count
+         from app.schedule_plans plan
+         join app.schedule_series series on series.id = $2
+         where plan.id = $1`,
+        [
+          created.id,
+          seriesId,
+          effectiveFrom,
+          [changedLessonId, racedChangedLessonId],
+        ],
+      );
+      expect(evidence.rows[0]).toEqual({
+        plan_version: 2,
+        valid_until: addDays(effectiveFrom, -1),
+        deleted_lessons: 0,
+        eligible_still_open: 0,
+        system_transitions: removed.cancelledLessons,
+        invalid_transition_facts: 0,
+        reserved_cancelled: 0,
+        changed_states: ["scheduled", "scheduled"],
+        changed_reserved: 2,
+        audit_count: 1,
+        outbox_count: 2,
+      });
+      const terminal = await pool.query<{ lifecycle_state: string }>(
+        "select lifecycle_state from app.lessons where id = $1",
+        [terminalLessonId],
+      );
+      expect(terminal.rows[0]?.lifecycle_state).toBe("cancelled");
+    } finally {
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
+  it("turns final-row removal into the complete shared plan-end result", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Последняя строка",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, isoWeekday(fixture.effectiveFrom), "12:00")],
+        },
+        {
+          idempotencyKey: `last-row-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const base = {
+        expectedVersion: 1,
+        effectiveFrom: fixture.effectiveFrom,
+        reasonText: "Завершение курса",
+      };
+      const preview = await plans.previewRemoveRow(
+        actor,
+        created.id,
+        created.seriesIds[0]!,
+        base,
+      );
+      expect(preview.impact.endsPlan).toBe(true);
+      const result = await plans.removeRow(
+        actor,
+        created.id,
+        created.seriesIds[0]!,
+        { ...base, previewToken: preview.previewToken, confirm: true },
+        {
+          idempotencyKey: `last-row-remove-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      expect(result).toMatchObject({
+        status: "ended",
+        endsPlan: true,
+        version: 2,
+        replayed: false,
+      });
+      const persisted = await pool.query<{
+        status: string;
+        active_until: string;
+        end_reason: string;
+        row_transitions: number;
+      }>(
+        `select plan.status, plan.active_until::text, plan.end_reason,
+           (select count(*)::int from app.lesson_transitions transition
+             join app.lessons lesson on lesson.id = transition.lesson_id
+             where lesson.series_id = $2
+               and transition.reason_code = 'schedule.plan.row.remove'
+               and transition.reason_text = 'Строка постоянного расписания удалена')
+             as row_transitions
+         from app.schedule_plans plan where plan.id = $1`,
+        [created.id, created.seriesIds[0]],
+      );
+      expect(persisted.rows[0]).toEqual({
+        status: "ended",
+        active_until: addDays(fixture.effectiveFrom, -1),
+        end_reason: base.reasonText,
+        row_transitions: result.cancelledLessons,
       });
     } finally {
       await cleanup(pool, fixture);

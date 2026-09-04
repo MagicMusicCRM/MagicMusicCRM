@@ -56,6 +56,7 @@ export interface SchedulePlanEndImpact {
     id: string;
     version: number;
     lifecycleState: "scheduled" | "settlement_pending";
+    clientIds: string[];
   }>;
   reservations: Array<{
     id: string;
@@ -65,6 +66,33 @@ export interface SchedulePlanEndImpact {
     units: string;
   }>;
   terminalLessonCount: number;
+  changedLessonCount: number;
+}
+
+export interface LockedSchedulePlanSeries {
+  id: string;
+  planId: string;
+  version: number;
+  validFrom: string;
+  validUntil: string | null;
+}
+
+export interface FuturePlanLessonCancellationImpact {
+  eligibleLessons: Array<{
+    id: string;
+    version: number;
+    lifecycleState: "scheduled" | "settlement_pending";
+    clientIds: string[];
+  }>;
+  reservations: Array<{
+    id: string;
+    lessonId: string;
+    subscriptionId: string;
+    version: number;
+    units: string;
+  }>;
+  preservedTerminalLessonIds: string[];
+  preservedChangedLessonIds: string[];
 }
 
 export interface SchedulePlanTrayCursor {
@@ -481,6 +509,36 @@ export class SchedulePlanRepository {
     return result.rows[0];
   }
 
+  async lockCurrentRow(
+    client: PoolClient,
+    planId: string,
+    seriesId: string,
+  ): Promise<LockedSchedulePlanSeries> {
+    const result = await client.query<{
+      id: string;
+      plan_id: string;
+      version: string | number;
+      valid_from: string;
+      valid_until: string | null;
+    }>(
+      `select id, plan_id, version, valid_from::text, valid_until::text
+       from app.schedule_series
+       where id = $2 and plan_id = $1 and deleted_at is null
+         and superseded_by is null
+       for update`,
+      [planId, seriesId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("Строка расписания не найдена.");
+    return {
+      id: row.id,
+      planId: row.plan_id,
+      version: Number(row.version),
+      validFrom: row.valid_from,
+      validUntil: row.valid_until,
+    };
+  }
+
   insertParticipants(
     client: PoolClient,
     planId: string,
@@ -745,6 +803,223 @@ export class SchedulePlanRepository {
     );
   }
 
+  async futureLessonCancellationImpact(
+    client: PoolClient,
+    input: { planId: string; seriesIds: string[]; effectiveFrom: string },
+    lock = false,
+  ): Promise<FuturePlanLessonCancellationImpact> {
+    if (input.seriesIds.length === 0) {
+      return {
+        eligibleLessons: [],
+        reservations: [],
+        preservedTerminalLessonIds: [],
+        preservedChangedLessonIds: [],
+      };
+    }
+    if (lock) {
+      const beforeLock = await this.futureLessonCancellationImpact(
+        client,
+        input,
+        false,
+      );
+      const lessonIds = [
+        ...beforeLock.eligibleLessons.map((lesson) => lesson.id),
+        ...beforeLock.preservedTerminalLessonIds,
+        ...beforeLock.preservedChangedLessonIds,
+      ];
+      if (lessonIds.length > 0) {
+        await client.query(
+          `select id from app.lessons where id = any($1::uuid[])
+           order by id for update`,
+          [[...new Set(lessonIds)].sort()],
+        );
+      }
+      if (beforeLock.reservations.length > 0) {
+        await client.query(
+          `select id from app.lesson_reservations
+           where id = any($1::uuid[]) order by id for update`,
+          [beforeLock.reservations.map((reservation) => reservation.id).sort()],
+        );
+      }
+      return this.futureLessonCancellationImpact(client, input, false);
+    }
+
+    const direct = await client.query<{
+      id: string;
+      version: string | number;
+      lifecycle_state: string;
+      client_ids: string[] | null;
+      matches_series: boolean;
+    }>(
+      `select lesson.id, lesson.version, lesson.lifecycle_state,
+         array(
+           select distinct client_id from (
+             select lesson.student_id as client_id
+             union all
+             select participant.student_id
+             from app.lesson_snapshot_participants participant
+             where participant.lesson_id = lesson.id
+           ) clients
+           where client_id is not null
+           order by client_id
+         ) as client_ids,
+         (
+           lesson.original_scheduled_at is null
+           and lesson.predecessor_id is null
+           and lesson.teacher_id is not distinct from series.teacher_id
+           and lesson.room_id is not distinct from series.room_id
+           and lesson.branch_id is not distinct from series.branch_id
+           and lesson.duration_minutes = series.duration_minutes
+           and lesson.series_date is not null
+           and lesson.scheduled_at = (
+             (lesson.series_date + series.begin_time) at time zone
+             coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow')
+           )
+         ) as matches_series
+       from app.lessons lesson
+       join app.schedule_series series on series.id = lesson.series_id
+       left join app.branches branch on branch.id = series.branch_id
+       where series.plan_id = $1 and series.id = any($2::uuid[])
+         and lesson.deleted_at is null
+         and timezone(
+           coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+           lesson.scheduled_at
+         )::date >= $3::date
+       order by lesson.id`,
+      [input.planId, input.seriesIds, input.effectiveFrom],
+    );
+    const eligibleLessons = direct.rows
+      .filter(
+        (lesson) =>
+          lesson.matches_series &&
+          ["scheduled", "settlement_pending"].includes(lesson.lifecycle_state),
+      )
+      .map((lesson) => ({
+        id: lesson.id,
+        version: Number(lesson.version),
+        lifecycleState: lesson.lifecycle_state as
+          | "scheduled"
+          | "settlement_pending",
+        clientIds: lesson.client_ids ?? [],
+      }));
+    const preservedTerminalLessonIds = direct.rows
+      .filter(
+        (lesson) =>
+          !["scheduled", "settlement_pending"].includes(lesson.lifecycle_state),
+      )
+      .map((lesson) => lesson.id);
+    const directChangedIds = direct.rows
+      .filter(
+        (lesson) =>
+          !lesson.matches_series &&
+          ["scheduled", "settlement_pending"].includes(lesson.lifecycle_state),
+      )
+      .map((lesson) => lesson.id);
+    const detached = await client.query<{ id: string }>(
+      `with recursive lineage as (
+         select source.id as current_lesson_id, source.id as source_id,
+           source.successor_id, 0 as depth,
+           array[source.id] as path
+         from app.lessons source
+         where source.series_id = any($1::uuid[])
+           and source.deleted_at is null
+         union all
+         select successor.id, lineage.source_id, successor.successor_id,
+           lineage.depth + 1, lineage.path || successor.id
+         from lineage
+         join app.lessons successor on successor.id = lineage.successor_id
+         where lineage.depth < 100 and successor.deleted_at is null
+           and not successor.id = any(lineage.path)
+       ), resolved as (
+         select distinct on (lineage.source_id)
+           lineage.source_id, lineage.current_lesson_id, lineage.depth
+         from lineage
+         order by lineage.source_id, lineage.depth desc
+       )
+       select lesson.id
+       from resolved
+       join app.lessons lesson on lesson.id = resolved.current_lesson_id
+       left join app.branches branch on branch.id = lesson.branch_id
+       where lesson.series_id is null
+         and lesson.deleted_at is null
+         and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
+         and timezone(
+           coalesce(branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at
+         )::date >= $2::date
+       order by lesson.id`,
+      [input.seriesIds, input.effectiveFrom],
+    );
+    const preservedChangedLessonIds = [
+      ...new Set([...directChangedIds, ...detached.rows.map((row) => row.id)]),
+    ].sort();
+    const eligibleIds = eligibleLessons.map((lesson) => lesson.id);
+    const reservations =
+      eligibleIds.length === 0
+        ? { rows: [] }
+        : await client.query<{
+            id: string;
+            lesson_id: string;
+            subscription_id: string;
+            version: string | number;
+            units: string;
+          }>(
+            `select id, lesson_id, subscription_id, version, units::text
+             from app.lesson_reservations
+             where lesson_id = any($1::uuid[]) and state = 'reserved'
+             order by id`,
+            [eligibleIds],
+          );
+    return {
+      eligibleLessons,
+      reservations: reservations.rows.map((reservation) => ({
+        id: reservation.id,
+        lessonId: reservation.lesson_id,
+        subscriptionId: reservation.subscription_id,
+        version: Number(reservation.version),
+        units: reservation.units,
+      })),
+      preservedTerminalLessonIds,
+      preservedChangedLessonIds,
+    };
+  }
+
+  retireRow(
+    client: PoolClient,
+    input: {
+      planId: string;
+      seriesId: string;
+      effectiveFrom: string;
+      version: number;
+    },
+  ) {
+    return client.query<{ id: string }>(
+      `update app.schedule_series
+       set valid_until = case when valid_from < $3::date
+             then least(coalesce(valid_until, ($3::date - 1)::date),
+               ($3::date - 1)::date)
+             else valid_until end,
+           deleted_at = case when valid_from >= $3::date
+             then coalesce(deleted_at, now()) else deleted_at end,
+           version = $4, updated_at = now()
+       where id = $2 and plan_id = $1 and deleted_at is null
+         and superseded_by is null
+       returning id`,
+      [input.planId, input.seriesId, input.effectiveFrom, input.version],
+    );
+  }
+
+  bumpAfterRowRemoval(
+    client: PoolClient,
+    input: { planId: string; expectedVersion: number; version: number },
+  ) {
+    return client.query<{ id: string }>(
+      `update app.schedule_plans set version = $3, updated_at = now()
+       where id = $1 and version = $2 and status = 'active'
+       returning id`,
+      [input.planId, input.expectedVersion, input.version],
+    );
+  }
+
   async hasTerminalHistoricalLesson(
     client: PoolClient,
     effectiveFrom: string,
@@ -878,44 +1153,16 @@ export class SchedulePlanRepository {
        order by id ${lock ? "for update" : ""}`,
       [planId],
     );
-    const lessons = await client.query<{
-      id: string;
-      version: string | number;
-      lifecycle_state: "scheduled" | "settlement_pending";
-    }>(
-      `select lesson.id, lesson.version, lesson.lifecycle_state
-       from app.lessons lesson
-       join app.schedule_series series on series.id = lesson.series_id
-       where series.plan_id = $1 and lesson.series_date > $2::date
-         and lesson.deleted_at is null
-         and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
-       order by lesson.id ${lock ? "for update of lesson" : ""}`,
-      [planId, lastDate],
-    );
-    const lessonIds = lessons.rows.map((row) => row.id);
-    const reservations = lessonIds.length
-      ? await client.query<{
-          id: string;
-          lesson_id: string;
-          subscription_id: string;
-          version: string | number;
-          units: string;
-        }>(
-          `select id, lesson_id, subscription_id, version, units::text
-           from app.lesson_reservations
-           where lesson_id = any($1::uuid[]) and state = 'reserved'
-           order by id ${lock ? "for update" : ""}`,
-          [lessonIds],
-        )
-      : { rows: [] };
-    const terminal = await client.query<{ count: string }>(
-      `select count(*)::text as count
-       from app.lessons lesson
-       join app.schedule_series series on series.id = lesson.series_id
-       where series.plan_id = $1 and lesson.series_date > $2::date
-         and lesson.deleted_at is null
-         and lesson.lifecycle_state not in ('scheduled', 'settlement_pending')`,
-      [planId, lastDate],
+    const nextDate = new Date(`${lastDate}T00:00:00.000Z`);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    const cancellationImpact = await this.futureLessonCancellationImpact(
+      client,
+      {
+        planId,
+        seriesIds: series.rows.map((row) => row.id),
+        effectiveFrom: nextDate.toISOString().slice(0, 10),
+      },
+      lock,
     );
     return {
       series: series.rows.map((row) => ({
@@ -924,19 +1171,11 @@ export class SchedulePlanRepository {
         validFrom: row.valid_from,
         validUntil: row.valid_until,
       })),
-      lessons: lessons.rows.map((row) => ({
-        id: row.id,
-        version: Number(row.version),
-        lifecycleState: row.lifecycle_state,
-      })),
-      reservations: reservations.rows.map((row) => ({
-        id: row.id,
-        lessonId: row.lesson_id,
-        subscriptionId: row.subscription_id,
-        version: Number(row.version),
-        units: row.units,
-      })),
-      terminalLessonCount: Number(terminal.rows[0]?.count ?? 0),
+      lessons: cancellationImpact.eligibleLessons,
+      reservations: cancellationImpact.reservations,
+      terminalLessonCount:
+        cancellationImpact.preservedTerminalLessonIds.length,
+      changedLessonCount: cancellationImpact.preservedChangedLessonIds.length,
     };
   }
 

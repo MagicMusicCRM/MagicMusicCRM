@@ -249,7 +249,7 @@ git commit -m "feat: expose recurring rule history and exceptions"
 - Consumes: existing schedule-plan preview token signer, version locks, lifecycle appender, `SubscriptionReservationService`, and the plan-end future cancellation rules.
 - Produces: `previewRemoveRow(...)`, `removeRow(...)`, and two endpoints under `/crm/schedule-plans/:planId/rows/:seriesId/remove`.
 
-- [ ] **Step 1: Write failing preview/commit tests**
+- [x] **Step 1: Write failing preview/commit tests**
 
 ```ts
 it("cancels only future unfinished lessons and releases their reservations", async () => {
@@ -274,13 +274,13 @@ Add commit tests for stale version `409 SCHEDULE_PLAN_VERSION_STALE`, invalid/ex
 Assert the preview default date is the row start for a future row and the
 organization-local current date for a current row.
 
-- [ ] **Step 2: Run the row-removal tests**
+- [x] **Step 2: Run the row-removal tests**
 
 Run: `cd server; npm test -- --runTestsByPath src/crm/schedule/schedule-plan-row-removal.service.spec.ts`
 
 Expected: FAIL because row removal does not exist.
 
-- [ ] **Step 3: Extract the existing future-cancellation primitive**
+- [x] **Step 3: Extract the existing future-cancellation primitive**
 
 ```ts
 export interface FuturePlanLessonCancellationInput {
@@ -304,7 +304,7 @@ cancelEligible(
 
 Move the plan-end cancellation loop into this service. Eligibility is `scheduled_at >= effectiveFrom`, non-terminal state, still owned by the selected plan/series, and not detached by a manual exception. Cancellation appends lifecycle/audit facts and reservation release facts; it never deletes lesson rows.
 
-- [ ] **Step 4: Implement signed row preview/commit and routes**
+- [x] **Step 4: Implement signed row preview/commit and routes**
 
 ```ts
 export class SchedulePlanRowRemovalPreviewDto {
@@ -346,7 +346,7 @@ Every system-generated cancellation uses reason
 client duration, and teacher rule `none`. Keep the operator-entered reason as
 separate audit context rather than using it as the lifecycle reason.
 
-- [ ] **Step 5: Run backend schedule gates and commit**
+- [x] **Step 5: Run backend schedule gates and commit**
 
 Run: `cd server; npm test -- --runTestsByPath src/crm/schedule/schedule-plan-row-removal.service.spec.ts src/crm/schedule/schedule-plan-services.spec.ts src/crm/schedule/schedule-plan-postgres.integration.spec.ts; npm run typecheck`
 

@@ -13,6 +13,7 @@ import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
 import { SchedulePlanDefinitionService } from "./schedule-plan-definition.service";
 import { SchedulePlanEndService } from "./schedule-plan-end.service";
+import { FuturePlanLessonCancellationService } from "./future-plan-lesson-cancellation.service";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
 import { SchedulePlanOverlapAnalyzer } from "./schedule-plan-overlap-analyzer";
 import { SchedulePlanQueryService } from "./schedule-plan-query.service";
@@ -1061,17 +1062,19 @@ describe("Schedule plan semantic owners", () => {
         },
       })),
     } as unknown as SubscriptionPreviewTokenService;
-    const lifecycle = {
-      appendTransition: jest.fn(async () =>
-        endEvents.push("append-transitions"),
-      ),
-    } as unknown as LessonLifecycleRepository;
-    const reservations = {
-      releaseForLessons: jest.fn(async () => {
+    const cancellations = {
+      cancelEligible: jest.fn(async () => {
+        endEvents.push("cancel-lessons");
+        endEvents.push("append-transitions");
         endEvents.push("release-reservations");
-        return 0;
+        return {
+          cancelledLessonIds: ["lesson-a"],
+          releasedReservationIds: [],
+          preservedTerminalLessonIds: ["terminal-a"],
+          preservedChangedLessonIds: [],
+        };
       }),
-    } as unknown as SubscriptionReservationService;
+    } as unknown as FuturePlanLessonCancellationService;
     const platform = {
       executeVersionedMutation: jest.fn(
         async ({
@@ -1091,8 +1094,7 @@ describe("Schedule plan semantic owners", () => {
       repository,
       {} as DatabaseService,
       tokens,
-      lifecycle,
-      reservations,
+      cancellations,
       definition,
     );
     const lockSpy = jest

@@ -52,6 +52,8 @@ describe("CrmScheduleController rollout boundary", () => {
         valid: true,
         rows: [],
       }),
+      previewRemoveRow: jest.fn().mockResolvedValue({ previewToken: "signed" }),
+      removeRow: jest.fn().mockResolvedValue({ endsPlan: false }),
     };
     const settlementCorrections = {
       preview: jest.fn(),
@@ -203,6 +205,52 @@ describe("CrmScheduleController rollout boundary", () => {
     expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(
       actor,
       {},
+    );
+  });
+
+  it("routes signed recurring-row preview and commit with command metadata", async () => {
+    const { controller: subject, schedulePlans } = controller("v4");
+    const preview = {
+      expectedVersion: 4,
+      effectiveFrom: "2026-09-04",
+      reasonText: "Смена преподавателя",
+    };
+    const command = {
+      ...preview,
+      previewToken: "signed",
+      confirm: true,
+    };
+
+    await subject.previewSchedulePlanRowRemoval(
+      actor,
+      "plan-a",
+      "series-a",
+      preview as never,
+    );
+    await subject.removeSchedulePlanRow(
+      actor,
+      "plan-a",
+      "series-a",
+      "row-remove-key",
+      "row-remove-request",
+      command as never,
+    );
+
+    expect(schedulePlans.previewRemoveRow).toHaveBeenCalledWith(
+      actor,
+      "plan-a",
+      "series-a",
+      preview,
+    );
+    expect(schedulePlans.removeRow).toHaveBeenCalledWith(
+      actor,
+      "plan-a",
+      "series-a",
+      command,
+      {
+        idempotencyKey: "row-remove-key",
+        requestId: "row-remove-request",
+      },
     );
   });
 

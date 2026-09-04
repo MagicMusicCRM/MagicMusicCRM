@@ -168,6 +168,8 @@ import { SchedulePlanQueryService } from "./schedule/schedule-plan-query.service
 import { SchedulePlanConstraintPreviewService } from "./schedule/schedule-plan-constraint-preview.service";
 import { SchedulePlanMutationService } from "./schedule/schedule-plan-mutation.service";
 import { SchedulePlanEndService } from "./schedule/schedule-plan-end.service";
+import { FuturePlanLessonCancellationService } from "./schedule/future-plan-lesson-cancellation.service";
+import { SchedulePlanRowRemovalService } from "./schedule/schedule-plan-row-removal.service";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
 import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
 import { StudentLessonTimelineRepository } from "./schedule/student-lesson-timeline.repository";
@@ -292,6 +294,8 @@ import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline
     SchedulePlanConstraintPreviewService,
     SchedulePlanMutationService,
     SchedulePlanEndService,
+    FuturePlanLessonCancellationService,
+    SchedulePlanRowRemovalService,
     SchedulePlanService,
     LessonTransitionPreparationService,
     LessonTransitionFinancialService,
