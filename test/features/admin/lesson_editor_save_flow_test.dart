@@ -392,6 +392,33 @@ void main() {
 
     expect(result, isA<LessonSaveFailure>());
   });
+
+  test('maps typed transition failures without losing their codes', () {
+    const expected = {
+      'LESSON_VERSION_STALE':
+          'Занятие уже изменилось. Я открыл актуальную версию.',
+      'LESSON_ALREADY_RESCHEDULED':
+          'Это занятие уже перенесено. Я открыл последнее занятие в цепочке.',
+      'LESSON_RESCHEDULE_CHAIN_INVALID':
+          'Цепочка переносов повреждена. Изменения не сохранены; обратитесь администратору.',
+      'LESSON_TRANSITION_PREVIEW_STALE':
+          'Расписание или расчёт изменились. Проверьте обновлённый предварительный расчёт.',
+      'LESSON_PARTIAL_DURATION_REQUIRED':
+          'Укажите часы списания клиента и начисления преподавателю.',
+    };
+
+    for (final entry in expected.entries) {
+      final source = MagicApiException(
+        statusCode: entry.key == 'LESSON_RESCHEDULE_CHAIN_INVALID' ? 422 : 409,
+        message: 'server error',
+        details: {'code': entry.key},
+      );
+      final mapped = mapLessonTransitionError(source);
+
+      expect(lessonTransitionErrorCode(mapped), entry.key);
+      expect(mapped.message, entry.value);
+    }
+  });
 }
 
 const _validAnalysis = LessonScheduleAnalysis(

@@ -1,4 +1,5 @@
 enum LessonDecisionOperation {
+  edit,
   reschedule,
   cancel,
   settle,
@@ -8,6 +9,7 @@ enum LessonDecisionOperation {
 
 extension LessonDecisionOperationContract on LessonDecisionOperation {
   String get apiKey => switch (this) {
+    LessonDecisionOperation.edit => 'planned-settlement',
     LessonDecisionOperation.reschedule => 'reschedule',
     LessonDecisionOperation.cancel => 'cancel',
     LessonDecisionOperation.settle => 'settle',
@@ -16,6 +18,7 @@ extension LessonDecisionOperationContract on LessonDecisionOperation {
   };
 
   String get title => switch (this) {
+    LessonDecisionOperation.edit => 'Изменение занятия',
     LessonDecisionOperation.reschedule => 'Перенос занятия',
     LessonDecisionOperation.cancel => 'Отмена занятия',
     LessonDecisionOperation.settle => 'Исправление расчёта',
@@ -24,6 +27,7 @@ extension LessonDecisionOperationContract on LessonDecisionOperation {
   };
 
   String get actionLabel => switch (this) {
+    LessonDecisionOperation.edit => 'Сохранить изменения',
     LessonDecisionOperation.reschedule => 'Перенести',
     LessonDecisionOperation.cancel => 'Отменить занятие',
     LessonDecisionOperation.settle => 'Исправить расчёт',
@@ -32,6 +36,7 @@ extension LessonDecisionOperationContract on LessonDecisionOperation {
   };
 
   String get catalogContext => switch (this) {
+    LessonDecisionOperation.edit ||
     LessonDecisionOperation.plannedSettlement ||
     LessonDecisionOperation.correction => 'settle',
     _ => apiKey,
@@ -133,7 +138,8 @@ class LessonDecisionPreview {
   String? get token => raw['previewToken']?.toString();
   Map<String, dynamic> get source => _map(raw['source']);
   Map<String, dynamic> get successor => _map(raw['successor']);
-  Map<String, dynamic> get financial => _map(raw['financialPreview']);
+  Map<String, dynamic> get financial =>
+      _map(raw['successorPlannedSettlementPreview'] ?? raw['financialPreview']);
   List<Map<String, dynamic>> get violations => _maps(raw['violations']);
   List<String> get warnings => [
     for (final warning in raw['warnings'] as List? ?? const [])
@@ -287,6 +293,7 @@ class LessonDecisionRequest {
     required this.operation,
     required this.lesson,
     this.successor,
+    this.successorFinancialDecision,
     this.initialSettlementTypeKey,
     this.resources,
     this.initialCompensationRuleKey,
@@ -296,6 +303,7 @@ class LessonDecisionRequest {
   final LessonDecisionOperation operation;
   final Map<String, dynamic> lesson;
   final Map<String, dynamic>? successor;
+  final Map<String, dynamic>? successorFinancialDecision;
   final String? initialSettlementTypeKey;
   final Map<String, dynamic>? resources;
   final String? initialCompensationRuleKey;
@@ -335,7 +343,7 @@ abstract interface class LessonDecisionFormLifecycle {
 
   Future<Map<String, dynamic>> commit(LessonDecisionPreview preview);
 
-  Object? recoverStaleCommit(Object error);
+  Future<Object?> recoverStaleCommit(Object error);
 }
 
 Map<String, dynamic> _map(Object? value) {

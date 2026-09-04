@@ -4,6 +4,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'lesson_decision_models.dart';
 import 'lesson_decision_sections.dart';
 import '../lesson_editor/lesson_financial_autofill.dart';
+import '../lesson_editor/lesson_transition_error.dart';
 
 class LessonDecisionForm extends StatefulWidget {
   const LessonDecisionForm({required this.controller, super.key});
@@ -601,7 +602,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       if (!mounted) return;
       setState(() => _preview = preview);
     } catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (mounted) setState(() => _error = mapLessonTransitionFailure(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -643,9 +644,10 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
-        final recovered = widget.controller.recoverStaleCommit(error);
+        final recovered = await widget.controller.recoverStaleCommit(error);
+        if (!mounted) return;
         setState(() {
-          _error = recovered ?? error;
+          _error = recovered ?? mapLessonTransitionFailure(error);
           if (recovered != null) {
             _preview = null;
             _commitAttempted = false;

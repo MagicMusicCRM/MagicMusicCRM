@@ -126,6 +126,7 @@ Future<void> showLessonDetailsSheet(
   required List<String> conflicts,
   required String? lessonId,
   required VoidCallback onEdit,
+  required VoidCallback onMove,
   required Future<void> Function() onCancel,
   String? settlementIssue,
   List<Map<String, dynamic>> settlementHistory = const [],
@@ -233,6 +234,15 @@ Future<void> showLessonDetailsSheet(
             },
             icon: const Icon(Icons.edit_outlined, size: 18),
             label: const Text('Изменить занятие'),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pop(surfaceContext);
+              onMove();
+            },
+            icon: const Icon(Icons.event_repeat_outlined, size: 18),
+            label: const Text('Перенести'),
           ),
           const SizedBox(height: AppSpace.sm),
           TextButton.icon(

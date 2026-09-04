@@ -28,12 +28,14 @@ class LessonStateProjection {
   final LessonSemantic semantic;
   final String state;
   final String label;
+  final bool coveredBySubscription;
 
   const LessonStateProjection({
     required this.token,
     required this.semantic,
     required this.state,
     required this.label,
+    this.coveredBySubscription = false,
   });
 
   factory LessonStateProjection.fromMap(
@@ -46,6 +48,7 @@ class LessonStateProjection {
           lesson['lifecycleState']?.toString(),
       rawStatus: lesson['status']?.toString(),
       hasConflict: hasConflict ?? _mapHasConflicts(lesson),
+      coveredBySubscription: _mapHasSubscriptionCoverage(lesson),
     );
   }
 }
@@ -54,6 +57,7 @@ LessonStateProjection lessonStateProjection({
   String? lifecycleState,
   String? rawStatus,
   bool hasConflict = false,
+  bool coveredBySubscription = false,
 }) {
   final state = _normalizeState(lifecycleState, rawStatus);
   final presentation = hasConflict
@@ -69,6 +73,7 @@ LessonStateProjection lessonStateProjection({
     semantic: presentation.semantic,
     state: state,
     label: presentation.label,
+    coveredBySubscription: coveredBySubscription,
   );
 }
 
@@ -123,6 +128,10 @@ bool _mapHasConflicts(Map<String, dynamic> lesson) {
 
 /// Coverage comes from an actual reservation, never an intended funding choice.
 bool lessonHasSubscriptionCoverage(Map<String, dynamic> lesson) {
+  return LessonStateProjection.fromMap(lesson).coveredBySubscription;
+}
+
+bool _mapHasSubscriptionCoverage(Map<String, dynamic> lesson) {
   if ((lesson['reservation_state'] ?? lesson['reservationState']) ==
       'reserved') {
     return true;

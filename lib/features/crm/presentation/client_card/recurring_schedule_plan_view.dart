@@ -617,6 +617,10 @@ class _StudentTimelineItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = LessonStateProjection.fromMap({
       'lifecycle_state': _lifecycleWire(item.lifecycleState),
+      if (item.settlement.coveredBySubscription)
+        'settlement_markers': const [
+          {'key': 'subscription_reserved'},
+        ],
     });
     final local = item.scheduledAt.toLocal();
     final details = <String>[
@@ -657,7 +661,7 @@ class _StudentTimelineItem extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
-                if (item.settlement.coveredBySubscription)
+                if (state.coveredBySubscription)
                   const LessonSubscriptionBadge(),
               ],
             );

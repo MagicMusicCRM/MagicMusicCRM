@@ -95,11 +95,13 @@ Future<T?> showMagicSheet<T>(
   String? subtitle,
   IconData? icon,
   List<Widget>? actions,
+  RouteSettings? routeSettings,
 }) {
   if (usesDesktopMagicModal(context)) {
     return showMagicDialog<T>(
       context: context,
       useRootNavigator: false,
+      routeSettings: routeSettings,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         child: ConstrainedBox(
@@ -118,6 +120,7 @@ Future<T?> showMagicSheet<T>(
   }
   return showModalBottomSheet<T>(
     context: context,
+    routeSettings: routeSettings,
     useSafeArea: true,
     isScrollControlled: true,
     constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width),

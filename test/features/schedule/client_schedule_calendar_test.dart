@@ -184,6 +184,7 @@ void main() {
       scheduleMatrix: [
         {
           ..._lessons.first,
+          'lifecycleState': 'rescheduled',
           'reservationState': 'reserved',
           'conflictTypes': <String>[],
           'isTrial': false,
@@ -213,22 +214,19 @@ void main() {
       );
     }
 
-    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.actionBlue);
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.text2);
     expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
     expectCoverage();
 
     await tester.tap(find.text('По преподавателям'));
     await tester.pumpAndSettle();
-    expect(
-      _timelineLessonBorder(tester, 'lesson-selected'),
-      AppColor.actionBlue,
-    );
+    expect(_timelineLessonBorder(tester, 'lesson-selected'), AppColor.text2);
     expect(_timelineLessonBorder(tester, 'lesson-other'), AppColor.success);
     expectCoverage();
 
     await tester.tap(find.text('Неделя'));
     await tester.pumpAndSettle();
-    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.actionBlue);
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.text2);
     expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
     expectCoverage();
 
@@ -239,7 +237,7 @@ void main() {
     );
     final monthBox =
         tester.widget<Container>(monthLesson).decoration as BoxDecoration;
-    expect((monthBox.border! as Border).left.color, AppColor.actionBlue);
+    expect((monthBox.border! as Border).left.color, AppColor.text2);
     expect(
       find.descendant(
         of: monthLesson,

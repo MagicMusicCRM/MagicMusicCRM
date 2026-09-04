@@ -417,7 +417,7 @@ git commit -m "feat: normalize lesson cancellation decisions"
 - Consumes: Tasks 1–4 transition responses and the shared `showMagicAdaptiveSurface` implementation.
 - Produces: a single editor that chooses ordinary edit or reschedule from the changed fields, plus an explicit cancel action using the same financial section and preview confirmation.
 
-- [ ] **Step 1: Write failing routing and responsive tests**
+- [x] **Step 1: Write failing routing and responsive tests**
 
 ```dart
 test('date or time change routes through reschedule', () {
@@ -444,13 +444,13 @@ Extend `modal_device_test.dart` so `Изменить занятие`, `Пере�
 `Отменить занятие` all open the shared adaptive editor, the completed move
 warning is visible, and no `Изменить расчёт` button is rendered.
 
-- [ ] **Step 2: Run editor and decision tests**
+- [x] **Step 2: Run editor and decision tests**
 
 Run: `flutter test test/features/admin/lesson_editor_decision_policy_test.dart test/features/admin/lesson_editor_save_flow_test.dart test/features/schedule/lesson_decision_flow_test.dart`
 
 Expected: FAIL because reschedule still expects the shared decision field and the entry points do not resolve chain redirects.
 
-- [ ] **Step 3: Route all entry points through one editor**
+- [x] **Step 3: Route all entry points through one editor**
 
 The lesson quick view exposes `Изменить занятие`, `Перенести`, and `Отменить занятие`. The first two open the same `CreateLessonDialog.show(context, lesson: actionableLesson)` adaptive editor; `Перенести` focuses the date/time section, date/time changes commit reschedule, resource-only changes update the actionable lesson, and the financial section remains in the same form. The third opens the same adaptive surface in cancellation mode with the cancellation defaults from Task 4. Remove any separate `Изменить расчёт` action while retaining settlement history as read-only context.
 
@@ -459,7 +459,7 @@ projection into `lessonStateProjection`. The subscription badge stays green
 for a covered scheduled lesson in both places, while lifecycle color remains
 reserved/completed/cancelled/rescheduled independently.
 
-- [ ] **Step 4: Map typed server failures to actionable Russian messages**
+- [x] **Step 4: Map typed server failures to actionable Russian messages**
 
 ```dart
 const lessonTransitionErrorMessages = {
@@ -473,7 +473,7 @@ const lessonTransitionErrorMessages = {
 
 On redirect, reload the actionable lesson, update the form version, and require a new preview. Preserve typed 409/422 codes in `MagicApiError`; never replace them with `Сервис временно недоступен`.
 
-- [ ] **Step 5: Run the complete transition slice and commit**
+- [x] **Step 5: Run the complete transition slice and commit**
 
 Run: `flutter test test/features/admin/lesson_editor_decision_policy_test.dart test/features/admin/lesson_editor_save_flow_test.dart test/features/schedule/lesson_decision_flow_test.dart test/features/schedule/recurring_schedule_plan_view_test.dart test/features/schedule/lesson_state_palette_test.dart test/features/schedule/client_schedule_calendar_test.dart; flutter test integration_test/lesson_settlement_device_test.dart integration_test/modal_device_test.dart -d windows; flutter analyze; cd server; npm test -- --runTestsByPath src/crm/schedule/lesson-transition-boundaries.spec.ts src/crm/schedule/lesson-transition-order.spec.ts src/crm/schedule/lesson-actionable-chain.service.spec.ts src/crm/schedule/reschedule-postgres.integration.spec.ts; npm run typecheck`
 

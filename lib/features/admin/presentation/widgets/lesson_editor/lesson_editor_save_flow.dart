@@ -8,6 +8,9 @@ import '../lesson_decision/lesson_decision_models.dart';
 import '../lesson_decision/lesson_decision_controller.dart';
 import 'lesson_editor_decision_policy.dart';
 import 'lesson_editor_models.dart';
+import 'lesson_transition_error.dart';
+
+export 'lesson_transition_error.dart';
 
 class LessonEditorScheduleRequest {
   const LessonEditorScheduleRequest({
@@ -194,7 +197,8 @@ class LessonEditorSaveFlow {
     LessonEditorReferenceState references,
     LessonEditorScheduleRequest Function() scheduleRequest, {
     required bool canManageTeacherCompensation,
-    required Future<LessonEditorSession> Function() reloadSession,
+    required Future<LessonEditorSession> Function(String? actionableLessonId)
+    reloadSession,
   }) async {
     if (_advancing) return const LessonSaveBusy();
     _advancing = true;
@@ -234,14 +238,18 @@ class LessonEditorSaveFlow {
       _financialPreview = preview;
       return LessonSavePreview(preview);
     } catch (error, stackTrace) {
-      final recovered = _decisionController?.recoverStaleCommit(error);
-      if (recovered == null) return LessonSaveFailure(error, stackTrace);
+      final recovered = await _decisionController?.recoverStaleCommit(error);
+      if (recovered == null) {
+        return LessonSaveFailure(mapLessonTransitionFailure(error), stackTrace);
+      }
       invalidateDecision();
       try {
         return LessonSaveFailure(
           recovered,
           stackTrace,
-          reloadedSession: await reloadSession(),
+          reloadedSession: await reloadSession(
+            lessonTransitionActionableLessonId(error),
+          ),
         );
       } catch (reloadError, reloadStackTrace) {
         return LessonSaveFailure(reloadError, reloadStackTrace);
@@ -387,6 +395,7 @@ class LessonEditorSaveFlow {
               'operation': decision.operation.apiKey,
               'lesson': decision.lesson,
               'successor': decision.successor,
+              'successorFinancialDecision': decision.successorFinancialDecision,
             },
     });
     final previous = _notesAttempt;

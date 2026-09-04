@@ -23,7 +23,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget
   final String? clientType, clientId, clientName;
   final int? initialDurationMinutes;
   final Map<String, dynamic>? lesson;
-  final bool initialIsTrial, pageMode;
+  final bool initialIsTrial, pageMode, embeddedSurface, focusDateTime;
   const CreateLessonDialog({
     super.key,
     this.initialDate,
@@ -38,6 +38,8 @@ class CreateLessonDialog extends ConsumerStatefulWidget
     this.clientName,
     this.initialIsTrial = false,
     this.pageMode = false,
+    this.embeddedSurface = false,
+    this.focusDateTime = false,
   });
   static Future<bool?> show(
     BuildContext context, {
@@ -52,9 +54,17 @@ class CreateLessonDialog extends ConsumerStatefulWidget
     String? clientId,
     String? clientName,
     bool initialIsTrial = false,
+    bool focusDateTime = false,
   }) => showLessonEditorSurface(
     context,
-    (pageMode) => CreateLessonDialog(
+    title: lesson != null
+        ? focusDateTime
+              ? 'Перенести занятие'
+              : 'Изменить занятие'
+        : leadId != null
+        ? 'Пробное занятие'
+        : 'Новое занятие',
+    editor: (embeddedSurface) => CreateLessonDialog(
       initialDate: initialDate,
       initialRoomId: initialRoomId,
       initialBranchId: initialBranchId,
@@ -66,7 +76,8 @@ class CreateLessonDialog extends ConsumerStatefulWidget
       clientId: clientId,
       clientName: clientName,
       initialIsTrial: initialIsTrial,
-      pageMode: pageMode,
+      embeddedSurface: embeddedSurface,
+      focusDateTime: focusDateTime,
     ),
   );
 
@@ -86,6 +97,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   (bool loading, String? error) _loadState = (true, null);
   (bool analyzing, String? error) _scheduleState = (false, null);
   bool _saving = false;
+  bool _dirty = false;
   Future<LessonEditorLoadPatch?>? _referenceLoad;
   LessonEditorValidation _valid = const LessonEditorValidation.valid();
   LessonScheduleAnalysis? _conflicts;
@@ -144,27 +156,58 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     setState(() {
       _flow.invalidateDecision();
       _draft = value;
+      _dirty = true;
       if (!scheduleChanged) return;
       _conflicts = null;
       _scheduleState = (_scheduleState.$1, null);
     });
   }
 
-  Widget build(BuildContext context) => LessonEditorView.fromState(
-    (_session, _draft, _refs),
-    (_conflicts, _loadState.$1, _saving, _scheduleState.$1),
-    (_valid.message, _loadState.$2, _scheduleState.$2),
-    actions: this,
-    canManageTeacherCompensation: _canManageTeacherCompensation,
-    pageMode: widget.pageMode,
-    title: lessonEditorTitle(_session, widget.leadId != null),
-    scrollController: _scroll,
-    onRetry: _refreshReferences,
-    canSave: _referenceLoad == null,
-    funding: _data.fundingFor(_session, _draft, _canManageTeacherCompensation),
-    knownPayers: _data.knownPayers,
-    financialPreview: _flow.financialPreview,
+  Widget build(BuildContext context) => LessonEditorDismissGuard(
+    isDirty: _dirty && !_saving,
+    child: LessonEditorView.fromState(
+      (_session, _draft, _refs),
+      (_conflicts, _loadState.$1, _saving, _scheduleState.$1),
+      (_valid.message, _loadState.$2, _scheduleState.$2),
+      actions: this,
+      canManageTeacherCompensation: _canManageTeacherCompensation,
+      pageMode: widget.pageMode,
+      embeddedSurface: widget.embeddedSurface,
+      focusDateTime: widget.focusDateTime,
+      showCompletedMoveWarning: _showCompletedMoveWarning,
+      title: lessonEditorTitle(_session, widget.leadId != null),
+      scrollController: _scroll,
+      onRetry: _refreshReferences,
+      canSave: _referenceLoad == null,
+      funding: _data.fundingFor(
+        _session,
+        _draft,
+        _canManageTeacherCompensation,
+      ),
+      knownPayers: _data.knownPayers,
+      financialPreview: _flow.financialPreview,
+    ),
   );
+
+  bool get _showCompletedMoveWarning {
+    final raw = _session.snapshot?.rawLesson;
+    final lifecycle =
+        (raw?['lifecycle_state'] ?? raw?['lifecycleState'] ?? raw?['status'])
+            ?.toString()
+            .toLowerCase();
+    final completed =
+        lifecycle == 'successfully_completed' ||
+        lifecycle == 'completed' ||
+        lifecycle == 'done';
+    if (!completed) return false;
+    if (widget.focusDateTime) return true;
+    try {
+      return _policy.editRequest(session: _session, draft: _draft).operation ==
+          LessonDecisionOperation.reschedule;
+    } catch (_) {
+      return false;
+    }
+  }
 
   searchClients(String q) => _data.searchClients(q);
   void selectClient(LessonClientRef? value) {
@@ -267,7 +310,12 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
         _refs,
         () => _schedule.requestFor(session: _session, draft: _draft),
         canManageTeacherCompensation: _canManageTeacherCompensation,
-        reloadSession: () => _data.reloadAfterConflict(widget, _session, _refs),
+        reloadSession: (actionableLessonId) => _data.reloadAfterConflict(
+          widget,
+          _session,
+          _refs,
+          actionableLessonId: actionableLessonId,
+        ),
       );
       if (!mounted) return;
       switch (outcome) {
@@ -312,5 +360,5 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     Navigator.pop(context);
   }
 
-  void cancel() => Navigator.pop(context);
+  void cancel() => Navigator.maybePop(context);
 }

@@ -107,6 +107,7 @@ void main() {
                         },
                       ],
                       onEdit: () => adjusted = true,
+                      onMove: () => adjusted = true,
                       onCancel: () async {},
                     ),
                     child: const Text('Открыть занятие'),
@@ -137,7 +138,12 @@ void main() {
         expect(find.text('План расчёта · заменён'), findsOneWidget);
         expect(find.text('Корректировка · действующий'), findsOneWidget);
         expect(find.textContaining('free_lesson'), findsNothing);
-        expect(find.text('Списание: Без списания · преподаватель: Стандартная ставка'), findsOneWidget);
+        expect(
+          find.text(
+            'Списание: Без списания · преподаватель: Стандартная ставка',
+          ),
+          findsOneWidget,
+        );
         expect(
           find.text('Причина: Согласовано бесплатное занятие'),
           findsOneWidget,

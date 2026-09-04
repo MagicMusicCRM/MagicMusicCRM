@@ -576,17 +576,10 @@ class LessonEditorDecisionPolicy {
       draft: draft,
       references: references,
     );
-    final financialDecision = <String, dynamic>{
-      'settlementTypeKey': draft.settlementTypeKey,
-      if (draft.clientDecisions.isNotEmpty)
-        'clientDecisions': lessonClientDecisionsPayload(draft.clientDecisions),
-      if (canManageTeacherCompensation) ...{
-        'teacherCompensationRuleKey': draft.compensationRuleKey,
-        'teacherCompensationValueMinor': ?draft.compensationValueMinor,
-        'teacherCreditedDurationMinutes': ?draft.teacherCreditedDurationMinutes,
-        'teacherCompensationSource': ?draft.teacherCompensationSource,
-      },
-    };
+    final financialDecision = financialDecisionPayload(
+      draft,
+      includeTeacherCompensation: canManageTeacherCompensation,
+    );
     return {
       ...schedulePayload(draft),
       'clientRef': {'type': client?.type, 'id': client?.id},
@@ -679,9 +672,12 @@ class LessonEditorDecisionPolicy {
     return LessonDecisionRequest(
       operation: timeChanged
           ? LessonDecisionOperation.reschedule
-          : _financialEditOperation(snapshot.rawLesson),
+          : _ordinaryEditOperation(snapshot.rawLesson),
       lesson: snapshot.rawLesson,
       successor: timeChanged ? schedule : null,
+      successorFinancialDecision: timeChanged
+          ? financialDecisionPayload(draft)
+          : null,
       resources: scheduleChanged && !timeChanged
           ? {
               'teacherId': draft.teacherId,
@@ -694,6 +690,21 @@ class LessonEditorDecisionPolicy {
       initialCompensationValueMinor: draft.compensationValueMinor,
     );
   }
+
+  Map<String, dynamic> financialDecisionPayload(
+    LessonEditorDraft draft, {
+    bool includeTeacherCompensation = true,
+  }) => {
+    'settlementTypeKey': draft.settlementTypeKey,
+    if (draft.clientDecisions.isNotEmpty)
+      'clientDecisions': lessonClientDecisionsPayload(draft.clientDecisions),
+    if (includeTeacherCompensation) ...{
+      'teacherCompensationRuleKey': draft.compensationRuleKey,
+      'teacherCompensationValueMinor': ?draft.compensationValueMinor,
+      'teacherCreditedDurationMinutes': ?draft.teacherCreditedDurationMinutes,
+      'teacherCompensationSource': ?draft.teacherCompensationSource,
+    },
+  };
 
   String clientChargeSnapshotLabel({
     required LessonEditorDraft draft,
@@ -1031,4 +1042,11 @@ LessonDecisionOperation _financialEditOperation(Map<String, dynamic> lesson) {
           state == 'done'
       ? LessonDecisionOperation.correction
       : LessonDecisionOperation.plannedSettlement;
+}
+
+LessonDecisionOperation _ordinaryEditOperation(Map<String, dynamic> lesson) {
+  final financialOperation = _financialEditOperation(lesson);
+  return financialOperation == LessonDecisionOperation.plannedSettlement
+      ? LessonDecisionOperation.edit
+      : financialOperation;
 }

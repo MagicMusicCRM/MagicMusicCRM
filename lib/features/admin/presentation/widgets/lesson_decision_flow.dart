@@ -11,15 +11,21 @@ import 'lesson_editor/lesson_editor_models.dart';
 
 export 'lesson_decision/lesson_decision_controller.dart';
 export 'lesson_decision/lesson_decision_models.dart';
+export 'lesson_editor/lesson_editor_view.dart' show LessonEditorDismissGuard;
 
 Future<bool?> showLessonEditorSurface(
-  BuildContext context,
-  Widget Function(bool pageMode) editor,
-) {
-  return showMagicDialog<bool>(
-    context: context,
+  BuildContext context, {
+  required String title,
+  required Widget Function(bool embeddedSurface) editor,
+}) {
+  return showMagicAdaptiveSurface<bool>(
+    context,
+    kind: AppSurfaceKind.quickView,
+    title: title,
+    subtitle: 'Расписание и расчёт занятия',
+    icon: Icons.event_note_rounded,
     routeSettings: const RouteSettings(name: 'lesson-editor'),
-    builder: (_) => editor(false),
+    builder: (_) => editor(true),
   );
 }
 

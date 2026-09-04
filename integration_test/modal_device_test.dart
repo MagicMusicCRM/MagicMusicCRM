@@ -37,11 +37,13 @@ void main() {
     await tester.tap(find.text('Быстрый просмотр'));
     await tester.pumpAndSettle();
     expect(find.text('Анна Смирнова'), findsNWidgets(2));
-    expect(find.text('Конфликт'), findsOneWidget);
     expect(find.textContaining('Причина конфликта'), findsOneWidget);
     expect(find.textContaining('ConflictException'), findsNothing);
     expect(find.text('Исправить расчёт'), findsNothing);
     expect(find.text('Изменить занятие'), findsOneWidget);
+    expect(find.text('Перенести'), findsOneWidget);
+    expect(find.text('Отменить занятие'), findsOneWidget);
+    expect(find.text('Изменить расчёт'), findsNothing);
     await captureEvidence(tester, 'lesson-quick-view');
     await captureEvidence(tester, 'lesson-settlement-review-required');
     if (const bool.fromEnvironment('V6_VISUAL_CHECK')) {
@@ -53,6 +55,30 @@ void main() {
 
     await tester.tap(find.text('Изменить занятие'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsOneWidget);
+    expect(find.text('Редактор: Изменить занятие'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Быстрый просмотр'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Перенести'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsOneWidget);
+    expect(find.text('Редактор: Перенести'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Быстрый просмотр'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Отменить занятие'));
+    await tester.tap(find.text('Отменить занятие'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsOneWidget);
+    expect(find.text('Редактор: Отменить занятие'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Выбрать клиента'));
     await tester.pumpAndSettle();
     expect(find.text('Поиск по ФИО'), findsOneWidget);
@@ -733,6 +759,12 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
     'scheduled_at': '2026-08-10T09:00:00.000Z',
   };
 
+  Future<bool?> _openQuickEditor(String title) => showLessonEditorSurface(
+    context,
+    title: title,
+    editor: (_) => Text('Редактор: $title'),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -751,8 +783,11 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
               conflicts: const [],
               settlementIssue: lessonSettlementIssueLabel('ConflictException'),
               lessonId: 'lesson-1',
-              onEdit: () {},
-              onCancel: () async {},
+              onEdit: () => _openQuickEditor('Изменить занятие'),
+              onMove: () => _openQuickEditor('Перенести'),
+              onCancel: () async {
+                await _openQuickEditor('Отменить занятие');
+              },
             ),
             child: const Text('Быстрый просмотр'),
           ),

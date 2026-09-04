@@ -236,6 +236,9 @@ class _SettlementApi extends MagicApiClient {
   final previews = <Map<String, dynamic>>[];
   final commits = <Map<String, dynamic>>[];
   final methods = <String>[];
+  final sourceDecisions = <Map<String, dynamic>>[];
+  final successorDecisions = <Map<String, dynamic>>[];
+  final subscriptionReservations = <String>{'lesson-source'};
 
   @override
   Future<T> get<T>(
@@ -330,8 +333,16 @@ class _SettlementApi extends MagicApiClient {
       final body = Map<String, dynamic>.from(data as Map);
       previews.add(body);
       final decision = Map<String, dynamic>.from(
-        body['financialDecision'] as Map,
+        (body['successorFinancialDecision'] ?? body['financialDecision'])
+            as Map,
       );
+      if (body['successorFinancialDecision'] is Map) {
+        sourceDecisions.add(const {
+          'settlementTypeKey': 'lesson',
+          'subscriptionId': 'subscription-device',
+        });
+        successorDecisions.add(decision);
+      }
       final clientDecisions = decision['clientDecisions'];
       final isGroupDecision =
           clientDecisions is List && clientDecisions.isNotEmpty;
@@ -352,7 +363,9 @@ class _SettlementApi extends MagicApiClient {
       };
       return <String, dynamic>{
             'canConfirm': true,
-            'financialPreview': {
+            body['successorFinancialDecision'] is Map
+                ? 'successorPlannedSettlementPreview'
+                : 'financialPreview': {
               'clientFacts': isGroupDecision
                   ? const [
                       {
@@ -396,6 +409,11 @@ class _SettlementApi extends MagicApiClient {
     bool authenticated = true,
   }) async {
     commits.add(Map<String, dynamic>.from(data as Map));
+    if (path.endsWith('/reschedule')) {
+      subscriptionReservations
+        ..remove('lesson-source')
+        ..add('lesson-successor');
+    }
     methods.add('POST $path');
     return <String, dynamic>{'lessonId': 'lesson-1', 'version': 8} as T;
   }
@@ -758,6 +776,72 @@ void main() {
     }
     debugPrint('V7_LESSON_SETTLEMENT_DEVICE_PASS');
   });
+
+  testWidgets(
+    'reschedule keeps distinct decisions and cancellation stays unpaid',
+    (tester) async {
+      final api = _SettlementApi();
+      final crm = MagicCrmService(api);
+      final reschedule = LessonDecisionController(
+        crm: crm,
+        operation: LessonDecisionOperation.reschedule,
+        lesson: <String, dynamic>{
+          'id': 'lesson-source',
+          'version': 4,
+          'branch_id': _branchId,
+        },
+        successor: const {
+          'id': 'lesson-successor',
+          'scheduledAt': '2026-08-16T10:00:00.000Z',
+          'durationMinutes': 60,
+        },
+        canManageTeacherCompensation: true,
+      );
+      final movePreview = await reschedule.preview(
+        reason: 'Перенос по просьбе клиента',
+        settlementTypeKey: 'free_lesson',
+        compensationRuleKey: 'none',
+      );
+      await reschedule.commit(movePreview);
+
+      expect(api.sourceDecisions.single['subscriptionId'], isNotNull);
+      expect(api.successorDecisions.single['settlementTypeKey'], 'free_lesson');
+      expect(api.sourceDecisions.single, isNot(api.successorDecisions.single));
+      expect(api.subscriptionReservations, {'lesson-successor'});
+
+      final cancel = LessonDecisionController(
+        crm: crm,
+        operation: LessonDecisionOperation.cancel,
+        lesson: <String, dynamic>{
+          'id': 'lesson-cancel',
+          'version': 3,
+          'branch_id': _branchId,
+        },
+        canManageTeacherCompensation: true,
+      );
+      await cancel.preview(
+        reason: 'Неоплачиваемая отмена',
+        settlementTypeKey: 'unpaid_absence',
+        compensationRuleKey: 'none',
+        teacherCreditedDurationMinutes: 0,
+        clientDecisions: const [
+          {
+            'clientId': _studentId,
+            'chargeType': 'none',
+            'chargeDurationMinutes': 0,
+          },
+        ],
+      );
+      final cancellation = api.previews.last['financialDecision'] as Map;
+      expect(cancellation['settlementTypeKey'], 'unpaid_absence');
+      expect(cancellation['teacherCompensationRuleKey'], 'none');
+      expect(cancellation['teacherCreditedDurationMinutes'], 0);
+      expect(
+        (cancellation['clientDecisions'] as List).single,
+        containsPair('chargeType', 'none'),
+      );
+    },
+  );
 
   testWidgets('five teacher pay rules and reasoned override stay usable', (
     tester,

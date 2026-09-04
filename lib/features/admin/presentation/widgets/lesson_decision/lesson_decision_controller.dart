@@ -3,6 +3,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import 'lesson_decision_models.dart';
+import '../lesson_editor/lesson_transition_error.dart';
 
 typedef LessonDecisionCommitted =
     Future<void> Function(Map<String, dynamic> result);
@@ -215,15 +216,29 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   int? _expectedVersion;
 
   @override
-  MagicApiException? recoverStaleCommit(Object error) {
+  Future<MagicApiException?> recoverStaleCommit(Object error) async {
     if (error is! MagicApiException || error.details is! Map) return null;
     final details = Map<String, dynamic>.from(error.details! as Map);
     final code = details['code']?.toString();
     if (code != 'STALE_LESSON_VERSION' &&
+        code != 'LESSON_VERSION_STALE' &&
+        code != 'LESSON_ALREADY_RESCHEDULED' &&
         code != 'LESSON_TRANSITION_PREVIEW_STALE') {
       return null;
     }
-    if (code == 'STALE_LESSON_VERSION') {
+    try {
+      final current = await _crm.reloadActionableLesson(
+        lesson,
+        actionableLessonId: lessonTransitionActionableLessonId(error),
+      );
+      lesson
+        ..clear()
+        ..addAll(current);
+      final rawVersion = current['version'];
+      _expectedVersion = rawVersion is num
+          ? rawVersion.toInt()
+          : int.tryParse(rawVersion?.toString() ?? '');
+    } catch (_) {
       final rawVersion = details['currentVersion'];
       final currentVersion = rawVersion is num
           ? rawVersion.toInt()
@@ -234,15 +249,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     }
     _previewPayload = null;
     _commitIdentity = null;
-    return MagicApiException(
-      statusCode: error.statusCode,
-      details: details,
-      message: code == 'STALE_LESSON_VERSION'
-          ? 'Версия обновлена другим сотрудником. Проверьте параметры и '
-                'нажмите «Рассчитать» ещё раз.'
-          : 'Условия расчёта изменились после предварительного просмотра. '
-                'Проверьте параметры и нажмите «Рассчитать» ещё раз.',
-    );
+    return mapLessonTransitionError(error);
   }
 
   @override
@@ -349,7 +356,9 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
           operation != LessonDecisionOperation.correction)
         'reasonCode': 'manual',
       'reasonText': reason.trim(),
-      'financialDecision': {
+      operation == LessonDecisionOperation.reschedule
+          ? 'successorFinancialDecision'
+          : 'financialDecision': {
         'settlementTypeKey': settlementTypeKey,
         if (clientDecisions.isNotEmpty)
           'clientDecisions': lessonClientDecisionsPayload(clientDecisions),

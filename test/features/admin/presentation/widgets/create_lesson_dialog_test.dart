@@ -446,10 +446,12 @@ void main() {
     await tester.tap(find.text('Открыть занятие'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsOneWidget);
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
     expect(find.byType(BackButton), findsNothing);
 
+    await tester.ensureVisible(find.text('Отмена'));
+    await tester.pump();
     await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
     expect(result.value, isNull);

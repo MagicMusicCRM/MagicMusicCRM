@@ -294,23 +294,40 @@ extension _ScheduleActions on _ScheduleWidgetState {
       settlementHistory: settlementHistory,
       lessonId: widget.canWrite ? lessonId : null,
       onEdit: () => _editLesson(lesson),
+      onMove: () => _moveLesson(lesson),
       onCancel: () => _cancelLesson(lesson),
     );
   }
 
   Future<void> _editLesson(Map<String, dynamic> lesson) async {
     if (!widget.canWrite) return;
-    final changed = await CreateLessonDialog.show(context, lesson: lesson);
+    final actionable = await _reloadActionableLesson(lesson);
+    if (!mounted || actionable == null) return;
+    final changed = await CreateLessonDialog.show(context, lesson: actionable);
+    if (changed == true && mounted) await _fetchAll();
+  }
+
+  Future<void> _moveLesson(Map<String, dynamic> lesson) async {
+    if (!widget.canWrite) return;
+    final actionable = await _reloadActionableLesson(lesson);
+    if (!mounted || actionable == null) return;
+    final changed = await CreateLessonDialog.show(
+      context,
+      lesson: actionable,
+      focusDateTime: true,
+    );
     if (changed == true && mounted) await _fetchAll();
   }
 
   Future<void> _cancelLesson(Map<String, dynamic> lesson) async {
     if (!widget.canWrite) return;
+    final actionable = await _reloadActionableLesson(lesson);
+    if (!mounted || actionable == null) return;
     final changed = await showLessonDecisionFlow(
       context,
       crm: ref.read(magicCrmServiceProvider),
       operation: LessonDecisionOperation.cancel,
-      lesson: lesson,
+      lesson: actionable,
       canManageTeacherCompensation: _canManageTeacherCompensation,
     );
     if (changed == true && mounted) {
@@ -321,6 +338,24 @@ extension _ScheduleActions on _ScheduleWidgetState {
         'Занятие отменено',
         type: MagicToastType.success,
       );
+    }
+  }
+
+  Future<Map<String, dynamic>?> _reloadActionableLesson(
+    Map<String, dynamic> lesson,
+  ) async {
+    try {
+      return await ref
+          .read(magicCrmServiceProvider)
+          .reloadActionableLesson(lesson);
+    } catch (error) {
+      if (!mounted) return null;
+      MagicToast.show(
+        context,
+        userErrorMessage(error, fallback: 'Не удалось открыть занятие.'),
+        type: MagicToastType.danger,
+      );
+      return null;
     }
   }
 

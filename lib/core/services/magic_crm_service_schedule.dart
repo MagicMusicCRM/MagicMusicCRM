@@ -402,6 +402,37 @@ extension MagicCrmSchedule on MagicCrmService {
     return _items(response).map(_legacyLesson).toList();
   }
 
+  /// Reloads the terminal lesson that mutations must target.
+  ///
+  /// Student timeline rows and transition errors expose the actionable id;
+  /// calendar rows fall back to their own id. In both cases the editor receives
+  /// the server's latest version instead of the projection that opened it.
+  Future<Map<String, dynamic>> reloadActionableLesson(
+    Map<String, dynamic> lesson, {
+    String? actionableLessonId,
+  }) async {
+    final reschedule = lesson['reschedule'];
+    final id =
+        actionableLessonId ??
+        lesson['actionable_lesson_id']?.toString() ??
+        lesson['actionableLessonId']?.toString() ??
+        (reschedule is Map
+            ? (reschedule['actionableLessonId'] ??
+                      reschedule['actionable_lesson_id'])
+                  ?.toString()
+            : null) ??
+        lesson['id']?.toString();
+    if (id == null || id.isEmpty) {
+      throw StateError('Занятие недоступно. Обновите расписание.');
+    }
+    final rows = await listLessons(lessonId: id, limit: 1);
+    final exact = rows.where((row) => row['id']?.toString() == id).firstOrNull;
+    if (exact == null) {
+      throw StateError('Занятие недоступно. Обновите расписание.');
+    }
+    return exact;
+  }
+
   /// Actor-scoped, typed Lead/Student lookup used by every v4 lesson form.
   ///
   /// The discriminator is deliberately preserved in `ref`; UUIDs from the two

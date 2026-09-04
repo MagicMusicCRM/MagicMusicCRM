@@ -137,11 +137,52 @@ void main() {
         expect(
           request.operation,
           state == 'scheduled'
-              ? LessonDecisionOperation.plannedSettlement
+              ? LessonDecisionOperation.edit
               : LessonDecisionOperation.correction,
         );
+        expect(request.lesson['id'], 'lesson-a');
         expect(request.successor, isNull);
       }
+    },
+  );
+
+  test('date or time change routes through reschedule', () {
+    final original = _draft();
+    final session = _editSession(original);
+
+    for (final movedDraft in [
+      original.copyWith(localStart: DateTime(2026, 8, 27, 13)),
+      original.copyWith(localStart: DateTime(2026, 8, 26, 14, 30)),
+    ]) {
+      final request = policy.editRequest(session: session, draft: movedDraft);
+
+      expect(request.operation, LessonDecisionOperation.reschedule);
+      expect(request.lesson['id'], 'lesson-a');
+      expect(request.successor, policy.schedulePayload(movedDraft));
+      expect(request.successorFinancialDecision, {
+        'settlementTypeKey': 'standard',
+        'teacherCompensationRuleKey': 'standard',
+      });
+    }
+  });
+
+  test(
+    'teacher-only change keeps the same lesson id and uses ordinary edit',
+    () {
+      final original = _draft();
+      final request = policy.editRequest(
+        session: _editSession(original),
+        draft: original.copyWith(teacherId: 'teacher-b'),
+      );
+
+      expect(request.operation, LessonDecisionOperation.edit);
+      expect(request.lesson['id'], 'lesson-a');
+      expect(request.successor, isNull);
+      expect(request.resources, {
+        'teacherId': 'teacher-b',
+        'branchId': 'branch-a',
+        'roomId': 'room-a',
+      });
     },
   );
 
@@ -1246,10 +1287,7 @@ void main() {
       expect(rescheduleRequest.successor, policy.schedulePayload(rescheduled));
       expect(correctionRequest.operation, LessonDecisionOperation.correction);
       expect(correctionRequest.successor, isNull);
-      expect(
-        plannedRequest.operation,
-        LessonDecisionOperation.plannedSettlement,
-      );
+      expect(plannedRequest.operation, LessonDecisionOperation.edit);
       expect(plannedRequest.initialSettlementTypeKey, 'standard');
       expect(plannedRequest.initialCompensationRuleKey, 'teacher-fixed');
       expect(plannedRequest.initialCompensationValueMinor, '250000');
@@ -1264,7 +1302,7 @@ void main() {
         'successfully_completed': LessonDecisionOperation.correction,
         'completed': LessonDecisionOperation.correction,
         'done': LessonDecisionOperation.correction,
-        'planned': LessonDecisionOperation.plannedSettlement,
+        'planned': LessonDecisionOperation.edit,
         'settlement_pending': LessonDecisionOperation.settle,
       };
 

@@ -58,6 +58,7 @@ void main() {
                         settlementIssue:
                             'Проверьте списание и оплату преподавателю.',
                         onEdit: () {},
+                        onMove: () {},
                         onCancel: () async {},
                       ),
                       child: const Text('Занятие'),

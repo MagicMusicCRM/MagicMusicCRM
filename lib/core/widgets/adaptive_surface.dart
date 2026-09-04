@@ -34,6 +34,7 @@ Future<T?> showMagicAdaptiveSurface<T>(
   String? subtitle,
   IconData? icon,
   List<Widget>? actions,
+  RouteSettings? routeSettings,
 }) {
   final container = AdaptiveSurfacePolicy.containerFor(
     kind,
@@ -62,6 +63,7 @@ Future<T?> showMagicAdaptiveSurface<T>(
       subtitle: subtitle,
       icon: icon,
       actions: actions,
+      routeSettings: routeSettings,
       builder: builder,
     ),
     AdaptiveSurfaceContainer.route => throw StateError(

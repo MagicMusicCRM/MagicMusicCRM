@@ -182,8 +182,11 @@ class _LessonDecisionApi extends MagicApiClient {
   }) async {
     expect(path, '/crm/lessons/$_lessonId/$operationKey/preview');
     previews.add(Map<String, dynamic>.from(data as Map));
+    final decisionKey = operationKey == 'reschedule'
+        ? 'successorFinancialDecision'
+        : 'financialDecision';
     final requestDecision = Map<String, dynamic>.from(
-      previews.last['financialDecision'] as Map,
+      previews.last[decisionKey] as Map,
     );
     final normalizedDecision = operationKey == 'cancel'
         ? _normalizeCancelDecision(requestDecision)
@@ -284,7 +287,8 @@ class _LessonDecisionApi extends MagicApiClient {
           'transitionId': 'transition-1',
           'clientFinancialFactIds': const <String>[],
           'teacherFinancialFactId': 'teacher-fact-1',
-          'financialDecision': commits.last['financialDecision'],
+          'successorFinancialDecision':
+              commits.last['successorFinancialDecision'],
           'replayed': commits.length > 1,
         }
         as T;
@@ -922,6 +926,7 @@ void main() {
           : 'stored lead decision round-trips through ${operation.apiKey}',
       (tester) async {
         final settlementKey = switch (operation) {
+          LessonDecisionOperation.edit ||
           LessonDecisionOperation.plannedSettlement ||
           LessonDecisionOperation.correction => 'lesson',
           _ => 'free_lesson',
@@ -963,7 +968,11 @@ void main() {
         await tester.tap(find.byKey(const Key('lesson-decision-submit')));
         await tester.pumpAndSettle();
 
-        final preview = api.previews.single['financialDecision'] as Map;
+        final preview =
+            api.previews.single[operation == LessonDecisionOperation.reschedule
+                    ? 'successorFinancialDecision'
+                    : 'financialDecision']
+                as Map;
         if (operation == LessonDecisionOperation.cancel) {
           expect(preview['settlementTypeKey'], 'unpaid_miss');
           expect(preview['clientDecisions'], [
@@ -1155,7 +1164,7 @@ void main() {
       );
 
       final decision = Map<String, dynamic>.from(
-        api.previews.single['financialDecision'] as Map,
+        api.previews.single['successorFinancialDecision'] as Map,
       );
       expect(decision, {'settlementTypeKey': 'free_lesson'});
     },
@@ -1178,7 +1187,7 @@ void main() {
 
   test(
     'clears preview identity and adopts current version after stale commit',
-    () {
+    () async {
       final controller = LessonDecisionController(
         crm: MagicCrmService(_LessonDecisionApi()),
         canManageTeacherCompensation: true,
@@ -1187,7 +1196,7 @@ void main() {
         successor: _successor,
       );
 
-      final recovered = controller.recoverStaleCommit(
+      final recovered = await controller.recoverStaleCommit(
         const MagicApiException(
           statusCode: 409,
           message: 'stale',
@@ -1195,7 +1204,10 @@ void main() {
         ),
       );
 
-      expect(recovered?.message, contains('Версия обновлена'));
+      expect(
+        recovered?.message,
+        'Занятие уже изменилось. Я открыл актуальную версию.',
+      );
       expect(
         () => controller.commit(
           const LessonDecisionPreview({
@@ -1245,7 +1257,7 @@ void main() {
     expect(body['expectedVersion'], 4);
     expect(body['successor'], _successor);
     expect(body['reasonText'], 'Клиент попросил перенести занятие');
-    expect(body['financialDecision'], {
+    expect(body['successorFinancialDecision'], {
       'settlementTypeKey': 'free_lesson',
       'teacherCompensationRuleKey': 'fixed',
       'teacherCompensationValueMinor': '125000',
@@ -1280,7 +1292,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(api.commits, hasLength(1));
       expect(lesson['version'], 4);
-      expect(find.textContaining('Версия обновлена'), findsOneWidget);
+      expect(
+        find.text('Занятие уже изменилось. Я открыл актуальную версию.'),
+        findsOneWidget,
+      );
       expect(find.text('Рассчитать'), findsOneWidget);
       expect(
         tester
@@ -1386,7 +1401,7 @@ void main() {
       await tester.tap(find.byKey(const Key('lesson-decision-submit')));
       await tester.pumpAndSettle();
 
-      expect(api.previews.single['financialDecision'], {
+      expect(api.previews.single['successorFinancialDecision'], {
         'settlementTypeKey': 'free_lesson',
         'teacherCompensationRuleKey': 'none',
       });
@@ -1404,7 +1419,7 @@ void main() {
       await tester.tap(find.byKey(const Key('lesson-decision-submit')));
       await tester.pumpAndSettle();
       expect(api.commits, hasLength(1));
-      expect(api.commits.single['financialDecision'], {
+      expect(api.commits.single['successorFinancialDecision'], {
         'settlementTypeKey': 'free_lesson',
         'teacherCompensationRuleKey': 'none',
       });
@@ -1468,7 +1483,7 @@ void main() {
       api.previews.single['reasonText'],
       'Почасовой override согласован директором',
     );
-    expect(api.previews.single['financialDecision'], {
+    expect(api.previews.single['successorFinancialDecision'], {
       'settlementTypeKey': 'free_lesson',
       'teacherCompensationRuleKey': 'hourly',
       'teacherCompensationValueMinor': '125000',
@@ -1998,7 +2013,7 @@ void main() {
       );
 
       await _previewStoredDecision(tester, 'Группа без изменений');
-      expect(api.previews.single['financialDecision'], {
+      expect(api.previews.single['successorFinancialDecision'], {
         'settlementTypeKey': 'partially_paid_lesson',
         'clientDecisions': [
           {
@@ -2094,6 +2109,108 @@ void main() {
         },
       ],
     );
+  });
+
+  for (final surfaceCase in const [
+    (width: 390.0, platform: TargetPlatform.android, mobile: true),
+    (width: 1440.0, platform: TargetPlatform.windows, mobile: false),
+  ]) {
+    testWidgets(
+      'lesson editor uses the shared adaptive surface at ${surfaceCase.width.toInt()}',
+      (tester) async {
+        tester.view.physicalSize = Size(surfaceCase.width, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(platform: surfaceCase.platform),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => FilledButton(
+                  onPressed: () => showLessonEditorSurface(
+                    context,
+                    title: 'Новое занятие',
+                    editor: (_) => const SizedBox(
+                      key: Key('adaptive-lesson-editor-body'),
+                      height: 640,
+                    ),
+                  ),
+                  child: const Text('Открыть редактор'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Открыть редактор'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(
+            ValueKey(
+              surfaceCase.mobile ? 'magic-sheet-mobile' : 'magic-sheet-desktop',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('magic-sheet-handle')),
+          surfaceCase.mobile ? findsOneWidget : findsNothing,
+        );
+        expect(find.byTooltip('Закрыть'), findsOneWidget);
+        expect(
+          find.byKey(const Key('magic-sheet-body-scroll')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byTooltip('Закрыть'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('adaptive-lesson-editor-body')),
+          findsNothing,
+        );
+      },
+    );
+  }
+
+  testWidgets('dirty mobile editor asks before swipe close', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showLessonEditorSurface(
+                context,
+                title: 'Изменить занятие',
+                editor: (_) => const LessonEditorDismissGuard(
+                  isDirty: true,
+                  child: SizedBox(height: 640),
+                ),
+              ),
+              child: const Text('Открыть грязную форму'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Открыть грязную форму'));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const Key('magic-sheet-handle')),
+      const Offset(0, 260),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Отменить изменения?'), findsOneWidget);
+    expect(find.byKey(const Key('magic-sheet-mobile')), findsNWidgets(2));
+    await tester.tap(find.text('Остаться'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('magic-sheet-mobile')), findsOneWidget);
   });
 }
 

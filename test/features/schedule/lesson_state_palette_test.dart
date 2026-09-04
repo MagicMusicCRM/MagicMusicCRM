@@ -25,6 +25,19 @@ void main() {
       expect(projection.label, 'Забронировано');
     });
 
+    test('effective subscription marker does not replace lifecycle color', () {
+      final projection = LessonStateProjection.fromMap(const {
+        'lifecycle_state': 'rescheduled',
+        'settlement_markers': [
+          {'key': 'subscription_reserved'},
+        ],
+      });
+
+      expect(projection.token, LessonStateToken.rescheduled);
+      expect(projection.coveredBySubscription, isTrue);
+      expect(projection.token.accent, AppColor.text2);
+    });
+
     test('coverage requires a reservation rather than a funding choice', () {
       for (final lesson in <Map<String, dynamic>>[
         {'reservation_state': 'reserved'},
