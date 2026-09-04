@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
+import { assertActiveClientReferences } from "../clients/client-reference.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import {
@@ -220,6 +221,10 @@ export class ScheduleSeriesMaterializerService {
         message: "Schedule series resources changed during materialization.",
       });
     }
+    await assertActiveClientReferences(
+      executor as unknown as PoolClient,
+      candidates.flatMap((candidate) => candidate.client_refs ?? []),
+    );
 
     for (const candidate of candidates) {
       if (!candidate.teacher_id || !candidate.branch_id || !candidate.room_id) {

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import type { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import {
@@ -45,6 +50,54 @@ export interface ResolvedClientReference {
 
 const GLOBAL_MANAGEMENT_ROLES = ["director", "system_admin"];
 const BRANCH_MANAGEMENT_ROLES = ["admin", "manager"];
+
+export async function assertActiveClientReferences(
+  client: PoolClient,
+  references: ClientRefDto[],
+): Promise<void> {
+  const exactReferences = [...new Map(
+    references.map((reference) => [
+      `${reference.type}:${reference.id}`,
+      { type: reference.type, id: reference.id },
+    ]),
+  ).values()].sort((left, right) =>
+    `${left.type}:${left.id}`.localeCompare(`${right.type}:${right.id}`),
+  );
+  if (exactReferences.length === 0) return;
+  const inactive = await client.query<{ type: ClientRefType; id: string }>(
+    `with requested as (
+       select item.type, item.id
+       from jsonb_to_recordset($1::jsonb) as item(type text, id text)
+     )
+     select requested.type, requested.id
+     from requested
+     where (
+       requested.type = 'student'
+       and not exists (
+         select 1 from app.students student
+         where student.id::text = requested.id and student.deleted_at is null
+       )
+     ) or (
+       requested.type = 'lead'
+       and not exists (
+         select 1 from app.leads lead
+         where lead.id::text = requested.id and lead.deleted_at is null
+       )
+     )
+     order by requested.type, requested.id`,
+    [JSON.stringify(exactReferences)],
+  );
+  if (inactive.rows.length === 0) return;
+  throw new UnprocessableEntityException({
+    code: "ARCHIVED_CLIENT_REFERENCE",
+    message: "Archived client cannot be scheduled.",
+    fields: ["clientRef"],
+    references: inactive.rows.map((reference) => ({
+      type: reference.type,
+      id: reference.id,
+    })),
+  });
+}
 
 /**
  * A single actor-scoped resolver for every cross-domain Lead/Student link.

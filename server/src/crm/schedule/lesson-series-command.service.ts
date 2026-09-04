@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
-import { ClientReferenceService } from "../clients/client-reference.service";
+import {
+  assertActiveClientReferences,
+  ClientReferenceService,
+} from "../clients/client-reference.service";
 import { CrmPolicy } from "../crm.policy";
 import { ClientRefDto } from "../dto/client-ref.dto";
 import { CreateScheduleSeriesDto } from "../dto/schedule-series.dto";
@@ -145,6 +148,7 @@ export class LessonSeriesCommandService {
           );
         }
         await this.acquireLocks(client, seriesId, templateDraft);
+        await assertActiveClientReferences(client, [clientRef]);
         await this.assertLeadNotConverted(client, clientRef);
         await this.validateEveryOccurrence(client, drafts, occurrences);
 

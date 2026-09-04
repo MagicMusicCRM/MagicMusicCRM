@@ -6,7 +6,10 @@ import {
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
-import { ClientReferenceService } from "../clients/client-reference.service";
+import {
+  assertActiveClientReferences,
+  ClientReferenceService,
+} from "../clients/client-reference.service";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
@@ -95,6 +98,8 @@ export class LessonWriteCommandService {
         const effectiveDraft = canManageTeacherCompensation
           ? draft
           : await this.withEffectiveTeacherRate(client, draft);
+        await this.acquireLocks(client, effectiveDraft);
+        await assertActiveClientReferences(client, [effectiveDraft.clientRef]);
         const preparedPlan = await this.settlement.resolvePlannedPlan(
           client,
           {
@@ -108,7 +113,6 @@ export class LessonWriteCommandService {
             requiredClientIds: [effectiveDraft.clientRef.id],
           },
         );
-        await this.acquireLocks(client, effectiveDraft);
         await this.assertConstraints(effectiveDraft, client);
         await this.assertLeadNotConverted(client, effectiveDraft);
         await this.repository.insertLesson(

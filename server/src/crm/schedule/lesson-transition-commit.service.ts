@@ -5,6 +5,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { assertActiveClientReferences } from "../clients/client-reference.service";
 import {
   LESSON_SETTLEMENT_PORT,
   type LessonSettlementPort,
@@ -64,6 +65,23 @@ export class LessonTransitionCommitService {
       input.lessonId,
       input.operation,
     );
+    const successor =
+      input.operation === "reschedule"
+        ? this.preparation.successorDraft(input.dto.successor!, source)
+        : null;
+    if (successor) {
+      await this.acquireLocks(client, source, successor);
+      await assertActiveClientReferences(
+        client,
+        successor.kind === "individual"
+          ? [successor.clientRef]
+          : successor.participants.map((participant) => ({
+              type: "student" as const,
+              id: participant.studentId,
+            })),
+      );
+      await this.assertValidSuccessor(client, input.lessonId, successor);
+    }
     const dto = await this.preparation.resolvedEffectiveTransitionDto(
       client,
       input.actor,
@@ -71,14 +89,6 @@ export class LessonTransitionCommitService {
       input.operation,
       input.dto,
     );
-    const successor =
-      input.operation === "reschedule"
-        ? this.preparation.successorDraft(input.dto.successor!, source)
-        : null;
-    if (successor) {
-      await this.acquireLocks(client, source, successor);
-      await this.assertValidSuccessor(client, input.lessonId, successor);
-    }
     const coverage = await this.reservations.lockSettlementCoverage(
       client,
       input.lessonId,

@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
+import { assertActiveClientReferences } from "../clients/client-reference.service";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import type {
   CreateSchedulePlanDto,
@@ -205,6 +206,10 @@ export class SchedulePlanDefinitionService {
     const subscriptionIds = this.subscriptionIds(input);
     const studentIds = this.studentIds(input);
     await this.lockResources(client, input, subscriptionIds, studentIds);
+    await assertActiveClientReferences(
+      client,
+      studentIds.map((id) => ({ type: "student", id })),
+    );
     await this.assertSubscriptionAssignments(client, input, subscriptionIds);
     await this.assertResources(client, input.rows, studentIds);
     if (input.kind === "group") {

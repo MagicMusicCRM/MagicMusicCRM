@@ -184,6 +184,9 @@ describe("Lesson transition runtime ordering", () => {
           advisoryRecorded = true;
           events.push("advisory-locks");
         }
+        if (normalized.includes("jsonb_to_recordset")) {
+          events.push("active-client-recheck");
+        }
         if (normalized.startsWith("insert into app.lessons")) {
           events.push("successor-insert");
         }
@@ -211,18 +214,21 @@ describe("Lesson transition runtime ordering", () => {
           _lessonId: string,
           _operation: string,
           dto: unknown,
-        ) => ({
-          ...(dto as Record<string, unknown>),
-          financialDecision: {
-            ...((dto as { financialDecision: Record<string, unknown> })
-              .financialDecision),
-            teacherCompensationSource: "automatic",
-          },
-          configurationRevisionIds: {
-            settlementRevisionId: "settlement-revision",
-            compensationRevisionId: "compensation-revision",
-          },
-        }),
+        ) => {
+          events.push("catalog-resolution");
+          return {
+            ...(dto as Record<string, unknown>),
+            financialDecision: {
+              ...((dto as { financialDecision: Record<string, unknown> })
+                .financialDecision),
+              teacherCompensationSource: "automatic",
+            },
+            configurationRevisionIds: {
+              settlementRevisionId: "settlement-revision",
+              compensationRevisionId: "compensation-revision",
+            },
+          };
+        },
       ),
       successorDraft: jest.fn(() => successor),
       validateSuccessor: jest.fn(async () => {
@@ -347,7 +353,9 @@ describe("Lesson transition runtime ordering", () => {
       "source-for-update",
       "settlement-review",
       "advisory-locks",
+      "active-client-recheck",
       "constraint-validation",
+      "catalog-resolution",
       "coverage-lock",
       "successor-insert",
       "source-settlement",

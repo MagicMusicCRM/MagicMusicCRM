@@ -232,14 +232,23 @@ describe("Schedule plan semantic owners", () => {
 
   it("locks plan subjects and resources in sorted unique order before subscriptions", async () => {
     const advisoryKeys: string[] = [];
+    const events: string[] = [];
+    let activeReferences: Array<{ type: string; id: string }> = [];
     let subscriptionSql = "";
     const client = {
       query: jest.fn(async (sql: string, values?: unknown[]) => {
         if (sql.includes("pg_advisory_xact_lock")) {
           advisoryKeys.push(String(values?.[0]));
+          events.push(`lock:${String(values?.[0])}`);
+          return { rows: [] };
+        }
+        if (sql.includes("jsonb_to_recordset")) {
+          events.push("active-client-recheck");
+          activeReferences = JSON.parse(String(values?.[0]));
           return { rows: [] };
         }
         if (sql.includes("from app.subscriptions")) {
+          events.push("subscriptions");
           subscriptionSql = sql;
           return {
             rows: [
@@ -295,6 +304,12 @@ describe("Schedule plan semantic owners", () => {
         ]),
       ].sort(),
     );
+    expect(activeReferences).toEqual([
+      { type: "student", id: "student-a" },
+      { type: "student", id: "student-b" },
+    ]);
+    expect(events.indexOf("active-client-recheck")).toBe(advisoryKeys.length);
+    expect(events.indexOf("subscriptions")).toBe(advisoryKeys.length + 1);
     expect(subscriptionSql).toMatch(/order by id for update/);
   });
 

@@ -2644,6 +2644,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         expectedVersion: 1,
         transitionFingerprint: "a".repeat(64),
       }).token;
+      const rescheduleIdempotencyKey =
+        `single-reschedule-gate-${randomUUID()}`;
       reschedulePromise = service.reschedule(rescheduleActor, lessonA, {
         expectedVersion: 1,
         reasonCode: "client.requested",
@@ -2662,7 +2664,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         previewToken,
         confirm: true,
       }, {
-        idempotencyKey: `single-reschedule-gate-${randomUUID()}`,
+        idempotencyKey: rescheduleIdempotencyKey,
         requestId: `single-reschedule-gate-${randomUUID()}`,
       });
       expect(await promiseStateAfter(reschedulePromise, 100)).toBe("pending");
@@ -2679,7 +2681,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         status: "rejected",
         reason: {
           status: 422,
-          response: { code: "UNKNOWN_LESSON_CLIENT" },
+          response: { code: "ARCHIVED_CLIENT_REFERENCE" },
         },
       });
       const evidence = await pool.query<{
@@ -2688,6 +2690,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         facts: number;
         transitions: number;
         successors: number;
+        idempotency: number;
+        aggregate_version: number;
       }>(
         `select lesson.lifecycle_state as state,
            (select count(*)::int from app.lesson_participant_exclusions
@@ -2697,9 +2701,21 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
            (select count(*)::int from app.lesson_transitions
              where lesson_id = lesson.id) as transitions,
            (select count(*)::int from app.lessons successor
-             where successor.predecessor_id = lesson.id) as successors
+             where successor.predecessor_id = lesson.id) as successors,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $3
+               and operation = 'schedule.lesson.reschedule'
+               and idempotency_key = $4) as idempotency,
+           (select version::int from app.aggregate_versions
+             where aggregate_type = 'schedule:lesson'
+               and aggregate_id = lesson.id::text) as aggregate_version
          from app.lessons lesson where lesson.id = $1`,
-        [lessonA, fixture.secondStudentId],
+        [
+          lessonA,
+          fixture.secondStudentId,
+          `user:${rescheduleActor.userId}`,
+          rescheduleIdempotencyKey,
+        ],
       );
       expect(evidence.rows[0]).toEqual({
         state: "scheduled",
@@ -2707,6 +2723,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         facts: 0,
         transitions: 0,
         successors: 0,
+        idempotency: 0,
+        aggregate_version: 1,
       });
     } finally {
       await creator.query("rollback").catch(() => undefined);

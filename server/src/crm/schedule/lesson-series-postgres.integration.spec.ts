@@ -70,6 +70,119 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("rejects archive-first series creation after its client barrier with zero writes", async () => {
+    const dates = await nextSeriesDates(pool);
+    const fixture = await createFixture(pool, dates[1]!.nineAt);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const idempotencyKey = `series-archive-first-${randomUUID()}`;
+    const requestId = `series-archive-first-${randomUUID()}`;
+    const blocker = await pool.connect();
+    const archiver = await pool.connect();
+    let createPromise: Promise<unknown> | undefined;
+    try {
+      const versionsBefore = Number((await pool.query<{ count: number }>(
+        "select count(*)::int as count from app.aggregate_versions",
+      )).rows[0]!.count);
+      await blocker.query("begin");
+      await blocker.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`branch:${fixture.branchId}`],
+      );
+      createPromise = commands.create(actor, {
+        clientRef: { type: "student", id: fixture.studentId },
+        teacherId: fixture.teacherId,
+        branchId: fixture.branchId,
+        roomId: fixture.roomId,
+        weekday: 1,
+        beginTime: "11:00",
+        durationMinutes: 60,
+        validFrom: dates[0]!.localDate,
+        validUntil: dates[0]!.localDate,
+        isTrial: false,
+        completionType: "standard.success",
+        clientChargeType: "none",
+        clientChargeValue: 0,
+        teacherCompensationType: "none",
+        teacherCompensationValue: 0,
+      }, { idempotencyKey, requestId });
+      await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+
+      await archiver.query("begin");
+      await archiver.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`client:student:${fixture.studentId}`],
+      );
+      await archiver.query(
+        "update app.students set deleted_at = now(), version = version + 1 where id = $1",
+        [fixture.studentId],
+      );
+      await archiver.query("commit");
+      const rejected = expect(createPromise).rejects.toMatchObject({
+        status: 422,
+        response: { code: "ARCHIVED_CLIENT_REFERENCE" },
+      });
+      await blocker.query("commit");
+      await rejected;
+
+      const writes = await pool.query<{
+        series: number;
+        lessons: number;
+        snapshots: number;
+        reservations: number;
+        audits: number;
+        outbox: number;
+        idempotency: number;
+        versions: number;
+      }>(
+        `select
+           (select count(*)::int from app.schedule_series
+             where created_by = $1 and client_id = $2) as series,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.created_by = $1 and series.client_id = $2) as lessons,
+           (select count(*)::int from app.lesson_snapshots snapshot
+             join app.lessons lesson on lesson.id = snapshot.lesson_id
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.created_by = $1 and series.client_id = $2) as snapshots,
+           (select count(*)::int from app.lesson_reservations reservation
+             join app.lessons lesson on lesson.id = reservation.lesson_id
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.created_by = $1 and series.client_id = $2) as reservations,
+           (select count(*)::int from app.audit_events where request_id = $3) as audits,
+           (select count(*)::int from app.platform_outbox_events where request_id = $3)
+             as outbox,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $4 and operation = 'schedule.lesson-series.create'
+               and idempotency_key = $5) as idempotency,
+           (select count(*)::int from app.aggregate_versions) as versions`,
+        [
+          fixture.managerId,
+          fixture.studentId,
+          requestId,
+          `user:${fixture.managerId}`,
+          idempotencyKey,
+        ],
+      );
+      expect(writes.rows[0]).toEqual({
+        series: 0,
+        lessons: 0,
+        snapshots: 0,
+        reservations: 0,
+        audits: 0,
+        outbox: 0,
+        idempotency: 0,
+        versions: versionsBefore,
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      await archiver.query("rollback").catch(() => undefined);
+      blocker.release();
+      archiver.release();
+      await Promise.allSettled([createPromise ?? Promise.resolve()]);
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
   it("rolls back an Nth conflict and creates a valid DST-aware series fully", async () => {
     const dates = await nextSeriesDates(pool);
     const fixture = await createFixture(pool, dates[1]!.nineAt);
@@ -549,6 +662,26 @@ async function nextSeriesDates(pool: Pool) {
     nineAt: new Date(row.nine_at),
     elevenAt: new Date(row.eleven_at),
   }));
+}
+
+async function waitForBlockedQuery(pool: Pool, fragment: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ blocked: boolean }>(
+      `select exists (
+         select 1 from pg_stat_activity
+         where datname = current_database()
+           and pid <> pg_backend_pid()
+           and state = 'active'
+           and wait_event_type = 'Lock'
+           and query ilike '%' || $1 || '%'
+       ) as blocked`,
+      [fragment],
+    );
+    if (result.rows[0]?.blocked) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for blocked query: ${fragment}`);
 }
 
 async function cleanupFixture(

@@ -7,6 +7,7 @@ import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { ClientReferenceService } from "../clients/client-reference.service";
+import { ClientArchiveService } from "../clients/client-archive.service";
 import { CrmPolicy } from "../crm.policy";
 import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
@@ -25,6 +26,7 @@ import { SubscriptionPreviewTokenService } from "../commerce/subscription-previe
 import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 import { LessonSettlementCorrectionService } from "./lesson-settlement-correction.service";
 import { ScheduleReadService } from "./schedule-read.service";
+import { stableLessonCreateId } from "./lesson-command-integrity";
 
 const defaultTestDatabaseUrl =
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
@@ -46,6 +48,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
   let commands: LessonCommandService;
   let settlement: LessonSettlementService;
   let corrections: LessonSettlementCorrectionService;
+  let archives: ClientArchiveService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: testDatabaseUrl });
@@ -59,6 +62,12 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       new PlatformIntegrityRepository(),
     );
     const policy = new CrmPolicy();
+    archives = new ClientArchiveService(
+      database,
+      platform,
+      policy,
+      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+    );
     const constraints = new ScheduleConstraintEngine(
       new ConstraintEngineRepository(database, availability),
     );
@@ -105,6 +114,164 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
   afterAll(async () => {
     await database.onModuleDestroy();
     await pool.end();
+  });
+
+  it.each([
+    { type: "student" as const, fixtureKey: "studentId" as const },
+    { type: "lead" as const, fixtureKey: "leadId" as const },
+  ])(
+    "rejects archive-first $type create after the client barrier without any create write",
+    async ({ type, fixtureKey }) => {
+      const fixture = await createFixture(pool);
+      const actor = { userId: fixture.managerId, role: "director" as const };
+      const idempotencyKey = `archive-first-${type}-${randomUUID()}`;
+      const requestId = `archive-first-${type}-${randomUUID()}`;
+      const lessonId = stableLessonCreateId(actor.userId, idempotencyKey);
+      const clientId = fixture[fixtureKey];
+      const blocker = await pool.connect();
+      let createPromise: Promise<unknown> | undefined;
+      try {
+        await pool.query("update app.users set role = 'director' where id = $1", [
+          actor.userId,
+        ]);
+        await blocker.query("begin");
+        await blocker.query(
+          "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+          [`branch:${fixture.branchId}`],
+        );
+        createPromise = commands.create(
+          actor,
+          archiveRaceDraft(fixture, type, clientId),
+          { idempotencyKey, requestId },
+        );
+        await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+
+        await expect(
+          archives.archive(actor, {
+            type,
+            id: clientId,
+            expectedVersion: 1,
+            reason: `test.archive-first-create.${type}`,
+            confirm: true,
+          }),
+        ).resolves.toMatchObject({
+          tombstone: { ref: { type, id: clientId }, tombstone: true, version: 2 },
+        });
+        const rejected = expect(createPromise).rejects.toMatchObject({
+          status: 422,
+          response: { code: "ARCHIVED_CLIENT_REFERENCE" },
+        });
+        await blocker.query("commit");
+        await rejected;
+
+        await expect(
+          lessonCreateWriteShape(
+            pool,
+            lessonId,
+            requestId,
+            actor.userId,
+            idempotencyKey,
+          ),
+        ).resolves.toEqual({
+          lessons: 0,
+          snapshots: 0,
+          plans: 0,
+          reservations: 0,
+          clientFacts: 0,
+          teacherFacts: 0,
+          audits: 0,
+          outbox: 0,
+          idempotency: 0,
+          aggregateVersions: 0,
+        });
+      } finally {
+        await blocker.query("rollback").catch(() => undefined);
+        blocker.release();
+        await Promise.allSettled([createPromise ?? Promise.resolve()]);
+        await cleanupArchiveArtifacts(pool, type, clientId);
+        await cleanupFixture(pool, {
+          ...fixture,
+          actorKey: `user:${fixture.managerId}`,
+          extraActorKeys: [fixture.managerId],
+          lessonIds: [lessonId],
+        });
+      }
+    },
+  );
+
+  it("lets barrier-first create commit before archive cancels its future lesson", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const idempotencyKey = `create-first-${randomUUID()}`;
+    const requestId = `create-first-${randomUUID()}`;
+    const lessonId = stableLessonCreateId(actor.userId, idempotencyKey);
+    const blocker = await pool.connect();
+    let createPromise: Promise<Awaited<ReturnType<LessonCommandService["create"]>>> | undefined;
+    let archivePromise: Promise<unknown> | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        actor.userId,
+      ]);
+      await blocker.query("begin");
+      await blocker.query(
+        "lock table app.lesson_settlement_plans in access exclusive mode",
+      );
+      createPromise = commands.create(
+        actor,
+        archiveRaceDraft(fixture, "student", fixture.studentId),
+        { idempotencyKey, requestId },
+      );
+      await waitForBlockedSessionCount(pool, 1);
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentId,
+        expectedVersion: 1,
+        reason: "test.create-first-archive",
+        confirm: true,
+      });
+      await waitForBlockedSessionCount(pool, 2);
+      await blocker.query("commit");
+
+      await expect(createPromise).resolves.toMatchObject({ id: lessonId, version: 1 });
+      await expect(archivePromise).resolves.toMatchObject({
+        tombstone: { tombstone: true, version: 2 },
+      });
+      await expect(
+        pool.query<{
+          lifecycle_state: string;
+          snapshot_count: number;
+          plan_state: string;
+        }>(
+          `select lesson.lifecycle_state,
+             (select count(*)::int from app.lesson_snapshots where lesson_id = lesson.id)
+               as snapshot_count,
+             (select state from app.lesson_settlement_plans where lesson_id = lesson.id)
+               as plan_state
+           from app.lessons lesson where lesson.id = $1`,
+          [lessonId],
+        ),
+      ).resolves.toMatchObject({
+        rows: [{
+          lifecycle_state: "cancelled",
+          snapshot_count: 1,
+          plan_state: "cancelled",
+        }],
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        createPromise ?? Promise.resolve(),
+        archivePromise ?? Promise.resolve(),
+      ]);
+      await cleanupArchiveArtifacts(pool, "student", fixture.studentId);
+      await cleanupFixture(pool, {
+        ...fixture,
+        actorKey: `user:${fixture.managerId}`,
+        extraActorKeys: [fixture.managerId],
+        lessonIds: [lessonId],
+      });
+    }
   });
 
   it("creates a sparse operational settlement and rejects missing clients or a teacher override", async () => {
@@ -1999,6 +2166,144 @@ async function expectCommandError(
       ...(response.field ? { field: response.field } : {}),
     }).toEqual(expected);
   }
+}
+
+function archiveRaceDraft(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  type: "student" | "lead",
+  clientId: string,
+): UpsertLessonDto {
+  return {
+    clientRef: { type, id: clientId },
+    teacherId: fixture.teacherId,
+    branchId: fixture.branchId,
+    roomId: fixture.roomId,
+    scheduledAt: nextMondayAtTenMoscow(),
+    durationMinutes: 60,
+    isTrial: false,
+    completionType: "standard.success",
+    clientChargeType: "none",
+    clientChargeValue: 0,
+    teacherCompensationType: "none",
+    teacherCompensationValue: 0,
+    financialDecision: {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      clientDecisions: [{ clientId, chargeType: "none" }],
+    },
+  };
+}
+
+async function lessonCreateWriteShape(
+  pool: Pool,
+  lessonId: string,
+  requestId: string,
+  actorUserId: string,
+  idempotencyKey: string,
+) {
+  const result = await pool.query<{
+    lessons: number;
+    snapshots: number;
+    plans: number;
+    reservations: number;
+    client_facts: number;
+    teacher_facts: number;
+    audits: number;
+    outbox: number;
+    idempotency: number;
+    aggregate_versions: number;
+  }>(
+    `select
+       (select count(*)::int from app.lessons where id = $1) as lessons,
+       (select count(*)::int from app.lesson_snapshots where lesson_id = $1)
+         as snapshots,
+       (select count(*)::int from app.lesson_settlement_plans where lesson_id = $1)
+         as plans,
+       (select count(*)::int from app.lesson_reservations where lesson_id = $1)
+         as reservations,
+       (select count(*)::int from app.lesson_client_charge_facts where lesson_id = $1)
+         as client_facts,
+       (select count(*)::int from app.lesson_teacher_compensation_facts where lesson_id = $1)
+         as teacher_facts,
+       (select count(*)::int from app.audit_events where request_id = $2) as audits,
+       (select count(*)::int from app.platform_outbox_events where request_id = $2)
+         as outbox,
+       (select count(*)::int from app.idempotency_records
+         where actor_key = $3 and operation = 'schedule.lesson.create'
+           and idempotency_key = $4) as idempotency,
+       (select count(*)::int from app.aggregate_versions
+         where aggregate_type = 'schedule:lesson' and aggregate_id = $1::text)
+         as aggregate_versions`,
+    [lessonId, requestId, `user:${actorUserId}`, idempotencyKey],
+  );
+  const row = result.rows[0]!;
+  return {
+    lessons: row.lessons,
+    snapshots: row.snapshots,
+    plans: row.plans,
+    reservations: row.reservations,
+    clientFacts: row.client_facts,
+    teacherFacts: row.teacher_facts,
+    audits: row.audits,
+    outbox: row.outbox,
+    idempotency: row.idempotency,
+    aggregateVersions: row.aggregate_versions,
+  };
+}
+
+async function cleanupArchiveArtifacts(
+  pool: Pool,
+  type: "student" | "lead",
+  id: string,
+) {
+  await pool.query(
+    "delete from app.idempotency_records where operation = 'crm.client.archive' and idempotency_key = $1",
+    [`${type}:${id}:v1`],
+  );
+  await pool.query(
+    "delete from app.platform_outbox_events where aggregate_type = $1 and aggregate_id = $2",
+    [`crm:${type}`, id],
+  );
+  await pool.query(
+    "delete from app.aggregate_versions where aggregate_type = $1 and aggregate_id = $2",
+    [`crm:${type}`, id],
+  );
+}
+
+async function waitForBlockedQuery(pool: Pool, fragment: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ blocked: boolean }>(
+      `select exists (
+         select 1 from pg_stat_activity
+         where datname = current_database()
+           and pid <> pg_backend_pid()
+           and state = 'active'
+           and wait_event_type = 'Lock'
+           and query ilike '%' || $1 || '%'
+       ) as blocked`,
+      [fragment],
+    );
+    if (result.rows[0]?.blocked) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for blocked query: ${fragment}`);
+}
+
+async function waitForBlockedSessionCount(pool: Pool, expected: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ count: number }>(
+      `select count(*)::int as count from pg_stat_activity
+       where datname = current_database()
+         and pid <> pg_backend_pid()
+         and state = 'active'
+         and wait_event_type = 'Lock'`,
+    );
+    if ((result.rows[0]?.count ?? 0) >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for ${expected} blocked sessions.`);
 }
 
 async function createFixture(
