@@ -511,11 +511,14 @@ class SchedulePlanMutationFlow {
           if (draft.notes.isNotEmpty) 'notes': draft.notes,
           'financialDecision': {
             'settlementTypeKey': draft.settlementTypeKey,
-            'teacherCompensationRuleKey': draft.teacherCompensationRuleKey,
-            if (draft.teacherCreditedDurationMinutes != null)
+            if (canManageTeacherCompensation)
+              'teacherCompensationRuleKey': draft.teacherCompensationRuleKey,
+            if (canManageTeacherCompensation &&
+                draft.teacherCreditedDurationMinutes != null)
               'teacherCreditedDurationMinutes':
                   draft.teacherCreditedDurationMinutes,
-            if (draft.teacherCompensationSource != null)
+            if (canManageTeacherCompensation &&
+                draft.teacherCompensationSource != null)
               'teacherCompensationSource': draft.teacherCompensationSource,
             'clientDecisions': lessonClientDecisionsPayload(
               draft.clientDecisions,

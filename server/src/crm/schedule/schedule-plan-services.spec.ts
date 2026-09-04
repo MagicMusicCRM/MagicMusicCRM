@@ -287,6 +287,35 @@ describe("Schedule plan semantic owners", () => {
       })),
     } as unknown as CrmPolicy;
     const previews = {
+      prepareRows: jest.fn(async (
+        targetClient: PoolClient,
+        targetActor: ActorContext,
+        rows: SchedulePlanRowDto[],
+      ) => Promise.all(rows.map(async (row) => {
+        const settlementPlan = await settlement.resolvePlannedPlan(
+          targetClient,
+          {
+            branchId: row.branchId,
+            durationMinutes: row.durationMinutes ?? 60,
+            decision: row.financialDecision,
+            actorUserId: targetActor.userId,
+            authorization: {
+              actor: targetActor,
+              capabilityKey: "config.commerce.manage",
+            },
+            requiredClientIds: ["student-a"],
+            reasonText: row.plannedSettlementReason,
+            configurationRevisionIds: {
+              settlementRevisionId: "settlement-a",
+              compensationRevisionId: "compensation-a",
+            },
+          },
+        );
+        return {
+          row: { ...row, financialDecision: settlementPlan.decision },
+          settlementPlan,
+        };
+      }))),
       assertUpdateHistoricalConfirmation: jest.fn(async () => false),
     } as unknown as SchedulePlanConstraintPreviewService;
     const mutation = new SchedulePlanMutationService(
@@ -295,7 +324,6 @@ describe("Schedule plan semantic owners", () => {
       repository,
       series,
       materializer,
-      settlement,
       definition,
       previews,
     );

@@ -5,13 +5,13 @@ import type {
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
 import type { LessonSeriesCommandService } from "./lesson-series-command.service";
+import type { PreparedSchedulePlanRow } from "./schedule-plan-constraint-preview.service";
 import type {
   PreparedSchedulePlanUpdate,
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
 import type {
   SchedulePlanRepository,
-  SchedulePlanSeriesSnapshot,
 } from "./schedule-plan.repository";
 import type { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
@@ -32,12 +32,13 @@ export const extendSchedulePlanBackwards = async (input: {
   series: LessonSeriesCommandService;
   materializer: ScheduleSeriesMaterializerService;
   definition: SchedulePlanDefinitionService;
+  preparedRows: PreparedSchedulePlanRow[];
   insertSeries: (
     args: Omit<
       Parameters<SchedulePlanRepository["insertSeries"]>[1],
       "settlementPlan"
     >,
-    storedSeries: SchedulePlanSeriesSnapshot | undefined,
+    preparedRow: PreparedSchedulePlanRow,
   ) => Promise<void>;
 }): Promise<BackdateMutationReference> => {
   const prefixUntil = input.prepared.prefixUntil!;
@@ -56,9 +57,6 @@ export const extendSchedulePlanBackwards = async (input: {
       input.version,
       index,
     );
-    const stored = input.prepared.activeSeries.find(
-      (series) => series.id === row.seriesId,
-    );
     await input.insertSeries(
       {
         id: seriesId,
@@ -73,7 +71,7 @@ export const extendSchedulePlanBackwards = async (input: {
         subscriptionId: input.prepared.subscriptionId,
         supersededBy: row.seriesId!,
       },
-      stored,
+      input.preparedRows[index]!,
     );
     seriesIds.push(seriesId);
   }

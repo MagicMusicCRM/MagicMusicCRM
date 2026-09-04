@@ -746,7 +746,6 @@ describe("lesson compensation service RBAC", () => {
         {} as never,
         {} as never,
         {} as never,
-        {} as never,
         {
           normalizeCreate: jest.fn(() => {
             throw reachedAuthorizedWork;
@@ -794,7 +793,6 @@ describe("lesson compensation service RBAC", () => {
       const service = new SchedulePlanMutationService(
         {} as PlatformIntegrityService,
         new CrmPolicy(),
-        {} as never,
         {} as never,
         {} as never,
         {} as never,

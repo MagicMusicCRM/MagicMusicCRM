@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
+import type { PreparedLessonSettlementPlan } from "../commerce/lesson-settlement.port";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { CrmPolicy } from "../crm.policy";
@@ -59,6 +60,11 @@ interface SchedulePlanHistoricalProjection {
   previewExpiresAt?: string;
 }
 
+export interface PreparedSchedulePlanRow {
+  row: SchedulePlanRowDto;
+  settlementPlan: PreparedLessonSettlementPlan;
+}
+
 @Injectable()
 export class SchedulePlanConstraintPreviewService {
   private readonly overlap = new SchedulePlanOverlapAnalyzer();
@@ -89,7 +95,7 @@ export class SchedulePlanConstraintPreviewService {
         participants: normalized.participants,
         rows: normalized.rows,
       });
-      const authorizedRows = await this.authorizedRows(
+      const preparedRows = await this.prepareRows(
         client,
         actor,
         normalized.rows,
@@ -97,7 +103,7 @@ export class SchedulePlanConstraintPreviewService {
       );
       const rows = await this.previewRows(
         client,
-        authorizedRows,
+        preparedRows.map((preparedRow) => preparedRow.row),
         normalized.activeFrom,
         normalized.activeUntil,
         studentIds,
@@ -132,7 +138,7 @@ export class SchedulePlanConstraintPreviewService {
     this.definition.assertRows(dto.rows);
     return this.database.transaction(async (client) => {
       const prepared = await this.definition.prepareUpdate(client, planId, dto);
-      const authorizedRows = await this.authorizedRows(
+      const preparedRows = await this.prepareRows(
         client,
         actor,
         dto.rows,
@@ -141,7 +147,7 @@ export class SchedulePlanConstraintPreviewService {
       );
       const rows = await this.previewUpdateRows(
         client,
-        authorizedRows,
+        preparedRows.map((preparedRow) => preparedRow.row),
         prepared,
       );
       this.overlap.addCrossRowViolations(dto.rows, rows, prepared.studentIds);
@@ -169,16 +175,11 @@ export class SchedulePlanConstraintPreviewService {
     actor: ActorContext,
     normalized: NormalizedSchedulePlanCreate,
     dto: CreateSchedulePlanDto,
+    preparedRows: PreparedSchedulePlanRow[],
   ): Promise<boolean> {
-    const authorizedRows = await this.authorizedRows(
-      client,
-      actor,
-      normalized.rows,
-      this.createStudentIds(normalized),
-    );
     const rows = await this.previewRows(
       client,
-      authorizedRows,
+      preparedRows.map((preparedRow) => preparedRow.row),
       normalized.activeFrom,
       normalized.activeUntil,
       this.createStudentIds(normalized),
@@ -202,15 +203,13 @@ export class SchedulePlanConstraintPreviewService {
     planId: string,
     dto: UpdateSchedulePlanDto,
     prepared: PreparedSchedulePlanUpdate,
+    preparedRows: PreparedSchedulePlanRow[],
   ): Promise<boolean> {
-    const authorizedRows = await this.authorizedRows(
+    const rows = await this.previewUpdateRows(
       client,
-      actor,
-      dto.rows,
-      prepared.studentIds,
+      preparedRows.map((preparedRow) => preparedRow.row),
       prepared,
     );
-    const rows = await this.previewUpdateRows(client, authorizedRows, prepared);
     return this.assertHistoricalConfirmation(dto, rows, {
       actor,
       operation: "update",
@@ -229,49 +228,34 @@ export class SchedulePlanConstraintPreviewService {
       : normalized.participants.map((participant) => participant.studentId);
   }
 
-  private async authorizedRows(
+  async prepareRows(
     client: PoolClient,
     actor: ActorContext,
     rows: SchedulePlanRowDto[],
     allowedClientIds: string[],
     prepared?: PreparedSchedulePlanUpdate,
-  ): Promise<SchedulePlanRowDto[]> {
+  ): Promise<PreparedSchedulePlanRow[]> {
     return Promise.all(
       rows.map(async (row) => {
+        this.policy.assertCanSupplyTeacherCompensation(
+          actor,
+          row.financialDecision,
+        );
         const storedSeries = prepared?.activeSeries.find(
           (series) => series.id === row.seriesId,
         );
         const stored = storedSeries?.planned_financial_decision;
-        const requestedDecision = this.policy.canManageTeacherCompensation(actor)
-          ? row.financialDecision
-          : stored
-          ? {
-              ...row.financialDecision,
-              teacherCompensationRuleKey: stored.teacherCompensationRuleKey,
-              teacherCompensationValueMinor:
-                stored.teacherCompensationValueMinor,
-              teacherCreditedDurationMinutes:
-                stored.teacherCreditedDurationMinutes,
-              teacherCompensationSource: stored.teacherCompensationSource,
-            }
-          : await this.settlement.applyDefaultTeacherCompensation(
-              client,
-              row.branchId,
-              row.financialDecision,
-            );
+        const requestedDecision = row.financialDecision;
         const preservedTeacherDecision = stored &&
-            sameTeacherDecision(requestedDecision, stored)
-          ? {
-              teacherCompensationRuleKey: stored.teacherCompensationRuleKey,
-              teacherCompensationValueMinor:
-                stored.teacherCompensationValueMinor,
-              teacherCreditedDurationMinutes:
-                stored.teacherCreditedDurationMinutes,
-              teacherCompensationSource: stored.teacherCompensationSource,
-            }
+            (!this.policy.canManageTeacherCompensation(actor) ||
+              sameTeacherDecision(requestedDecision, stored))
+          ? teacherDecision(stored)
           : undefined;
+        const effectiveDecision = preservedTeacherDecision
+          ? { ...requestedDecision, ...preservedTeacherDecision }
+          : requestedDecision;
         const usesStoredCatalog = stored !== null && stored !== undefined &&
-          fingerprintPayload(requestedDecision) ===
+          fingerprintPayload(effectiveDecision) ===
             fingerprintPayload(stored);
         const settlementPlan = await this.settlement.resolvePlannedPlan(
           client,
@@ -299,8 +283,10 @@ export class SchedulePlanConstraintPreviewService {
             ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
           },
         );
-        const financialDecision = settlementPlan.decision;
-        return { ...row, financialDecision };
+        return {
+          row: { ...row, financialDecision: settlementPlan.decision },
+          settlementPlan,
+        };
       }),
     );
   }
@@ -565,6 +551,18 @@ function sameTeacherDecision(
     left.teacherCreditedDurationMinutes ===
       right.teacherCreditedDurationMinutes &&
     left.teacherCompensationSource === right.teacherCompensationSource;
+}
+
+function teacherDecision(
+  decision: SchedulePlanRowDto["financialDecision"],
+) {
+  return {
+    teacherCompensationRuleKey: decision.teacherCompensationRuleKey,
+    teacherCompensationValueMinor: decision.teacherCompensationValueMinor,
+    teacherCreditedDurationMinutes:
+      decision.teacherCreditedDurationMinutes,
+    teacherCompensationSource: decision.teacherCompensationSource,
+  };
 }
 
 interface HistoricalTokenInput {

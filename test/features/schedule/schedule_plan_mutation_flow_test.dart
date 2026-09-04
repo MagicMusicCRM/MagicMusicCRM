@@ -22,52 +22,105 @@ void main() {
     );
   });
 
-  test('schedule-plan payload preserves the complete frozen decision', () {
-    final draft = PreferredScheduleDraft(
-      branchId: 'branch-a',
-      weekdays: const {1},
-      beginTime: '10:00',
-      durationMinutes: 60,
-      lessonsPerDay: 1,
-      validFrom: DateTime(2026, 9, 1),
-      validUntil: DateTime(2026, 12, 1),
-      teacherId: 'teacher-a',
-      roomId: 'room-a',
-      notes: '',
-      settlementTypeKey: 'visit',
-      teacherCompensationRuleKey: 'hourly',
-      teacherCreditedDurationMinutes: 45,
-      teacherCompensationSource: 'manual',
-      clientDecisions: const [
-        {
-          'clientId': 'student-a',
-          'chargeDurationMinutes': 30,
-          'chargeType': 'subscription',
-          'subscriptionId': 'subscription-a',
-        },
-      ],
-    );
+  test(
+    'unauthorized preview and create/update payloads omit teacher fields',
+    () {
+      final draft = PreferredScheduleDraft(
+        branchId: 'branch-a',
+        weekdays: const {1},
+        beginTime: '10:00',
+        durationMinutes: 60,
+        lessonsPerDay: 1,
+        validFrom: DateTime(2026, 9, 1),
+        validUntil: DateTime(2026, 12, 1),
+        teacherId: 'teacher-a',
+        roomId: 'room-a',
+        notes: '',
+        settlementTypeKey: 'visit',
+        teacherCompensationRuleKey: 'hourly',
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: 'manual',
+        clientDecisions: const [
+          {
+            'clientId': 'student-a',
+            'chargeDurationMinutes': 30,
+            'chargeType': 'subscription',
+            'subscriptionId': 'subscription-a',
+          },
+        ],
+      );
 
-    final rows = SchedulePlanMutationFlow.rowsFromDraft(
-      draft,
-      canManageTeacherCompensation: false,
-    );
+      final rows = SchedulePlanMutationFlow.rowsFromDraft(
+        draft,
+        canManageTeacherCompensation: false,
+      );
 
-    expect(rows.single['financialDecision'], {
-      'settlementTypeKey': 'visit',
-      'teacherCompensationRuleKey': 'hourly',
-      'teacherCreditedDurationMinutes': 45,
-      'teacherCompensationSource': 'manual',
-      'clientDecisions': [
-        {
-          'clientId': 'student-a',
-          'chargeDurationMinutes': 30,
-          'chargeType': 'subscription',
-          'subscriptionId': 'subscription-a',
-        },
-      ],
-    });
-  });
+      final financialDecision =
+          rows.single['financialDecision'] as Map<String, dynamic>;
+
+      expect(financialDecision, {
+        'settlementTypeKey': 'visit',
+        'clientDecisions': [
+          {
+            'clientId': 'student-a',
+            'chargeDurationMinutes': 30,
+            'chargeType': 'subscription',
+            'subscriptionId': 'subscription-a',
+          },
+        ],
+      });
+      expect(financialDecision, isNot(contains('teacherCompensationRuleKey')));
+      expect(
+        financialDecision,
+        isNot(contains('teacherCompensationValueMinor')),
+      );
+      expect(
+        financialDecision,
+        isNot(contains('teacherCreditedDurationMinutes')),
+      );
+      expect(financialDecision, isNot(contains('teacherCompensationSource')));
+    },
+  );
+
+  test(
+    'authorized preview and create/update payloads retain manual teacher fields',
+    () {
+      final draft = PreferredScheduleDraft(
+        branchId: 'branch-a',
+        weekdays: const {1},
+        beginTime: '10:00',
+        durationMinutes: 60,
+        lessonsPerDay: 1,
+        validFrom: DateTime(2026, 9, 1),
+        validUntil: DateTime(2026, 12, 1),
+        teacherId: 'teacher-a',
+        roomId: 'room-a',
+        notes: '',
+        settlementTypeKey: 'visit',
+        teacherCompensationRuleKey: 'hourly',
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: 'manual',
+        clientDecisions: const [
+          {'clientId': 'student-a', 'chargeDurationMinutes': 30},
+        ],
+      );
+
+      final rows = SchedulePlanMutationFlow.rowsFromDraft(
+        draft,
+        canManageTeacherCompensation: true,
+      );
+
+      expect(rows.single['financialDecision'], {
+        'settlementTypeKey': 'visit',
+        'teacherCompensationRuleKey': 'hourly',
+        'teacherCreditedDurationMinutes': 45,
+        'teacherCompensationSource': 'manual',
+        'clientDecisions': [
+          {'clientId': 'student-a', 'chargeDurationMinutes': 30},
+        ],
+      });
+    },
+  );
 
   test('new individual and group rows seed every current plan client', () {
     final individual = _plan(

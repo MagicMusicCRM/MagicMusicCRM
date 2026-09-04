@@ -114,7 +114,6 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         repository,
         series,
         materializer,
-        settlement,
         definition,
         previews,
       ),
@@ -256,9 +255,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         ...row(fixture, 2, "11:00"),
         financialDecision: {
           settlementTypeKey: "lesson",
-          teacherCompensationRuleKey: "standard",
           clientDecisions,
-        },
+        } as ConfiguredLessonFinancialDecisionDto,
       }],
     });
     try {
@@ -332,9 +330,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           ...row(fixture, 1, "10:00"),
           financialDecision: {
             settlementTypeKey: "lesson",
-            teacherCompensationRuleKey: "standard",
             clientDecisions: [{ clientId: fixture.studentIds[0]! }],
-          },
+          } as ConfiguredLessonFinancialDecisionDto,
         }],
       });
 
@@ -342,6 +339,157 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       expect(resolveSpy).toHaveBeenCalledTimes(1);
     } finally {
       resolveSpy.mockRestore();
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("resolves sparse operational recurring rows once and persists that prepared revision", async () => {
+    const fixture = await createFixture(pool);
+    const originalResolve = settlement.resolvePlannedPlan.bind(settlement);
+    const preparedPlans: Awaited<ReturnType<typeof originalResolve>>[] = [];
+    const resolveSpy = jest
+      .spyOn(settlement, "resolvePlannedPlan")
+      .mockImplementation(async (...args) => {
+        const prepared = await originalResolve(...args);
+        preparedPlans.push(prepared);
+        return prepared;
+      });
+    const scenarios = [
+      { role: "manager" as const, settlementTypeKey: "free_lesson", weekday: 1 },
+      { role: "admin" as const, settlementTypeKey: "unpaid_miss", weekday: 2 },
+    ];
+    try {
+      for (const scenario of scenarios) {
+        const actor = { userId: fixture.managerId, role: scenario.role };
+        const financialDecision = {
+          settlementTypeKey: scenario.settlementTypeKey,
+          clientDecisions: [{
+            clientId: fixture.studentIds[0]!,
+            settlementTypeKey: scenario.settlementTypeKey,
+            chargeType: "none" as const,
+          }],
+        } as ConfiguredLessonFinancialDecisionDto;
+        const dto = {
+          kind: "individual" as const,
+          title: `Sparse ${scenario.role} ${scenario.settlementTypeKey}`,
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [{
+            ...row(fixture, scenario.weekday, "14:00"),
+            financialDecision,
+          }],
+        };
+
+        preparedPlans.length = 0;
+        resolveSpy.mockClear();
+        const preview = await plans.previewConstraints(actor, dto);
+        expect(preview.valid).toBe(true);
+        expect(resolveSpy).toHaveBeenCalledTimes(1);
+        expect(resolveSpy.mock.calls[0]![1].decision).toEqual(financialDecision);
+        expect(preparedPlans[0]!.decision).toMatchObject({
+          teacherCompensationRuleKey: "none",
+          teacherCreditedDurationMinutes: 0,
+          teacherCompensationSource: "automatic",
+        });
+
+        preparedPlans.length = 0;
+        resolveSpy.mockClear();
+        const created = await plans.create(actor, dto, {
+          idempotencyKey: `sparse-${scenario.role}-${scenario.settlementTypeKey}-${randomUUID()}`,
+          requestId: randomUUID(),
+        });
+        expect(resolveSpy).toHaveBeenCalledTimes(1);
+        const persisted = await pool.query<{
+          decision: ConfiguredLessonFinancialDecisionDto;
+          settlement_revision_id: string;
+          compensation_revision_id: string;
+        }>(
+          `select planned_financial_decision as decision,
+             settlement_revision_id, compensation_revision_id
+           from app.schedule_series where id = $1`,
+          [created.seriesIds[0]],
+        );
+        expect(persisted.rows[0]!.decision).toMatchObject({
+          teacherCompensationRuleKey: "none",
+          teacherCreditedDurationMinutes: 0,
+          teacherCompensationSource: "automatic",
+        });
+        expect(persisted.rows[0]!.settlement_revision_id).toBe(
+          preparedPlans[0]!.settlementRevisionId,
+        );
+        expect(persisted.rows[0]!.compensation_revision_id).toBe(
+          preparedPlans[0]!.compensationRevisionId,
+        );
+      }
+    } finally {
+      resolveSpy.mockRestore();
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects an unauthorized recurring teacher override without any write", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const requestId = `schedule-plan-rbac-${randomUUID()}`;
+    const title = `Forbidden override ${randomUUID()}`;
+    try {
+      await expect(plans.create(actor, {
+        kind: "individual",
+        title,
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [{
+          ...row(fixture, 3, "15:00"),
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "standard",
+            clientDecisions: [{
+              clientId: fixture.studentIds[0]!,
+              settlementTypeKey: "free_lesson",
+              chargeType: "none",
+            }],
+          },
+        }],
+      }, {
+        idempotencyKey: `forbidden-recurring-${randomUUID()}`,
+        requestId,
+      })).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      const writes = await pool.query<{
+        plans: string;
+        series: string;
+        lessons: string;
+        audits: string;
+        outbox: string;
+      }>(
+        `select
+          (select count(*)::text from app.schedule_plans where title = $1) as plans,
+          (select count(*)::text from app.schedule_series series
+             join app.schedule_plans plan on plan.id = series.plan_id
+             where plan.title = $1) as series,
+          (select count(*)::text from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             join app.schedule_plans plan on plan.id = series.plan_id
+             where plan.title = $1) as lessons,
+          (select count(*)::text from app.audit_events where request_id = $2) as audits,
+          (select count(*)::text from app.platform_outbox_events
+             where request_id = $2) as outbox`,
+        [title, requestId],
+      );
+      expect(writes.rows[0]).toEqual({
+        plans: "0",
+        series: "0",
+        lessons: "0",
+        audits: "0",
+        outbox: "0",
+      });
+    } finally {
       await cleanup(pool, fixture);
     }
   });
@@ -3744,6 +3892,13 @@ async function cleanup(
     );
     await client.query(
       `delete from app.lesson_reservations where lesson_id in (
+         select lesson.id from app.lessons lesson join app.schedule_series series
+           on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
+         where plan.created_by = $1)`,
+      [fixture.managerId],
+    );
+    await client.query(
+      `delete from app.lesson_teacher_compensation_facts where lesson_id in (
          select lesson.id from app.lessons lesson join app.schedule_series series
            on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
          where plan.created_by = $1)`,

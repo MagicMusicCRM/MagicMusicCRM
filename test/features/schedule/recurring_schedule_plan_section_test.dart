@@ -674,6 +674,13 @@ void main() {
         for (final row in rows) {
           expect(row['financialDecision'], {
             'settlementTypeKey': 'free_lesson',
+            'clientDecisions': [
+              {
+                'clientId': 'student-1',
+                'chargeType': 'subscription',
+                'subscriptionId': 'subscription-1',
+              },
+            ],
           });
         }
         expect(
@@ -770,11 +777,8 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
     await tester.pumpAndSettle();
-    expect(
-      api.postRequests.where(
-        (request) => request.path == '/crm/schedule-plans/constraints/preview',
-      ),
-      hasLength(1),
+    final createPreview = api.postRequests.singleWhere(
+      (request) => request.path == '/crm/schedule-plans/constraints/preview',
     );
     final create = api.idempotentRequests.singleWhere(
       (request) => request.path == '/crm/schedule-plans',
@@ -787,6 +791,20 @@ void main() {
       (create.data['rows'] as List).map((row) => row['teacherId']),
       containsAll(['teacher-1', 'teacher-2']),
     );
+    for (final data in [createPreview.data, create.data]) {
+      for (final row in (data['rows'] as List).cast<Map<String, dynamic>>()) {
+        expect(row['financialDecision'], {
+          'settlementTypeKey': 'free_lesson',
+          'clientDecisions': [
+            {
+              'clientId': 'student-1',
+              'chargeType': 'subscription',
+              'subscriptionId': 'subscription-1',
+            },
+          ],
+        });
+      }
+    }
 
     await tester.ensureVisible(
       find.byKey(const ValueKey('schedule-plan-row-edit-series-active')),
@@ -806,19 +824,22 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
     await tester.pumpAndSettle();
-    expect(
-      api.postRequests.where(
-        (request) =>
-            request.path ==
-            '/crm/schedule-plans/plan-active/constraints/preview',
-      ),
-      hasLength(1),
+    final updatePreview = api.postRequests.singleWhere(
+      (request) =>
+          request.path ==
+          '/crm/schedule-plans/plan-active/constraints/preview',
     );
     final update = api.idempotentRequests.singleWhere(
       (request) => request.path == '/crm/schedule-plans/plan-active',
     );
     expect(update.data['expectedVersion'], 1);
     expect((update.data['rows'] as List).single['seriesId'], 'series-active');
+    for (final data in [updatePreview.data, update.data]) {
+      expect((data['rows'] as List).single['financialDecision'], {
+        'settlementTypeKey': 'free_lesson',
+        'clientDecisions': <Map<String, dynamic>>[],
+      });
+    }
     await tester.pump(const Duration(seconds: 4));
   });
 
