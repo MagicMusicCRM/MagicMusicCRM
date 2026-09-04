@@ -1,3 +1,130 @@
+enum ScheduleRuleTimelineKind {
+  recurringRule,
+  datedException;
+
+  factory ScheduleRuleTimelineKind.fromWire(Object? value) => switch (value) {
+    'recurring_rule' => ScheduleRuleTimelineKind.recurringRule,
+    'dated_exception' => ScheduleRuleTimelineKind.datedException,
+    _ => throw FormatException('Unknown schedule rule timeline kind: $value'),
+  };
+}
+
+enum ScheduleRuleTimelineStatus {
+  active,
+  expired;
+
+  factory ScheduleRuleTimelineStatus.fromWire(Object? value) => switch (value) {
+    'active' => ScheduleRuleTimelineStatus.active,
+    'expired' => ScheduleRuleTimelineStatus.expired,
+    _ => throw FormatException('Unknown schedule rule timeline status: $value'),
+  };
+}
+
+enum ScheduleRuleTimelineChangedField {
+  scheduledAt,
+  teacherId,
+  roomId,
+  branchId,
+  durationMinutes;
+
+  factory ScheduleRuleTimelineChangedField.fromWire(Object? value) =>
+      switch (value) {
+        'scheduledAt' => ScheduleRuleTimelineChangedField.scheduledAt,
+        'teacherId' => ScheduleRuleTimelineChangedField.teacherId,
+        'roomId' => ScheduleRuleTimelineChangedField.roomId,
+        'branchId' => ScheduleRuleTimelineChangedField.branchId,
+        'durationMinutes' => ScheduleRuleTimelineChangedField.durationMinutes,
+        _ => throw FormatException(
+          'Unknown schedule rule timeline changed field: $value',
+        ),
+      };
+}
+
+class ScheduleRuleTimelineEntry {
+  const ScheduleRuleTimelineEntry({
+    required this.id,
+    required this.kind,
+    required this.status,
+    required this.activeFrom,
+    required this.activeUntil,
+    required this.scheduledDate,
+    required this.teacherId,
+    required this.teacherName,
+    required this.roomId,
+    required this.roomName,
+    required this.branchId,
+    required this.branchName,
+    required this.weekday,
+    required this.beginTime,
+    required this.durationMinutes,
+    required this.changedFields,
+    required this.sortBucket,
+    required this.sortAt,
+    required this.lessonId,
+    required this.sourceSeriesId,
+  });
+
+  factory ScheduleRuleTimelineEntry.fromMap(Map<String, dynamic> map) {
+    final rawChangedFields = map['changedFields'];
+    if (rawChangedFields is! List) {
+      throw const FormatException(
+        'Schedule rule timeline changedFields must be a list',
+      );
+    }
+    final sortBucket = _scheduleRuleRequiredInt(map, 'sortBucket');
+    if (sortBucket < 0 || sortBucket > 3) {
+      throw FormatException(
+        'Unknown schedule rule timeline sort bucket: $sortBucket',
+      );
+    }
+    return ScheduleRuleTimelineEntry(
+      id: _scheduleRuleRequiredString(map, 'id'),
+      kind: ScheduleRuleTimelineKind.fromWire(map['kind']),
+      status: ScheduleRuleTimelineStatus.fromWire(map['status']),
+      activeFrom: _scheduleRuleRequiredString(map, 'activeFrom'),
+      activeUntil: _scheduleRuleNullableString(map, 'activeUntil'),
+      scheduledDate: _scheduleRuleNullableString(map, 'scheduledDate'),
+      teacherId: _scheduleRuleRequiredString(map, 'teacherId'),
+      teacherName: _scheduleRuleNullableString(map, 'teacherName'),
+      roomId: _scheduleRuleRequiredString(map, 'roomId'),
+      roomName: _scheduleRuleNullableString(map, 'roomName'),
+      branchId: _scheduleRuleRequiredString(map, 'branchId'),
+      branchName: _scheduleRuleNullableString(map, 'branchName'),
+      weekday: _scheduleRuleRequiredInt(map, 'weekday'),
+      beginTime: _scheduleRuleRequiredString(map, 'beginTime'),
+      durationMinutes: _scheduleRuleRequiredInt(map, 'durationMinutes'),
+      changedFields: List.unmodifiable(
+        rawChangedFields.map(ScheduleRuleTimelineChangedField.fromWire),
+      ),
+      sortBucket: sortBucket,
+      sortAt: _scheduleRuleRequiredString(map, 'sortAt'),
+      lessonId: _scheduleRuleNullableString(map, 'lessonId'),
+      sourceSeriesId: _scheduleRuleRequiredString(map, 'sourceSeriesId'),
+    );
+  }
+
+  final String id;
+  final ScheduleRuleTimelineKind kind;
+  final ScheduleRuleTimelineStatus status;
+  final String activeFrom;
+  final String? activeUntil;
+  final String? scheduledDate;
+  final String teacherId;
+  final String? teacherName;
+  final String roomId;
+  final String? roomName;
+  final String branchId;
+  final String? branchName;
+  final int weekday;
+  final String beginTime;
+  final int durationMinutes;
+  final List<ScheduleRuleTimelineChangedField> changedFields;
+  final int sortBucket;
+  final String sortAt;
+  final String? lessonId;
+  final String sourceSeriesId;
+}
+
 class SchedulePlanRow {
   const SchedulePlanRow({
     required this.id,
@@ -119,6 +246,8 @@ class SchedulePlan {
     required this.endReason,
     required this.rows,
     required this.participants,
+    this.ruleTimeline = const [],
+    this.exceptions = const [],
   });
 
   factory SchedulePlan.fromMap(Map<String, dynamic> map) => SchedulePlan(
@@ -150,6 +279,8 @@ class SchedulePlan {
           ),
         )
         .toList(growable: false),
+    ruleTimeline: _scheduleRuleTimelineList(map['ruleTimeline']),
+    exceptions: _scheduleRuleTimelineList(map['exceptions']),
   );
 
   final String id;
@@ -170,6 +301,8 @@ class SchedulePlan {
   final int? coveredLessonCount;
   final List<SchedulePlanRow> rows;
   final List<SchedulePlanParticipant> participants;
+  final List<ScheduleRuleTimelineEntry> ruleTimeline;
+  final List<ScheduleRuleTimelineEntry> exceptions;
 
   bool get isActive => status == 'active';
   bool get isGroup => kind == 'group';
@@ -186,6 +319,56 @@ class SchedulePlan {
         )
         .toList(growable: false);
   }
+}
+
+List<ScheduleRuleTimelineEntry> _scheduleRuleTimelineList(Object? value) {
+  if (value == null) return const [];
+  if (value is! List) {
+    throw const FormatException('Schedule rule timeline must be a list');
+  }
+  return List.unmodifiable(
+    value.map((entry) {
+      if (entry is! Map) {
+        throw const FormatException(
+          'Schedule rule timeline entry must be an object',
+        );
+      }
+      return ScheduleRuleTimelineEntry.fromMap(
+        Map<String, dynamic>.from(entry),
+      );
+    }),
+  );
+}
+
+String _scheduleRuleRequiredString(Map<String, dynamic> map, String field) {
+  final value = map[field];
+  if (value is! String) {
+    throw FormatException(
+      'Schedule rule timeline field $field must be a string',
+    );
+  }
+  return value;
+}
+
+String? _scheduleRuleNullableString(Map<String, dynamic> map, String field) {
+  final value = map[field];
+  if (value == null) return null;
+  if (value is! String) {
+    throw FormatException(
+      'Schedule rule timeline field $field must be a string or null',
+    );
+  }
+  return value;
+}
+
+int _scheduleRuleRequiredInt(Map<String, dynamic> map, String field) {
+  final value = map[field];
+  if (value is! num || value.toInt() != value) {
+    throw FormatException(
+      'Schedule rule timeline field $field must be an integer',
+    );
+  }
+  return value.toInt();
 }
 
 class SchedulePlanTrayItem {

@@ -13,6 +13,7 @@ import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/models/student_funnel.dart';
+import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/core/models/subscription_purchase.dart';
 
 export 'package:magic_music_crm/core/models/subscription_purchase.dart';

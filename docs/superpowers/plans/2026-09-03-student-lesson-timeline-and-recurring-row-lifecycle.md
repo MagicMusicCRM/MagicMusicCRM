@@ -373,7 +373,7 @@ git commit -m "feat: remove recurring rows with signed impact preview"
 - Consumes: Task 1 `StudentLessonTimelinePage` JSON and Task 2 `ruleTimeline` JSON.
 - Produces: `MagicCrmService.listStudentLessonTimeline`, immutable timeline models, and `StudentLessonTimelineController` page/load/retry methods.
 
-- [ ] **Step 1: Write failing parsing and paging tests**
+- [x] **Step 1: Write failing parsing and paging tests**
 
 ```dart
 test('parses origins, coverage, and reschedule links', () {
@@ -393,13 +393,13 @@ test('paging replaces the visible page without mixing plan trays', () async {
 });
 ```
 
-- [ ] **Step 2: Run the focused Flutter tests**
+- [x] **Step 2: Run the focused Flutter tests**
 
 Run: `flutter test test/core/models/student_lesson_timeline_test.dart test/features/schedule/student_lesson_timeline_controller_test.dart`
 
 Expected: FAIL because the model, service method, and controller do not exist.
 
-- [ ] **Step 3: Implement typed models and service call**
+- [x] **Step 3: Implement typed models and service call**
 
 ```dart
 Future<StudentLessonTimelinePage> listStudentLessonTimeline({
@@ -412,7 +412,7 @@ Future<StudentLessonTimelinePage> listStudentLessonTimeline({
 
 The controller exposes `page`, `loading`, `paging`, `error`, `load()`, `previous()`, `next()`, and `retry()`. It discards late responses after the student ID changes and keeps the previous successful page visible during a page failure.
 
-- [ ] **Step 4: Parse the recurring rule timeline**
+- [x] **Step 4: Parse the recurring rule timeline**
 
 Add `ScheduleRuleTimelineEntry` to `schedule_plan.dart` with exact enum fallbacks that report unknown server values as parse errors in debug tests instead of silently treating them as active rules.
 
@@ -420,7 +420,7 @@ Run: `flutter test test/core/models/student_lesson_timeline_test.dart test/core/
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the Flutter data layer**
+- [x] **Step 5: Commit the Flutter data layer**
 
 ```powershell
 git add lib/core/models/student_lesson_timeline.dart lib/core/models/schedule_plan.dart lib/core/services/magic_crm_service_schedule.dart lib/features/crm/presentation/client_card/student_lesson_timeline_controller.dart test/core/models/student_lesson_timeline_test.dart test/core/models/schedule_plan_test.dart test/features/schedule/student_lesson_timeline_controller_test.dart

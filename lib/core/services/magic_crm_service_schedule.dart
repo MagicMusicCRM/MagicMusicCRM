@@ -3,6 +3,23 @@ part of 'magic_crm_service.dart';
 /// Schedule & lessons: matrix, lessons, tasks, comments,
 /// timeline, progress notes, subscriptions, ledger, schedule series.
 extension MagicCrmSchedule on MagicCrmService {
+  Future<StudentLessonTimelinePage> listStudentLessonTimeline({
+    required String studentId,
+    String? cursor,
+    String direction = 'next',
+    int limit = 24,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/students/${Uri.encodeComponent(studentId)}/lesson-timeline',
+      queryParameters: {
+        'cursor': ?cursor,
+        'direction': direction,
+        'limit': limit,
+      },
+    );
+    return StudentLessonTimelinePage.fromJson(response);
+  }
+
   Future<Map<String, dynamic>> getLessonDecisionCatalog({String? branchId}) =>
       _api.get<Map<String, dynamic>>(
         '/crm/configuration/lesson-decisions',

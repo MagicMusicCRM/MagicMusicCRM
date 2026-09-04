@@ -2,6 +2,75 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 
 void main() {
+  test('plan parses recurring rules and dated exceptions exactly', () {
+    final plan = SchedulePlan.fromMap({
+      'id': 'plan-1',
+      'kind': 'individual',
+      'title': 'Фортепиано',
+      'studentId': 'student-1',
+      'activeFrom': '2026-09-01',
+      'status': 'active',
+      'version': 3,
+      'rows': <dynamic>[],
+      'participants': <dynamic>[],
+      'ruleTimeline': [
+        _ruleTimelineJson(),
+        _ruleTimelineJson(
+          id: 'lesson-exception',
+          kind: 'dated_exception',
+          status: 'expired',
+          scheduledDate: '2026-09-02',
+          activeUntil: '2026-09-02',
+          changedFields: const ['teacherId', 'roomId'],
+          sortBucket: 3,
+          lessonId: 'lesson-exception',
+        ),
+      ],
+      'exceptions': [
+        _ruleTimelineJson(
+          id: 'lesson-exception',
+          kind: 'dated_exception',
+          status: 'expired',
+          scheduledDate: '2026-09-02',
+          activeUntil: '2026-09-02',
+          changedFields: const ['teacherId', 'roomId'],
+          sortBucket: 3,
+          lessonId: 'lesson-exception',
+        ),
+      ],
+    });
+
+    expect(
+      plan.ruleTimeline.first.kind,
+      ScheduleRuleTimelineKind.recurringRule,
+    );
+    expect(plan.ruleTimeline.first.status, ScheduleRuleTimelineStatus.active);
+    expect(plan.ruleTimeline.first.lessonId, isNull);
+    expect(
+      plan.ruleTimeline.last.kind,
+      ScheduleRuleTimelineKind.datedException,
+    );
+    expect(plan.ruleTimeline.last.status, ScheduleRuleTimelineStatus.expired);
+    expect(plan.ruleTimeline.last.changedFields, [
+      ScheduleRuleTimelineChangedField.teacherId,
+      ScheduleRuleTimelineChangedField.roomId,
+    ]);
+    expect(plan.exceptions.single.lessonId, 'lesson-exception');
+  });
+
+  test('rule timeline rejects unknown server enum values', () {
+    for (final entry in [
+      _ruleTimelineJson(kind: 'current_rule'),
+      _ruleTimelineJson(status: 'current'),
+      _ruleTimelineJson(changedFields: const ['teacher']),
+    ]) {
+      expect(
+        () => ScheduleRuleTimelineEntry.fromMap(entry),
+        throwsFormatException,
+      );
+    }
+  });
+
   test('group plan exposes only the latest dated participant slice', () {
     final plan = SchedulePlan.fromMap({
       'id': 'plan-group',
@@ -119,3 +188,35 @@ void main() {
     expect(page.items.single.roomName, 'Класс 1');
   });
 }
+
+Map<String, dynamic> _ruleTimelineJson({
+  String id = 'series-1',
+  String kind = 'recurring_rule',
+  String status = 'active',
+  String? activeUntil,
+  String? scheduledDate,
+  List<String> changedFields = const [],
+  int sortBucket = 0,
+  String? lessonId,
+}) => {
+  'id': id,
+  'kind': kind,
+  'status': status,
+  'activeFrom': '2026-09-01',
+  'activeUntil': activeUntil,
+  'scheduledDate': scheduledDate,
+  'teacherId': 'teacher-1',
+  'teacherName': 'Мария Иванова',
+  'roomId': 'room-1',
+  'roomName': 'Класс 1',
+  'branchId': 'branch-1',
+  'branchName': 'Центр',
+  'weekday': 4,
+  'beginTime': '15:30',
+  'durationMinutes': 45,
+  'changedFields': changedFields,
+  'sortBucket': sortBucket,
+  'sortAt': scheduledDate ?? activeUntil ?? '2026-09-01',
+  'lessonId': lessonId,
+  'sourceSeriesId': 'series-1',
+};
