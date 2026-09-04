@@ -474,15 +474,7 @@ export class SchedulePlanMutationService {
     replaceableDates: Map<string, string[]>,
   ) {
     const lessonIds: string[] = [];
-    for (const [index, row] of rows.entries()) {
-      await this.series.validatePlanRow(
-        client,
-        row,
-        prepared.effectiveFrom,
-        prepared.activeUntil,
-        prepared.studentIds,
-        includePast,
-      );
+    for (const [index] of rows.entries()) {
       const seriesId = seriesIds[index]!;
       await this.materializer.materializePlanSeries(client, seriesId, {
         includePast,

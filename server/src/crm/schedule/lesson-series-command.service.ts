@@ -1,3 +1,4 @@
+import { unchangedScheduleLessonSql } from "./schedule-lesson-template";
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { PoolClient } from "pg";
@@ -303,8 +304,29 @@ export class LessonSeriesCommandService {
       occurrences.length > 0
         ? occurrences
         : [await this.firstPlanOccurrence(client, dto)];
+    // The materializer retains these dates across a row's lineage. Preview only
+    // occurrences that will actually be created, not an individually edited lesson.
+    const preserved = row.seriesId
+      ? await client.query<{ local_date: string }>(`
+          with recursive lineage as (
+            select id, plan_id from app.schedule_series where id = $1
+            union
+            select previous.id, previous.plan_id from app.schedule_series previous
+            join lineage current on previous.superseded_by = current.id
+              and previous.plan_id = current.plan_id
+          )
+          select lesson.series_date::text as local_date
+          from app.lessons lesson join app.schedule_series series on series.id = lesson.series_id
+          where series.id in (select id from lineage)
+            and lesson.deleted_at is null
+            and lesson.original_scheduled_at is null
+            and (lesson.lifecycle_state <> 'scheduled' or not (${unchangedScheduleLessonSql}))
+        `, [row.seriesId])
+      : { rows: [] };
+    const preservedDates = new Set(preserved.rows.map((item) => item.local_date));
     const failures: SchedulePlanRowConstraintPreview["failures"] = [];
     for (const occurrence of validationOccurrences) {
+      if (preservedDates.has(occurrence.localDate)) continue;
       for (const studentId of studentIds) {
         const result = await this.constraints.validate(
           {

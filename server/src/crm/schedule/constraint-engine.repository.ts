@@ -1,3 +1,4 @@
+import { unchangedScheduleLessonSql } from "./schedule-lesson-template";
 import { Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
@@ -198,7 +199,10 @@ export class ConstraintEngineRepository {
              or lesson.series_id is null
              or not (
                lesson.series_id = any(candidate.exclude_schedule_series_ids)
-               and lesson.original_scheduled_at is null
+               and exists (select 1 from app.schedule_series series
+                 where series.id = lesson.series_id and (
+                   (series.plan_id is null and lesson.original_scheduled_at is null)
+                   or (series.plan_id is not null and (${unchangedScheduleLessonSql}))))
              )
            )
         ),
@@ -227,7 +231,10 @@ export class ConstraintEngineRepository {
              or lesson.series_id is null
              or not (
                lesson.series_id = any(candidate.exclude_schedule_series_ids)
-               and lesson.original_scheduled_at is null
+               and exists (select 1 from app.schedule_series series
+                 where series.id = lesson.series_id and (
+                   (series.plan_id is null and lesson.original_scheduled_at is null)
+                   or (series.plan_id is not null and (${unchangedScheduleLessonSql}))))
              )
            )
         ),
@@ -280,7 +287,10 @@ export class ConstraintEngineRepository {
              or lesson.series_id is null
              or not (
                lesson.series_id = any(candidate.exclude_schedule_series_ids)
-               and lesson.original_scheduled_at is null
+               and exists (select 1 from app.schedule_series series
+                 where series.id = lesson.series_id and (
+                   (series.plan_id is null and lesson.original_scheduled_at is null)
+                   or (series.plan_id is not null and (${unchangedScheduleLessonSql}))))
              )
            )
         )

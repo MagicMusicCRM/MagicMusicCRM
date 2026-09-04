@@ -170,6 +170,62 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("preserves individual unpaid and resource exceptions when a recurring policy changes", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    await pool.query("update app.users set role='director' where id=$1", [fixture.managerId]);
+    try {
+      const template = row(fixture, isoWeekday(fixture.effectiveFrom), "10:00");
+      const created = await plans.create(actor, {
+        kind: "individual", title: "Preserve individual decisions",
+        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.effectiveFrom, activeUntil: fixture.until60, rows: [template],
+      }, { idempotencyKey: randomUUID(), requestId: randomUUID() });
+      const ordered = await pool.query<{ id: string }>(
+        "select id from app.lessons where series_id=$1 and deleted_at is null order by scheduled_at",
+        [created.seriesIds[0]],
+      );
+      const unpaidId = ordered.rows[0]!.id;
+      const replacementId = ordered.rows[1]!.id;
+      await database.transaction(async (client) => {
+        const current = (await settlement.loadPlan(client, unpaidId))!;
+        const prepared = await settlement.preparePlan(client, fixture.branchId, {
+          ...current.decision, settlementTypeKey: "unpaid_miss",
+          teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: fixture.studentIds[0]!, chargeType: "subscription",
+            subscriptionId: fixture.subscriptionIds[0]! }],
+        });
+        await settlement.replacePlan(client, { ...prepared, lessonId: unpaidId,
+          expectedVersion: current.version, selectedBy: actor.userId, reasonText: "Индивидуальный пропуск" });
+        await reservations.releaseForLessons(client, [unpaidId]);
+        await client.query("update app.lessons set teacher_id=$2, room_id=$3 where id=$1",
+          [replacementId, additional.teacherId, additional.roomId]);
+      });
+      const snapshot = async () => (await pool.query(`select lesson.id,
+          lesson.teacher_id, lesson.room_id, decision.decision, decision.version,
+          (select coalesce(sum(units),0)::text from app.lesson_reservations
+            where lesson_id=lesson.id and state='reserved') as reserved
+        from app.lessons lesson join app.lesson_settlement_plans decision on decision.lesson_id=lesson.id
+        where lesson.id=any($1::uuid[]) and lesson.deleted_at is null order by lesson.id`,
+        [[unpaidId, replacementId]])).rows;
+      const before = await snapshot();
+      const dto = { expectedVersion: created.version, effectiveFrom: fixture.effectiveFrom,
+        activeUntil: fixture.until60, rows: [{ ...template, seriesId: created.seriesIds[0],
+          financialDecision: { ...template.financialDecision, teacherCompensationSource: "automatic" as const } }] };
+      const preview = await plans.previewUpdateConstraints(actor, created.id, dto);
+      expect(preview.rows.flatMap((item) => item.failures)).toEqual([]);
+      const updated = await plans.update(actor, created.id, dto,
+        { idempotencyKey: randomUUID(), requestId: randomUUID() });
+      await database.transaction((client) => materializer.materializePlanSeries(client, updated.seriesIds[0]!));
+      expect(await snapshot()).toEqual(before);
+      const live = await pool.query<{ count: number }>(`select count(*)::int as count
+        from app.lessons lesson join app.schedule_series series on series.id=lesson.series_id
+        where series.plan_id=$1 and lesson.deleted_at is null`, [created.id]);
+      expect(live.rows[0]!.count).toBe(ordered.rows.length);
+    } finally { await cleanup(pool, fixture, additional); }
+  });
+
   it("materializes canonical completion and hourly teacher snapshot, preserving a lesson's edited personal-account funding", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
@@ -5948,3 +6004,4 @@ async function cleanup(
     client.release();
   }
 }
+

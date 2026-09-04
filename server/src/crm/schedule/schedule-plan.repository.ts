@@ -1,3 +1,4 @@
+import { unchangedScheduleLessonSql } from "./schedule-lesson-template";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
@@ -686,7 +687,7 @@ export class SchedulePlanRepository {
       `select (
          lesson.deleted_at is not null
          or lesson.lifecycle_state <> 'scheduled'
-         or lesson.original_scheduled_at is not null
+         or not (${unchangedScheduleLessonSql})
        ) as immutable
        from app.lessons lesson
        join app.schedule_series series on series.id = lesson.series_id
@@ -711,7 +712,7 @@ export class SchedulePlanRepository {
        where series.plan_id = $1 and lesson.series_id = series.id
          and lesson.series_date >= $2::date and lesson.series_date < $3::date
          and lesson.lifecycle_state = 'scheduled'
-         and lesson.original_scheduled_at is null and lesson.deleted_at is null
+         and (${unchangedScheduleLessonSql}) and lesson.deleted_at is null
        returning lesson.id`,
       [planId, from, untilExclusive],
     );
@@ -864,17 +865,7 @@ export class SchedulePlanRepository {
            order by client_id
          ) as client_ids,
          (
-           lesson.original_scheduled_at is null
-           and lesson.predecessor_id is null
-           and lesson.teacher_id is not distinct from series.teacher_id
-           and lesson.room_id is not distinct from series.room_id
-           and lesson.branch_id is not distinct from series.branch_id
-           and lesson.duration_minutes = series.duration_minutes
-           and lesson.series_date is not null
-           and lesson.scheduled_at = (
-             (lesson.series_date + series.begin_time) at time zone
-             coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow')
-           )
+           ${unchangedScheduleLessonSql}
          ) as matches_series
        from app.lessons lesson
        join app.schedule_series series on series.id = lesson.series_id
@@ -1038,7 +1029,7 @@ export class SchedulePlanRepository {
             now()
           )::date
           and (lesson.lifecycle_state <> 'scheduled'
-            or lesson.original_scheduled_at is not null)
+            or not (${unchangedScheduleLessonSql}))
         order by lesson.series_date, lesson.id
         limit 1
         for update of lesson`,
@@ -1076,7 +1067,7 @@ export class SchedulePlanRepository {
         where series.id = $1 and lesson.series_id = series.id
           and lesson.series_date >= $2::date
           and lesson.lifecycle_state = 'scheduled'
-          and lesson.original_scheduled_at is null
+          and (${unchangedScheduleLessonSql})
           and lesson.deleted_at is null
         returning lesson.id, lesson.series_date::text`,
       [seriesId, effectiveFrom],
