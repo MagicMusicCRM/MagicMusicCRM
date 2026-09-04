@@ -15,6 +15,7 @@ import {
   ArchiveConvertedLeadDto,
 } from "../dto/client-archive.dto";
 import { ClientRefDto, ClientRefType } from "../dto/client-ref.dto";
+import { acquireLessonSettlementLocks } from "../commerce/lesson-settlement-locks";
 
 interface ArchiveSnapshotRow {
   type: ClientRefType;
@@ -359,6 +360,38 @@ export class ClientArchiveService {
            )
          )`,
       [planIds, ref.type, ref.id],
+    );
+
+    const affectedLessons = await client.query<{ id: string }>(
+      `select lesson.id
+       from app.lessons lesson
+       left join app.schedule_series series on series.id = lesson.series_id
+       where lesson.deleted_at is null
+         and lesson.scheduled_at >= now()
+         and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
+         and (
+           series.plan_id = any($1::uuid[])
+           or (
+             series.plan_id is null and series.id is not null and (
+               ($2::text = 'student' and series.student_id = $3::uuid)
+               or (series.client_type = $2 and series.client_id = $3::uuid)
+             )
+           )
+           or (
+             $2::text = 'student' and lesson.group_id is not null
+             and exists (
+               select 1 from app.lesson_snapshot_participants participant
+               where participant.lesson_id = lesson.id
+                 and participant.student_id = $3::uuid
+             )
+           )
+         )
+       order by lesson.id`,
+      [planIds, ref.type, ref.id],
+    );
+    await acquireLessonSettlementLocks(
+      client,
+      affectedLessons.rows.map((lesson) => lesson.id),
     );
 
     let excludedGroupLessons = 0;

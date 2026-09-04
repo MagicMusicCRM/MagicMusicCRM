@@ -11,6 +11,7 @@ import { NotificationsService } from "../../notifications/notifications.service"
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { ClientArchiveService } from "../clients/client-archive.service";
 import { LessonSettlementPort } from "../commerce/lesson-settlement.port";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
@@ -50,6 +51,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
   let settlement: LessonSettlementService;
   let completionWorker: LessonCompletionWorker;
   let corrections: LessonSettlementCorrectionService;
+  let archives: ClientArchiveService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
@@ -77,6 +79,12 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       new PlatformIntegrityRepository(),
     );
     const policy = new CrmPolicy();
+    archives = new ClientArchiveService(
+      database,
+      platform,
+      policy,
+      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+    );
     const validator = new LessonRequiredFieldValidator();
     settlement = new LessonSettlementService(database);
     corrections = new LessonSettlementCorrectionService(database, platform, policy,
@@ -1725,6 +1733,127 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     }
   });
 
+  it("serializes partial group archive and transition commits in both lock orders", async () => {
+    const lifecycle = new LessonLifecycleRepository(database);
+    const run = async (first: "archive" | "transition") => {
+      const fixture = await createFixture(pool, lifecycle);
+      const actor = { userId: fixture.managerId, role: "director" as const };
+      const staleDecision = {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+        clientDecisions: [fixture.studentId, fixture.secondStudentId]
+          .map((clientId) => ({ clientId })),
+      };
+      const previewDto = {
+        expectedVersion: 1,
+        reasonCode: "school.cancelled",
+        reasonText: "Конкурентная проверка архива и перехода",
+        financialDecision: staleDecision,
+      };
+      const archiveDto = {
+        type: "student" as const,
+        id: fixture.secondStudentId,
+        expectedVersion: 1,
+        reason: `test.transition-race.${first}`,
+        confirm: true as const,
+      };
+      const blocker = await pool.connect();
+      let archivePromise: Promise<unknown> | undefined;
+      let transitionPromise: Promise<unknown> | undefined;
+      try {
+        await pool.query("update app.users set role = 'director' where id = $1", [
+          fixture.managerId,
+        ]);
+        const scheduled = await pool.query<{ version: number | string }>(
+          "update app.lessons set scheduled_at = now() + interval '1 day' where id = $1 returning version",
+          [fixture.groupSourceId],
+        );
+        previewDto.expectedVersion = Number(scheduled.rows[0]!.version);
+        const signedPreview = await service.previewCancel(
+          actor,
+          fixture.groupSourceId,
+          previewDto,
+        );
+        const transition = () => service.cancel(actor, fixture.groupSourceId, {
+          ...previewDto,
+          previewToken: signedPreview.previewToken!,
+          confirm: true,
+        }, {
+          idempotencyKey: `transition-race-${first}-${randomUUID()}`,
+          requestId: `transition-race-${first}-${randomUUID()}`,
+        });
+        await blocker.query("begin");
+        if (first === "archive") {
+          await blocker.query(
+            "select id from app.students where id = $1 for update",
+            [fixture.secondStudentId],
+          );
+          archivePromise = archives.archive(actor, archiveDto);
+          const archivePid = await waitForBlockedQuery(
+            pool,
+            "insert into app.lesson_participant_exclusions",
+          );
+          expect(await sessionHoldsAdvisoryLock(pool, archivePid)).toBe(true);
+          transitionPromise = transition();
+          await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+          await blocker.query("commit");
+          await archivePromise;
+          await expect(transitionPromise).rejects.toMatchObject({
+            status: 422,
+            response: { code: "UNKNOWN_LESSON_CLIENT" },
+          });
+        } else {
+          await blocker.query(
+            "select id from app.lessons where id = $1 for update",
+            [fixture.groupSourceId],
+          );
+          transitionPromise = transition();
+          const transitionPid = await waitForBlockedQuery(
+            pool,
+            "select lesson.id",
+          );
+          expect(await sessionHoldsAdvisoryLock(pool, transitionPid)).toBe(true);
+          archivePromise = archives.archive(actor, archiveDto);
+          await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+          await blocker.query("commit");
+          await expect(transitionPromise).resolves.toMatchObject({
+            source: { state: "cancelled" },
+            clientFinancialFactIds: [expect.any(String), expect.any(String)],
+          });
+          await archivePromise;
+        }
+        const evidence = await pool.query<{
+          exclusions: number;
+          facts: number;
+          transitions: number;
+        }>(
+          `select
+             (select count(*)::int from app.lesson_participant_exclusions
+               where lesson_id = $1 and student_id = $2) as exclusions,
+             (select count(*)::int from app.lesson_client_charge_facts
+               where lesson_id = $1) as facts,
+             (select count(*)::int from app.lesson_transitions
+               where lesson_id = $1) as transitions`,
+          [fixture.groupSourceId, fixture.secondStudentId],
+        );
+        expect(evidence.rows[0]).toEqual(first === "archive"
+          ? { exclusions: 1, facts: 0, transitions: 0 }
+          : { exclusions: 0, facts: 2, transitions: 1 });
+      } finally {
+        await blocker.query("rollback").catch(() => undefined);
+        blocker.release();
+        await Promise.allSettled([
+          archivePromise ?? Promise.resolve(),
+          transitionPromise ?? Promise.resolve(),
+        ]);
+        await cleanup(pool, fixture);
+      }
+    };
+
+    await run("archive");
+    await run("transition");
+  });
+
   it("previews and commits an exact frozen lead row", async () => {
     const fixture = await createFixture(
       pool,
@@ -2327,6 +2456,43 @@ async function transitionCounts(pool: Pool, lessonId: string) {
     [lessonId],
   );
   return { ...result.rows[0]!, version: Number(result.rows[0]!.version) };
+}
+
+async function waitForBlockedQuery(pool: Pool, fragment: string): Promise<number> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ pid: number }>(
+      `select pid from pg_stat_activity
+       where datname = current_database()
+         and wait_event_type = 'Lock'
+         and query ilike $1
+       order by query_start desc limit 1`,
+      [`%${fragment}%`],
+    );
+    if (result.rows[0]) return result.rows[0].pid;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const active = await pool.query<{ pid: number; state: string; wait_event_type: string | null; query: string }>(
+    `select pid, state, wait_event_type, query from pg_stat_activity
+     where datname = current_database() and state <> 'idle' order by query_start`,
+  );
+  throw new Error(
+    `Timed out waiting for blocked query: ${fragment}; active=${JSON.stringify(active.rows)}`,
+  );
+}
+
+async function sessionHoldsAdvisoryLock(
+  pool: Pool,
+  pid: number,
+): Promise<boolean> {
+  const result = await pool.query<{ held: boolean }>(
+    `select exists(
+       select 1 from pg_locks
+       where pid = $1 and locktype = 'advisory' and granted
+     ) as held`,
+    [pid],
+  );
+  return result.rows[0]!.held;
 }
 
 async function effectiveSubscriptionUnits(

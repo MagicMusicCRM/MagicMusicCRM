@@ -1,13 +1,10 @@
 import {
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  UnprocessableEntityException,
+  ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
+import { acquireLessonSettlementLocks } from "../commerce/lesson-settlement-locks";
 import {
   LESSON_SETTLEMENT_PORT,
   type LessonSettlementPort,
@@ -75,6 +72,7 @@ export class LessonTransitionPreparationService {
     client?: PoolClient,
     lock = false,
   ): Promise<TransitionSource> {
+    if (client) await acquireLessonSettlementLocks(client, [lessonId]);
     const query = client
       ? client.query.bind(client)
       : this.database.query.bind(this.database);

@@ -44,16 +44,14 @@ import {
   assertLessonSubscriptionSelection,
   reserveLessonSettlementSubscriptions,
 } from "./lesson-settlement-subscription-capacity";
+import { acquireLessonSettlementLocks } from "./lesson-settlement-locks";
 
 export async function settleLesson(
   client: PoolClient,
   lessonId: string,
   input?: LessonSettlementInput,
 ): Promise<LessonSettlementResult> {
-  await client.query(
-    "select pg_advisory_xact_lock(hashtextextended($1, 0))",
-    [`commerce:lesson-settlement:${lessonId}`],
-  );
+  await acquireLessonSettlementLocks(client, [lessonId]);
   const existing = await loadLessonSettlementFacts(client, lessonId);
   if (existing && !input?.correction) {
     if (input) {
