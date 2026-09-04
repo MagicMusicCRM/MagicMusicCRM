@@ -170,6 +170,8 @@ import { SchedulePlanMutationService } from "./schedule/schedule-plan-mutation.s
 import { SchedulePlanEndService } from "./schedule/schedule-plan-end.service";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
 import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
+import { StudentLessonTimelineRepository } from "./schedule/student-lesson-timeline.repository";
+import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline.service";
 
 @Module({
   imports: [
@@ -303,6 +305,8 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     LessonCompletionService,
     LessonCompletionWorker,
     LessonSettlementCorrectionService,
+    StudentLessonTimelineRepository,
+    StudentLessonTimelineService,
     PackageCatalogRepository,
     PackageCatalogService,
     SubscriptionPurchaseTermsService,

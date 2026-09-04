@@ -66,6 +66,8 @@ import {
   LessonSettlementCorrectionPreviewDto,
 } from "./dto/lesson-settlement-correction.dto";
 import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
+import { StudentLessonTimelineQuery } from "./dto/student-lesson-timeline.query";
+import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -81,7 +83,17 @@ export class CrmScheduleController {
     private readonly v4DomainFlags: V4DomainFlagsService,
     private readonly schedulePlans: SchedulePlanService,
     private readonly settlementCorrections: LessonSettlementCorrectionService,
+    private readonly studentLessonTimelines: StudentLessonTimelineService,
   ) {}
+
+  @Get("students/:studentId/lesson-timeline")
+  studentLessonTimeline(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Query() query: StudentLessonTimelineQuery,
+  ) {
+    return this.studentLessonTimelines.list(actor, studentId, query);
+  }
 
   @Get("schedule-plans")
   listSchedulePlans(

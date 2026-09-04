@@ -58,6 +58,9 @@ describe("CrmScheduleController rollout boundary", () => {
       commit: jest.fn(),
       history: jest.fn(),
     };
+    const studentLessonTimeline = {
+      list: jest.fn().mockResolvedValue({ items: [] }),
+    };
     const flags = {
       get: jest.fn(() => ({ effectivePath })),
       assertEnabled: jest.fn(() => {
@@ -76,6 +79,7 @@ describe("CrmScheduleController rollout boundary", () => {
         flags,
         schedulePlans as never,
         settlementCorrections as never,
+        studentLessonTimeline as never,
       ),
       lessonMutations,
       lessonTeacherRates,
@@ -85,6 +89,7 @@ describe("CrmScheduleController rollout boundary", () => {
       lessonCommands,
       schedulePlans,
       settlementCorrections,
+      studentLessonTimeline,
     };
   }
 
@@ -198,6 +203,19 @@ describe("CrmScheduleController rollout boundary", () => {
     expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(
       actor,
       {},
+    );
+  });
+
+  it("routes the canonical student lesson timeline through its query service", async () => {
+    const { controller: subject, studentLessonTimeline } = controller("v4");
+    const query = { direction: "next", cursor: "opaque", limit: 24 } as never;
+
+    await subject.studentLessonTimeline(actor, "student-a", query);
+
+    expect(studentLessonTimeline.list).toHaveBeenCalledWith(
+      actor,
+      "student-a",
+      query,
     );
   });
 
