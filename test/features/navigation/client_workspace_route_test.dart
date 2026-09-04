@@ -403,6 +403,40 @@ void main() {
             'hasNext': false,
           },
         },
+        studentLessonTimelinePage: const {
+          'items': [
+            {
+              'id': 'lesson-1',
+              'version': 1,
+              'scheduledAt': '2026-08-08T12:00:00.000Z',
+              'durationMinutes': 60,
+              'lifecycleState': 'scheduled',
+              'student': {'id': 'student-1', 'name': 'Анна Смирнова'},
+              'group': null,
+              'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
+              'room': null,
+              'branch': {'id': 'branch-1', 'name': 'Главный'},
+              'origin': {
+                'kind': 'generated',
+                'planId': 'plan-1',
+                'seriesId': 'series-1',
+              },
+              'settlement': {
+                'coveredBySubscription': false,
+                'settlementTypeKey': 'free_lesson',
+              },
+              'reschedule': {
+                'predecessorId': null,
+                'successorId': null,
+                'actionableLessonId': 'lesson-1',
+              },
+            },
+          ],
+          'previousCursor': null,
+          'nextCursor': null,
+          'hasPrevious': false,
+          'hasNext': false,
+        },
       );
       await tester.pumpWidget(
         _app(
@@ -471,7 +505,7 @@ void main() {
       expect(find.byKey(const Key('client-calendar-widget')), findsNothing);
       expect(find.text('Постоянные расписания'), findsOneWidget);
       expect(find.text('Индивидуальный вокал'), findsOneWidget);
-      expect(find.byKey(const Key('client-lesson-date-tray')), findsOneWidget);
+      expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
       expect(find.text('Фактические занятия'), findsNothing);
       expect(find.text('Предстоящие'), findsNothing);
       expect(find.text('Прошедшие'), findsNothing);
@@ -523,9 +557,9 @@ void main() {
         ),
       );
       await tester.ensureVisible(
-        find.byKey(const ValueKey('client-lesson-lesson-1')),
+        find.byKey(const ValueKey('student-timeline-lesson-1')),
       );
-      await tester.tap(find.byKey(const ValueKey('client-lesson-lesson-1')));
+      await tester.tap(find.byKey(const ValueKey('student-timeline-lesson-1')));
       await tester.pumpAndSettle();
       expect(find.text('Изменить занятие'), findsOneWidget);
       await tester.binding.handlePopRoute();

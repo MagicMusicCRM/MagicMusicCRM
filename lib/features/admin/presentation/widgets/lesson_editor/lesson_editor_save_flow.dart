@@ -238,7 +238,10 @@ class LessonEditorSaveFlow {
       _financialPreview = preview;
       return LessonSavePreview(preview);
     } catch (error, stackTrace) {
-      final recovered = await _decisionController?.recoverStaleCommit(error);
+      final recovered = await _decisionController?.recoverStaleCommit(
+        error,
+        reloadLesson: false,
+      );
       if (recovered == null) {
         return LessonSaveFailure(mapLessonTransitionFailure(error), stackTrace);
       }
@@ -271,6 +274,7 @@ class LessonEditorSaveFlow {
       successor: request.successor,
       resources: request.resources,
       canManageTeacherCompensation: canManageTeacherCompensation,
+      reloadStaleLesson: false,
       afterCommit: decision.noteUpdate == null
           ? null
           : (result) => saveConfirmedNotes(decision.noteUpdate!, result),

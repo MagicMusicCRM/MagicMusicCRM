@@ -631,6 +631,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
           ],
           if (chargeTypes[participants[index].id] != null) ...[
             DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
               key: Key('lesson-decision-charge-type-${participants[index].id}'),
               initialValue: chargeTypes[participants[index].id],
               decoration: const InputDecoration(labelText: 'Источник средств'),

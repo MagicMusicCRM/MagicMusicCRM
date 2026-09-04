@@ -175,7 +175,26 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const actor = { userId: fixture.managerId, role: "manager" as const };
     try {
       await pool.query("insert into app.teacher_rates (teacher_id, rate, effective_from) values ($1, 1200, '2020-01-01')", [fixture.teacherId]);
-      const dto = { kind: "individual" as const, title: "Оплата занятия", studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0], activeFrom: fixture.today, activeUntil: null, rows: [{ ...row(fixture, 1, "10:00"), durationMinutes: 45 }] };
+      const fundingRow = row(fixture, 1, "10:00");
+      const dto = {
+        kind: "individual" as const,
+        title: "Оплата занятия",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: null,
+        rows: [{
+          ...fundingRow,
+          durationMinutes: 45,
+          financialDecision: {
+            ...fundingRow.financialDecision,
+            clientDecisions: [{
+              clientId: fixture.studentIds[0]!,
+              chargeDurationMinutes: 45,
+            }],
+          },
+        }],
+      };
       const created = await plans.create(actor, dto, { idempotencyKey: `funding-plan-${randomUUID()}`, requestId: randomUUID() });
       const lessonId = created.lessonIds[0]!;
       const snapshots = await pool.query("select completion_type, teacher_compensation_type, teacher_compensation_value::text from app.lesson_snapshots where lesson_id=$1", [lessonId]);
@@ -4501,6 +4520,12 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           requestId: `request-${randomUUID()}`,
         },
       );
+      const futureEligible = await pool.query<{ count: number }>(
+        `select count(*)::int as count from app.lessons
+         where id = any($1::uuid[]) and scheduled_at >= now()
+           and lifecycle_state in ('scheduled', 'settlement_pending')`,
+        [created.lessonIds],
+      );
       const updateIdempotencyKey = `archive-plan-update-${randomUUID()}`;
       await blocker.query("begin");
       const blockerPid = await backendPid(blocker);
@@ -4599,7 +4624,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         series_count: 1,
         continuation_count: 0,
         lesson_count: created.lessonIds.length,
-        cancelled_count: created.lessonIds.length,
+        cancelled_count: futureEligible.rows[0]!.count,
         idempotency: 0,
         update_audit: 0,
         plan_outbox: 1,

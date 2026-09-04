@@ -133,11 +133,12 @@ export class CrmConfigurationService {
 
   async saveDraft(actor: ActorContext, dto: SaveCrmConfigurationDraftDto) {
     await this.assertScope(actor, dto.branchId);
-    const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
     const current = await resolveEffectiveCrmConfiguration(
       this.database,
       dto.branchId,
     );
+    this.assertRawSystemOwnedCatalogUnchanged(current.snapshot, dto.snapshot);
+    const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
     const currentVersion = dto.branchId
       ? current.branchVersion
       : current.schoolVersion;
@@ -178,11 +179,15 @@ export class CrmConfigurationService {
 
   async preview(actor: ActorContext, dto: SaveCrmConfigurationDraftDto) {
     await this.assertScope(actor, dto.branchId);
-    const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
     const effective = await resolveEffectiveCrmConfiguration(
       this.database,
       dto.branchId,
     );
+    this.assertRawSystemOwnedCatalogUnchanged(
+      effective.snapshot,
+      dto.snapshot,
+    );
+    const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
     this.assertSystemOwnedCatalogUnchanged(effective.snapshot, snapshot);
     return buildCrmConfigurationImpact({
       next: snapshot,
@@ -264,7 +269,6 @@ export class CrmConfigurationService {
         message: "Укажите причину публикации.",
       });
     }
-    const requested = normalizeCrmConfigurationSnapshot(dto.snapshot);
     const result = await this.database.transaction(async (client) => {
       await client.query("select pg_advisory_xact_lock(hashtext($1))", [
         `crm-configuration:${dto.branchId ?? "school"}`,
@@ -286,6 +290,11 @@ export class CrmConfigurationService {
           currentVersion,
         });
       }
+      this.assertRawSystemOwnedCatalogUnchanged(
+        effective.snapshot,
+        dto.snapshot,
+      );
+      const requested = normalizeCrmConfigurationSnapshot(dto.snapshot);
       this.assertSystemOwnedCatalogUnchanged(effective.snapshot, requested);
       const impact = await buildCrmConfigurationImpact({
         next: requested,
@@ -389,6 +398,27 @@ export class CrmConfigurationService {
   private assertSystemOwnedCatalogUnchanged(
     current: ConfigSnapshot,
     next: ConfigSnapshot,
+  ): void {
+    if (
+      sameCrmConfigurationValue(
+        current.lessonSettlementTypes,
+        next.lessonSettlementTypes,
+      ) &&
+      sameCrmConfigurationValue(
+        current.teacherCompensationRules,
+        next.teacherCompensationRules,
+      )
+    ) {
+      return;
+    }
+    throw new ForbiddenException({
+      code: "SYSTEM_SETTLEMENT_POLICY_READ_ONLY",
+    });
+  }
+
+  private assertRawSystemOwnedCatalogUnchanged(
+    current: ConfigSnapshot,
+    next: Record<string, unknown>,
   ): void {
     if (
       sameCrmConfigurationValue(

@@ -18,6 +18,10 @@ void main() {
       'lib/features/admin/presentation/widgets/lesson_editor/'
       'lesson_editor_decision_policy.dart',
     ).readAsStringSync();
+    final presenter = File(
+      'lib/features/admin/presentation/widgets/lesson_editor/'
+      'lesson_editor_save_presenter.dart',
+    ).readAsStringSync();
 
     expect(shell, isNot(contains("part 'create_lesson_dialog_view.dart'")));
     expect(shell, isNot(contains('part of ')));
@@ -41,8 +45,8 @@ void main() {
     }
     expect(shell, contains('class _LessonEditorDialogState'));
     expect(shell, contains('implements LessonEditorActions'));
-    expect(shell, contains('showMagicDatePicker('));
-    expect(shell, contains('showMagicTimePicker('));
+    expect(presenter, contains('showMagicDatePicker('));
+    expect(presenter, contains('showMagicTimePicker('));
     expect(shell, contains('LessonEditorDataController'));
     expect(shell, contains('LessonEditorScheduleController'));
     expect(shell, contains('LessonEditorSaveFlow'));

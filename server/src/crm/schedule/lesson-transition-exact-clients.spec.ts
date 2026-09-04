@@ -278,11 +278,11 @@ describe("lesson transition exact frozen clients", () => {
   });
 
   it.each([
-    ["none", 0, "none", undefined],
-    ["fixed", 700, "fixed", "70000"],
+    ["none", 0],
+    ["fixed", 700],
   ] as const)(
-    "preserves a no-plan legacy %s teacher snapshot as an ambiguous manual decision",
-    async (legacyType, legacyValue, expectedRule, expectedValue) => {
+    "recomputes a successor instead of copying a no-plan legacy %s teacher snapshot",
+    async (legacyType, legacyValue) => {
       const manager = { userId: "manager-a", role: "manager" as const };
       const policy = {
         canManageTeacherCompensation: jest.fn(() => false),
@@ -296,6 +296,7 @@ describe("lesson transition exact frozen clients", () => {
         resolvePlannedPlan: jest.fn(async (_client, input) => ({
           decision: {
             ...input.decision,
+            teacherCompensationSource: "automatic" as const,
             ...input.preservedTeacherDecision,
           },
           settlementRevisionId: "settlement-revision",
@@ -309,24 +310,27 @@ describe("lesson transition exact frozen clients", () => {
         teacherCompensationValue: legacyValue,
       };
 
-      await preparationWith(settlement, policy).resolvedEffectiveTransitionDto(
+      const resolved = await preparationWith(settlement, policy)
+        .resolvedEffectiveTransitionDto(
         {} as PoolClient,
         manager,
         source,
-        "cancel",
-        dto(decision([studentA])),
+        "reschedule",
+        rescheduleDto(decision([studentA])),
       );
 
-      expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+      expect(settlement.resolvePlannedPlan).toHaveBeenNthCalledWith(
+        2,
         expect.anything(),
-        expect.objectContaining({
-          preservedTeacherDecision: {
-            teacherCompensationRuleKey: expectedRule,
-            teacherCompensationValueMinor: expectedValue,
-            teacherCompensationSource: "manual",
-          },
-        }),
+        expect.not.objectContaining({ preservedTeacherDecision: expect.anything() }),
       );
+      expect(resolved.operation).toBe("reschedule");
+      if (resolved.operation !== "reschedule") throw new Error("unreachable");
+      expect(resolved.successorFinancialDecision).toMatchObject({
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+        teacherCompensationSource: "automatic",
+      });
     },
   );
 

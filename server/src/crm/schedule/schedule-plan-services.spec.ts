@@ -783,6 +783,7 @@ describe("Schedule plan semantic owners", () => {
       updatePlan: jest.fn(async () => updateEvents.push("update-plan")),
     } as unknown as SchedulePlanRepository;
     const series = {
+      assertPlanExpansionBounds: jest.fn(async () => {}),
       validatePlanRow: jest.fn(async () =>
         updateEvents.push("validate-new-series"),
       ),

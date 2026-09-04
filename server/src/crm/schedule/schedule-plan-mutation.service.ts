@@ -20,28 +20,16 @@ import {
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
 import { assertSchedulePlanMetadata as assertMetadata } from "./schedule-plan-definition.service";
-import {
-  type PreparedSchedulePlanRow,
-  SchedulePlanConstraintPreviewService,
-} from "./schedule-plan-constraint-preview.service";
-import {
-  SchedulePlanRepository,
-} from "./schedule-plan.repository";
+import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
+import type { PreparedSchedulePlanRow } from "./schedule-plan-preview.types";
+import type {
+  SchedulePlanMutationReference as MutationReference,
+  SchedulePlanMutationResult,
+} from "./schedule-plan-mutation.types";
+import { SchedulePlanRepository } from "./schedule-plan.repository";
 import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
-export interface SchedulePlanMutationResult {
-  id: string;
-  seriesIds: string[];
-  lessonIds: string[];
-  version: number;
-  replayed: boolean;
-}
-
-interface MutationReference extends Record<string, unknown> {
-  planId: string;
-  seriesIds: string[];
-  lessonIds: string[];
-}
+export type { SchedulePlanMutationResult } from "./schedule-plan-mutation.types";
 
 @Injectable()
 export class SchedulePlanMutationService {
@@ -183,6 +171,12 @@ export class SchedulePlanMutationService {
       participants: normalized.participants,
       rows: normalized.rows,
     });
+    await this.series.assertPlanExpansionBounds(
+      client,
+      normalized.rows,
+      normalized.activeFrom,
+      normalized.activeUntil,
+    );
     const preparedRows = await this.previews.prepareRows(
       client,
       actor,
@@ -238,6 +232,12 @@ export class SchedulePlanMutationService {
     dto: UpdateSchedulePlanDto,
     prepared: PreparedSchedulePlanUpdate,
   ): Promise<MutationReference> {
+    await this.series.assertPlanExpansionBounds(
+      client,
+      dto.rows,
+      prepared.effectiveFrom,
+      prepared.activeUntil,
+    );
     const preparedRows = await this.previews.prepareRows(
       client,
       actor,

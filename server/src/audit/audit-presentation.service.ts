@@ -169,6 +169,7 @@ const ACTION_TITLES: Record<string, string> = {
   'crm.schedule_plan_ended': 'План занятий завершён',
   'crm.schedule_plan_created': 'План занятий создан',
   'crm.schedule_plan_updated': 'План занятий изменён',
+  'crm.schedule_plan_row_removed': 'Строка расписания удалена',
   'crm.schedule_series_created': 'Серия расписания создана',
   'crm.schedule_series_stopped': 'Серия расписания завершена',
   'crm.schedule_series_updated': 'Серия расписания изменена',

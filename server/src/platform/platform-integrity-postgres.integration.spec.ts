@@ -364,6 +364,14 @@ describe("PlatformIntegrityService (PostgreSQL)", () => {
   });
 
   it("claims distinct events and persists retry, publish, and dead-letter state", async () => {
+    await database.query(`
+      update app.platform_outbox_events
+         set published_at = coalesce(published_at, now()),
+             claimed_at = null,
+             claimed_by = null
+       where aggregate_type <> 'v4-test:aggregate'
+         and published_at is null
+    `);
     const actorKey = `v4-test:${randomUUID()}`;
     for (const aggregateId of [randomUUID(), randomUUID()]) {
       await service.executeVersionedMutation(

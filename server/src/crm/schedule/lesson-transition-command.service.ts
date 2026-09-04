@@ -173,7 +173,11 @@ export class LessonTransitionCommandService {
       expectedVersion: dto.expectedVersion,
       requestId: metadata.requestId,
       audit: {
-        action: this.auditAction(operation),
+        action: operation === "reschedule"
+          ? "crm.lesson_rescheduled"
+          : operation === "cancel"
+            ? "crm.lesson_cancelled"
+            : "crm.lesson_settled",
         entityType: "lesson",
         entityId: actionableLessonId,
         reason: transitionReasonCode(dto),
@@ -356,12 +360,6 @@ export class LessonTransitionCommandService {
     return stableTransitionId(
       `schedule.lesson.reschedule\0${lessonId}\0${actorUserId}\0${idempotencyKey}`,
     );
-  }
-
-  private auditAction(operation: TransitionOperation): string {
-    if (operation === "reschedule") return "crm.lesson_rescheduled";
-    if (operation === "cancel") return "crm.lesson_cancelled";
-    return "crm.lesson_settled";
   }
 
   private outboxAction(operation: TransitionOperation): string {

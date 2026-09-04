@@ -330,6 +330,7 @@ describe('AuditPresentationService', () => {
     ['crm.lesson_settled', 'Занятие проведено'],
     ['crm.lessons_bulk_transitioned', 'Статус занятий изменён'],
     ['crm.schedule_plan_ended', 'План занятий завершён'],
+    ['crm.schedule_plan_row_removed', 'Строка расписания удалена'],
     ['crm.client_internal_note_changed', 'Общая заметка изменена'],
     ['crm.comment_created', 'Комментарий добавлен'],
     ['crm.comment_teacher_sharing_changed', 'Видимость комментария изменена'],

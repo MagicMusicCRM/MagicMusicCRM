@@ -55,7 +55,7 @@ describe("lesson compensation service RBAC", () => {
     });
 
     it("rejects create before lesson, snapshot, or plan persistence", async () => {
-      const client = { query: jest.fn() };
+      const client = { query: jest.fn().mockResolvedValue({ rows: [] }) };
       const settlement = {
         resolvePlannedDecision: jest.fn(() => {
           throw new Error("legacy decision-only resolver used");

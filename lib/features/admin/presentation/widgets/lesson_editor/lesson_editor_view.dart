@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 import '../lesson_decision/lesson_decision_models.dart';
 import 'lesson_editor_decision_policy.dart';
@@ -35,63 +34,6 @@ typedef LessonEditorProgressViewState = (
   bool,
 );
 typedef LessonEditorFeedbackViewState = (String?, String?, String?);
-
-class LessonEditorDismissGuard extends StatefulWidget {
-  const LessonEditorDismissGuard({
-    required this.isDirty,
-    required this.child,
-    super.key,
-  });
-
-  final bool isDirty;
-  final Widget child;
-
-  @override
-  State<LessonEditorDismissGuard> createState() =>
-      _LessonEditorDismissGuardState();
-}
-
-class _LessonEditorDismissGuardState extends State<LessonEditorDismissGuard> {
-  bool _allowPop = false;
-  bool _confirming = false;
-
-  Future<void> _confirmDiscard() async {
-    if (_confirming) return;
-    _confirming = true;
-    final discard = await showMagicDialog<bool>(
-      context: context,
-      useRootNavigator: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Отменить изменения?'),
-        content: const Text('Несохранённые изменения будут потеряны.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Остаться'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Отменить изменения'),
-          ),
-        ],
-      ),
-    );
-    _confirming = false;
-    if (!mounted || discard != true) return;
-    setState(() => _allowPop = true);
-    await WidgetsBinding.instance.endOfFrame;
-    if (mounted) Navigator.of(context).maybePop(false);
-  }
-
-  @override
-  Widget build(BuildContext context) => PopScope<bool>(
-    canPop: _allowPop || !widget.isDirty,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) _confirmDiscard();
-    },
-    child: widget.child,
-  );
-}
 
 class LessonEditorViewModel {
   const LessonEditorViewModel({

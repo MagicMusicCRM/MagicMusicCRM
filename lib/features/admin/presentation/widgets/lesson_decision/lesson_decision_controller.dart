@@ -19,6 +19,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     String? initialSettlementTypeKey,
     String? initialCompensationRuleKey,
     String? initialCompensationValueMinor,
+    this.reloadStaleLesson = true,
     this.afterCommit,
   }) : _crm = crm,
        _initialSettlementTypeKey = initialSettlementTypeKey,
@@ -38,6 +39,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   final String? _initialSettlementTypeKey;
   final String? _initialCompensationRuleKey;
   final String? _initialCompensationValueMinor;
+  final bool reloadStaleLesson;
   final LessonDecisionCommitted? afterCommit;
   final Map<String, dynamic>? resources;
 
@@ -216,7 +218,10 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   int? _expectedVersion;
 
   @override
-  Future<MagicApiException?> recoverStaleCommit(Object error) async {
+  Future<MagicApiException?> recoverStaleCommit(
+    Object error, {
+    bool reloadLesson = true,
+  }) async {
     if (error is! MagicApiException || error.details is! Map) return null;
     final details = Map<String, dynamic>.from(error.details! as Map);
     final code = details['code']?.toString();
@@ -226,19 +231,29 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
         code != 'LESSON_TRANSITION_PREVIEW_STALE') {
       return null;
     }
-    try {
-      final current = await _crm.reloadActionableLesson(
-        lesson,
-        actionableLessonId: lessonTransitionActionableLessonId(error),
-      );
-      lesson
-        ..clear()
-        ..addAll(current);
-      final rawVersion = current['version'];
-      _expectedVersion = rawVersion is num
-          ? rawVersion.toInt()
-          : int.tryParse(rawVersion?.toString() ?? '');
-    } catch (_) {
+    if (reloadLesson) {
+      try {
+        final current = await _crm.reloadActionableLesson(
+          lesson,
+          actionableLessonId: lessonTransitionActionableLessonId(error),
+        );
+        lesson
+          ..clear()
+          ..addAll(current);
+        final rawVersion = current['version'];
+        _expectedVersion = rawVersion is num
+            ? rawVersion.toInt()
+            : int.tryParse(rawVersion?.toString() ?? '');
+      } catch (_) {
+        final rawVersion = details['currentVersion'];
+        final currentVersion = rawVersion is num
+            ? rawVersion.toInt()
+            : int.tryParse(rawVersion?.toString() ?? '');
+        if (currentVersion != null && currentVersion > 0) {
+          _expectedVersion = currentVersion;
+        }
+      }
+    } else {
       final rawVersion = details['currentVersion'];
       final currentVersion = rawVersion is num
           ? rawVersion.toInt()
@@ -381,7 +396,10 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
         data: payload,
       );
     } catch (error) {
-      final recovered = await recoverStaleCommit(error);
+      final recovered = await recoverStaleCommit(
+        error,
+        reloadLesson: reloadStaleLesson,
+      );
       if (recovered != null) throw recovered;
       throw mapLessonTransitionFailure(error);
     }
@@ -409,7 +427,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
       operationKey: operation.apiKey,
       data: data,
       identity: identity,
-      usePut: operation == LessonDecisionOperation.plannedSettlement,
+      usePut: operation.apiKey == 'planned-settlement',
     );
     await afterCommit?.call(result);
     return result;

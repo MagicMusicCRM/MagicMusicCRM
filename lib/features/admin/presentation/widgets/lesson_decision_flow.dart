@@ -11,7 +11,8 @@ import 'lesson_editor/lesson_editor_models.dart';
 
 export 'lesson_decision/lesson_decision_controller.dart';
 export 'lesson_decision/lesson_decision_models.dart';
-export 'lesson_editor/lesson_editor_view.dart' show LessonEditorDismissGuard;
+export 'lesson_editor/lesson_editor_dismiss_guard.dart'
+    show LessonEditorDismissGuard;
 
 Future<bool?> showLessonEditorSurface(
   BuildContext context, {

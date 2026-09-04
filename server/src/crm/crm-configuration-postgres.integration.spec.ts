@@ -450,8 +450,8 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     expect(current).toMatchObject({
       branchVersion: historicalVersion,
       sources: {
-        lessonSettlementTypes: "branch_override",
-        teacherCompensationRules: "branch_override",
+        lessonSettlementTypes: "school",
+        teacherCompensationRules: "school",
       },
     });
 
@@ -475,8 +475,8 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       service.getEffective(director, branchId),
     ).resolves.toMatchObject({
       sources: {
-        lessonSettlementTypes: "branch_override",
-        teacherCompensationRules: "branch_override",
+        lessonSettlementTypes: "school",
+        teacherCompensationRules: "school",
       },
     });
   });

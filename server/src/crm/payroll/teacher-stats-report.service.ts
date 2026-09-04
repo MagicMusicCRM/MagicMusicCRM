@@ -9,54 +9,11 @@ import {
   TeacherMovementTotals,
   TeacherRateEntry,
   TeacherReportRow,
-  TeacherStatsUnitType,
+  TeacherStatsAccumulator,
+  TeacherStatsReportPeriod,
+  TeacherStatsReportTotals,
+  TeacherStatsUnitAccumulator,
 } from "./payroll.types";
-
-interface ReportPeriod {
-  from: string;
-  to: string;
-}
-
-interface UnitAccumulator {
-  compensationKey: string;
-  compensationLabel: string;
-  compensationSource: "automatic" | "manual";
-  unitType: TeacherStatsUnitType;
-  groupId: string | null;
-  studentId: string | null;
-  unitName: string;
-  teacherRate: number | null;
-  days: Map<string, number>;
-  lessonIds: string[];
-  editableLessonIds: string[];
-  settledLessons: number;
-  completedLessons: number;
-  payableLessons: number;
-  hoursTotal: number;
-  scheduledHoursTotal: number;
-  accruedTotal: number;
-}
-
-interface TeacherAccumulator {
-  completedLessons: number;
-  payableLessons: number;
-  hoursTotal: number;
-  scheduledHoursTotal: number;
-  accruedTotal: number;
-  units: Map<string, UnitAccumulator>;
-}
-
-interface ReportTotals {
-  completedLessons: number;
-  payableLessons: number;
-  hoursTotal: number;
-  scheduledHoursTotal: number;
-  accruedTotal: number;
-  bonusTotal: number;
-  deductionTotal: number;
-  paidTotal: number;
-  periodBalance: number;
-}
 
 @Injectable()
 export class TeacherStatsReportService {
@@ -117,7 +74,7 @@ export class TeacherStatsReportService {
     };
   }
 
-  private resolvePeriod(query: TeacherStatsQuery): ReportPeriod {
+  private resolvePeriod(query: TeacherStatsQuery): TeacherStatsReportPeriod {
     const now = new Date();
     const from =
       query.from ??
@@ -164,11 +121,11 @@ export class TeacherStatsReportService {
     });
   }
 
-  private initializeTeachers(ids: string[]): Map<string, TeacherAccumulator> {
+  private initializeTeachers(ids: string[]): Map<string, TeacherStatsAccumulator> {
     return new Map(ids.map((id) => [id, this.emptyTeacher()]));
   }
 
-  private emptyTeacher(): TeacherAccumulator {
+  private emptyTeacher(): TeacherStatsAccumulator {
     return {
       completedLessons: 0,
       payableLessons: 0,
@@ -181,7 +138,7 @@ export class TeacherStatsReportService {
 
   private accumulateLessons(
     lessons: PayrollLessonRow[],
-    teachers: Map<string, TeacherAccumulator>,
+    teachers: Map<string, TeacherStatsAccumulator>,
     names: Map<string, string>,
     rates: Map<string, TeacherRateEntry[]>,
   ): void {
@@ -193,7 +150,7 @@ export class TeacherStatsReportService {
 
   private accumulateLesson(
     lesson: PayrollLessonRow,
-    teachers: Map<string, TeacherAccumulator>,
+    teachers: Map<string, TeacherStatsAccumulator>,
     rates: Map<string, TeacherRateEntry[]>,
   ): void {
     const accrual = this.calculator.computeLessonAccrual(lesson, rates);
@@ -237,7 +194,7 @@ export class TeacherStatsReportService {
     lesson: PayrollLessonRow,
     rate: number,
     compensationSource: "automatic" | "manual",
-  ): UnitAccumulator {
+  ): TeacherStatsUnitAccumulator {
     const labels: Record<string, string> = {
       none: "Не оплачивать",
       standard: "Полная стандартная ставка",
@@ -282,12 +239,12 @@ export class TeacherStatsReportService {
   }
 
   private projectTeachers(
-    teachers: Map<string, TeacherAccumulator>,
+    teachers: Map<string, TeacherStatsAccumulator>,
     names: Map<string, string>,
     salaries: Map<string, number | null>,
     rates: Map<string, TeacherRateEntry[]>,
     movements: Map<string, TeacherMovementTotals>,
-    totals: ReportTotals,
+    totals: TeacherStatsReportTotals,
   ) {
     return [...teachers.entries()].map(([teacherId, teacher]) => {
       const movement = movements.get(teacherId) ?? {
@@ -325,7 +282,7 @@ export class TeacherStatsReportService {
     });
   }
 
-  private projectUnit(unit: UnitAccumulator, currentRate: number) {
+  private projectUnit(unit: TeacherStatsUnitAccumulator, currentRate: number) {
     return {
       compensationKey: unit.compensationKey,
       compensationLabel: unit.compensationLabel,
@@ -364,7 +321,7 @@ export class TeacherStatsReportService {
     return current;
   }
 
-  private compensationTypes(teacher: TeacherAccumulator) {
+  private compensationTypes(teacher: TeacherStatsAccumulator) {
     const types = new Map<string, {
       key: string;
       label: string;
@@ -390,8 +347,8 @@ export class TeacherStatsReportService {
   }
 
   private addTeacherTotals(
-    totals: ReportTotals,
-    teacher: TeacherAccumulator,
+    totals: TeacherStatsReportTotals,
+    teacher: TeacherStatsAccumulator,
     movement: TeacherMovementTotals,
     periodBalance: number,
   ): void {
@@ -406,7 +363,7 @@ export class TeacherStatsReportService {
     totals.periodBalance += periodBalance;
   }
 
-  private projectTotals(totals: ReportTotals) {
+  private projectTotals(totals: TeacherStatsReportTotals) {
     return {
       hoursTotal: this.calculator.round2(totals.hoursTotal),
       scheduledHoursTotal: this.calculator.round2(totals.scheduledHoursTotal),
@@ -421,7 +378,7 @@ export class TeacherStatsReportService {
     };
   }
 
-  private emptyTotals(): ReportTotals {
+  private emptyTotals(): TeacherStatsReportTotals {
     return {
       completedLessons: 0,
       payableLessons: 0,
@@ -435,7 +392,7 @@ export class TeacherStatsReportService {
     };
   }
 
-  private emptyReport(period: ReportPeriod, query: TeacherStatsQuery) {
+  private emptyReport(period: TeacherStatsReportPeriod, query: TeacherStatsQuery) {
     return {
       ...period,
       movementsScope: this.movementsScope(query),

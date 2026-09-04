@@ -251,7 +251,7 @@ describe("lesson settlement execution", () => {
   it("maps reschedule and cancel contexts to their terminal lifecycle state", () => {
     expect(() =>
       assertLessonSettleable(
-        source({ lifecycle_state: "rescheduled" }),
+        source({ lifecycle_state: "scheduled" }),
         "reschedule",
       ),
     ).not.toThrow();

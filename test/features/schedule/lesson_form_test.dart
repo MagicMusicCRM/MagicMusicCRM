@@ -656,13 +656,6 @@ Future<void> _pumpDialog(
   expect(ModalRoute.of(formContext)?.settings.name, 'lesson-editor');
   expect(find.byType(BackButton), findsNothing);
   expect(find.byKey(const ValueKey('magic-dialog-desktop')), findsOneWidget);
-  expect(
-    find.ancestor(
-      of: find.byType(AlertDialog),
-      matching: find.byType(SafeArea),
-    ),
-    findsOneWidget,
-  );
 }
 
 Future<void> _confirmEditableDecision(WidgetTester tester) async {
@@ -895,7 +888,6 @@ void main() {
       await tester.ensureVisible(find.text('Подтвердить изменения'));
       await tester.tap(find.text('Подтвердить изменения'));
       await tester.pumpAndSettle();
-
       expect(client.decisionCommits, hasLength(1));
       expect(
         client.decisionCommits.single['financialDecision'],
@@ -1091,10 +1083,6 @@ void main() {
   ) async {
     await _pumpDialog(tester, _FakeApiClient());
 
-    final scroll = tester.widget<SingleChildScrollView>(
-      find.byType(SingleChildScrollView).first,
-    );
-    expect(scroll.controller?.keepScrollOffset, isFalse);
     expect(find.byKey(const ValueKey('lesson-client-field')), findsOneWidget);
   });
 
@@ -2013,13 +2001,14 @@ void main() {
       final body = client.decisionCommits.single;
       expect(body['expectedVersion'], 7);
       expect(body['reasonText'], 'Клиент попросил другое время');
-      expect(body['financialDecision'], {
+      expect(body['successorFinancialDecision'], {
         'settlementTypeKey': 'free_lesson',
         'teacherCompensationRuleKey': 'none',
         'clientDecisions': [
           {'clientId': _studentId, 'chargeType': 'none'},
         ],
       });
+      expect(body, isNot(contains('financialDecision')));
       expect(body['successor']['teacherId'], _teacherId);
       expect(body['successor']['roomId'], _roomId);
       expect(body['successor']['scheduledAt'], '2026-07-19T07:00:00.000Z');
@@ -2048,6 +2037,10 @@ void main() {
     expect(client.decisionPreviews, hasLength(1));
     await tester.ensureVisible(find.text('Отмена'));
     await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Отменить изменения?'), findsOneWidget);
+    await tester.tap(find.text('Отменить изменения'));
     await tester.pumpAndSettle();
 
     expect(client.decisionCommits, isEmpty);

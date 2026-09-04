@@ -3,7 +3,6 @@ import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
-import type { PreparedLessonSettlementPlan } from "../commerce/lesson-settlement.port";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
@@ -30,41 +29,18 @@ import {
   SchedulePlanOverlapAnalyzer,
   type SchedulePlanRowPreview,
 } from "./schedule-plan-overlap-analyzer";
+import type {
+  PreparedSchedulePlanRow,
+  SchedulePlanConstraintProjection,
+  SchedulePlanHistoricalOccurrence,
+  SchedulePlanHistoricalProjection,
+} from "./schedule-plan-preview.types";
+import { prepareSchedulePlanRow } from "./schedule-plan-row-settlement";
 
-export interface SchedulePlanConstraintProjection {
-  valid: boolean;
-  conflicts: ReturnType<typeof groupScheduleConflicts>;
-  rows: Array<{
-    index: number;
-    valid: boolean;
-    occurrencesChecked: number;
-    failures: SchedulePlanRowPreview["failures"];
-    suggestions: SchedulePlanRowPreview["suggestions"];
-  }>;
-  historical: SchedulePlanHistoricalProjection;
-}
-
-interface SchedulePlanHistoricalOccurrence {
-  rowIndex: number;
-  localDate: string;
-  startAt: string;
-  endAt: string;
-}
-
-interface SchedulePlanHistoricalProjection {
-  confirmRequired: boolean;
-  count: number;
-  from: string | null;
-  until: string | null;
-  occurrences: SchedulePlanHistoricalOccurrence[];
-  previewToken?: string;
-  previewExpiresAt?: string;
-}
-
-export interface PreparedSchedulePlanRow {
-  row: SchedulePlanRowDto;
-  settlementPlan: PreparedLessonSettlementPlan;
-}
+export type {
+  PreparedSchedulePlanRow,
+  SchedulePlanConstraintProjection,
+} from "./schedule-plan-preview.types";
 
 @Injectable()
 export class SchedulePlanConstraintPreviewService {
@@ -97,6 +73,12 @@ export class SchedulePlanConstraintPreviewService {
         participants: normalized.participants,
         rows: normalized.rows,
       });
+      await this.series.assertPlanExpansionBounds(
+        client,
+        normalized.rows,
+        normalized.activeFrom,
+        normalized.activeUntil,
+      );
       const preparedRows = await this.prepareRows(
         client,
         actor,
@@ -142,6 +124,12 @@ export class SchedulePlanConstraintPreviewService {
     return this.database.transaction(async (client) => {
       await acquireLessonSettlementCoordinationGate(client);
       const prepared = await this.definition.prepareUpdate(client, planId, dto);
+      await this.series.assertPlanExpansionBounds(
+        client,
+        dto.rows,
+        this.updatePreviewFrom(prepared),
+        this.updatePreviewUntil(prepared),
+      );
       const preparedRows = await this.prepareRows(
         client,
         actor,
@@ -240,74 +228,17 @@ export class SchedulePlanConstraintPreviewService {
     prepared?: PreparedSchedulePlanUpdate,
   ): Promise<PreparedSchedulePlanRow[]> {
     return Promise.all(
-      rows.map(async (row) => {
-        this.policy.assertCanSupplyTeacherCompensation(
-          actor,
-          row.financialDecision,
-        );
-        const storedSeries = prepared?.activeSeries.find(
-          (series) => series.id === row.seriesId,
-        );
-        const stored = storedSeries?.planned_financial_decision;
-        const requestedDecision = row.financialDecision;
-        const storedTeacherDecision = stored
-          ? teacherDecision(stored)
-          : undefined;
-        const preservesStoredTeacherDecision = Boolean(
-          stored &&
-            stored.teacherCompensationSource !== "automatic" &&
-            (!this.policy.canManageTeacherCompensation(actor) ||
-              sameTeacherDecision(requestedDecision, stored)),
-        );
-        const effectiveDecision = preservesStoredTeacherDecision
-          ? { ...requestedDecision, ...storedTeacherDecision }
-          : requestedDecision;
-        const usesStoredCatalog = stored !== null && stored !== undefined &&
-          fingerprintPayload(effectiveDecision) === fingerprintPayload(stored);
-        const preservedTeacherDecision = preservesStoredTeacherDecision &&
-            storedTeacherDecision
-          ? {
-              ...storedTeacherDecision,
-              teacherCompensationSource:
-                storedTeacherDecision.teacherCompensationSource ?? "manual",
-            }
-          : undefined;
-        const unchangedLegacyWithoutClientDecisions = Boolean(
-          storedSeries &&
-            usesStoredCatalog &&
-            !stored?.clientDecisions?.length,
-        );
-        const settlementPlan = await this.settlement.resolvePlannedPlan(
+      rows.map((row) =>
+        prepareSchedulePlanRow({
           client,
-          {
-            branchId: row.branchId,
-            durationMinutes: row.durationMinutes ?? 60,
-            decision: requestedDecision,
-            actorUserId: actor.userId,
-            authorization:
-              this.policy.teacherCompensationMutationAuthorization(actor),
-            reasonText: row.plannedSettlementReason,
-            ...(storedSeries && usesStoredCatalog
-              ? {
-                  configurationRevisionIds: {
-                    settlementRevisionId:
-                      storedSeries.settlement_revision_id,
-                    compensationRevisionId:
-                      storedSeries.compensation_revision_id,
-                  },
-                }
-              : {}),
-            ...(!unchangedLegacyWithoutClientDecisions
-              ? { requiredClientIds: allowedClientIds }
-              : {}),
-            ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
-          },
-        );
-        return {
-          row: { ...row, financialDecision: settlementPlan.decision },
-          settlementPlan,
-        };
-      }),
+          actor,
+          row,
+          allowedClientIds,
+          policy: this.policy,
+          settlement: this.settlement,
+          prepared,
+        }),
+      ),
     );
   }
 
@@ -558,31 +489,6 @@ export class SchedulePlanConstraintPreviewService {
       ? prepared.plan.active_from
       : prepared.effectiveFrom;
   }
-}
-
-function sameTeacherDecision(
-  left: SchedulePlanRowDto["financialDecision"],
-  right: SchedulePlanRowDto["financialDecision"],
-) {
-  return left.teacherCompensationRuleKey ===
-      right.teacherCompensationRuleKey &&
-    left.teacherCompensationValueMinor ===
-      right.teacherCompensationValueMinor &&
-    left.teacherCreditedDurationMinutes ===
-      right.teacherCreditedDurationMinutes &&
-    left.teacherCompensationSource === right.teacherCompensationSource;
-}
-
-function teacherDecision(
-  decision: SchedulePlanRowDto["financialDecision"],
-) {
-  return {
-    teacherCompensationRuleKey: decision.teacherCompensationRuleKey,
-    teacherCompensationValueMinor: decision.teacherCompensationValueMinor,
-    teacherCreditedDurationMinutes:
-      decision.teacherCreditedDurationMinutes,
-    teacherCompensationSource: decision.teacherCompensationSource,
-  };
 }
 
 interface HistoricalTokenInput {

@@ -1,4 +1,3 @@
-import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'dart:async';
 // ignore_for_file: annotate_overrides
 import 'package:flutter/material.dart';
@@ -13,6 +12,7 @@ import 'lesson_editor/lesson_editor_decision_policy.dart';
 import 'lesson_editor/lesson_editor_initial_mapper.dart';
 import 'lesson_editor/lesson_editor_models.dart';
 import 'lesson_editor/lesson_editor_save_flow.dart';
+import 'lesson_editor/lesson_editor_save_presenter.dart';
 import 'lesson_editor/lesson_editor_schedule_controller.dart';
 import 'lesson_editor/lesson_editor_view.dart';
 
@@ -189,25 +189,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     ),
   );
 
-  bool get _showCompletedMoveWarning {
-    final raw = _session.snapshot?.rawLesson;
-    final lifecycle =
-        (raw?['lifecycle_state'] ?? raw?['lifecycleState'] ?? raw?['status'])
-            ?.toString()
-            .toLowerCase();
-    final completed =
-        lifecycle == 'successfully_completed' ||
-        lifecycle == 'completed' ||
-        lifecycle == 'done';
-    if (!completed) return false;
-    if (widget.focusDateTime) return true;
-    try {
-      return _policy.editRequest(session: _session, draft: _draft).operation ==
-          LessonDecisionOperation.reschedule;
-    } catch (_) {
-      return false;
-    }
-  }
+  bool get _showCompletedMoveWarning =>
+      completedMoveWarning(_session, _draft, widget.focusDateTime, _policy);
 
   searchClients(String q) => _data.searchClients(q);
   void selectClient(LessonClientRef? value) {
@@ -240,22 +223,13 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> selectDate(LessonDatePickerRequest request) async {
-    final date = await showMagicDatePicker(
-      context: context,
-      initialDate: request.initialDate,
-      firstDate: request.firstDate,
-      lastDate: request.lastDate,
-    );
+    final date = await pickLessonEditorDate(context, request);
     if (!mounted || date == null) return;
     _update(_draft.withDate(date), scheduleChanged: true);
   }
 
   Future<void> selectTime(LessonTimePickerRequest request) async {
-    final time = await showMagicTimePicker(
-      context: context,
-      initialTime: TimeOfDay(hour: request.hour, minute: request.minute),
-      builder: lessonTimePicker24HourBuilder,
-    );
+    final time = await pickLessonEditorTime(context, request);
     if (!mounted || time == null) return;
     _update(_draft.withTime(time.hour, time.minute), scheduleChanged: true);
   }
@@ -318,37 +292,15 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
         ),
       );
       if (!mounted) return;
-      switch (outcome) {
-        case LessonSaveCreated():
-          finishLessonEditor(context, 'Занятие создано');
-        case LessonSaveNotes():
-          finishLessonEditor(context, 'Заметка сохранена');
-        case LessonSaveConfirmed():
-          finishLessonEditor(context, 'Изменения занятия применены');
-        case LessonSavePreview():
-          scrollToLessonPreview(context, _scroll);
-        case LessonSaveInvalid(:final validation):
-          setState(() => _valid = validation);
-        case LessonSaveViolations(:final violations):
-          final analysis = LessonScheduleAnalysis.fromViolations(violations);
-          setState(() => _conflicts = analysis);
-          await showLessonEditorConstraints(
-            context,
-            violations,
-            onOpen: _focusConstraint,
-          );
-        case LessonSaveDecision():
-          throw StateError('Предварительный расчёт занятия не получен.');
-        case LessonSaveFailure(:final error, :final reloadedSession):
-          if (reloadedSession != null) _session = reloadedSession;
-          showLessonEditorError(
-            context,
-            error,
-            'Не удалось сохранить занятие.',
-          );
-        case LessonSaveBusy():
-          break;
-      }
+      await presentLessonEditorSaveOutcome(
+        context,
+        outcome,
+        scrollController: _scroll,
+        onInvalid: (validation) => setState(() => _valid = validation),
+        onViolations: (analysis) => setState(() => _conflicts = analysis),
+        onSessionReloaded: (session) => _session = session,
+        onOpenConstraint: _focusConstraint,
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }

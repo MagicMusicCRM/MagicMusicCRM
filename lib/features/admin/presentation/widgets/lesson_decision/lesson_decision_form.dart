@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
 
 import 'lesson_decision_models.dart';
 import 'lesson_decision_sections.dart';
 import '../lesson_editor/lesson_financial_autofill.dart';
 import '../lesson_editor/lesson_transition_error.dart';
-import '../lesson_editor/lesson_editor_view.dart';
+import '../lesson_editor/lesson_editor_dismiss_guard.dart';
 
 class GuardedLessonDecisionForm extends StatefulWidget {
   const GuardedLessonDecisionForm({required this.controller, super.key});
@@ -343,24 +345,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     var applyRecommendation = true;
     if (widget.controller.operation == LessonDecisionOperation.cancel &&
         (_compensationTouched || _clientDecisionTouched.isNotEmpty)) {
-      final choice = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          content: const Text(
-            'Применить рекомендованные значения для нового типа?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Оставить мои значения'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Применить'),
-            ),
-          ],
-        ),
-      );
+      final choice = await _confirmSettlementRecommendation(context);
       if (!mounted || choice == null) return;
       applyRecommendation = choice;
     }
@@ -660,7 +645,14 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       if (!mounted) return;
       setState(() => _preview = preview);
     } catch (error) {
-      if (mounted) setState(() => _error = mapLessonTransitionFailure(error));
+      if (mounted) {
+        final recovered = await widget.controller.recoverStaleCommit(error);
+        if (mounted) {
+          setState(
+            () => _error = recovered ?? mapLessonTransitionFailure(error),
+          );
+        }
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -799,6 +791,35 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     );
   }
 }
+
+Future<bool?> _confirmSettlementRecommendation(BuildContext context) =>
+    showMagicAdaptiveSurface<bool>(
+      context,
+      kind: AppSurfaceKind.confirmation,
+      title: 'Изменить тип списания?',
+      builder: (surfaceContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Применить рекомендованные значения для нового типа?'),
+          const SizedBox(height: AppSpace.lg),
+          OverflowBar(
+            alignment: MainAxisAlignment.end,
+            spacing: AppSpace.sm,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(surfaceContext, false),
+                child: const Text('Оставить мои значения'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(surfaceContext, true),
+                child: const Text('Применить'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
 
 ({String? settlementKey, String? compensationKey, String compensationValue})
 _resolveDefaults(

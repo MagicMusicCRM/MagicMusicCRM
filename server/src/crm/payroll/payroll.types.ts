@@ -106,3 +106,49 @@ export interface TeacherReportRow {
   name: string;
   salary: string | number | null;
 }
+
+export interface TeacherStatsReportPeriod {
+  from: string;
+  to: string;
+}
+
+export interface TeacherStatsUnitAccumulator {
+  compensationKey: string;
+  compensationLabel: string;
+  compensationSource: "automatic" | "manual";
+  unitType: TeacherStatsUnitType;
+  groupId: string | null;
+  studentId: string | null;
+  unitName: string;
+  teacherRate: number | null;
+  days: Map<string, number>;
+  lessonIds: string[];
+  editableLessonIds: string[];
+  settledLessons: number;
+  completedLessons: number;
+  payableLessons: number;
+  hoursTotal: number;
+  scheduledHoursTotal: number;
+  accruedTotal: number;
+}
+
+export interface TeacherStatsAccumulator {
+  completedLessons: number;
+  payableLessons: number;
+  hoursTotal: number;
+  scheduledHoursTotal: number;
+  accruedTotal: number;
+  units: Map<string, TeacherStatsUnitAccumulator>;
+}
+
+export interface TeacherStatsReportTotals {
+  completedLessons: number;
+  payableLessons: number;
+  hoursTotal: number;
+  scheduledHoursTotal: number;
+  accruedTotal: number;
+  bonusTotal: number;
+  deductionTotal: number;
+  paidTotal: number;
+  periodBalance: number;
+}

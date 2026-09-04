@@ -343,7 +343,7 @@ abstract interface class LessonDecisionFormLifecycle {
 
   Future<Map<String, dynamic>> commit(LessonDecisionPreview preview);
 
-  Future<Object?> recoverStaleCommit(Object error);
+  Future<Object?> recoverStaleCommit(Object error, {bool reloadLesson = true});
 }
 
 Map<String, dynamic> _map(Object? value) {
