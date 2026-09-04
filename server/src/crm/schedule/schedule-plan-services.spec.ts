@@ -16,7 +16,7 @@ import { SchedulePlanEndService } from "./schedule-plan-end.service";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
 import { SchedulePlanOverlapAnalyzer } from "./schedule-plan-overlap-analyzer";
 import { SchedulePlanQueryService } from "./schedule-plan-query.service";
-import type { SchedulePlanRepository } from "./schedule-plan.repository";
+import { SchedulePlanRepository } from "./schedule-plan.repository";
 import type { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
 const actor: ActorContext = { userId: "actor-a", role: "manager" };
@@ -472,6 +472,127 @@ describe("Schedule plan semantic owners", () => {
     expect(events.indexOf("active-client-recheck")).toBe(advisoryKeys.length);
     expect(events.indexOf("subscriptions")).toBe(advisoryKeys.length + 1);
     expect(subscriptionSql).toMatch(/order by id for update/);
+  });
+
+  it("loads rule history and exceptions in bounded batches while keeping only current rows editable", async () => {
+    const database = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "plan-a",
+              kind: "individual",
+              title: "History plan",
+              student_id: "student-a",
+              group_id: null,
+              subscription_id: "subscription-a",
+              active_from: "2025-01-01",
+              active_until: null,
+              status: "active",
+              version: 2,
+              ended_at: null,
+              ended_by: null,
+              ended_by_name: null,
+              end_reason: null,
+              participants: [],
+              scheduled_lesson_count: "4",
+              covered_lesson_count: "3",
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              plan_id: "plan-a",
+              id: "series-retired",
+              teacher_id: "teacher-a",
+              teacher_name: "Teacher A",
+              room_id: "room-a",
+              room_name: "Room A",
+              branch_id: "branch-a",
+              branch_name: "Branch A",
+              weekday: 1,
+              begin_time: "10:00",
+              duration_minutes: 60,
+              valid_from: "2025-01-01",
+              valid_until: "2025-12-31",
+              notes: null,
+              planned_financial_decision: {},
+              superseded_by: "series-current",
+              deleted_at: null,
+            },
+            {
+              plan_id: "plan-a",
+              id: "series-current",
+              teacher_id: "teacher-a",
+              teacher_name: "Teacher A",
+              room_id: "room-a",
+              room_name: "Room A",
+              branch_id: "branch-a",
+              branch_name: "Branch A",
+              weekday: 1,
+              begin_time: "11:00",
+              duration_minutes: 60,
+              valid_from: "2026-01-01",
+              valid_until: null,
+              notes: null,
+              planned_financial_decision: {},
+              superseded_by: null,
+              deleted_at: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              plan_id: "plan-a",
+              lesson_id: "lesson-exception",
+              source_series_id: "series-current",
+              series_id: "series-current",
+              scheduled_at: "2099-01-05T08:00:00.000Z",
+              expected_scheduled_at: "2099-01-05T08:00:00.000Z",
+              scheduled_date: "2099-01-05",
+              teacher_id: "teacher-b",
+              teacher_name: "Teacher B",
+              room_id: "room-a",
+              room_name: "Room A",
+              branch_id: "branch-a",
+              branch_name: "Branch A",
+              weekday: 1,
+              begin_time: "11:00",
+              duration_minutes: 60,
+              predecessor_id: null,
+            },
+          ],
+        }),
+    } as unknown as DatabaseService;
+    const service = new SchedulePlanQueryService(
+      new SchedulePlanRepository(database),
+    );
+
+    const result = await service.list(actor, {
+      studentId: "student-a",
+      includeEnded: true,
+    });
+
+    expect((database.query as jest.Mock)).toHaveBeenCalledTimes(3);
+    expect((database.query as jest.Mock).mock.calls[1][1]).toEqual([["plan-a"]]);
+    expect((database.query as jest.Mock).mock.calls[2][1]).toEqual([["plan-a"]]);
+    expect(result.items[0]).toMatchObject({
+      rows: [{ id: "series-current", active: true }],
+      ruleTimeline: expect.arrayContaining([
+        expect.objectContaining({ id: "series-retired", kind: "recurring_rule" }),
+        expect.objectContaining({ id: "series-current", kind: "recurring_rule" }),
+        expect.objectContaining({ id: "lesson-exception", kind: "dated_exception" }),
+      ]),
+      exceptions: [
+        expect.objectContaining({
+          lessonId: "lesson-exception",
+          changedFields: ["teacherId"],
+        }),
+      ],
+    });
   });
 
   it("preserves update lock and write ordering", async () => {

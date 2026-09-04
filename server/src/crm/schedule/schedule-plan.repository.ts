@@ -11,6 +11,11 @@ import {
   LessonFinancialDecision,
   PreparedLessonSettlementPlan,
 } from "../commerce/lesson-settlement.port";
+import type {
+  SchedulePlanTimelineInput,
+  SchedulePlanTimelineLessonInput,
+  SchedulePlanTimelineRuleInput,
+} from "./schedule-plan-timeline";
 
 export interface LockedSchedulePlan {
   id: string;
@@ -67,6 +72,10 @@ export interface SchedulePlanTrayCursor {
   id: string;
 }
 
+export interface SchedulePlanListTimelineSource {
+  timelineInput: SchedulePlanTimelineInput;
+}
+
 @Injectable()
 export class SchedulePlanRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -87,7 +96,6 @@ export class SchedulePlanRepository {
       ended_by: string | null;
       ended_by_name: string | null;
       end_reason: string | null;
-      series: Record<string, unknown>[];
       participants: Record<string, unknown>[];
       scheduled_lesson_count: string;
       covered_lesson_count: string;
@@ -143,33 +151,6 @@ export class SchedulePlanRepository {
             end as ended_by_name,
           coalesce((
             select jsonb_agg(jsonb_build_object(
-              'id', series.id,
-              'teacherId', series.teacher_id,
-              'teacherName', nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
-                coalesce(teacher_profile.last_name, '')), ''),
-              'roomId', series.room_id,
-              'roomName', room.name,
-              'branchId', series.branch_id,
-              'branchName', branch.name,
-              'weekday', series.weekday,
-              'beginTime', to_char(series.begin_time, 'HH24:MI'),
-              'durationMinutes', series.duration_minutes,
-              'validFrom', series.valid_from,
-              'validUntil', series.valid_until,
-              'notes', series.notes,
-              'financialDecision', series.planned_financial_decision,
-              'supersededBy', series.superseded_by,
-              'active', series.deleted_at is null and series.superseded_by is null
-            ) order by series.valid_from, series.weekday, series.begin_time, series.id)
-            from app.schedule_series series
-            left join app.teachers teacher on teacher.id = series.teacher_id
-            left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
-            left join app.rooms room on room.id = series.room_id
-            left join app.branches branch on branch.id = series.branch_id
-            where series.plan_id = plan.id
-          ), '[]'::jsonb) as series,
-          coalesce((
-            select jsonb_agg(jsonb_build_object(
               'id', participant.id,
               'studentId', participant.student_id,
               'subscriptionId', participant.subscription_id,
@@ -209,28 +190,227 @@ export class SchedulePlanRepository {
         query.includeEnded === true,
       ],
     );
+    const planIds = result.rows.map((row) => row.id);
+    if (planIds.length === 0) return { items: [] };
+    const seriesResult = await this.database.query<{
+      plan_id: string;
+      id: string;
+      teacher_id: string;
+      teacher_name: string | null;
+      room_id: string;
+      room_name: string | null;
+      branch_id: string;
+      branch_name: string | null;
+      weekday: number;
+      begin_time: string;
+      duration_minutes: number;
+      valid_from: string;
+      valid_until: string | null;
+      notes: string | null;
+      planned_financial_decision: LessonFinancialDecision | null;
+      superseded_by: string | null;
+      deleted_at: Date | string | null;
+    }>(
+      `select series.plan_id, series.id, series.teacher_id,
+         nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
+           coalesce(teacher_profile.last_name, '')), '') as teacher_name,
+         series.room_id, room.name as room_name,
+         series.branch_id, branch.name as branch_name,
+         series.weekday, to_char(series.begin_time, 'HH24:MI') as begin_time,
+         series.duration_minutes, series.valid_from::text,
+         series.valid_until::text, series.notes,
+         series.planned_financial_decision, series.superseded_by,
+         series.deleted_at
+       from app.schedule_series series
+       left join app.teachers teacher on teacher.id = series.teacher_id
+       left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
+       left join app.rooms room on room.id = series.room_id
+       left join app.branches branch on branch.id = series.branch_id
+       where series.plan_id = any($1::uuid[])
+       order by series.plan_id, series.valid_from, series.weekday,
+         series.begin_time, series.id`,
+      [planIds],
+    );
+    const exceptionResult = await this.database.query<{
+      plan_id: string;
+      lesson_id: string;
+      source_series_id: string;
+      series_id: string | null;
+      scheduled_at: Date | string;
+      expected_scheduled_at: Date | string;
+      scheduled_date: string;
+      teacher_id: string;
+      teacher_name: string | null;
+      room_id: string;
+      room_name: string | null;
+      branch_id: string;
+      branch_name: string | null;
+      weekday: number;
+      begin_time: string;
+      duration_minutes: number;
+      predecessor_id: string | null;
+    }>(
+      `with recursive lesson_lineage (
+         current_lesson_id, source_series_id, source_series_date,
+         successor_id, plan_id, path, depth
+       ) as (
+         select lesson.id, series.id, lesson.series_date, lesson.successor_id,
+           series.plan_id, array[lesson.id], 0
+         from app.lessons lesson
+         join app.schedule_series series on series.id = lesson.series_id
+         where series.plan_id = any($1::uuid[])
+           and lesson.series_date is not null
+           and lesson.deleted_at is null
+         union all
+         select successor.id, lineage.source_series_id,
+           lineage.source_series_date, successor.successor_id,
+           lineage.plan_id, lineage.path || successor.id, lineage.depth + 1
+         from lesson_lineage lineage
+         join app.lessons successor on successor.id = lineage.successor_id
+         where lineage.depth < 100
+           and successor.deleted_at is null
+           and not successor.id = any(lineage.path)
+       ), resolved as (
+         select distinct on (lineage.current_lesson_id)
+           lineage.current_lesson_id, lineage.source_series_id,
+           lineage.source_series_date, lineage.plan_id, lineage.depth
+         from lesson_lineage lineage
+         order by lineage.current_lesson_id, lineage.depth desc
+       )
+       select resolved.plan_id, lesson.id as lesson_id,
+         source_series.id as source_series_id, lesson.series_id,
+         lesson.scheduled_at,
+         (resolved.source_series_date + source_series.begin_time) at time zone
+           coalesce(source_series.timezone_name, source_branch.timezone_name,
+             'Europe/Moscow') as expected_scheduled_at,
+         to_char(timezone(coalesce(lesson_branch.timezone_name,
+           source_branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at),
+           'YYYY-MM-DD') as scheduled_date,
+         lesson.teacher_id,
+         nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
+           coalesce(teacher_profile.last_name, '')), '') as teacher_name,
+         lesson.room_id, room.name as room_name,
+         lesson.branch_id, lesson_branch.name as branch_name,
+         extract(isodow from timezone(coalesce(lesson_branch.timezone_name,
+           source_branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at))::int
+           as weekday,
+         to_char(timezone(coalesce(lesson_branch.timezone_name,
+           source_branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at),
+           'HH24:MI') as begin_time,
+         lesson.duration_minutes, lesson.predecessor_id
+       from resolved
+       join app.lessons lesson on lesson.id = resolved.current_lesson_id
+       join app.schedule_series source_series
+         on source_series.id = resolved.source_series_id
+       left join app.branches source_branch on source_branch.id = source_series.branch_id
+       left join app.branches lesson_branch on lesson_branch.id = lesson.branch_id
+       left join app.teachers teacher on teacher.id = lesson.teacher_id
+       left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
+       left join app.rooms room on room.id = lesson.room_id
+       order by resolved.plan_id, lesson.scheduled_at, lesson.id`,
+      [planIds],
+    );
+    const seriesByPlan = new Map<string, typeof seriesResult.rows>();
+    for (const series of seriesResult.rows) {
+      const rows = seriesByPlan.get(series.plan_id) ?? [];
+      rows.push(series);
+      seriesByPlan.set(series.plan_id, rows);
+    }
+    const exceptionsByPlan = new Map<string, typeof exceptionResult.rows>();
+    for (const exception of exceptionResult.rows) {
+      const rows = exceptionsByPlan.get(exception.plan_id) ?? [];
+      rows.push(exception);
+      exceptionsByPlan.set(exception.plan_id, rows);
+    }
     return {
-      items: result.rows.map((row) => ({
-        id: row.id,
-        kind: row.kind,
-        title: row.title,
-        studentId: row.student_id,
-        groupId: row.group_id,
-        subscriptionId: row.subscription_id,
-        activeFrom: row.active_from,
-        activeUntil: row.active_until,
-        status: row.status,
-        version: Number(row.version),
-        endedAt:
-          row.ended_at == null ? null : new Date(row.ended_at).toISOString(),
-        endedBy: row.ended_by,
-        endedByName: row.ended_by_name,
-        endReason: row.end_reason,
-        rows: row.series,
-        participants: row.participants,
-        scheduledLessonCount: Number(row.scheduled_lesson_count),
-        coveredLessonCount: row.kind === 'individual' ? Number(row.covered_lesson_count) : null,
-      })),
+      items: result.rows.map((row) => {
+        const series = seriesByPlan.get(row.id) ?? [];
+        const timelineRules: SchedulePlanTimelineRuleInput[] = series.map(
+          (item) => ({
+            id: item.id,
+            activeFrom: item.valid_from,
+            activeUntil: item.valid_until,
+            teacherId: item.teacher_id,
+            teacherName: item.teacher_name,
+            roomId: item.room_id,
+            roomName: item.room_name,
+            branchId: item.branch_id,
+            branchName: item.branch_name,
+            weekday: item.weekday,
+            beginTime: item.begin_time,
+            durationMinutes: item.duration_minutes,
+          }),
+        );
+        const timelineLessons: SchedulePlanTimelineLessonInput[] = (
+          exceptionsByPlan.get(row.id) ?? []
+        ).map((item) => ({
+          id: item.lesson_id,
+          sourceSeriesId: item.source_series_id,
+          seriesId: item.series_id,
+          scheduledAt: new Date(item.scheduled_at).toISOString(),
+          expectedScheduledAt: new Date(item.expected_scheduled_at).toISOString(),
+          scheduledDate: item.scheduled_date,
+          teacherId: item.teacher_id,
+          teacherName: item.teacher_name,
+          roomId: item.room_id,
+          roomName: item.room_name,
+          branchId: item.branch_id,
+          branchName: item.branch_name,
+          weekday: item.weekday,
+          beginTime: item.begin_time,
+          durationMinutes: item.duration_minutes,
+          predecessorId: item.predecessor_id,
+        }));
+        return {
+          id: row.id,
+          kind: row.kind,
+          title: row.title,
+          studentId: row.student_id,
+          groupId: row.group_id,
+          subscriptionId: row.subscription_id,
+          activeFrom: row.active_from,
+          activeUntil: row.active_until,
+          status: row.status,
+          version: Number(row.version),
+          endedAt:
+            row.ended_at == null ? null : new Date(row.ended_at).toISOString(),
+          endedBy: row.ended_by,
+          endedByName: row.ended_by_name,
+          endReason: row.end_reason,
+          rows: series
+            .filter(
+              (item) => item.deleted_at === null && item.superseded_by === null,
+            )
+            .map((item) => ({
+              id: item.id,
+              teacherId: item.teacher_id,
+              teacherName: item.teacher_name,
+              roomId: item.room_id,
+              roomName: item.room_name,
+              branchId: item.branch_id,
+              branchName: item.branch_name,
+              weekday: item.weekday,
+              beginTime: item.begin_time,
+              durationMinutes: item.duration_minutes,
+              validFrom: item.valid_from,
+              validUntil: item.valid_until,
+              notes: item.notes,
+              financialDecision: item.planned_financial_decision,
+              supersededBy: item.superseded_by,
+              active: true,
+            })),
+          participants: row.participants,
+          scheduledLessonCount: Number(row.scheduled_lesson_count),
+          coveredLessonCount:
+            row.kind === "individual"
+              ? Number(row.covered_lesson_count)
+              : null,
+          timelineInput: {
+            rules: timelineRules,
+            lessons: timelineLessons,
+          },
+        } satisfies SchedulePlanListTimelineSource & Record<string, unknown>;
+      }),
     };
   }
 

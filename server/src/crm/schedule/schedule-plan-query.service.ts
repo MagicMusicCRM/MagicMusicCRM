@@ -9,6 +9,7 @@ import {
   SchedulePlanRepository,
   type SchedulePlanTrayCursor,
 } from "./schedule-plan.repository";
+import { buildSchedulePlanTimeline } from "./schedule-plan-timeline";
 
 export interface SchedulePlanTrayProjection {
   planId: string;
@@ -35,11 +36,22 @@ export interface SchedulePlanTrayProjection {
 export class SchedulePlanQueryService {
   constructor(private readonly repository: SchedulePlanRepository) {}
 
-  list(
+  async list(
     actor: ActorContext,
     query: SchedulePlanQuery,
-  ): ReturnType<SchedulePlanRepository["list"]> {
-    return this.repository.list(actor, query);
+  ) {
+    const result = await this.repository.list(actor, query);
+    const now = new Date();
+    return {
+      items: result.items.map(({ timelineInput, ...plan }) => {
+        const timeline = buildSchedulePlanTimeline(timelineInput, now);
+        return {
+          ...plan,
+          ruleTimeline: timeline.entries,
+          exceptions: timeline.exceptions,
+        };
+      }),
+    };
   }
 
   async tray(

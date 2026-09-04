@@ -762,6 +762,99 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("lists both saved rule ranges and projects a one-day resource override", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const sourceRow = row(fixture, isoWeekday(fixture.today), "10:00");
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "История диапазонов",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-timeline-create-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updated = await plans.update(
+        actor,
+        created.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+          rows: [
+            {
+              ...sourceRow,
+              seriesId: created.seriesIds[0],
+              beginTime: "11:00",
+            },
+          ],
+        },
+        {
+          idempotencyKey: `plan-timeline-update-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const overridden = await pool.query<{ id: string }>(
+        `update app.lessons
+         set teacher_id = $2, room_id = $3, updated_at = now()
+         where id = (
+           select lesson.id from app.lessons lesson
+           where lesson.series_id = $1 and lesson.deleted_at is null
+           order by lesson.series_date, lesson.id limit 1
+         ) returning id`,
+        [updated.seriesIds[0], additional.teacherId, additional.roomId],
+      );
+
+      const projection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+        includeEnded: true,
+      });
+      const projectedPlan = projection.items.find((item) => item.id === created.id)!;
+      const recurringRules = projectedPlan.ruleTimeline.filter(
+        (entry) => entry.kind === "recurring_rule",
+      );
+
+      expect(projectedPlan.rows).toEqual([
+        expect.objectContaining({ id: updated.seriesIds[0], active: true }),
+      ]);
+      expect(recurringRules).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: created.seriesIds[0],
+            activeFrom: fixture.today,
+            activeUntil: addDays(fixture.effectiveFrom, -1),
+          }),
+          expect.objectContaining({
+            id: updated.seriesIds[0],
+            activeFrom: fixture.effectiveFrom,
+            activeUntil: fixture.until60,
+          }),
+        ]),
+      );
+      expect(projectedPlan.exceptions).toEqual([
+        expect.objectContaining({
+          lessonId: overridden.rows[0]!.id,
+          sourceSeriesId: updated.seriesIds[0],
+          teacherId: additional.teacherId,
+          roomId: additional.roomId,
+          changedFields: ["teacherId", "roomId"],
+        }),
+      ]);
+    } finally {
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
   it("creates all 13 September-to-December Fridays and reserves only the first 12", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
