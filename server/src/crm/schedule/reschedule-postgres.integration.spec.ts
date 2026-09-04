@@ -666,7 +666,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         canConfirm: true,
         financialDecision: {
           settlementTypeKey: "free_lesson",
-          teacherCompensationRuleKey: "standard",
+          teacherCompensationRuleKey: "none",
         },
         financialPreview: {
           clientFacts: [
@@ -677,8 +677,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             }),
           ],
           teacherFact: expect.objectContaining({
-            compensationRuleKey: "standard",
-            amountMinor: "70000",
+            compensationRuleKey: "none",
+            amountMinor: "0",
           }),
         },
       });
@@ -1062,7 +1062,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     }
   });
 
-  it("cancels every catalog type allowed for cancellation with exact financial and reservation history", async () => {
+  it("cancels every automatic catalog policy with exact financial and reservation history", async () => {
     const lifecycle = new LessonLifecycleRepository(database);
     const fixture = await createFixture(pool, lifecycle);
     const actor = { userId: fixture.managerId, role: "manager" as const };
@@ -1076,6 +1076,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         reservationState: "released",
         reservationUnits: "1.00",
         availableUnits: "1.00",
+        teacherRule: "none",
+        teacherAmount: "0",
       },
       {
         key: "paid_miss",
@@ -1086,16 +1088,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         reservationState: "consumed",
         reservationUnits: "1.00",
         availableUnits: "0.00",
-      },
-      {
-        key: "partially_paid_miss",
-        label: "Частично оплачиваемый пропуск",
-        color: "cyan",
-        share: 5_000,
-        units: "0.50",
-        reservationState: "consumed",
-        reservationUnits: "0.50",
-        availableUnits: "0.50",
+        teacherRule: "standard",
+        teacherAmount: "70000",
       },
       {
         key: "unpaid_miss",
@@ -1106,16 +1100,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         reservationState: "released",
         reservationUnits: "1.00",
         availableUnits: "1.00",
-      },
-      {
-        key: "penalty_lesson",
-        label: "Занятие со штрафом",
-        color: "violet",
-        share: 10_000,
-        units: "1.00",
-        reservationState: "consumed",
-        reservationUnits: "1.00",
-        availableUnits: "0.00",
+        teacherRule: "none",
+        teacherAmount: "0",
       },
     ] as const;
     try {
@@ -1163,7 +1149,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         });
 
         if (index === 0) {
-          for (const forbiddenKey of ["lesson", "partially_paid_lesson"]) {
+          for (const forbiddenKey of ["lesson"]) {
             await expect(
               service.previewCancel(actor, lessonId, {
                 expectedVersion: 1,
@@ -1187,12 +1173,9 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
 
         const financialDecision = {
           settlementTypeKey: item.key,
-          teacherCompensationRuleKey: "standard",
+          teacherCompensationRuleKey: item.teacherRule,
           clientDecisions: [{
             clientId: fixture.studentId,
-            ...(item.key === "partially_paid_miss"
-              ? { chargeDurationMinutes: 30 }
-              : {}),
           }],
         };
         const reasonText = `Отмена: ${item.label}`;
@@ -1219,8 +1202,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
               }),
             ],
             teacherFact: expect.objectContaining({
-              compensationRuleKey: "standard",
-              amountMinor: "70000",
+              compensationRuleKey: item.teacherRule,
+              amountMinor: item.teacherAmount,
               configurationRevisionId: expect.any(String),
             }),
           },
@@ -1253,7 +1236,10 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         );
         expect(cancelled).toMatchObject({
           source: { id: lessonId, state: "cancelled", version: 2 },
-          financialDecision,
+          financialDecision: expect.objectContaining({
+            settlementTypeKey: item.key,
+            teacherCompensationRuleKey: item.teacherRule,
+          }),
           replayed: false,
         });
         expect(replay).toMatchObject({
@@ -1359,7 +1345,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           fact_units: item.units,
           amount_minor: "0",
           client_revision_id: expect.any(String),
-          teacher_amount_minor: "70000",
+          teacher_amount_minor: item.teacherAmount,
           teacher_revision_id: expect.any(String),
           reason_code: "school.cancelled",
           reason_text: reasonText,
@@ -1515,7 +1501,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         source: { state: "scheduled" },
         financialDecision: {
           settlementTypeKey: "free_lesson",
-          teacherCompensationRuleKey: "standard",
+          teacherCompensationRuleKey: "none",
         },
         successor: {
           subject: { type: "group", id: fixture.groupId },
@@ -1537,8 +1523,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             }),
           ]),
           teacherFact: expect.objectContaining({
-            compensationRuleKey: "standard",
-            amountMinor: "70000",
+            compensationRuleKey: "none",
+            amountMinor: "0",
           }),
         },
       });

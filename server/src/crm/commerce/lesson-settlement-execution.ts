@@ -395,11 +395,20 @@ async function assertExistingLessonSettlementDecision(
       const pricingMatches = !decision ||
         (decision.basePriceMinor === undefined && !decision.discount && !decision.surcharge) ||
         fingerprintPayload(funding.pricingSnapshot) === fingerprintPayload(fact.pricingSnapshot);
+      const requestedHourShareBasisPoints =
+        decision?.chargeDurationMinutes === undefined
+          ? undefined
+          : durationShareBasisPoints(
+              decision.chargeDurationMinutes,
+              existing.teacherFact.durationMinutes,
+            );
       return (
         funding.chargeType === fact.chargeType &&
         funding.subscriptionId === fact.subscriptionId &&
         (funding.payerStudentId ?? fact.clientId) === (fact.payerStudentId ?? subscriptionOwner ?? fact.clientId) &&
         pricingMatches &&
+        (requestedHourShareBasisPoints === undefined ||
+          requestedHourShareBasisPoints === fact.hourShareBasisPoints) &&
         fact.settlementTypeKey ===
           (decision?.settlementTypeKey ?? input.decision.settlementTypeKey) &&
         (requiresExplicitPayer

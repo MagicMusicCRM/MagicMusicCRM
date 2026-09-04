@@ -20,7 +20,6 @@ import {
   draftProjection,
   effectiveTransitionDto,
   hasTransitionClientCharge,
-  legacyPlanTeacherSource,
   requiredTransitionClientIds,
   selectedTransitionSubscriptionIds,
   sourceProjection,
@@ -355,11 +354,14 @@ export class LessonTransitionPreparationService {
   private async preservedTeacherDecision(
     client: PoolClient,
     source: TransitionSource,
-  ): Promise<NonNullable<
+  ): Promise<
     Parameters<LessonSettlementPort["resolvePlannedPlan"]>[1]["preservedTeacherDecision"]
-  >> {
+  > {
     const current = await this.settlement.loadPlan(client, source.id, true);
     if (current) {
+      if (current.decision.teacherCompensationSource === "automatic") {
+        return undefined;
+      }
       return {
         teacherCompensationRuleKey:
           current.decision.teacherCompensationRuleKey,
@@ -368,16 +370,10 @@ export class LessonTransitionPreparationService {
         teacherCreditedDurationMinutes:
           current.decision.teacherCreditedDurationMinutes,
         teacherCompensationSource:
-          current.decision.teacherCompensationSource ??
-          legacyPlanTeacherSource(current.decision),
+          current.decision.teacherCompensationSource ?? "manual",
       };
     }
-    const snapshot = source.groupId ? source.groupSnapshot : source.snapshot;
-    return {
-      teacherCompensationRuleKey:
-        snapshot?.teacherCompensationType === "none" ? "none" : "standard",
-      teacherCompensationSource: "automatic",
-    };
+    return undefined;
   }
 
   private mapSource(row: TransitionLessonRow): TransitionSource {

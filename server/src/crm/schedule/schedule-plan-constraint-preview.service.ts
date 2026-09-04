@@ -250,17 +250,33 @@ export class SchedulePlanConstraintPreviewService {
         );
         const stored = storedSeries?.planned_financial_decision;
         const requestedDecision = row.financialDecision;
-        const preservedTeacherDecision = stored &&
-            (!this.policy.canManageTeacherCompensation(actor) ||
-              sameTeacherDecision(requestedDecision, stored))
+        const storedTeacherDecision = stored
           ? teacherDecision(stored)
           : undefined;
-        const effectiveDecision = preservedTeacherDecision
-          ? { ...requestedDecision, ...preservedTeacherDecision }
+        const preservesStoredTeacherDecision = Boolean(
+          stored &&
+            stored.teacherCompensationSource !== "automatic" &&
+            (!this.policy.canManageTeacherCompensation(actor) ||
+              sameTeacherDecision(requestedDecision, stored)),
+        );
+        const effectiveDecision = preservesStoredTeacherDecision
+          ? { ...requestedDecision, ...storedTeacherDecision }
           : requestedDecision;
         const usesStoredCatalog = stored !== null && stored !== undefined &&
-          fingerprintPayload(effectiveDecision) ===
-            fingerprintPayload(stored);
+          fingerprintPayload(effectiveDecision) === fingerprintPayload(stored);
+        const preservedTeacherDecision = preservesStoredTeacherDecision &&
+            storedTeacherDecision
+          ? {
+              ...storedTeacherDecision,
+              teacherCompensationSource:
+                storedTeacherDecision.teacherCompensationSource ?? "manual",
+            }
+          : undefined;
+        const unchangedLegacyWithoutClientDecisions = Boolean(
+          storedSeries &&
+            usesStoredCatalog &&
+            !stored?.clientDecisions?.length,
+        );
         const settlementPlan = await this.settlement.resolvePlannedPlan(
           client,
           {
@@ -281,7 +297,7 @@ export class SchedulePlanConstraintPreviewService {
                   },
                 }
               : {}),
-            ...(!storedSeries || stored?.clientDecisions?.length
+            ...(!unchangedLegacyWithoutClientDecisions
               ? { requiredClientIds: allowedClientIds }
               : {}),
             ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),

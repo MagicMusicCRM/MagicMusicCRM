@@ -477,6 +477,13 @@ function normalizeSettlementTypes(raw: unknown): LessonSettlementTypeConfig[] {
           "Укажите хотя бы один допустимый сценарий.",
         );
       }
+      const hourShareBasisPoints = readInteger(
+        row.hourShareBasisPoints,
+        `lessonSettlementTypes.${index}.hourShareBasisPoints`,
+        0,
+        20000,
+      );
+      const legacyPolicy = legacySettlementPolicy(hourShareBasisPoints);
       return {
         stableKey: readKey(
           row.stableKey,
@@ -491,24 +498,26 @@ function normalizeSettlementTypes(raw: unknown): LessonSettlementTypeConfig[] {
           row.colorToken,
           `lessonSettlementTypes.${index}.colorToken`,
         ),
-        hourShareBasisPoints: readInteger(
-          row.hourShareBasisPoints,
-          `lessonSettlementTypes.${index}.hourShareBasisPoints`,
-          0,
-          20000,
-        ),
-        clientDurationMode: readSettlementDurationMode(
-          row.clientDurationMode,
-          `lessonSettlementTypes.${index}.clientDurationMode`,
-        ),
-        teacherDurationMode: readSettlementDurationMode(
-          row.teacherDurationMode,
-          `lessonSettlementTypes.${index}.teacherDurationMode`,
-        ),
-        defaultTeacherCompensationRuleKey: readKey(
-          row.defaultTeacherCompensationRuleKey,
-          `lessonSettlementTypes.${index}.defaultTeacherCompensationRuleKey`,
-        ),
+        hourShareBasisPoints,
+        clientDurationMode: row.clientDurationMode === undefined
+          ? legacyPolicy.durationMode
+          : readSettlementDurationMode(
+              row.clientDurationMode,
+              `lessonSettlementTypes.${index}.clientDurationMode`,
+            ),
+        teacherDurationMode: row.teacherDurationMode === undefined
+          ? legacyPolicy.durationMode
+          : readSettlementDurationMode(
+              row.teacherDurationMode,
+              `lessonSettlementTypes.${index}.teacherDurationMode`,
+            ),
+        defaultTeacherCompensationRuleKey:
+          row.defaultTeacherCompensationRuleKey === undefined
+            ? legacyPolicy.teacherCompensationRuleKey
+            : readKey(
+                row.defaultTeacherCompensationRuleKey,
+                `lessonSettlementTypes.${index}.defaultTeacherCompensationRuleKey`,
+              ),
         ...(row.fixedPenaltyMinor === undefined ||
         row.fixedPenaltyMinor === null
           ? {}
@@ -549,6 +558,19 @@ function normalizeSettlementTypes(raw: unknown): LessonSettlementTypeConfig[] {
     );
   }
   return settlementTypes;
+}
+
+function legacySettlementPolicy(hourShareBasisPoints: number): {
+  durationMode: LessonSettlementTypeConfig["clientDurationMode"];
+  teacherCompensationRuleKey: string;
+} {
+  if (hourShareBasisPoints === 0) {
+    return { durationMode: "zero", teacherCompensationRuleKey: "none" };
+  }
+  if (hourShareBasisPoints === 10_000) {
+    return { durationMode: "full", teacherCompensationRuleKey: "standard" };
+  }
+  return { durationMode: "manual", teacherCompensationRuleKey: "percent" };
 }
 
 function readSettlementDurationMode(

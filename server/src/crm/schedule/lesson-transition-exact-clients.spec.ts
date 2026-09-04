@@ -188,6 +188,57 @@ describe("lesson transition exact frozen clients", () => {
     ]);
   });
 
+  it("lets the settlement policy recompute a stored automatic transition decision", async () => {
+    const manager = { userId: "manager-a", role: "manager" as const };
+    const policy = {
+      canManageTeacherCompensation: jest.fn(() => false),
+      teacherCompensationMutationAuthorization: jest.fn(() => ({
+        actor: manager,
+        capabilityKey: "schedule.lesson.write" as const,
+      })),
+    } as unknown as CrmPolicy;
+    const settlement = {
+      loadPlan: jest.fn(async () => ({
+        decision: {
+          settlementTypeKey: "lesson",
+          teacherCompensationRuleKey: "standard",
+          teacherCreditedDurationMinutes: 60,
+          teacherCompensationSource: "automatic" as const,
+        },
+      })),
+      resolvePlannedPlan: jest.fn(async (_client, input) => ({
+        decision: {
+          ...input.decision,
+          teacherCompensationRuleKey: "none",
+          teacherCreditedDurationMinutes: 0,
+          teacherCompensationSource: "automatic" as const,
+        },
+        settlementRevisionId: "settlement-revision",
+        compensationRevisionId: "compensation-revision",
+      })),
+    } as unknown as LessonSettlementPort;
+
+    const resolved = await preparationWith(settlement, policy)
+      .resolvedEffectiveTransitionDto(
+        {} as PoolClient,
+        manager,
+        individualSource("student", studentA),
+        "cancel",
+        dto(decision([studentA])),
+      );
+
+    expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.not.objectContaining({ preservedTeacherDecision: expect.anything() }),
+    );
+    expect(resolved.financialDecision).toMatchObject({
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      teacherCreditedDurationMinutes: 0,
+      teacherCompensationSource: "automatic",
+    });
+  });
+
   it.each([
     ["missing", decision([studentA]), "CLIENT_DECISION_MISSING"],
     ["duplicate", decision([studentA, studentA, studentB]), "DUPLICATE_CLIENT_DECISION"],

@@ -201,6 +201,52 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     }
   });
 
+  it("executes an explicit percent value without synthesizing full credited minutes", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      const decision = await database.transaction((client) =>
+        service.resolvePlannedDecision(client, {
+          branchId: fixture.branchId,
+          durationMinutes: 60,
+          decision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "percent",
+            teacherCompensationValueMinor: "5000",
+            teacherCompensationSource: "manual",
+            clientDecisions: [{ clientId: fixture.studentId }],
+          },
+          requiredClientIds: [fixture.studentId],
+          actorUserId: fixture.managerId,
+          authorization: {
+            actor: { userId: fixture.managerId, role: "director" },
+            capabilityKey: "config.commerce.manage",
+          },
+          reasonText: "Половина стандартной ставки",
+        })
+      );
+      expect(decision).toMatchObject({
+        teacherCompensationRuleKey: "percent",
+        teacherCompensationValueMinor: "5000",
+        teacherCompensationSource: "manual",
+      });
+      expect(decision.teacherCreditedDurationMinutes).toBeUndefined();
+
+      const settled = await service.settleStandalone(fixture.fixedLessonId, {
+        context: "settle",
+        decision,
+        reasonText: "Половина стандартной ставки",
+      });
+      expect(settled.teacherFact).toMatchObject({
+        compensationRuleKey: "percent",
+        compensationActualValue: "5000",
+        amountMinor: "35000",
+        compensationSource: "manual",
+      });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
   it("persists personal-account payer pricing, replays exactly and transfers only effective debits on correction", async () => {
     const fixture = await createFixture(pool, database);
     try {
@@ -865,6 +911,7 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
                 colorToken: "violet",
                 hourShareBasisPoints: 20_000,
                 fixedPenaltyMinor: "250",
+                active: true,
               }
             : type,
         ),

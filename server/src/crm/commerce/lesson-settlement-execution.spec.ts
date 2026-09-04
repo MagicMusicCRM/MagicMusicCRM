@@ -391,4 +391,65 @@ describe("lesson settlement execution", () => {
       response: { code: "LESSON_ALREADY_SETTLED_WITH_DIFFERENT_DECISION" },
     });
   });
+
+  it("rejects replay when the requested client duration changes the effective share", async () => {
+    const responses = [
+      queryResult([]),
+      queryResult([{
+        client_fact_id: "client-fact-a",
+        client_type: "student",
+        client_id: "student-a",
+        charge_type: "none",
+        client_snapshot_value: "0.00",
+        subscription_id: null,
+        client_amount_minor: "0",
+        units: "0.00",
+        client_currency_code: "RUB",
+        settlement_type_key: "partially_paid_lesson",
+        settlement_label: "Частично",
+        settlement_color_token: "info",
+        hour_share_basis_points: 2_500,
+        fixed_penalty_minor: "0",
+        configuration_revision_id: "settlement-revision",
+      }]),
+      queryResult([{
+        teacher_fact_id: "teacher-fact-a",
+        teacher_id: "teacher-a",
+        compensation_type: "standard",
+        teacher_snapshot_rate: "1000",
+        rate_minor: "100000",
+        duration_minutes: 60,
+        teacher_amount_minor: "100000",
+        teacher_currency_code: "RUB",
+        compensation_rule_key: "standard",
+        compensation_rule_label: "Стандарт",
+        compensation_mode: "standard",
+        compensation_default_value: "0",
+        compensation_actual_value: "0",
+        compensation_override_reason: null,
+        compensation_source: "automatic",
+        configuration_revision_id: "compensation-revision",
+      }]),
+      queryResult([]),
+    ];
+    const client = {
+      query: async () => responses.shift()!,
+    } as unknown as PoolClient;
+
+    await expect(settleLesson(client, "lesson-a", {
+      context: "settle",
+      decision: {
+        settlementTypeKey: "partially_paid_lesson",
+        teacherCompensationRuleKey: "standard",
+        teacherCompensationSource: "automatic",
+        clientDecisions: [{
+          clientId: "student-a",
+          chargeType: "none",
+          chargeDurationMinutes: 45,
+        }],
+      },
+    })).rejects.toMatchObject({
+      response: { code: "LESSON_ALREADY_SETTLED_WITH_DIFFERENT_DECISION" },
+    });
+  });
 });

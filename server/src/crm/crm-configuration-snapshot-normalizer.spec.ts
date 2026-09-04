@@ -257,6 +257,23 @@ describe("normalizeCrmConfigurationSnapshot", () => {
     });
   });
 
+  it("reads the legacy 0109 settlement shape without rewriting history", () => {
+    const raw = validRawSnapshot();
+    const legacy = rows(raw, "lessonSettlementTypes")[0]!;
+    delete legacy.clientDurationMode;
+    delete legacy.teacherDurationMode;
+    delete legacy.defaultTeacherCompensationRuleKey;
+
+    const normalized = normalizeCrmConfigurationSnapshot(raw);
+
+    expect(normalized.lessonSettlementTypes[0]).toMatchObject({
+      stableKey: "lesson",
+      clientDurationMode: "full",
+      teacherDurationMode: "full",
+      defaultTeacherCompensationRuleKey: "standard",
+    });
+  });
+
   it("requires at least one active lesson settlement type", () => {
     const raw = validRawSnapshot();
     rows(raw, "lessonSettlementTypes")[0].active = false;

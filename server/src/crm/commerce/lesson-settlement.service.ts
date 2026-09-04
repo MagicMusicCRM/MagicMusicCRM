@@ -147,6 +147,25 @@ export class LessonSettlementService implements LessonSettlementPort {
       ...(clientDecisions ? { clientDecisions } : {}),
     };
     if (input.preservedTeacherDecision) {
+      if (
+        input.preservedTeacherDecision.teacherCompensationSource ===
+        "automatic"
+      ) {
+        if (hasSuppliedTeacherDecision(decision)) {
+          const requested = this.resolveTeacherDecision(
+            catalog,
+            input,
+            decision,
+          );
+          if (requested.teacherCompensationSource === "manual") {
+            return requested;
+          }
+        }
+        return this.resolveTeacherDecision(catalog, input, {
+          ...decision,
+          ...input.preservedTeacherDecision,
+        });
+      }
       if (hasSuppliedTeacherDecision(decision)) {
         this.resolveTeacherDecision(catalog, input, decision);
       }
@@ -237,7 +256,10 @@ export class LessonSettlementService implements LessonSettlementPort {
           undefined,
         );
     const teacherFieldsOmitted = !hasSuppliedTeacherDecision(decision);
-    if (teacherFieldsOmitted) {
+    if (
+      teacherFieldsOmitted ||
+      decision.teacherCompensationSource === "automatic"
+    ) {
       if (policy.teacherDurationMode === "manual") {
         invalidLessonSettlementDecision(
           "TEACHER_PARTIAL_DURATION_REQUIRED",
@@ -252,14 +274,11 @@ export class LessonSettlementService implements LessonSettlementPort {
         teacherCompensationSource: "automatic",
       };
     }
-    if (
-      !decision.teacherCompensationRuleKey ||
-      !catalog.compensation_rules.some(
-        (rule) =>
-          rule.active &&
-          rule.stableKey === decision.teacherCompensationRuleKey,
-      )
-    ) {
+    const selectedRule = catalog.compensation_rules.find(
+      (rule) =>
+        rule.active && rule.stableKey === decision.teacherCompensationRuleKey,
+    );
+    if (!decision.teacherCompensationRuleKey || !selectedRule) {
       invalidLessonSettlementDecision(
         "TEACHER_COMPENSATION_RULE_NOT_FOUND",
         "teacherCompensationRuleKey",
@@ -347,7 +366,11 @@ export class LessonSettlementService implements LessonSettlementPort {
     return {
       ...decision,
       teacherCreditedDurationMinutes:
-        requestedMinutes ?? recommendedMinutes,
+        selectedRule.mode === "percent" &&
+          decision.teacherCompensationValueMinor !== undefined &&
+          requestedMinutes === undefined
+          ? undefined
+          : requestedMinutes ?? recommendedMinutes,
       teacherCompensationSource: "manual",
     };
   }

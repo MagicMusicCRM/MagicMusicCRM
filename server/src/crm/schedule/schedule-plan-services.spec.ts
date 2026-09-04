@@ -42,6 +42,167 @@ const scheduleRow = (
 });
 
 describe("Schedule plan semantic owners", () => {
+  it("recomputes stored automatic recurring pay while exempting only an unchanged legacy row", async () => {
+    const client = {} as PoolClient;
+    const settlement = {
+      resolvePlannedPlan: jest.fn(async (_client, input) => ({
+        decision: {
+          ...input.decision,
+          teacherCompensationRuleKey: "none",
+          teacherCreditedDurationMinutes: 0,
+          teacherCompensationSource: "automatic",
+        },
+        settlementRevisionId: "new-settlement",
+        compensationRevisionId: "new-compensation",
+      })),
+    } as unknown as LessonSettlementService;
+    const policy = {
+      assertCanSupplyTeacherCompensation: jest.fn(),
+      canManageTeacherCompensation: jest.fn(() => false),
+      teacherCompensationMutationAuthorization: jest.fn(() => ({
+        actor,
+        capabilityKey: "schedule.lesson.write" as const,
+      })),
+    } as unknown as CrmPolicy;
+    const service = new SchedulePlanConstraintPreviewService(
+      policy,
+      {} as DatabaseService,
+      {} as SchedulePlanDefinitionService,
+      {} as LessonSeriesCommandService,
+      settlement,
+      {} as SubscriptionPreviewTokenService,
+    );
+    const automatic = {
+      id: "series-a",
+      settlement_revision_id: "old-settlement",
+      compensation_revision_id: "old-compensation",
+      planned_financial_decision: {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "standard",
+        teacherCreditedDurationMinutes: 60,
+        teacherCompensationSource: "automatic" as const,
+        clientDecisions: [{ clientId: "student-a" }],
+      },
+    };
+
+    await service.prepareRows(
+      client,
+      actor,
+      [scheduleRow({
+        seriesId: "series-a",
+        durationMinutes: 30,
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "standard",
+          teacherCreditedDurationMinutes: 60,
+          teacherCompensationSource: "automatic",
+          clientDecisions: [{ clientId: "student-a" }],
+        },
+      })],
+      ["student-a"],
+      { activeSeries: [automatic] } as never,
+    );
+
+    expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({
+        durationMinutes: 30,
+        requiredClientIds: ["student-a"],
+      }),
+    );
+    expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+      client,
+      expect.not.objectContaining({ preservedTeacherDecision: expect.anything() }),
+    );
+
+    (settlement.resolvePlannedPlan as jest.Mock).mockClear();
+    const legacyDecision = {
+      settlementTypeKey: "lesson",
+      teacherCompensationRuleKey: "standard",
+    };
+    await service.prepareRows(
+      client,
+      actor,
+      [scheduleRow({
+        seriesId: "series-a",
+        financialDecision: legacyDecision,
+      })],
+      ["student-a"],
+      {
+        activeSeries: [{
+          ...automatic,
+          planned_financial_decision: legacyDecision,
+        }],
+      } as never,
+    );
+    expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+      client,
+      expect.not.objectContaining({ requiredClientIds: expect.anything() }),
+    );
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["unrelated", [{ clientId: "student-x" }]],
+    ["exact", [{ clientId: "student-a" }, { clientId: "student-b" }]],
+  ] as const)(
+    "requires exact clients for a changed legacy recurring row with %s decisions",
+    async (_name, clientDecisions) => {
+      const settlement = {
+        resolvePlannedPlan: jest.fn(async (_client, input) => ({
+          decision: { ...input.decision, teacherCompensationSource: "manual" },
+          settlementRevisionId: "new-settlement",
+          compensationRevisionId: "new-compensation",
+        })),
+      } as unknown as LessonSettlementService;
+      const service = new SchedulePlanConstraintPreviewService(
+        {
+          assertCanSupplyTeacherCompensation: jest.fn(),
+          canManageTeacherCompensation: jest.fn(() => false),
+          teacherCompensationMutationAuthorization: jest.fn(() => ({
+            actor,
+            capabilityKey: "schedule.lesson.write" as const,
+          })),
+        } as unknown as CrmPolicy,
+        {} as DatabaseService,
+        {} as SchedulePlanDefinitionService,
+        {} as LessonSeriesCommandService,
+        settlement,
+        {} as SubscriptionPreviewTokenService,
+      );
+      await service.prepareRows(
+        {} as PoolClient,
+        actor,
+        [scheduleRow({
+          seriesId: "series-a",
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "standard",
+            ...(clientDecisions ? { clientDecisions: [...clientDecisions] } : {}),
+          },
+        })],
+        ["student-a", "student-b"],
+        {
+          activeSeries: [{
+            id: "series-a",
+            settlement_revision_id: "old-settlement",
+            compensation_revision_id: "old-compensation",
+            planned_financial_decision: {
+              settlementTypeKey: "lesson",
+              teacherCompensationRuleKey: "standard",
+            },
+          }],
+        } as never,
+      );
+      expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          requiredClientIds: ["student-a", "student-b"],
+        }),
+      );
+    },
+  );
+
   it.each(["create", "update"] as const)(
     "rejects raw %s teacher compensation before platform integrity",
     async (operation) => {

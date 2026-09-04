@@ -83,7 +83,7 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
     ["standard", undefined, "lesson", 60],
     ["fixed", "125000", "lesson", 60],
     ["hourly", "140000", "lesson", 60],
-    ["percent", "5000", "lesson", 60],
+    ["percent", "5000", "lesson", undefined],
     ["fixed", "125000", "free_lesson", 0],
   ] as const)(
     "preserves authorized manual %s compensation with omitted minutes",
@@ -320,6 +320,36 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
       teacherCompensationSource: "manual",
     });
   });
+
+  it.each([
+    ["free_lesson", 60, "none", 0],
+    ["lesson", 30, "standard", 30],
+  ] as const)(
+    "recomputes a stored automatic teacher decision for %s/%i minutes",
+    async (settlementTypeKey, durationMinutes, ruleKey, creditedMinutes) => {
+      await expect(service.resolvePlannedDecision(catalogClient(), {
+        branchId: "branch-a",
+        durationMinutes,
+        decision: {
+          settlementTypeKey,
+          clientDecisions: [{ clientId: "student-a" }],
+        } as never,
+        requiredClientIds: ["student-a"],
+        actorUserId: "admin-a",
+        authorization: actor("admin"),
+        preservedTeacherDecision: {
+          teacherCompensationRuleKey: "standard",
+          teacherCompensationValueMinor: undefined,
+          teacherCreditedDurationMinutes: 60,
+          teacherCompensationSource: "automatic",
+        },
+      })).resolves.toMatchObject({
+        teacherCompensationRuleKey: ruleKey,
+        teacherCreditedDurationMinutes: creditedMinutes,
+        teacherCompensationSource: "automatic",
+      });
+    },
+  );
 
   it("rejects a supplied unauthorized override before reusing a preserved decision", async () => {
     await expect(service.resolvePlannedDecision(catalogClient(), {
