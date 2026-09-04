@@ -3974,6 +3974,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       const evidence = await pool.query<{
         series_count: number;
         superseded_count: number;
+        old_historical_live_lessons: number;
+        old_historical_wrong_resources: number;
         old_future_live_lessons: number;
         continuation_live_lessons: number;
         wrong_continuation_resources: number;
@@ -3982,6 +3984,15 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         `select count(*)::int as series_count,
            count(*) filter (where superseded_by is not null)::int
              as superseded_count,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = $2 and lesson.deleted_at is null
+               and lesson.series_date < $5::date)
+             as old_historical_live_lessons,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = $2 and lesson.deleted_at is null
+               and lesson.series_date < $5::date
+               and (lesson.teacher_id <> $6 or lesson.room_id <> $7))
+             as old_historical_wrong_resources,
            (select count(*)::int from app.lessons lesson
              where lesson.series_id = $2 and lesson.deleted_at is null
                and lesson.series_date >= $5::date)
@@ -4019,15 +4030,19 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           additional.teacherId,
           additional.roomId,
           fixture.effectiveFrom,
+          fixture.teacherId,
+          fixture.roomId,
         ],
       );
       expect(evidence.rows[0]).toMatchObject({
         series_count: 2,
         superseded_count: 1,
+        old_historical_wrong_resources: 0,
         old_future_live_lessons: 0,
         wrong_continuation_resources: 0,
         duplicate_dates: 0,
       });
+      expect(evidence.rows[0]!.old_historical_live_lessons).toBeGreaterThan(0);
       expect(evidence.rows[0]!.continuation_live_lessons).toBeGreaterThan(0);
     } finally {
       await blocker.query("rollback").catch(() => undefined);
@@ -4037,6 +4052,162 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         materializerPromise ?? Promise.resolve(),
       ]);
       await cleanup(pool, fixture, additional);
+    }
+  });
+
+  it("fails a nested legacy group materialization when membership grows after the outer reread", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const lessonBlocker = await pool.connect();
+    const drift = await pool.connect();
+    let updatePromise: Promise<unknown> | undefined;
+    let driftSeriesPromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    let initialLessonCount = 0;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      await pool.query(
+        `update app.group_students set left_at = now()
+         where group_id = $1 and student_id = $2`,
+        [fixture.groupId, fixture.studentIds[1]],
+      );
+      const inserted = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           group_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '18:30', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.groupId,
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = inserted.rows[0]!.id;
+      await materializer.materializeSeries(legacySeriesId);
+      const initialLessons = await pool.query<{ count: number }>(
+        "select count(*)::int as count from app.lessons where series_id = $1",
+        [legacySeriesId],
+      );
+      initialLessonCount = initialLessons.rows[0]!.count;
+
+      await lessonBlocker.query("begin");
+      const lessonBlockerPid = await backendPid(lessonBlocker);
+      const blockedLesson = await lessonBlocker.query<{ id: string }>(
+        `select id from app.lessons
+         where series_id = $1 and series_date >= $2::date
+           and deleted_at is null and status = 'scheduled'
+         order by series_date limit 1 for update`,
+        [legacySeriesId, fixture.effectiveFrom],
+      );
+      expect(blockedLesson.rows).toHaveLength(1);
+
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        effectiveFrom: fixture.effectiveFrom,
+      });
+      const updatePid = await waitForBlockedBy(pool, lessonBlockerPid);
+      await waitForSpecificBlock(pool, updatePid, lessonBlockerPid);
+
+      // addGroupStudent commits without a schedule advisory lock. The nested
+      // materializer must observe this new participant without acquiring its
+      // key while the outer edit already owns the old series lock.
+      await pool.query(
+        `update app.group_students set left_at = null
+         where group_id = $1 and student_id = $2`,
+        [fixture.groupId, fixture.studentIds[1]],
+      );
+      await drift.query("begin");
+      const driftPid = await backendPid(drift);
+      await drift.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`client:student:${fixture.studentIds[1]}`],
+      );
+      driftSeriesPromise = drift.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`series:${legacySeriesId}`],
+      );
+      await waitForSpecificBlock(pool, driftPid, updatePid);
+
+      await lessonBlocker.query("commit");
+      const [updateResult, driftResult] = await Promise.allSettled([
+        updatePromise,
+        driftSeriesPromise,
+      ]);
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 409,
+          response: { code: "SCHEDULE_SERIES_LOCK_SET_CHANGED" },
+        },
+      });
+      expect(driftResult.status).toBe("fulfilled");
+      const failures = [updateResult, driftResult]
+        .filter((result) => result.status === "rejected")
+        .map((result) => result.reason as { code?: string; status?: number });
+      expect(failures.some((failure) => failure.code === "40P01")).toBe(false);
+      expect(failures.some((failure) => failure.status === 500)).toBe(false);
+      await drift.query("commit");
+
+      const evidence = await pool.query<{
+        valid_until: string;
+        version: number;
+        superseded_by: string | null;
+        deleted_at: Date | null;
+        series_count: number;
+        lesson_count: number;
+        update_audit: number;
+        outbox: number;
+        idempotency: number;
+      }>(
+        `select source.valid_until::text, source.version::int,
+           source.superseded_by, source.deleted_at,
+           (select count(*)::int from app.schedule_series candidate
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as series_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series candidate on candidate.id = lesson.series_id
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as lesson_count,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $2
+               and action = 'crm.schedule_series_updated'
+               and entity_id = source.id::text) as update_audit,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_id = source.id::text) as outbox,
+           (select count(*)::int from app.idempotency_records
+             where actor_key in ($2::text, 'user:' || $2::text)
+               and operation like 'schedule.series%') as idempotency
+         from app.schedule_series source where source.id = $1`,
+        [legacySeriesId, fixture.managerId],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        valid_until: fixture.until60,
+        version: 1,
+        superseded_by: null,
+        deleted_at: null,
+        series_count: 1,
+        lesson_count: initialLessonCount,
+        update_audit: 0,
+        outbox: 0,
+        idempotency: 0,
+      });
+    } finally {
+      await lessonBlocker.query("rollback").catch(() => undefined);
+      await Promise.allSettled([
+        updatePromise ?? Promise.resolve(),
+        driftSeriesPromise ?? Promise.resolve(),
+      ]);
+      await drift.query("rollback").catch(() => undefined);
+      lessonBlocker.release();
+      drift.release();
+      await cleanup(pool, fixture);
     }
   });
 

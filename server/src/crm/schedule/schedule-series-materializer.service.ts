@@ -36,6 +36,10 @@ interface ScheduleMaterializationOptions {
   includePast?: boolean;
   deferPlanReservations?: boolean;
   replaceableLineageDates?: string[];
+  outerLockContract?: {
+    prelockedKeys: string[];
+    expectedKeys: string[];
+  };
 }
 
 @Injectable()
@@ -185,6 +189,43 @@ export class ScheduleSeriesMaterializerService {
     ]);
   }
 
+  private normalizedConstraintKeys(keys: Array<string | null>) {
+    return [
+      ...new Set(
+        keys
+          .filter((key): key is string => typeof key === "string")
+          .map((key) => key.toLowerCase()),
+      ),
+    ].sort();
+  }
+
+  private assertOuterLockContract(
+    candidates: SeriesConstraintCandidate[],
+    options: ScheduleMaterializationOptions,
+  ) {
+    const contract = options.outerLockContract;
+    if (!contract || candidates.length === 0) return;
+
+    const requiredKeys = this.normalizedConstraintKeys(
+      this.seriesConstraintLockKeys(candidates),
+    );
+    const prelockedKeys = new Set(
+      this.normalizedConstraintKeys(contract.prelockedKeys),
+    );
+    const expectedKeys = this.normalizedConstraintKeys(contract.expectedKeys);
+    if (
+      requiredKeys.some((key) => !prelockedKeys.has(key)) ||
+      requiredKeys.length !== expectedKeys.length ||
+      requiredKeys.some((key, index) => key !== expectedKeys[index])
+    ) {
+      throw new ConflictException({
+        code: "SCHEDULE_SERIES_LOCK_SET_CHANGED",
+        message:
+          "Schedule series client or resource set changed during materialization.",
+      });
+    }
+  }
+
   private async assertNoScheduleSeriesConflicts(
     seriesId: string,
     executor: ScheduleQueryExecutor = this.database,
@@ -196,6 +237,9 @@ export class ScheduleSeriesMaterializerService {
       options,
     );
     const lockedKeys = this.seriesConstraintLockKeys(beforeLock);
+    // A nested legacy edit already holds the outer series lock. It must never
+    // discover and acquire a new client/resource key from that point onward.
+    this.assertOuterLockContract(beforeLock, options);
     await acquireScheduleLockKeys(executor, lockedKeys);
     await acquireScheduleSeriesLock(executor, seriesId);
 
@@ -206,20 +250,22 @@ export class ScheduleSeriesMaterializerService {
       executor,
       options,
     );
-    const normalizedLockedKeys = new Set(
-      lockedKeys
-        .filter((key): key is string => typeof key === "string")
-        .map((key) => key.toLowerCase()),
-    );
-    if (
-      this.seriesConstraintLockKeys(candidates).some(
-        (key) => key != null && !normalizedLockedKeys.has(key.toLowerCase()),
-      )
-    ) {
-      throw new ConflictException({
-        code: "SCHEDULE_SERIES_RESOURCES_CHANGED",
-        message: "Schedule series resources changed during materialization.",
-      });
+    if (options.outerLockContract) {
+      this.assertOuterLockContract(candidates, options);
+    } else {
+      const normalizedLockedKeys = new Set(
+        this.normalizedConstraintKeys(lockedKeys),
+      );
+      if (
+        this.seriesConstraintLockKeys(candidates).some(
+          (key) => key != null && !normalizedLockedKeys.has(key.toLowerCase()),
+        )
+      ) {
+        throw new ConflictException({
+          code: "SCHEDULE_SERIES_RESOURCES_CHANGED",
+          message: "Schedule series resources changed during materialization.",
+        });
+      }
     }
     await assertActiveClientReferences(
       executor as unknown as PoolClient,

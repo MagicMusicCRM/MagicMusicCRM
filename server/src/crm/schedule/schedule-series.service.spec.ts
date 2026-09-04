@@ -454,14 +454,13 @@ describe("ScheduleSeriesService", () => {
       transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
         work({ query }),
     } as unknown as DatabaseService;
+    const materializeSeries = jest.fn().mockResolvedValue(0);
     const service = new ScheduleSeriesService(
       database,
       { record: jest.fn() } as unknown as AuditService,
       { assertCanWriteCrm: jest.fn() } as unknown as CrmPolicy,
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
-      {
-        materializeSeries: jest.fn().mockResolvedValue(0),
-      } as unknown as ScheduleSeriesMaterializerService,
+      { materializeSeries } as unknown as ScheduleSeriesMaterializerService,
     );
 
     await expect(
@@ -503,6 +502,28 @@ describe("ScheduleSeriesService", () => {
       false,
       12,
     ]);
+    expect(materializeSeries).toHaveBeenCalledWith(
+      "series-b",
+      expect.anything(),
+      {
+        outerLockContract: {
+          prelockedKeys: [
+            "branch:branch-a",
+            "client:lead:lead-a",
+            "room:room-a",
+            "room:room-b",
+            "teacher:teacher-a",
+            "teacher:teacher-b",
+          ],
+          expectedKeys: [
+            "branch:branch-a",
+            "client:lead:lead-a",
+            "room:room-b",
+            "teacher:teacher-b",
+          ],
+        },
+      },
+    );
   });
 
   it("returns a typed stale conflict when the legacy pre-read changes before the row lock", async () => {

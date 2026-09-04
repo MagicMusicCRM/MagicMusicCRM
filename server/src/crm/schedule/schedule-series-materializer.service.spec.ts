@@ -183,4 +183,129 @@ describe("ScheduleSeriesMaterializerService", () => {
     expect(candidateRead).toBe(2);
     expect(writes).toEqual([]);
   });
+
+  it("rejects a nested client key outside the outer prelocked set before locking", async () => {
+    const events: string[] = [];
+    const query = jest.fn(async (sql: string) => {
+      if (sql.includes("with recursive target") && sql.includes("client_refs")) {
+        return {
+          rows: [
+            {
+              series_date: "2026-09-07",
+              plan_id: null,
+              group_id: "group-a",
+              teacher_id: "teacher-a",
+              branch_id: "branch-a",
+              room_id: "room-a",
+              starts_at: "2026-09-07T07:00:00.000Z",
+              ends_at: "2026-09-07T08:00:00.000Z",
+              client_refs: [
+                { type: "student", id: "student-a" },
+                { type: "student", id: "student-b" },
+              ],
+            },
+          ],
+        };
+      }
+      if (sql.includes("pg_advisory_xact_lock")) events.push("lock");
+      if (sql.includes("insert into app.lessons")) events.push("write");
+      return { rows: [] };
+    });
+    const service = new ScheduleSeriesMaterializerService(
+      {} as DatabaseService,
+      {
+        validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+      } as unknown as ScheduleConstraintEngine,
+    );
+
+    await expect(
+      service.materializePlanSeries({ query } as never, "series-a", {
+        outerLockContract: {
+          prelockedKeys: [
+            "branch:branch-a",
+            "client:student:student-a",
+            "room:room-a",
+            "teacher:teacher-a",
+          ],
+          expectedKeys: [
+            "branch:branch-a",
+            "client:student:student-a",
+            "room:room-a",
+            "teacher:teacher-a",
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_SERIES_LOCK_SET_CHANGED" },
+    });
+    expect(events).toEqual([]);
+  });
+
+  it("rejects a nested client removal found by the post-lock reread", async () => {
+    let candidateRead = 0;
+    const events: string[] = [];
+    const query = jest.fn(async (sql: string) => {
+      if (sql.includes("with recursive target") && sql.includes("client_refs")) {
+        candidateRead += 1;
+        return {
+          rows: [
+            {
+              series_date: "2026-09-07",
+              plan_id: null,
+              group_id: "group-a",
+              teacher_id: "teacher-a",
+              branch_id: "branch-a",
+              room_id: "room-a",
+              starts_at: "2026-09-07T07:00:00.000Z",
+              ends_at: "2026-09-07T08:00:00.000Z",
+              client_refs:
+                candidateRead === 1
+                  ? [
+                      { type: "student", id: "student-a" },
+                      { type: "student", id: "student-b" },
+                    ]
+                  : [{ type: "student", id: "student-a" }],
+            },
+          ],
+        };
+      }
+      if (sql.includes("pg_advisory_xact_lock")) events.push("lock");
+      if (
+        sql.includes("jsonb_to_recordset") ||
+        sql.includes("insert into app.lessons")
+      ) {
+        events.push("write");
+      }
+      return { rows: [] };
+    });
+    const service = new ScheduleSeriesMaterializerService(
+      {} as DatabaseService,
+      {
+        validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+      } as unknown as ScheduleConstraintEngine,
+    );
+    const expectedKeys = [
+      "branch:branch-a",
+      "client:student:student-a",
+      "client:student:student-b",
+      "room:room-a",
+      "teacher:teacher-a",
+    ];
+
+    await expect(
+      service.materializePlanSeries({ query } as never, "series-a", {
+        outerLockContract: {
+          prelockedKeys: expectedKeys,
+          expectedKeys,
+        },
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_SERIES_LOCK_SET_CHANGED" },
+    });
+    expect(candidateRead).toBe(2);
+    expect(events.filter((event) => event === "lock")).toHaveLength(6);
+    expect(events).not.toContain("write");
+  });
 });

@@ -182,7 +182,7 @@ export class ScheduleSeriesService {
         }
         this.assertLegacySeriesMutationAllowed(beforeLock.plan_id);
         const beforeLockClientRefs = this.seriesClientRefs(beforeLock);
-        await acquireScheduleLockKeys(client, [
+        const prelockedKeys = this.normalizedScheduleLockKeys([
           ...beforeLockClientRefs.map(
             (reference) => `client:${reference.type}:${reference.id}`,
           ),
@@ -192,6 +192,19 @@ export class ScheduleSeriesService {
           beforeLock.teacher_id ? `teacher:${beforeLock.teacher_id}` : null,
           dto.teacherId ? `teacher:${dto.teacherId}` : null,
         ]);
+        const expectedContinuationKeys = this.normalizedScheduleLockKeys([
+          ...beforeLockClientRefs.map(
+            (reference) => `client:${reference.type}:${reference.id}`,
+          ),
+          beforeLock.branch_id ? `branch:${beforeLock.branch_id}` : null,
+          (dto.roomId ?? beforeLock.room_id)
+            ? `room:${dto.roomId ?? beforeLock.room_id}`
+            : null,
+          (dto.teacherId ?? beforeLock.teacher_id)
+            ? `teacher:${dto.teacherId ?? beforeLock.teacher_id}`
+            : null,
+        ]);
+        await acquireScheduleLockKeys(client, prelockedKeys);
         await acquireScheduleSeriesLock(
           client as unknown as ScheduleQueryExecutor,
           seriesId,
@@ -351,6 +364,12 @@ export class ScheduleSeriesService {
         const created = await this.materializer.materializeSeries(
           newSeriesId,
           client as unknown as ScheduleQueryExecutor,
+          {
+            outerLockContract: {
+              prelockedKeys,
+              expectedKeys: expectedContinuationKeys,
+            },
+          },
         );
         return { newSeriesId, created };
       },
@@ -437,6 +456,18 @@ export class ScheduleSeriesService {
     ].sort((left, right) =>
       `${left.type}:${left.id}`.localeCompare(`${right.type}:${right.id}`),
     );
+  }
+
+  private normalizedScheduleLockKeys(
+    keys: Array<string | null | undefined>,
+  ): string[] {
+    return [
+      ...new Set(
+        keys
+          .filter((key): key is string => typeof key === "string")
+          .map((key) => key.toLowerCase()),
+      ),
+    ].sort();
   }
 
   private legacySeriesMutationSnapshotKey(series: ScheduleSeriesRow): string {
