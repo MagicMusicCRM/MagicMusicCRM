@@ -144,7 +144,7 @@ describe("Lesson transition runtime ordering", () => {
       assertSettlementReviewPlan: jest.fn(async () => {
         events.push("settlement-review");
       }),
-      resolvedTransitionDto: jest.fn(
+      resolvedEffectiveTransitionDto: jest.fn(
         async (
           _client: PoolClient,
           _actor: unknown,

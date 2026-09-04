@@ -206,6 +206,26 @@ describe("CrmPolicy", () => {
         ),
       ).toThrow(ForbiddenException);
     });
+
+    it.each([
+      { teacherCompensationRuleKey: "fixed" },
+      { teacherCompensationValueMinor: "70000" },
+      { teacherCreditedDurationMinutes: 60 },
+      { teacherCompensationSource: "manual" },
+    ])("typed-rejects every teacher decision field: %j", (financialDecision) => {
+      try {
+        policy.assertCanSupplyTeacherCompensation(
+          { userId: "manager-a", role: "manager" },
+          { financialDecision },
+        );
+        throw new Error("Expected teacher compensation rejection.");
+      } catch (error) {
+        expect(error).toMatchObject({
+          status: 403,
+          response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+        });
+      }
+    });
   });
 
   // KVA-239: общешкольные финансы — только director/system_admin.

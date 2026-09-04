@@ -219,15 +219,74 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         metadata("complete-before-reschedule"),
       );
 
+      const completedEvidence = async () => {
+        const result = await pool.query(
+          `select source.lifecycle_state, source.version,
+             (select count(*)::int from app.lessons
+               where predecessor_id = source.id) as successors,
+             (select count(*)::int from app.lesson_settlement_plans plan
+               where plan.lesson_id = source.id
+                  or plan.lesson_id in (
+                    select id from app.lessons where predecessor_id = source.id
+                  )) as plans,
+             (select count(*)::int from app.lesson_settlement_corrections
+               where lesson_id = source.id) as corrections,
+             (select count(*)::int from app.lesson_transitions
+               where lesson_id = source.id) as transitions,
+             (select count(*)::int from app.lesson_client_charge_facts
+               where lesson_id = source.id) as client_facts,
+             (select count(*)::int from app.lesson_teacher_compensation_facts
+               where lesson_id = source.id) as teacher_facts,
+             (select state::text from app.lesson_reservations
+               where lesson_id = source.id limit 1) as reservation_state,
+             (select units::text from app.lesson_reservations
+               where lesson_id = source.id limit 1) as reservation_units,
+             (select count(*)::int from app.audit_events
+               where entity_type = 'lesson'
+                 and entity_id = source.id::text) as audits,
+             (select count(*)::int from app.platform_outbox_events
+               where aggregate_type = 'schedule:lesson'
+                 and aggregate_id = source.id::text) as outbox,
+             (select count(*)::int from app.idempotency_records
+               where actor_key = $2) as idempotency
+           from app.lessons source where source.id = $1`,
+          [sourceLessonId, `user:${fixture.managerId}`],
+        );
+        return result.rows[0];
+      };
+      const beforeUnauthorized = await completedEvidence();
+      const reversalRequestDecision = {
+        settlementTypeKey: "paid_miss",
+      } as never;
+      const forbiddenTeacherDecision = {
+        settlementTypeKey: "paid_miss",
+        teacherCompensationRuleKey: "fixed",
+        teacherCreditedDurationMinutes: 60,
+        teacherCompensationSource: "manual" as const,
+      };
+      const completedReschedule = {
+        expectedVersion: 3,
+        reasonCode: "business.error",
+        reasonText: "Исправление ошибочно завершённого занятия",
+        successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+      };
+      await expect(
+        service.previewReschedule(actor, sourceLessonId, {
+          ...completedReschedule,
+          financialDecision: forbiddenTeacherDecision,
+        }),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      expect(await completedEvidence()).toEqual(beforeUnauthorized);
+
       const reschedulePreview = await service.previewReschedule(
         actor,
         sourceLessonId,
         {
-          expectedVersion: 3,
-          reasonCode: "business.error",
-          reasonText: "Исправление ошибочно завершённого занятия",
-          financialDecision: paidDecision,
-          successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+          ...completedReschedule,
+          financialDecision: reversalRequestDecision,
         },
       );
       expect(reschedulePreview).toMatchObject({
@@ -239,14 +298,23 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         warnings: ["COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED"],
       });
       const rescheduleCommand = {
-        expectedVersion: 3,
-        reasonCode: "business.error",
-        reasonText: "Исправление ошибочно завершённого занятия",
-        financialDecision: paidDecision,
-        successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+        ...completedReschedule,
+        financialDecision: reversalRequestDecision,
         previewToken: reschedulePreview.previewToken!,
         confirm: true as const,
       };
+      await expect(
+        service.reschedule(
+          actor,
+          sourceLessonId,
+          { ...rescheduleCommand, financialDecision: forbiddenTeacherDecision },
+          metadata("completed-reschedule-unauthorized"),
+        ),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      expect(await completedEvidence()).toEqual(beforeUnauthorized);
       await expect(
         failingService.reschedule(
           actor,
@@ -287,10 +355,36 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         effectiveSubscriptionUnits(pool, fixture.subscriptionId),
       ).resolves.toBe("1.00");
 
-      const moved = await service.reschedule(
-        actor,
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const director = {
+        userId: fixture.managerId,
+        role: "director" as const,
+      };
+      const authorizedPreview = await service.previewReschedule(
+        director,
         sourceLessonId,
-        rescheduleCommand,
+        {
+          ...completedReschedule,
+          financialDecision: forbiddenTeacherDecision,
+        },
+      );
+      expect(authorizedPreview.financialDecision).toEqual({
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+        teacherCreditedDurationMinutes: 0,
+        teacherCompensationSource: "automatic",
+      });
+      const moved = await service.reschedule(
+        director,
+        sourceLessonId,
+        {
+          ...completedReschedule,
+          financialDecision: forbiddenTeacherDecision,
+          previewToken: authorizedPreview.previewToken!,
+          confirm: true,
+        },
         metadata("completed-reschedule"),
       );
       expect(moved.financialDecision).toEqual({

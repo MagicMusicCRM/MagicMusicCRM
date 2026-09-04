@@ -15,7 +15,6 @@ import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
 import {
-  effectiveTransitionDto,
   normalizedTransitionDecision,
   selectedTransitionSubscriptionIds,
   stableTransitionId,
@@ -65,17 +64,12 @@ export class LessonTransitionCommitService {
       input.lessonId,
       input.operation,
     );
-    const effectiveDto = effectiveTransitionDto(
-      source,
-      input.dto,
-      input.operation,
-    );
-    const dto = await this.preparation.resolvedTransitionDto(
+    const dto = await this.preparation.resolvedEffectiveTransitionDto(
       client,
       input.actor,
       source,
       input.operation,
-      effectiveDto,
+      input.dto,
     );
     const successor =
       input.operation === "reschedule"

@@ -281,6 +281,36 @@ export const completedTransitionReversalDecision = (): LessonFinancialDecision =
   teacherCompensationRuleKey: "none",
 });
 
+export const transitionDecisionForResolution = (
+  decision: LessonFinancialDecision,
+  preservesTeacherDecision: boolean,
+): LessonFinancialDecision => {
+  const legacyAutomatic =
+    decision.teacherCompensationSource === undefined &&
+    decision.teacherCompensationValueMinor === undefined &&
+    decision.teacherCreditedDurationMinutes === undefined &&
+    [undefined, "none", "standard"].includes(
+      decision.teacherCompensationRuleKey,
+    );
+  if (!preservesTeacherDecision || !legacyAutomatic) return decision;
+  const {
+    teacherCompensationRuleKey: _rule,
+    teacherCompensationValueMinor: _value,
+    teacherCreditedDurationMinutes: _duration,
+    teacherCompensationSource: _source,
+    ...clientDecision
+  } = decision;
+  return clientDecision as LessonFinancialDecision;
+};
+
+export const legacyPlanTeacherSource = (
+  decision: LessonFinancialDecision,
+): "automatic" | "manual" =>
+  decision.teacherCompensationValueMinor !== undefined ||
+      !["none", "standard"].includes(decision.teacherCompensationRuleKey)
+    ? "manual"
+    : "automatic";
+
 export const effectiveTransitionDto = (
   source: TransitionSource,
   dto: TransitionPreviewDto,
