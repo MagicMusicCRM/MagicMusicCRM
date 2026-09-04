@@ -57,7 +57,11 @@ describe("Lesson settlement calculation", () => {
         chargeType: "personal_account",
         baseChargeMinor: 100_000n,
       }),
-    ).toEqual({ units, amountMinor: amount });
+    ).toEqual({
+      hourShareBasisPoints: share,
+      units,
+      amountMinor: amount,
+    });
   });
 
   it("allows no funding only when both the share and penalty are zero", () => {
@@ -69,7 +73,11 @@ describe("Lesson settlement calculation", () => {
         chargeType: "none",
         baseChargeMinor: 0n,
       }),
-    ).toEqual({ units: "0.00", amountMinor: "0" });
+    ).toEqual({
+      hourShareBasisPoints: 0,
+      units: "0.00",
+      amountMinor: "0",
+    });
 
     for (const input of [
       { hourShareBasisPoints: 10_000, fixedPenaltyMinor: "0" },

@@ -41,7 +41,11 @@ function fact(
       active: true,
       order: 0,
     },
-    calculation: { units, amountMinor: "0" },
+    calculation: {
+      hourShareBasisPoints: 10_000,
+      units,
+      amountMinor: "0",
+    },
   };
 }
 

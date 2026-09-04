@@ -49,6 +49,158 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("keeps partial preview, result, reservation, and immutable facts on one effective share", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      const decision = {
+        settlementTypeKey: "partially_paid_lesson",
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "60000",
+        teacherCompensationSource: "manual" as const,
+        clientDecisions: [
+          {
+            clientId: fixture.studentId,
+            chargeType: "subscription" as const,
+            subscriptionId: fixture.groupSubscriptionId,
+            chargeDurationMinutes: 15,
+          },
+          {
+            clientId: fixture.secondStudentId,
+            chargeType: "personal_account" as const,
+            basePriceMinor: "80000",
+            chargeDurationMinutes: 45,
+          },
+        ],
+      };
+      const input = {
+        context: "settle" as const,
+        reasonText: "Согласованы точные длительности участников",
+        decision,
+      };
+
+      const preview = await database.transaction((client) =>
+        service.preview(client, fixture.groupFundingLessonId, input)
+      );
+      expect(preview.clientFacts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          clientId: fixture.studentId,
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 2_500,
+          units: "0.25",
+          amountMinor: "0",
+        }),
+        expect.objectContaining({
+          clientId: fixture.secondStudentId,
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 7_500,
+          units: "0.75",
+          amountMinor: "60000",
+        }),
+      ]));
+
+      const settled = await database.transaction(async (client) => {
+        const result = await service.settle(
+          client,
+          fixture.groupFundingLessonId,
+          input,
+        );
+        await reservations.terminalize(client, result);
+        return result;
+      });
+      expect(settled.clientFacts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          clientId: fixture.studentId,
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 2_500,
+          units: "0.25",
+          amountMinor: "0",
+        }),
+        expect.objectContaining({
+          clientId: fixture.secondStudentId,
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 7_500,
+          units: "0.75",
+          amountMinor: "60000",
+        }),
+      ]));
+      const persisted = await pool.query<{
+        client_id: string;
+        settlement_type_key: string;
+        hour_share_basis_points: number;
+        units: string;
+        amount_minor: string;
+      }>(
+        `select client_id, settlement_type_key, hour_share_basis_points,
+           units::text, amount_minor::text
+         from app.lesson_client_charge_facts_effective
+         where lesson_id = $1
+         order by client_id`,
+        [fixture.groupFundingLessonId],
+      );
+      expect(persisted.rows).toEqual(expect.arrayContaining([
+        {
+          client_id: fixture.studentId,
+          settlement_type_key: "partially_paid_lesson",
+          hour_share_basis_points: 2_500,
+          units: "0.25",
+          amount_minor: "0",
+        },
+        {
+          client_id: fixture.secondStudentId,
+          settlement_type_key: "partially_paid_lesson",
+          hour_share_basis_points: 7_500,
+          units: "0.75",
+          amount_minor: "60000",
+        },
+      ]));
+      const reservation = await pool.query<{ state: string; units: string }>(
+        `select state, units::text from app.lesson_reservations
+         where lesson_id = $1 and subscription_id = $2`,
+        [fixture.groupFundingLessonId, fixture.groupSubscriptionId],
+      );
+      expect(reservation.rows[0]).toEqual({ state: "consumed", units: "0.25" });
+      expect(decision).toMatchObject({
+        settlementTypeKey: "partially_paid_lesson",
+        clientDecisions: [
+          { clientId: fixture.studentId, chargeDurationMinutes: 15 },
+          { clientId: fixture.secondStudentId, chargeDurationMinutes: 45 },
+        ],
+      });
+
+      await expect(service.settleStandalone(fixture.groupLessonId, {
+        ...input,
+        decision: {
+          ...decision,
+          clientDecisions: [
+            {
+              clientId: fixture.studentId,
+              chargeType: "personal_account",
+              basePriceMinor: "80000",
+              chargeDurationMinutes: 61,
+            },
+            {
+              clientId: fixture.secondStudentId,
+              chargeType: "personal_account",
+              basePriceMinor: "80000",
+              chargeDurationMinutes: 30,
+            },
+          ],
+        },
+      })).rejects.toMatchObject({
+        status: 422,
+        response: { code: "PARTIAL_DURATION_EXCEEDS_LESSON" },
+      });
+      const invalidFacts = await pool.query<{ count: number }>(
+        `select count(*)::int as count from app.lesson_client_charge_facts
+         where lesson_id = $1`,
+        [fixture.groupLessonId],
+      );
+      expect(invalidFacts.rows[0]?.count).toBe(0);
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
   it("persists personal-account payer pricing, replays exactly and transfers only effective debits on correction", async () => {
     const fixture = await createFixture(pool, database);
     try {
@@ -1598,7 +1750,11 @@ function crossPayerCapacityFact(
       active: true,
       order: 0,
     },
-    calculation: { units: "1.00", amountMinor: "0" },
+    calculation: {
+      hourShareBasisPoints: 10_000,
+      units: "1.00",
+      amountMinor: "0",
+    },
   };
 }
 

@@ -83,6 +83,7 @@ export function calculateClientSettlement(input: {
     throw new LessonSettlementCalculationError("CLIENT_AMOUNT_TOO_LARGE");
   }
   return {
+    hourShareBasisPoints: input.hourShareBasisPoints,
     units: `${unitsHundredths / 100n}.${(unitsHundredths % 100n)
       .toString().padStart(2, "0")}`,
     amountMinor: amount.toString(),

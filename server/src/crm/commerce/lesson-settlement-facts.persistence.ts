@@ -48,7 +48,11 @@ export interface CalculatedLessonClientFact {
   payerStudentId: string | null;
   pricingSnapshot?: LessonPriceSnapshot | null;
   settlement: LessonSettlementTypeConfig;
-  calculation: { units: string; amountMinor: string };
+  calculation: {
+    hourShareBasisPoints: number;
+    units: string;
+    amountMinor: string;
+  };
 }
 
 export interface CalculatedLessonTeacherFact {
@@ -561,7 +565,7 @@ export function projectConfiguredLessonClientFact(
     amountMinor: fact.calculation.amountMinor, units: fact.calculation.units,
     currencyCode: "RUB", settlementTypeKey: fact.settlement.stableKey,
     settlementLabel: fact.settlement.label, settlementColorToken: fact.settlement.colorToken,
-    hourShareBasisPoints: fact.settlement.hourShareBasisPoints,
+    hourShareBasisPoints: fact.calculation.hourShareBasisPoints,
     fixedPenaltyMinor: fact.settlement.fixedPenaltyMinor ?? "0", configurationRevisionId,
   };
 }

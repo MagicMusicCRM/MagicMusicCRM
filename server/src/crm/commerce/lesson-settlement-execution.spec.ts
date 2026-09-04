@@ -55,16 +55,19 @@ function errorResponse(action: () => unknown): unknown {
 
 describe("lesson settlement execution", () => {
   it.each([
-    [30, 0, 30, "0.00", "0", "10000", "100000"],
-    [45, 45, 0, "0.75", "100000", "0", "0"],
-    [60, 30, 45, "0.50", "50000", "7500", "75000"],
-    [90, 90, 45, "1.50", "100000", "5000", "50000"],
+    [60, 0, 30, 0, "0.00", "0", "5000", "50000"],
+    [60, 15, 60, 2_500, "0.25", "25000", "10000", "100000"],
+    [60, 30, 45, 5_000, "0.50", "50000", "7500", "75000"],
+    [60, 45, 0, 7_500, "0.75", "75000", "0", "0"],
+    [60, 60, 60, 10_000, "1.00", "100000", "10000", "100000"],
+    [90, 90, 45, 10_000, "1.50", "100000", "5000", "50000"],
   ] as const)(
-    "uses independent exact client/teacher minutes for %i-minute funding",
+    "uses the exact effective share for a %i-minute lesson with %i client minutes",
     async (
       durationMinutes,
       clientMinutes,
       teacherMinutes,
+      expectedClientBasisPoints,
       expectedUnits,
       expectedPersonalAmount,
       expectedTeacherBasisPoints,
@@ -163,6 +166,7 @@ describe("lesson settlement execution", () => {
       },
     })).resolves.toMatchObject({
       clientFacts: [{
+        hourShareBasisPoints: expectedClientBasisPoints,
         units: expectedUnits,
         amountMinor: funding === "personal_account"
           ? expectedPersonalAmount
