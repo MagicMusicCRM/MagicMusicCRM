@@ -1,6 +1,6 @@
 # MagicMusicCRM — действующие архитектурные решения
 
-Статус: active. Обновлено 2026-08-22.
+Статус: active. Обновлено 2026-09-04.
 
 ## Инженерный процесс
 
@@ -88,17 +88,20 @@ DECISION: Финансовые, lesson settlement и audit facts неизмен�
 создаются append-only reversal/correction facts внутри transaction с expected
 version, idempotency и outbox.
 
-DECISION: Post-completion reschedule — одна transaction: zero-effect correction
-supersedes исходные client/teacher facts, исходный consumed reservation остаётся
-историческим и перестаёт быть effective через superseded fact, successor получает
-клонированный settlement plan и новый reservation. UI не предлагает изменить
-фиксированный reversal `free_lesson/none`, но показывает причину и последствия.
+DECISION (owner, 2026-09-03): Edit, reschedule и cancel используют один
+адаптивный редактор и одну versioned command family. Resource/financial-only
+изменение обновляет actionable Lesson, дата или время создают successor, cancel
+использует тот же financial preview. Любой source ID сначала разрешается по
+bounded reschedule chain до текущего Lesson; commit повторяет разрешение под
+lock и возвращает typed 409 при гонке.
 
-DECISION: Form reschedule запланированного индивидуального и группового Lesson
-использует один successor contract: frozen client/group/participants неизменяемы,
-меняются только время, длительность и ресурсы. No-op отклоняется до preview;
-реальное изменение проходит reason + settlement + teacher pay, signed preview,
-expected version и idempotent commit, после которого UI ждёт authoritative readback.
+DECISION (owner, 2026-09-03): Reschedule имеет два разных финансовых решения.
+Source zero decision `free_lesson/none` создаёт только сервер и фиксирует
+append-only; клиент передаёт редактируемый `successorFinancialDecision`. Для
+завершённого source zero correction supersedes effective client/teacher facts,
+а consumed reservation остаётся историческим; successor получает отдельный
+plan, актуальный rate snapshot выбранного teacher и новый reservation. Оба
+решения входят в signed fingerprint и коммитятся одной транзакцией.
 
 DECISION: Физическое удаление организационной сущности с историческими ссылками
 не используется. Decommission выполняется через preview, blockers/remediation,
@@ -190,9 +193,9 @@ DECISION (owner, 2026-08-30): Назначение абонемента и фа�
 `/crm/leads/:leadId/subscriptions/issue` поверх канонического writer. Adapter
 удаляется после release/telemetry evidence, что build `<=201` отсутствует в
 поддерживаемом окне клиентов; до этого он не получает отдельный writer или DTO.
-Период действия передаётся в том же
-подписанном снимке: начало может быть задним числом, окончание включительно и по
-умолчанию равно началу плюс один календарный месяц. Все записи выполняются в
+  Период действия передаётся в том же подписанном снимке: начало может быть
+  задним числом, окончание включительно, а по умолчанию отсутствует и означает
+  бессрочный абонемент. Все записи выполняются в
 одной transaction с expected version, idempotency, audit/outbox и append-only
 историей; UI не создаёт второй экран или параллельную модель оплаты.
 
@@ -217,6 +220,15 @@ immutable snapshot, settlement plan/revision и применимые reservation
 только для settlement с нулевыми `hourShareBasisPoints` и
 `fixedPenaltyMinor`; общий calculation/plan path отклоняет платную или
 штрафную комбинацию до commit как `CLIENT_FUNDING_SOURCE_REQUIRED`.
+
+DECISION (owner, 2026-09-03): Lesson settlement types и teacher compensation
+rules — system-owned catalog. User settings surface скрыта, а backend отклоняет
+изменение `403 SYSTEM_SETTLEMENT_POLICY_READ_ONLY`. Policy revision задаёт
+duration modes `zero/full/manual`, default teacher rule и контексты. Обычное
+занятие/`paid_miss` дают full+standard, `free_lesson`/`unpaid_miss` — zero+none,
+partial типы требуют независимые client и teacher minutes. Autofill выполняется
+один раз; touched значение получает source `manual` и не перезаписывается.
+`penalty_lesson` неактивен для новых решений, исторический read сохраняется.
 
 DECISION: `Lesson.is_trial` и frozen `lesson_snapshots.trial` — только
 независимый immutable marker. Он не изменяет `settlementTypeKey`,
@@ -278,6 +290,19 @@ direction. Settlement и predecessor/successor markers вычисляет backen
 authoritative facts; UI сохраняет последнюю успешную страницу при ошибке и
 повторяет точный неуспешный запрос.
 
+DECISION (owner, 2026-09-03): Карточка Student читает одну canonical lesson
+timeline без фильтра по Plan: manual/generated/one-off, cancelled и каждый узел
+reschedule chain возвращаются ровно один раз с authoritative coverage и
+actionable ID. Правила отображаются отдельно: active open-ended, finite по
+ближайшей границе, dated exceptions, затем expired от новых к старым. Изменение
+одной даты является exception, а не новой текущей версией всего Plan.
+
+DECISION (owner, 2026-09-03): Удаление строки Schedule Plan — signed
+preview/commit. Под lock строка retire на `effectiveFrom - 1`, отменяются только
+её будущие eligible unfinished generated Lesson, освобождаются reservations,
+plan version увеличивается и пишутся audit/outbox. Terminal/manual exceptions
+не меняются; последняя строка завершает Plan через общий end path.
+
 DECISION (owner, 2026-08-14): Schedule Plan — единственный пользовательский
 редактор постоянного расписания. Legacy `schedule-series` и строковое поле
 `preferredSchedule` остаются совместимым read/history-контрактом до отдельной
@@ -315,7 +340,8 @@ DECISION: Group Lesson settlement не является отдельной фи�
 Один common decision дополняется sparse `clientDecisions`; UI получает имена
 только из active frozen snapshot participants и не вычисляет деньги/часы
 самостоятельно. Commerce backend применяет источник средств каждого участника,
-создаёт один immutable client fact на участника и один teacher fact на Lesson;
+  создаёт один immutable client fact на участника и ровно один teacher fact на
+  Lesson с фактически зачтёнными преподавателю минутами;
 в той же terminalize-команде потреблённый subscription reservation становится
 `consumed`, остальные резервы Lesson — `released`. Исключённые участники не
 возвращаются в UI и не получают новый факт.
@@ -362,9 +388,16 @@ compensation совместимы, но поля игнорируются в п�
 не расширяют rate-write.
 
 DECISION (owner, 2026-08-29): Новый teacher-stats export строится как XLSX
-accrual report без payout-полей; stateless OOXML builder предоставляется из
+accrual report по effective teacher facts, включая credited minutes и effective
+rate, без payout-полей; stateless OOXML builder предоставляется из
 neutral common module, чтобы CRM не импортировал Analytics. Payout storage,
 audit и compatibility routes остаются до отдельного adoption/telemetry gate.
+
+DECISION (owner, 2026-09-03): Миграции 0148/0149 только добавляют nullable
+provenance и immutable system policy revision. Совместимый application rollback
+использует предыдущий image поверх schema 0149; destructive down и удаление
+policy revision запрещены. Исторические decision/fact payload без новых полей
+читаются через legacy fallback и не переписываются массово.
 
 DECISION: Lead loss reason хранит `reason_name_snapshot` и
 `reason_kind_snapshot` в каждой исторической смене статуса. Переименование не

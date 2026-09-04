@@ -3,10 +3,13 @@ import {
   Catch,
   ExceptionFilter,
   HttpException,
-  HttpStatus
+  HttpStatus,
+  UnprocessableEntityException
 } from '@nestjs/common';
 import * as Sentry from '@sentry/node';
 import { Request, Response } from 'express';
+import { LessonSettlementCalculationError } from '../../crm/commerce/lesson-settlement.calculation';
+import { SubscriptionPreviewTokenError } from '../../crm/commerce/subscription-preview-token';
 import { SafeLogger } from '../logging/safe-logger.service';
 
 @Catch()
@@ -19,12 +22,14 @@ export class SafeExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const requestId = request.header('x-request-id');
 
+    const safeException = this.mapDomainException(exception);
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
+      safeException instanceof HttpException
+        ? safeException.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
+    const code = this.safeCode(safeException, status);
 
-    if (!(exception instanceof HttpException)) {
+    if (!(safeException instanceof HttpException)) {
       // Carry the error's class, message and stack into the log. Sentry may be
       // unconfigured (SENTRY_DSN unset), and until this was added an unhandled
       // 500 logged only «Unhandled exception» with no cause — a Postgres check
@@ -36,6 +41,7 @@ export class SafeExceptionFilter implements ExceptionFilter {
       this.logger.error(
         {
           message: 'Unhandled exception',
+          code,
           // Constructor name, not `.name` — a `pg` error carries the useful
           // class («DatabaseError») on its constructor while `.name` is a bare
           // «error».
@@ -59,7 +65,8 @@ export class SafeExceptionFilter implements ExceptionFilter {
         {
           message: 'Request rejected',
           status,
-          detail: this.safeMessage(exception),
+          code,
+          detail: this.safeMessage(safeException, status),
           requestId,
           path: request.path,
           method: request.method
@@ -84,13 +91,37 @@ export class SafeExceptionFilter implements ExceptionFilter {
       // fields next to the message (e.g. the 409 {message, conflicts:[…]} of
       // the schedule contract). Flattening it to a bare message would strip
       // the data the client renders. The envelope fields below always win.
-      ...this.extraPayload(exception),
+      ...this.extraPayload(safeException),
       statusCode: status,
-      message: this.safeMessage(exception),
+      code,
+      message: this.safeMessage(safeException, status),
       requestId,
       timestamp: new Date().toISOString(),
       path: request.path
     });
+  }
+
+  /**
+   * Only errors emitted by the pure schedule-commerce boundary are promoted
+   * here. Unknown Error subclasses, database failures and programmer faults
+   * remain opaque 500 responses.
+   */
+  private mapDomainException(exception: unknown): unknown {
+    if (exception instanceof LessonSettlementCalculationError) {
+      return new UnprocessableEntityException({
+        code: exception.code,
+        message: 'Проверьте параметры расчёта занятия.'
+      });
+    }
+    if (exception instanceof SubscriptionPreviewTokenError) {
+      return new UnprocessableEntityException({
+        code: exception.code,
+        message: exception.code === 'PREVIEW_TOKEN_EXPIRED'
+          ? 'Предпросмотр устарел. Обновите расчёт и повторите действие.'
+          : 'Не удалось подтвердить предпросмотр. Обновите расчёт и повторите действие.'
+      });
+    }
+    return exception;
   }
 
   /** Extra structured fields of an HttpException object response (if any). */
@@ -103,8 +134,25 @@ export class SafeExceptionFilter implements ExceptionFilter {
     return rest;
   }
 
-  private safeMessage(exception: unknown): string {
-    if (!(exception instanceof HttpException)) return 'Internal server error';
+  private safeCode(exception: unknown, status: number): string {
+    if (exception instanceof HttpException) {
+      const response = exception.getResponse();
+      if (typeof response === 'object' && response !== null && 'code' in response) {
+        const code = (response as { code: unknown }).code;
+        if (typeof code === 'string' && /^[A-Z0-9_]{2,120}$/.test(code)) {
+          return code;
+        }
+      }
+    }
+    return status >= HttpStatus.INTERNAL_SERVER_ERROR
+      ? 'INTERNAL_SERVER_ERROR'
+      : `HTTP_${status}`;
+  }
+
+  private safeMessage(exception: unknown, status: number): string {
+    if (!(exception instanceof HttpException)) {
+      return 'Сервис временно недоступен. Попробуйте позже.';
+    }
 
     const response = exception.getResponse();
     if (typeof response === 'string') return response;
@@ -114,6 +162,16 @@ export class SafeExceptionFilter implements ExceptionFilter {
       if (typeof message === 'string') return message;
     }
 
+    if (status === HttpStatus.FORBIDDEN) {
+      return 'Недостаточно прав для выполнения действия.';
+    }
+    if (status === HttpStatus.NOT_FOUND) return 'Запрошенные данные не найдены.';
+    if (status === HttpStatus.CONFLICT) {
+      return 'Данные уже изменились. Обновите экран и повторите действие.';
+    }
+    if (status === HttpStatus.UNPROCESSABLE_ENTITY) {
+      return 'Проверьте введённые данные.';
+    }
     return exception.message;
   }
 }
