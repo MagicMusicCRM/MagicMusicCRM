@@ -74,6 +74,7 @@ export interface SchedulePlanTrayCursor {
 
 export interface SchedulePlanListTimelineSource {
   timelineInput: SchedulePlanTimelineInput;
+  rowDefinitions: Array<{ id: string } & Record<string, unknown>>;
 }
 
 @Injectable()
@@ -210,6 +211,7 @@ export class SchedulePlanRepository {
       planned_financial_decision: LessonFinancialDecision | null;
       superseded_by: string | null;
       deleted_at: Date | string | null;
+      business_date: string;
     }>(
       `select series.plan_id, series.id, series.teacher_id,
          nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
@@ -220,7 +222,9 @@ export class SchedulePlanRepository {
          series.duration_minutes, series.valid_from::text,
          series.valid_until::text, series.notes,
          series.planned_financial_decision, series.superseded_by,
-         series.deleted_at
+         series.deleted_at,
+         timezone(coalesce(branch.timezone_name, series.timezone_name,
+           'Europe/Moscow'), now())::date::text as business_date
        from app.schedule_series series
        left join app.teachers teacher on teacher.id = series.teacher_id
        left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
@@ -239,6 +243,9 @@ export class SchedulePlanRepository {
       scheduled_at: Date | string;
       expected_scheduled_at: Date | string;
       scheduled_date: string;
+      business_date: string;
+      source_series_date: string;
+      reschedule_depth: number;
       teacher_id: string;
       teacher_name: string | null;
       room_id: string;
@@ -271,14 +278,19 @@ export class SchedulePlanRepository {
            and successor.deleted_at is null
            and not successor.id = any(lineage.path)
        ), resolved as (
-         select distinct on (lineage.current_lesson_id)
+         select distinct on (
+           lineage.source_series_id, lineage.source_series_date
+         )
            lineage.current_lesson_id, lineage.source_series_id,
            lineage.source_series_date, lineage.plan_id, lineage.depth
          from lesson_lineage lineage
-         order by lineage.current_lesson_id, lineage.depth desc
+         order by lineage.source_series_id, lineage.source_series_date,
+           lineage.depth desc, lineage.current_lesson_id
        )
        select resolved.plan_id, lesson.id as lesson_id,
          source_series.id as source_series_id, lesson.series_id,
+         resolved.source_series_date::text as source_series_date,
+         resolved.depth as reschedule_depth,
          lesson.scheduled_at,
          (resolved.source_series_date + source_series.begin_time) at time zone
            coalesce(source_series.timezone_name, source_branch.timezone_name,
@@ -286,6 +298,9 @@ export class SchedulePlanRepository {
          to_char(timezone(coalesce(lesson_branch.timezone_name,
            source_branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at),
            'YYYY-MM-DD') as scheduled_date,
+         timezone(coalesce(lesson_branch.timezone_name,
+           source_branch.timezone_name, source_series.timezone_name,
+           'Europe/Moscow'), now())::date::text as business_date,
          lesson.teacher_id,
          nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
            coalesce(teacher_profile.last_name, '')), '') as teacher_name,
@@ -330,6 +345,12 @@ export class SchedulePlanRepository {
             id: item.id,
             activeFrom: item.valid_from,
             activeUntil: item.valid_until,
+            businessDate: item.business_date,
+            deletedAt:
+              item.deleted_at == null
+                ? null
+                : new Date(item.deleted_at).toISOString(),
+            supersededBy: item.superseded_by,
             teacherId: item.teacher_id,
             teacherName: item.teacher_name,
             roomId: item.room_id,
@@ -350,6 +371,9 @@ export class SchedulePlanRepository {
           scheduledAt: new Date(item.scheduled_at).toISOString(),
           expectedScheduledAt: new Date(item.expected_scheduled_at).toISOString(),
           scheduledDate: item.scheduled_date,
+          businessDate: item.business_date,
+          sourceSeriesDate: item.source_series_date,
+          rescheduleDepth: item.reschedule_depth,
           teacherId: item.teacher_id,
           teacherName: item.teacher_name,
           roomId: item.room_id,
@@ -377,11 +401,7 @@ export class SchedulePlanRepository {
           endedBy: row.ended_by,
           endedByName: row.ended_by_name,
           endReason: row.end_reason,
-          rows: series
-            .filter(
-              (item) => item.deleted_at === null && item.superseded_by === null,
-            )
-            .map((item) => ({
+          rowDefinitions: series.map((item) => ({
               id: item.id,
               teacherId: item.teacher_id,
               teacherName: item.teacher_name,

@@ -49,6 +49,7 @@ export type ScheduleRuleTimelineEntry =
 export interface SchedulePlanTimelineProjection {
   entries: ScheduleRuleTimelineEntry[];
   exceptions: ScheduleDatedExceptionTimelineEntry[];
+  editableRuleIds: string[];
 }
 
 export interface SchedulePlanEntity {

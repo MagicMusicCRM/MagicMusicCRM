@@ -16,6 +16,9 @@ const rule = (
   id,
   activeFrom,
   activeUntil,
+  businessDate: "2026-09-03",
+  deletedAt: null,
+  supersededBy: null,
   teacherId: "teacher-a",
   teacherName: "Teacher A",
   roomId: "room-a",
@@ -38,6 +41,9 @@ const lesson = (
   scheduledAt: "2026-09-04T10:00:00.000Z",
   expectedScheduledAt: "2026-09-04T10:00:00.000Z",
   scheduledDate: "2026-09-04",
+  businessDate: "2026-09-03",
+  sourceSeriesDate: "2026-09-04",
+  rescheduleDepth: 0,
   teacherId: "teacher-a",
   teacherName: "Teacher A",
   roomId: "room-a",
@@ -177,5 +183,103 @@ describe("buildSchedulePlanTimeline", () => {
         changedFields: [],
       }),
     ]);
+  });
+
+  it("expires lifecycle-retired rules and exposes only effective current rule ids", () => {
+    const result = buildSchedulePlanTimeline(
+      {
+        rules: [
+          rule("current", "2026-09-01", null),
+          rule("finite-expired", "2026-08-01", "2026-09-02"),
+          rule("deleted-before-start", "2026-09-10", null, {
+            deletedAt: "2026-09-01T10:00:00.000Z",
+          }),
+          rule("superseded-before-start", "2026-09-10", null, {
+            supersededBy: "replacement",
+          }),
+        ],
+        lessons: [],
+      },
+      NOW,
+    );
+
+    expect(result.editableRuleIds).toEqual(["current"]);
+    expect(
+      Object.fromEntries(result.entries.map((entry) => [entry.id, entry.status])),
+    ).toMatchObject({
+      current: "active",
+      "finite-expired": "expired",
+      "deleted-before-start": "expired",
+      "superseded-before-start": "expired",
+    });
+  });
+
+  it("collapses a reschedule chain to its deepest successor for one source occurrence", () => {
+    const result = buildSchedulePlanTimeline(
+      {
+        rules: [rule("source-series", "2026-08-01", null)],
+        lessons: [
+          lesson("successor-b", {
+            seriesId: null,
+            predecessorId: "source-a",
+            sourceSeriesDate: "2026-09-04",
+            rescheduleDepth: 1,
+          }),
+          lesson("successor-c", {
+            seriesId: null,
+            predecessorId: "successor-b",
+            sourceSeriesDate: "2026-09-04",
+            rescheduleDepth: 2,
+          }),
+        ],
+      },
+      NOW,
+    );
+
+    expect(result.exceptions.map((entry) => entry.lessonId)).toEqual([
+      "successor-c",
+    ]);
+  });
+
+  it("uses each branch business date near UTC midnight", () => {
+    const nearMidnightUtc = new Date("2026-09-03T21:30:00.000Z");
+    const result = buildSchedulePlanTimeline(
+      {
+        rules: [
+          rule("moscow-rule", "2026-08-01", "2026-09-03", {
+            businessDate: "2026-09-04",
+          }),
+          rule("new-york-rule", "2026-08-01", "2026-09-03", {
+            businessDate: "2026-09-03",
+          }),
+        ],
+        lessons: [
+          lesson("moscow-exception", {
+            sourceSeriesId: "moscow-rule",
+            seriesId: "moscow-rule",
+            scheduledDate: "2026-09-03",
+            businessDate: "2026-09-04",
+            teacherId: "teacher-b",
+          }),
+          lesson("new-york-exception", {
+            sourceSeriesId: "new-york-rule",
+            seriesId: "new-york-rule",
+            scheduledDate: "2026-09-03",
+            businessDate: "2026-09-03",
+            teacherId: "teacher-b",
+          }),
+        ],
+      },
+      nearMidnightUtc,
+    );
+
+    expect(
+      Object.fromEntries(result.entries.map((entry) => [entry.id, entry.status])),
+    ).toMatchObject({
+      "moscow-rule": "expired",
+      "new-york-rule": "active",
+      "moscow-exception": "expired",
+      "new-york-exception": "active",
+    });
   });
 });

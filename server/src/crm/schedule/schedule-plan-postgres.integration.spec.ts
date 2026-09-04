@@ -855,6 +855,254 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("keeps a naturally expired finite series in history but removes it from editable rows", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Истёкшее правило",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, isoWeekday(fixture.today), "10:00")],
+        },
+        {
+          idempotencyKey: `plan-expired-row-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const expiredUntil = addDays(fixture.today, -1);
+      await pool.query(
+        `update app.schedule_series
+         set valid_from = $2::date - 1, valid_until = $2::date,
+           deleted_at = null, superseded_by = null
+         where id = $1`,
+        [created.seriesIds[0], expiredUntil],
+      );
+
+      const projection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+        includeEnded: true,
+      });
+      const projectedPlan = projection.items.find(
+        (item) => item.id === created.id,
+      )!;
+
+      expect(projectedPlan.rows).toEqual([]);
+      expect(projectedPlan.ruleTimeline).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: created.seriesIds[0],
+            status: "expired",
+            sortBucket: 3,
+            sortAt: expiredUntil,
+          }),
+        ]),
+      );
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("projects only the deepest lesson in a multi-hop reschedule chain", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    let sourceLessonId: string | undefined;
+    let successorBId: string | undefined;
+    let successorCId: string | undefined;
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Цепочка переносов",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, isoWeekday(fixture.today), "10:00")],
+        },
+        {
+          idempotencyKey: `plan-reschedule-chain-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      sourceLessonId = created.lessonIds[0]!;
+      const successorB = await pool.query<{ id: string }>(
+        `insert into app.lessons (
+           student_id, group_id, teacher_id, branch_id, room_id,
+           scheduled_at, duration_minutes, status, created_by, predecessor_id
+         )
+         select student_id, group_id, teacher_id, branch_id, room_id,
+           scheduled_at + interval '1 day', duration_minutes, 'scheduled',
+           $2, id
+         from app.lessons where id = $1
+         returning id`,
+        [sourceLessonId, fixture.managerId],
+      );
+      successorBId = successorB.rows[0]!.id;
+      await pool.query(
+        `update app.lessons
+         set successor_id = $2, lifecycle_state = 'rescheduled'
+         where id = $1`,
+        [sourceLessonId, successorBId],
+      );
+      const successorC = await pool.query<{ id: string }>(
+        `insert into app.lessons (
+           student_id, group_id, teacher_id, branch_id, room_id,
+           scheduled_at, duration_minutes, status, created_by, predecessor_id
+         )
+         select student_id, group_id, teacher_id, branch_id, room_id,
+           scheduled_at + interval '1 day', duration_minutes, 'scheduled',
+           $2, id
+         from app.lessons where id = $1
+         returning id`,
+        [successorBId, fixture.managerId],
+      );
+      successorCId = successorC.rows[0]!.id;
+      await pool.query(
+        `update app.lessons
+         set successor_id = $2, lifecycle_state = 'rescheduled'
+         where id = $1`,
+        [successorBId, successorCId],
+      );
+
+      const projection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+      });
+      const projectedPlan = projection.items.find(
+        (item) => item.id === created.id,
+      )!;
+
+      expect(projectedPlan.exceptions.map((entry) => entry.lessonId)).toEqual([
+        successorCId,
+      ]);
+    } finally {
+      if (sourceLessonId) {
+        await pool.query(
+          "update app.lessons set successor_id = null where id = $1",
+          [sourceLessonId],
+        );
+      }
+      if (successorBId) {
+        await pool.query(
+          "update app.lessons set successor_id = null where id = $1",
+          [successorBId],
+        );
+      }
+      if (successorCId) {
+        await pool.query("delete from app.lessons where id = $1", [
+          successorCId,
+        ]);
+      }
+      if (successorBId) {
+        await pool.query("delete from app.lessons where id = $1", [
+          successorBId,
+        ]);
+      }
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("uses the branch-local date for rule and exception expiry around UTC midnight", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const boundary = await pool.query<{
+        timezone_name: string;
+        local_today: string;
+        utc_today: string;
+      }>(
+        `with selected as (
+           select case
+             when extract(hour from timezone('UTC', now())) < 10
+               then 'Pacific/Honolulu'
+             else 'Pacific/Kiritimati'
+           end as timezone_name
+         )
+         select timezone_name,
+           timezone(timezone_name, now())::date::text as local_today,
+           timezone('UTC', now())::date::text as utc_today
+         from selected`,
+      );
+      const {
+        timezone_name: timezoneName,
+        local_today: localToday,
+        utc_today: utcToday,
+      } = boundary.rows[0]!;
+      expect(localToday).not.toBe(utcToday);
+      const boundaryDate = localToday < utcToday ? localToday : utcToday;
+      const expectedStatus = localToday > boundaryDate ? "expired" : "active";
+      expect(utcToday > boundaryDate ? "expired" : "active").not.toBe(
+        expectedStatus,
+      );
+
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Локальная дата филиала",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, isoWeekday(fixture.today), "10:00")],
+        },
+        {
+          idempotencyKey: `plan-local-date-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const exceptionLessonId = created.lessonIds[0]!;
+      await pool.query(
+        "update app.branches set timezone_name = $2 where id = $1",
+        [fixture.branchId, timezoneName],
+      );
+      await pool.query(
+        `update app.schedule_series
+         set valid_from = $2::date - 1, valid_until = $2::date
+         where id = $1`,
+        [created.seriesIds[0], boundaryDate],
+      );
+      await pool.query(
+        `update app.lessons
+         set scheduled_at = ($2::date + time '11:00') at time zone $3,
+           updated_at = now()
+         where id = $1`,
+        [exceptionLessonId, boundaryDate, timezoneName],
+      );
+
+      const projection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+        includeEnded: true,
+      });
+      const projectedPlan = projection.items.find(
+        (item) => item.id === created.id,
+      )!;
+      const projectedRule = projectedPlan.ruleTimeline.find(
+        (entry) => entry.id === created.seriesIds[0],
+      );
+      const projectedException = projectedPlan.exceptions.find(
+        (entry) => entry.lessonId === exceptionLessonId,
+      );
+
+      expect(projectedRule).toMatchObject({ status: expectedStatus });
+      expect(projectedException).toMatchObject({
+        scheduledDate: boundaryDate,
+        status: expectedStatus,
+      });
+      expect(projectedPlan.rows).toHaveLength(
+        expectedStatus === "active" ? 1 : 0,
+      );
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("creates all 13 September-to-December Fridays and reserves only the first 12", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
