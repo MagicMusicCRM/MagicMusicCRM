@@ -71,14 +71,25 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
       _initialFinancialDecision?['teacherCompensationSource']?.toString();
 
   @override
-  List<Map<String, dynamic>> get initialClientDecisions => List.unmodifiable([
-    for (final item
-        in _initialFinancialDecision?['clientDecisions'] as List? ?? const [])
-      if (item is Map)
-        Map<String, dynamic>.unmodifiable(
-          normalizeLessonClientDecision(Map<String, dynamic>.from(item)),
-        ),
-  ]);
+  List<Map<String, dynamic>> get initialClientDecisions {
+    final stored = [
+      for (final item
+          in _initialFinancialDecision?['clientDecisions'] as List? ?? const [])
+        if (item is Map)
+          Map<String, dynamic>.unmodifiable(
+            normalizeLessonClientDecision(Map<String, dynamic>.from(item)),
+          ),
+    ];
+    if (stored.isNotEmpty) return List.unmodifiable(stored);
+    return List.unmodifiable([
+      for (final participant in settlementClients)
+        if (!participant.isStudent)
+          Map<String, dynamic>.unmodifiable({
+            'clientId': participant.id,
+            'chargeType': 'none',
+          }),
+    ]);
+  }
 
   @override
   bool get isGroupLesson {
@@ -124,26 +135,45 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   List<LessonDecisionParticipant> get settlementClients {
     if (isGroupLesson) return groupParticipants;
     final clientType = (lesson['client_type'] ?? lesson['clientType'])
-        ?.toString();
-    if (clientType != null && clientType != 'student') return const [];
-    final id =
-        (lesson['student_id'] ??
-                lesson['studentId'] ??
-                lesson['client_id'] ??
-                lesson['clientId'])
-            ?.toString();
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    final leadId = (lesson['lead_id'] ?? lesson['leadId'])?.toString();
+    final isLead =
+        clientType == 'lead' ||
+        (clientType == null && leadId?.isNotEmpty == true);
+    if (clientType != null && clientType != 'student' && !isLead) {
+      return const [];
+    }
+    final id = isLead
+        ? (leadId ?? lesson['client_id'] ?? lesson['clientId'])?.toString()
+        : (lesson['student_id'] ??
+                  lesson['studentId'] ??
+                  lesson['client_id'] ??
+                  lesson['clientId'])
+              ?.toString();
     if (id == null || id.isEmpty) return const [];
     final name =
-        (lesson['student_name'] ??
-                lesson['studentName'] ??
-                lesson['client_name'] ??
-                lesson['clientName'])
+        (isLead
+                ? (lesson['lead_name'] ??
+                      lesson['leadName'] ??
+                      lesson['client_name'] ??
+                      lesson['clientName'])
+                : (lesson['student_name'] ??
+                      lesson['studentName'] ??
+                      lesson['client_name'] ??
+                      lesson['clientName']))
             ?.toString()
             .trim();
     return [
       LessonDecisionParticipant(
         id: id,
-        name: name?.isNotEmpty == true ? name! : 'Ученик',
+        name: name?.isNotEmpty == true
+            ? name!
+            : isLead
+            ? 'Лид'
+            : 'Ученик',
+        isStudent: !isLead,
       ),
     ];
   }

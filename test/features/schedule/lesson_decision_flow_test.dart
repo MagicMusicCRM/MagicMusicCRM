@@ -17,6 +17,7 @@ const _groupLessonId = '30000000-0000-4000-8000-000000000001';
 const _firstGroupStudentId = '40000000-0000-4000-8000-000000000001';
 const _secondGroupStudentId = '50000000-0000-4000-8000-000000000001';
 const _crossPayerSubscriptionId = '70000000-0000-4000-8000-000000000001';
+const _leadId = '80000000-0000-4000-8000-000000000001';
 
 const _lesson = <String, dynamic>{
   'id': _lessonId,
@@ -524,6 +525,152 @@ Future<void> _openAndFill(
 }
 
 void main() {
+  test('individual lead identity survives snake and camel read shapes', () {
+    for (final fixture in [
+      (
+        lesson: const {
+          ..._lesson,
+          'lead_id': _leadId,
+          'lead_name': 'Лид Снэйк',
+        },
+        name: 'Лид Снэйк',
+      ),
+      (
+        lesson: const {..._lesson, 'leadId': _leadId, 'leadName': 'Лид Кэмел'},
+        name: 'Лид Кэмел',
+      ),
+      (
+        lesson: const {
+          ..._lesson,
+          'clientType': 'lead',
+          'clientId': _leadId,
+          'clientName': 'Лид Generic',
+        },
+        name: 'Лид Generic',
+      ),
+    ]) {
+      final controller = LessonDecisionController(
+        crm: MagicCrmService(_LessonDecisionApi()),
+        operation: LessonDecisionOperation.plannedSettlement,
+        lesson: fixture.lesson,
+        canManageTeacherCompensation: false,
+      );
+
+      expect(controller.settlementClients, hasLength(1));
+      expect(controller.settlementClients.single.id, _leadId);
+      expect(controller.settlementClients.single.name, fixture.name);
+      expect(controller.settlementClients.single.isStudent, isFalse);
+      expect(controller.initialClientDecisions, [
+        {'clientId': _leadId, 'chargeType': 'none'},
+      ]);
+    }
+  });
+
+  testWidgets(
+    'planned settlement previews the exact frozen lead with no fake funding',
+    (tester) async {
+      final api = _LessonDecisionApi(operationKey: 'planned-settlement');
+      final lesson = <String, dynamic>{
+        ..._lesson,
+        'clientType': 'lead',
+        'clientId': _leadId,
+        'clientName': 'Лид Кэмел',
+        'financialDecision': {'settlementTypeKey': 'lesson'},
+      };
+      tester.view.physicalSize = const Size(1400, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _host(
+          api,
+          lesson: lesson,
+          operation: LessonDecisionOperation.plannedSettlement,
+          canManageTeacherCompensation: false,
+        ),
+      );
+      await tester.tap(find.text('Открыть'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Проверка frozen lead',
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+
+      expect(api.previews.single['financialDecision'], {
+        'settlementTypeKey': 'lesson',
+        'clientDecisions': [
+          {'clientId': _leadId, 'chargeType': 'none'},
+        ],
+      });
+    },
+  );
+
+  for (final operation in [
+    LessonDecisionOperation.plannedSettlement,
+    LessonDecisionOperation.correction,
+    LessonDecisionOperation.cancel,
+    LessonDecisionOperation.reschedule,
+  ]) {
+    testWidgets(
+      'stored lead decision round-trips through ${operation.apiKey}',
+      (tester) async {
+        final settlementKey = switch (operation) {
+          LessonDecisionOperation.plannedSettlement ||
+          LessonDecisionOperation.correction => 'lesson',
+          _ => 'free_lesson',
+        };
+        final api = _LessonDecisionApi(operationKey: operation.apiKey);
+        final lesson = <String, dynamic>{
+          ..._lesson,
+          'client_type': 'lead',
+          'lead_id': _leadId,
+          'lead_name': 'Лид Снэйк',
+          'financial_decision': {
+            'settlementTypeKey': settlementKey,
+            'clientDecisions': [
+              {
+                'clientId': _leadId,
+                'settlementTypeKey': settlementKey,
+                'chargeType': 'none',
+              },
+            ],
+          },
+        };
+        tester.view.physicalSize = const Size(1400, 1200);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          _host(
+            api,
+            lesson: lesson,
+            operation: operation,
+            canManageTeacherCompensation: false,
+          ),
+        );
+        await tester.tap(find.text('Открыть'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('lesson-decision-reason')),
+          'Без изменения решения лида',
+        );
+        await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+        await tester.pumpAndSettle();
+
+        expect(
+          (api.previews.single['financialDecision'] as Map)['clientDecisions'],
+          [
+            {
+              'clientId': _leadId,
+              'settlementTypeKey': settlementKey,
+              'chargeType': 'none',
+            },
+          ],
+        );
+      },
+    );
+  }
+
   for (final operation in [
     LessonDecisionOperation.plannedSettlement,
     LessonDecisionOperation.correction,
