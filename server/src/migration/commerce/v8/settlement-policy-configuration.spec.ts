@@ -41,6 +41,43 @@ function clientWithRevisionState() {
 }
 
 describe("ensureSystemSettlementPolicyRevision", () => {
+  it("reuses a valid system revision below a later ordinary revision", async () => {
+    const snapshot = buildCrmConfigurationBaseline([]);
+    const system = {
+      id: REVISION_ID,
+      version: 1,
+      effective_snapshot: snapshot,
+      impact: { systemMigration: "v8-settlement-policy-v1" },
+      reason: SYSTEM_SETTLEMENT_POLICY_REASON,
+      created_by: ACTOR_ID,
+    };
+    const latest = {
+      ...system,
+      id: "33333333-3333-4333-8333-333333333333",
+      version: 2,
+      impact: {},
+      reason: "ordinary.configuration.change",
+    };
+    const query = jest.fn(async (text: string) => {
+      if (text.includes("pg_advisory_xact_lock")) return { rows: [] };
+      if (text.includes("impact ->> 'systemMigration'")) {
+        return { rows: [system] };
+      }
+      if (text.includes("from app.crm_configuration_revisions")) {
+        return { rows: [latest] };
+      }
+      throw new Error(`Unexpected SQL: ${text}`);
+    });
+
+    await expect(ensureSystemSettlementPolicyRevision(
+      { query } as unknown as PoolClient,
+      ACTOR_ID,
+    )).resolves.toEqual({ revisionId: REVISION_ID, created: false });
+    expect(query.mock.calls.some(([sql]) =>
+      String(sql).includes("insert into app.crm_configuration_revisions"),
+    )).toBe(false);
+  });
+
   it("publishes one system-owned complete policy and is idempotent", async () => {
     const fixture = clientWithRevisionState();
 

@@ -24,6 +24,7 @@ import { ensureSystemSettlementPolicyRevision } from "./settlement-policy-config
 export interface SettlementPolicyCandidateInput {
   entityType: "lesson_plan" | "schedule_series";
   entityId: string;
+  aggregateId?: string;
   expectedVersion: number;
   lifecycleState: string;
   durationMinutes: number;
@@ -137,6 +138,15 @@ export interface SettlementPolicyApplyDependencies {
     current: SettlementPolicyCandidateInput,
     command: SettlementPolicyApplyCommand,
   ) => Promise<void>;
+  repairScheduleGroup?: (
+    items: SettlementPolicyScheduleGroupItem[],
+  ) => Promise<void>;
+}
+
+export interface SettlementPolicyScheduleGroupItem {
+  current: SettlementPolicyCandidateInput;
+  candidate: SettlementPolicyReconciliationReport["candidates"][number];
+  command: SettlementPolicyApplyCommand;
 }
 
 export async function applySettlementPolicyCandidates(
@@ -175,7 +185,14 @@ export async function applySettlementPolicyCandidates(
       continue;
     }
     const classification = classifySettlementPolicyCandidate(current);
-    if (classification.classification === "clean") continue;
+    if (classification.classification === "clean") {
+      if (current.decision && matchesProposedAutomaticResult(
+        current.decision,
+        candidate.proposedDecision,
+      )) continue;
+      issues.push(staleIssue(candidate));
+      continue;
+    }
     if (current.expectedVersion !== candidate.expectedVersion ||
         !current.decision ||
         settlementDecisionHash(current.decision) !==
@@ -184,17 +201,23 @@ export async function applySettlementPolicyCandidates(
       issues.push(staleIssue(candidate));
       continue;
     }
+    if (current.entityType === "schedule_series" && !current.aggregateId) {
+      issues.push(staleIssue(candidate));
+      continue;
+    }
     pending.push({ current, candidate });
   }
   if (issues.length > 0) {
     return { mutations, configurationRevisionId, issues };
   }
-  for (const { current, candidate } of pending) {
-    if (!configurationRevisionId) {
-      configurationRevisionId =
-        (await dependencies.ensureConfiguration()).revisionId;
-    }
-    await dependencies.repair(current, {
+  if (pending.length > 0) {
+    configurationRevisionId =
+      (await dependencies.ensureConfiguration()).revisionId;
+  }
+  const items = pending.map(({ current, candidate }) => ({
+    current,
+    candidate,
+    command: {
       proposedDecision: candidate.proposedDecision,
       idempotencyKey: [
         "v8:settlement-policy",
@@ -202,11 +225,52 @@ export async function applySettlementPolicyCandidates(
         candidate.entityId,
         candidate.currentDecisionHash,
       ].join(":"),
-      configurationRevisionId,
-    });
+      configurationRevisionId: configurationRevisionId!,
+    },
+  }));
+  const scheduleGroups = new Map<string, SettlementPolicyScheduleGroupItem[]>();
+  for (const item of items.filter(({ current }) =>
+    current.entityType === "schedule_series")) {
+    const group = scheduleGroups.get(item.current.aggregateId!) ?? [];
+    group.push(item);
+    scheduleGroups.set(item.current.aggregateId!, group);
+  }
+  for (const group of scheduleGroups.values()) {
+    try {
+      if (dependencies.repairScheduleGroup) {
+        await dependencies.repairScheduleGroup(group);
+      } else {
+        for (const item of group) {
+          await dependencies.repair(item.current, item.command);
+        }
+      }
+      mutations += group.length;
+    } catch (error) {
+      if (!isReconciliationStale(error)) throw error;
+      issues.push(...group.map(({ candidate }) => staleIssue(candidate)));
+      return { mutations, configurationRevisionId, issues };
+    }
+  }
+  for (const item of items.filter(({ current }) =>
+    current.entityType === "lesson_plan")) {
+    await dependencies.repair(item.current, item.command);
     mutations += 1;
   }
   return { mutations, configurationRevisionId, issues };
+}
+
+function matchesProposedAutomaticResult(
+  live: LessonFinancialDecision,
+  proposed: LessonFinancialDecision,
+): boolean {
+  return live.settlementTypeKey === proposed.settlementTypeKey &&
+    live.teacherCompensationRuleKey ===
+      proposed.teacherCompensationRuleKey &&
+    live.teacherCreditedDurationMinutes ===
+      proposed.teacherCreditedDurationMinutes &&
+    live.teacherCompensationValueMinor ===
+      proposed.teacherCompensationValueMinor &&
+    live.teacherCompensationSource === "automatic";
 }
 
 function staleIssue(candidate: {
@@ -220,11 +284,17 @@ function staleIssue(candidate: {
   };
 }
 
+function isReconciliationStale(error: unknown): boolean {
+  return error instanceof Error &&
+    error.message === "RECONCILIATION_STALE_CANDIDATE";
+}
+
 type Queryable = Pick<PoolClient, "query"> | Pick<DatabaseService, "query">;
 
 interface RawCandidateRow extends QueryResultRow {
   entity_type: "lesson_plan" | "schedule_series";
   entity_id: string;
+  aggregate_id: string;
   expected_version: number | string;
   lifecycle_state: string;
   duration_minutes: number | string;
@@ -259,6 +329,7 @@ export async function scanSettlementPolicyCandidates(
 }> {
   const result = await runQuery<RawCandidateRow>(queryable, `
     select 'lesson_plan'::text as entity_type, lesson.id as entity_id,
+      lesson.id as aggregate_id,
       lesson.version as expected_version, lesson.lifecycle_state,
       lesson.duration_minutes, settlement.decision,
       settlement.reason_text as manual_reason,
@@ -282,7 +353,7 @@ export async function scanSettlementPolicyCandidates(
 
     union all
 
-    select 'schedule_series'::text, series.id, plan.version,
+    select 'schedule_series'::text, series.id, plan.id, plan.version,
       case when plan.status = 'active' and series.deleted_at is null
         and series.superseded_by is null then 'scheduled' else 'inactive' end,
       series.duration_minutes, series.planned_financial_decision,
@@ -362,6 +433,7 @@ function candidateInputFromRow(
   return {
     entityType: row.entity_type,
     entityId: row.entity_id,
+    aggregateId: row.aggregate_id,
     expectedVersion: Number(row.expected_version),
     lifecycleState: row.lifecycle_state,
     durationMinutes: Number(row.duration_minutes),
@@ -479,10 +551,6 @@ async function runApply(
   dryRun: SettlementPolicyReconciliationReport,
 ): Promise<{ report: SettlementPolicyReconciliationReport; mutations: number }> {
   const before = await readInvariants(runtime.database);
-  const reportByEntity = new Map(dryRun.candidates.map((candidate) => [
-    `${candidate.entityType}:${candidate.entityId}`,
-    candidate,
-  ]));
   const result = await applySettlementPolicyCandidates(dryRun, {
     candidateRevision: SETTLEMENT_POLICY_CANDIDATE_REVISION,
     ensureConfiguration: () => runtime.database.transaction((client) =>
@@ -501,14 +569,7 @@ async function runApply(
           compensationRevisionId: row.compensation_revision_id,
         },
       ).catch(() => undefined);
-      const current = candidateInputFromRow(row, catalog);
-      const expected = reportByEntity.get(`${entityType}:${entityId}`);
-      if (entityType === "schedule_series" && expected &&
-          await completedIdempotency(runtime.database, runtime.actor.userId,
-            expected)) {
-        return automaticAppliedCandidate(current, expected);
-      }
-      return current;
+      return candidateInputFromRow(row, catalog);
     },
     repair: async (current, command) => {
       const decision = mergeAutomaticTeacherDecision(
@@ -518,14 +579,10 @@ async function runApply(
       if (current.entityType === "lesson_plan") {
         await repairLessonPlan(runtime, current, decision, command.idempotencyKey);
       } else {
-        await repairScheduleSeries(
-          runtime,
-          current,
-          decision,
-          command.idempotencyKey,
-        );
+        throw new Error("SCHEDULE_GROUP_REPAIR_REQUIRED");
       }
     },
+    repairScheduleGroup: (items) => repairScheduleSeriesGroup(runtime, items),
   });
   const after = await readInvariants(runtime.database);
   assertApplyInvariants(before, after);
@@ -558,49 +615,6 @@ function mergeAutomaticTeacherDecision(
   return { ...preserved, ...proposed };
 }
 
-function automaticAppliedCandidate(
-  current: SettlementPolicyCandidateInput,
-  report: SettlementPolicyRepairCandidate,
-): SettlementPolicyCandidateInput {
-  return {
-    ...current,
-    lifecycleState: "scheduled",
-    settlementTypeKey: report.proposedDecision.settlementTypeKey,
-    teacherCompensationRuleKey:
-      report.proposedDecision.teacherCompensationRuleKey,
-    teacherCompensationSource: "automatic",
-    manualReason: null,
-    decision: report.proposedDecision,
-  };
-}
-
-async function completedIdempotency(
-  queryable: Queryable,
-  actorUserId: string,
-  candidate: SettlementPolicyRepairCandidate,
-): Promise<boolean> {
-  const idempotencyKey = reconciliationIdempotencyKey(candidate);
-  const result = await runQuery<{ completed: boolean }>(queryable, `
-    select exists (
-      select 1 from app.idempotency_records
-      where actor_key = $1 and operation = 'schedule.plan.update'
-        and idempotency_key = $2 and status = 'completed'
-    ) as completed
-  `, [`user:${actorUserId}`, idempotencyKey]);
-  return result.rows[0]?.completed === true;
-}
-
-function reconciliationIdempotencyKey(
-  candidate: SettlementPolicyRepairCandidate,
-): string {
-  return [
-    "v8:settlement-policy",
-    candidate.entityType,
-    candidate.entityId,
-    candidate.currentDecisionHash,
-  ].join(":");
-}
-
 async function loadRawCandidate(
   queryable: Queryable,
   entityType: "lesson_plan" | "schedule_series",
@@ -609,6 +623,7 @@ async function loadRawCandidate(
   if (entityType === "lesson_plan") {
     const result = await runQuery<RawCandidateRow>(queryable, `
       select 'lesson_plan'::text as entity_type, lesson.id as entity_id,
+        lesson.id as aggregate_id,
         lesson.version as expected_version, lesson.lifecycle_state,
         lesson.duration_minutes, settlement.decision,
         settlement.reason_text as manual_reason,
@@ -633,7 +648,7 @@ async function loadRawCandidate(
       where lineage.depth < 100 and not successor.id = any(lineage.path)
     )
     select 'schedule_series'::text as entity_type, $1::uuid as entity_id,
-      plan.version as expected_version,
+      plan.id as aggregate_id, plan.version as expected_version,
       case when plan.status = 'active' and series.deleted_at is null
         and series.superseded_by is null then 'scheduled' else 'inactive' end
         as lifecycle_state,
@@ -694,31 +709,37 @@ interface SchedulePlanRepairRow extends QueryResultRow {
   duration_minutes: number;
   notes: string | null;
   decision: LessonFinancialDecision;
-  target: boolean;
   local_today: string;
 }
 
-async function repairScheduleSeries(
+export function verifyScheduleGroupSnapshot(
+  items: SettlementPolicyScheduleGroupItem[],
+  snapshot: {
+    planId: string;
+    planVersion: number;
+    rows: Array<{ seriesId: string; decision: LessonFinancialDecision }>;
+  },
+): void {
+  const live = new Map(snapshot.rows.map((row) => [row.seriesId, row]));
+  const valid = items.length > 0 && items.every(({ current, candidate }) => {
+    const row = live.get(candidate.entityId);
+    return current.aggregateId === snapshot.planId &&
+      candidate.expectedVersion === snapshot.planVersion &&
+      row !== undefined &&
+      settlementDecisionHash(row.decision) === candidate.currentDecisionHash;
+  });
+  if (!valid) throw new Error("RECONCILIATION_STALE_CANDIDATE");
+}
+
+async function repairScheduleSeriesGroup(
   runtime: ReconciliationRuntime,
-  current: SettlementPolicyCandidateInput,
-  decision: LessonFinancialDecision,
-  idempotencyKey: string,
+  items: SettlementPolicyScheduleGroupItem[],
 ): Promise<void> {
+  const planId = items[0]?.current.aggregateId;
+  if (!planId || items.some((item) => item.current.aggregateId !== planId)) {
+    throw new Error("RECONCILIATION_STALE_CANDIDATE");
+  }
   const rows = await runQuery<SchedulePlanRepairRow>(runtime.database, `
-    with recursive target_lineage as (
-      select series.id, series.superseded_by, 0 as depth,
-        array[series.id] as path
-      from app.schedule_series series where series.id = $1
-      union all
-      select successor.id, successor.superseded_by, lineage.depth + 1,
-        lineage.path || successor.id
-      from target_lineage lineage
-      join app.schedule_series successor
-        on successor.id = lineage.superseded_by
-      where lineage.depth < 100 and not successor.id = any(lineage.path)
-    ), target as (
-      select id from target_lineage order by depth desc limit 1
-    )
     select plan.id as plan_id, plan.version as plan_version, plan.title,
       plan.active_from::text, plan.active_until::text, plan.subscription_id,
       plan.kind, series.id as series_id, series.teacher_id, series.room_id,
@@ -726,54 +747,100 @@ async function repairScheduleSeries(
       to_char(series.begin_time, 'HH24:MI') as begin_time,
       series.duration_minutes, series.notes,
       series.planned_financial_decision as decision,
-      series.id = target.id as target,
       greatest(plan.active_from,
         max(timezone(coalesce(branch.timezone_name, series.timezone_name,
           'Europe/Moscow'), now())::date) over ())::text as local_today
-    from target
-    join app.schedule_series target_series on target_series.id = target.id
-    join app.schedule_plans plan on plan.id = target_series.plan_id
+    from app.schedule_plans plan
     join app.schedule_series series on series.plan_id = plan.id
       and series.deleted_at is null and series.superseded_by is null
     left join app.branches branch on branch.id = series.branch_id
+    where plan.id = $1 and plan.status = 'active'
     order by series.id
-  `, [current.entityId]);
-  if (rows.rows.length === 0 || !rows.rows.some((row) => row.target)) {
-    throw new Error("RECONCILIATION_STALE_CANDIDATE");
-  }
+  `, [planId]);
+  if (rows.rows.length === 0) throw new Error("RECONCILIATION_STALE_CANDIDATE");
   const plan = rows.rows[0]!;
+  verifyScheduleGroupSnapshot(items, {
+    planId: plan.plan_id,
+    planVersion: Number(plan.plan_version),
+    rows: rows.rows.map((row) => ({
+      seriesId: row.series_id,
+      decision: row.decision,
+    })),
+  });
+  const proposed = new Map(items.map((item) => [
+    item.candidate.entityId,
+    mergeAutomaticTeacherDecision(
+      rows.rows.find((row) => row.series_id === item.candidate.entityId)!
+        .decision,
+      item.command.proposedDecision,
+    ),
+  ]));
   const participants = plan.kind === "group"
     ? await activePlanParticipants(runtime.database, plan.plan_id,
         plan.local_today)
     : undefined;
-  await runtime.scheduleCommands.update(
-    runtime.actor,
-    plan.plan_id,
-    {
-      expectedVersion: Number(plan.plan_version),
-      effectiveFrom: plan.local_today,
-      title: plan.title,
-      activeUntil: plan.active_until,
-      ...(plan.subscription_id ? { subscriptionId: plan.subscription_id } : {}),
-      ...(participants ? { participants } : {}),
-      rows: rows.rows.map((row) => ({
-        seriesId: row.series_id,
-        teacherId: row.teacher_id,
-        roomId: row.room_id,
-        branchId: row.branch_id,
-        weekday: row.weekday,
-        beginTime: row.begin_time,
-        durationMinutes: row.duration_minutes,
-        ...(row.notes ? { notes: row.notes } : {}),
-        financialDecision: row.target ? decision : row.decision,
-        ...(row.target
-          ? { plannedSettlementReason:
-              "Автоматическое восстановление политики расчёта" }
-          : {}),
-      })),
-    },
-    { idempotencyKey, requestId: requestId(idempotencyKey) },
-  );
+  const idempotencyKey = scheduleGroupIdempotencyKey(planId, items);
+  try {
+    await runtime.scheduleCommands.update(
+      runtime.actor,
+      plan.plan_id,
+      {
+        expectedVersion: items[0]!.candidate.expectedVersion,
+        effectiveFrom: plan.local_today,
+        title: plan.title,
+        activeUntil: plan.active_until,
+        ...(plan.subscription_id ? { subscriptionId: plan.subscription_id } : {}),
+        ...(participants ? { participants } : {}),
+        rows: rows.rows.map((row) => ({
+          seriesId: row.series_id,
+          teacherId: row.teacher_id,
+          roomId: row.room_id,
+          branchId: row.branch_id,
+          weekday: row.weekday,
+          beginTime: row.begin_time,
+          durationMinutes: row.duration_minutes,
+          ...(row.notes ? { notes: row.notes } : {}),
+          financialDecision: proposed.get(row.series_id) ?? row.decision,
+          ...(proposed.has(row.series_id)
+            ? { plannedSettlementReason:
+                "Автоматическое восстановление политики расчёта" }
+            : {}),
+        })),
+      },
+      { idempotencyKey, requestId: requestId(idempotencyKey) },
+    );
+  } catch (error) {
+    if (scheduleCommandWasStale(error)) {
+      throw new Error("RECONCILIATION_STALE_CANDIDATE");
+    }
+    throw error;
+  }
+}
+
+function scheduleGroupIdempotencyKey(
+  planId: string,
+  items: SettlementPolicyScheduleGroupItem[],
+): string {
+  return `v8:settlement-policy:schedule_series:${planId}:${fingerprintPayload(
+    items.map(({ candidate }) => ({
+      entityId: candidate.entityId,
+      decisionHash: candidate.currentDecisionHash,
+    })).sort((left, right) => left.entityId.localeCompare(right.entityId)),
+  )}`;
+}
+
+function scheduleCommandWasStale(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const response = "getResponse" in error &&
+      typeof error.getResponse === "function"
+    ? error.getResponse()
+    : error;
+  const code = response && typeof response === "object" && "code" in response
+    ? response.code
+    : undefined;
+  return code === "STALE_VERSION" ||
+    code === "STALE_AGGREGATE_VERSION" ||
+    code === "LESSON_VERSION_DIVERGED";
 }
 
 async function activePlanParticipants(

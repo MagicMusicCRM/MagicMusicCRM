@@ -26,16 +26,27 @@ export async function ensureSystemSettlementPolicyRevision(
   await client.query("select pg_advisory_xact_lock(hashtext($1))", [
     "crm-configuration:school",
   ]);
+  const existingSystemResult = await client.query<ConfigurationRevision>(
+    `select id, version, effective_snapshot, impact, reason, created_by
+     from app.crm_configuration_revisions
+     where branch_id is null
+       and impact ->> 'systemMigration' = $1
+     order by version desc limit 1`,
+    [SYSTEM_SETTLEMENT_POLICY_KEY],
+  );
+  const existingSystem = existingSystemResult.rows[0];
+  if (existingSystem) {
+    if (!isSystemPolicyRevision(existingSystem)) {
+      throw new Error("SYSTEM_SETTLEMENT_POLICY_REVISION_INVALID");
+    }
+    return { revisionId: existingSystem.id, created: false };
+  }
   const currentResult = await client.query<ConfigurationRevision>(
     `select id, version, effective_snapshot, impact, reason, created_by
      from app.crm_configuration_revisions
      where branch_id is null order by version desc limit 1`,
   );
   const current = currentResult.rows[0];
-  if (current && isSystemPolicyRevision(current)) {
-    return { revisionId: current.id, created: false };
-  }
-
   const baseline = buildCrmConfigurationBaseline(
     current ? [] : await loadClientFieldDefinitions(client),
   );

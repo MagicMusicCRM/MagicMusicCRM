@@ -3,6 +3,8 @@ import {
   applySettlementPolicyCandidates,
   classifySettlementPolicyCandidate,
   type SettlementPolicyCandidateInput,
+  type SettlementPolicyScheduleGroupItem,
+  verifyScheduleGroupSnapshot,
 } from "./lesson-settlement-policy-data";
 import {
   createSettlementPolicyReport,
@@ -186,6 +188,188 @@ describe("signed settlement policy reports", () => {
 });
 
 describe("settlement policy apply guard", () => {
+  it("groups schedule rows by plan and rejects a fresh concurrent plan version", async () => {
+    const planId = "44444444-4444-4444-8444-444444444444";
+    const secondId = "55555555-5555-4555-8555-555555555555";
+    const first = candidate({
+      entityType: "schedule_series",
+      aggregateId: planId,
+      expectedVersion: 7,
+    });
+    const second = candidate({
+      entityType: "schedule_series",
+      entityId: secondId,
+      aggregateId: planId,
+      expectedVersion: 7,
+    });
+    const classified = classifySettlementPolicyCandidate(first);
+    const report = createSettlementPolicyReport({
+      mode: "dry-run",
+      candidateRevision: "v8-settlement-policy-v1",
+      candidates: [first, second].map((item) => ({
+        entityType: item.entityType,
+        entityId: item.entityId,
+        expectedVersion: item.expectedVersion,
+        currentDecisionHash: settlementDecisionHash(item.decision!),
+        proposedDecision: classified.proposedDecision!,
+        classification: classified.classification,
+        reasonCode: classified.reasonCode,
+      })),
+      issues: [],
+      invariants: {
+        futureLessonCountBefore: 2,
+        futureLessonCountAfter: 2,
+        activeReservationUnitsBefore: "2",
+        activeReservationUnitsAfter: "2",
+        effectiveTeacherFactCountBefore: 0,
+        effectiveTeacherFactCountAfter: 0,
+        schedulePlanVersionChanges: [],
+      },
+      generatedAt: "2026-09-04T00:00:00.000Z",
+    });
+    const repair = jest.fn();
+    const repairScheduleGroup = jest.fn(async (
+      items: SettlementPolicyScheduleGroupItem[],
+    ) => {
+      verifyScheduleGroupSnapshot(items, {
+        planId,
+        planVersion: 8,
+        rows: items.map(({ candidate }) => ({
+          seriesId: candidate.entityId,
+          decision: first.decision!,
+        })),
+      });
+    });
+
+    await expect(applySettlementPolicyCandidates(report, {
+      candidateRevision: "v8-settlement-policy-v1",
+      ensureConfiguration: jest.fn(async () => ({
+        revisionId: "22222222-2222-4222-8222-222222222222",
+        created: false,
+      })),
+      loadCandidate: jest.fn(async (_type, id) => id === secondId
+        ? second
+        : first),
+      repair,
+      repairScheduleGroup,
+    })).resolves.toEqual({
+      mutations: 0,
+      configurationRevisionId: "22222222-2222-4222-8222-222222222222",
+      issues: [
+        { entityType: "schedule_series", entityId: LESSON_ID,
+          code: "RECONCILIATION_STALE_CANDIDATE" },
+        { entityType: "schedule_series", entityId: secondId,
+          code: "RECONCILIATION_STALE_CANDIDATE" },
+      ],
+    });
+    expect(repairScheduleGroup).toHaveBeenCalledTimes(1);
+    expect(repair).not.toHaveBeenCalled();
+  });
+
+  it("treats a live manual decision as stale instead of trusting completion state", async () => {
+    const original = candidate();
+    const classified = classifySettlementPolicyCandidate(original);
+    const report = createSettlementPolicyReport({
+      mode: "dry-run",
+      candidateRevision: "v8-settlement-policy-v1",
+      candidates: [{
+        entityType: original.entityType,
+        entityId: original.entityId,
+        expectedVersion: original.expectedVersion,
+        currentDecisionHash: settlementDecisionHash(original.decision!),
+        proposedDecision: classified.proposedDecision!,
+        classification: classified.classification,
+        reasonCode: classified.reasonCode,
+      }],
+      issues: [],
+      invariants: {
+        futureLessonCountBefore: 1,
+        futureLessonCountAfter: 1,
+        activeReservationUnitsBefore: "1",
+        activeReservationUnitsAfter: "1",
+        effectiveTeacherFactCountBefore: 0,
+        effectiveTeacherFactCountAfter: 0,
+        schedulePlanVersionChanges: [],
+      },
+      generatedAt: "2026-09-04T00:00:00.000Z",
+    });
+    const repair = jest.fn();
+
+    const result = await applySettlementPolicyCandidates(report, {
+      candidateRevision: "v8-settlement-policy-v1",
+      ensureConfiguration: jest.fn(),
+      loadCandidate: jest.fn(async () => candidate({
+        teacherCompensationSource: "manual",
+        decision: {
+          settlementTypeKey: "lesson",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "1000",
+          teacherCompensationSource: "manual",
+        },
+      })),
+      repair,
+    });
+
+    expect(result.issues).toEqual([{
+      entityType: "lesson_plan",
+      entityId: LESSON_ID,
+      code: "RECONCILIATION_STALE_CANDIDATE",
+    }]);
+    expect(repair).not.toHaveBeenCalled();
+  });
+
+  it("does not no-op a completed automatic decision with different credited minutes", async () => {
+    const original = candidate();
+    const classified = classifySettlementPolicyCandidate(original);
+    const report = createSettlementPolicyReport({
+      mode: "dry-run",
+      candidateRevision: "v8-settlement-policy-v1",
+      candidates: [{
+        entityType: original.entityType,
+        entityId: original.entityId,
+        expectedVersion: original.expectedVersion,
+        currentDecisionHash: settlementDecisionHash(original.decision!),
+        proposedDecision: classified.proposedDecision!,
+        classification: classified.classification,
+        reasonCode: classified.reasonCode,
+      }],
+      issues: [],
+      invariants: {
+        futureLessonCountBefore: 1,
+        futureLessonCountAfter: 1,
+        activeReservationUnitsBefore: "1",
+        activeReservationUnitsAfter: "1",
+        effectiveTeacherFactCountBefore: 0,
+        effectiveTeacherFactCountAfter: 0,
+        schedulePlanVersionChanges: [],
+      },
+      generatedAt: "2026-09-04T00:00:00.000Z",
+    });
+
+    const result = await applySettlementPolicyCandidates(report, {
+      candidateRevision: "v8-settlement-policy-v1",
+      ensureConfiguration: jest.fn(),
+      loadCandidate: jest.fn(async () => candidate({
+        expectedVersion: 4,
+        teacherCompensationRuleKey: "standard",
+        teacherCompensationSource: "automatic",
+        decision: {
+          settlementTypeKey: "lesson",
+          teacherCompensationRuleKey: "standard",
+          teacherCreditedDurationMinutes: 30,
+          teacherCompensationSource: "automatic",
+        },
+      })),
+      repair: jest.fn(),
+    });
+
+    expect(result.issues).toEqual([{
+      entityType: "lesson_plan",
+      entityId: LESSON_ID,
+      code: "RECONCILIATION_STALE_CANDIDATE",
+    }]);
+  });
+
   it("reports a changed record as stale and does not overwrite it", async () => {
     const original = candidate();
     const classified = classifySettlementPolicyCandidate(original);
