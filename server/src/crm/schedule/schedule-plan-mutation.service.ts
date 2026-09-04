@@ -9,6 +9,7 @@ import type {
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { extendSchedulePlanBackwards } from "./schedule-plan-backdate-mutation";
 import { moveSchedulePlanStartForward } from "./schedule-plan-forward-start-mutation";
@@ -116,6 +117,7 @@ export class SchedulePlanMutationService {
     this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     assertMetadata(metadata);
     this.definition.assertRows(dto.rows);
+    let prepared: PreparedSchedulePlanUpdate | undefined;
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
@@ -137,8 +139,19 @@ export class SchedulePlanMutationService {
         type: "schedule.plan.changed",
         payload: { entityId: planId, state: "updated" },
       },
+      beforeVersionAdvance: async (client) => {
+        await acquireLessonSettlementCoordinationGate(client);
+        prepared = await this.definition.prepareUpdate(client, planId, dto);
+      },
       mutate: (client, version) =>
-        this.updateInTransaction(client, actor, planId, version, dto),
+        this.updateInTransaction(
+          client,
+          actor,
+          planId,
+          version,
+          dto,
+          prepared!,
+        ),
     });
     return this.result(
       planId,
@@ -223,8 +236,8 @@ export class SchedulePlanMutationService {
     planId: string,
     version: number,
     dto: UpdateSchedulePlanDto,
+    prepared: PreparedSchedulePlanUpdate,
   ): Promise<MutationReference> {
-    const prepared = await this.definition.prepareUpdate(client, planId, dto);
     const preparedRows = await this.previews.prepareRows(
       client,
       actor,

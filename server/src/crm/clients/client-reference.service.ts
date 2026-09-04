@@ -67,7 +67,7 @@ export async function assertActiveClientReferences(
   const inactive = await client.query<{ type: ClientRefType; id: string }>(
     `with requested as (
        select item.type, item.id
-       from jsonb_to_recordset($1::jsonb) as item(type text, id text)
+       from jsonb_to_recordset($1::jsonb) as item(type text, id uuid)
      )
      select requested.type, requested.id
      from requested
@@ -75,13 +75,13 @@ export async function assertActiveClientReferences(
        requested.type = 'student'
        and not exists (
          select 1 from app.students student
-         where student.id::text = requested.id and student.deleted_at is null
+         where student.id = requested.id and student.deleted_at is null
        )
      ) or (
        requested.type = 'lead'
        and not exists (
          select 1 from app.leads lead
-         where lead.id::text = requested.id and lead.deleted_at is null
+         where lead.id = requested.id and lead.deleted_at is null
        )
      )
      order by requested.type, requested.id`,

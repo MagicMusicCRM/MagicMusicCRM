@@ -6,6 +6,7 @@ import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import type { PreparedLessonSettlementPlan } from "../commerce/lesson-settlement.port";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { CrmPolicy } from "../crm.policy";
 import type {
   CreateSchedulePlanDto,
@@ -139,6 +140,7 @@ export class SchedulePlanConstraintPreviewService {
     this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     this.definition.assertRows(dto.rows);
     return this.database.transaction(async (client) => {
+      await acquireLessonSettlementCoordinationGate(client);
       const prepared = await this.definition.prepareUpdate(client, planId, dto);
       const preparedRows = await this.prepareRows(
         client,

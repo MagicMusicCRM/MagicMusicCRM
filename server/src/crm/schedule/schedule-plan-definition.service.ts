@@ -131,7 +131,6 @@ export class SchedulePlanDefinitionService {
     dto: UpdateSchedulePlanDto,
   ): Promise<PreparedSchedulePlanUpdate> {
     const plan = await this.repository.lock(client, planId);
-    this.assertEditable(plan, dto);
     const effectiveFrom = dto.effectiveFrom.slice(0, 10);
     let mode = initialSchedulePlanUpdateMode(plan, effectiveFrom);
     const participantsAtOldStart =
@@ -154,7 +153,6 @@ export class SchedulePlanDefinitionService {
     const activeUntil = Object.prototype.hasOwnProperty.call(dto, "activeUntil")
       ? (dto.activeUntil?.slice(0, 10) ?? null)
       : plan.active_until;
-    this.assertPeriod(effectiveFrom, activeUntil);
     const studentIds =
       plan.kind === "individual"
         ? [plan.student_id!]
@@ -168,6 +166,8 @@ export class SchedulePlanDefinitionService {
       participants,
       rows: dto.rows,
     });
+    this.assertEditable(plan, dto);
+    this.assertPeriod(effectiveFrom, activeUntil);
     const activeSeries = (await this.repository.activeSeries(client, planId))
       .rows;
     mode = await prepareSchedulePlanUpdateMode({

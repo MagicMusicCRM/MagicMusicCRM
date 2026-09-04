@@ -15,7 +15,10 @@ import {
   ArchiveConvertedLeadDto,
 } from "../dto/client-archive.dto";
 import { ClientRefDto, ClientRefType } from "../dto/client-ref.dto";
-import { acquireStableLessonSettlementLocks } from "../commerce/lesson-settlement-locks";
+import {
+  acquireLessonSettlementCoordinationGate,
+  acquireStableLessonSettlementLocks,
+} from "../commerce/lesson-settlement-locks";
 import { acquireScheduleLockKeys } from "../schedule/schedule-locks";
 
 interface ArchiveSnapshotRow {
@@ -194,6 +197,7 @@ export class ClientArchiveService {
           state: "archived",
         },
       },
+      beforeVersionAdvance: acquireLessonSettlementCoordinationGate,
       mutate: async (client, nextVersion) => {
         const recurringActions = await this.cancelRecurringActions(
           client,

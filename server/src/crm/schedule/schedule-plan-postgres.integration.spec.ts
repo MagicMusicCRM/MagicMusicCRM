@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
+import { AuditService } from "../../audit/audit.service";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { ClientArchiveService } from "../clients/client-archive.service";
 import { ClientReferenceService } from "../clients/client-reference.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
@@ -18,6 +20,7 @@ import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
+import { ScheduleSeriesService } from "./schedule-series.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
@@ -54,6 +57,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   let reservations: SubscriptionReservationService;
   let lifecycle: LessonLifecycleRepository;
   let settlement: LessonSettlementService;
+  let archives: ClientArchiveService;
+  let legacySeries: ScheduleSeriesService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
@@ -84,6 +89,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       database,
       new PlatformIntegrityRepository(),
     );
+    archives = new ClientArchiveService(database, platform, policy, realtime);
     const series = new LessonSeriesCommandService(
       platform,
       policy,
@@ -109,6 +115,13 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       series,
       settlement,
       previewTokens,
+    );
+    legacySeries = new ScheduleSeriesService(
+      database,
+      new AuditService(database),
+      policy,
+      realtime,
+      materializer,
     );
     plans = new SchedulePlanService(
       new SchedulePlanQueryService(repository),
@@ -3647,6 +3660,520 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       await cleanup(pool, fixture);
     }
   });
+
+  it("serializes archive before a plan update and rejects the tombstoned client without writes", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let updatePromise: Promise<unknown> | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const sourceRow = row(fixture, isoWeekday(fixture.effectiveFrom), "18:00");
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Archive-first plan update",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `archive-plan-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updateIdempotencyKey = `archive-plan-update-${randomUUID()}`;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query("select id from app.schedule_plans where id = $1 for update", [
+        created.id,
+      ]);
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentIds[0]!,
+        expectedVersion: 1,
+        reason: "test.plan-update-archive-first",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedBy(pool, blockerPid);
+      updatePromise = plans.update(
+        actor,
+        created.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+          subscriptionId: fixture.subscriptionIds[0],
+          rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+        },
+        {
+          idempotencyKey: updateIdempotencyKey,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updatePid = await waitForBlockedBy(pool, archivePid);
+      await waitForSpecificBlock(pool, updatePid, archivePid);
+      await blocker.query("commit");
+      const [archiveResult, updateResult] = await Promise.allSettled([
+        archivePromise,
+        updatePromise,
+      ]);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 422,
+          response: { code: "ARCHIVED_CLIENT_REFERENCE" },
+        },
+      });
+      const evidence = await pool.query<{
+        status: string;
+        plan_version: number;
+        aggregate_version: number;
+        series_count: number;
+        continuation_count: number;
+        lesson_count: number;
+        cancelled_count: number;
+        idempotency: number;
+        update_audit: number;
+        plan_outbox: number;
+      }>(
+        `select plan.status, plan.version::int as plan_version,
+           (select version::int from app.aggregate_versions
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text) as aggregate_version,
+           (select count(*)::int from app.schedule_series
+             where plan_id = plan.id) as series_count,
+           (select count(*)::int from app.schedule_series
+             where plan_id = plan.id and id <> $2) as continuation_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id) as lesson_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id
+               and lesson.lifecycle_state = 'cancelled') as cancelled_count,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $3 and operation = 'schedule.plan.update'
+               and idempotency_key = $4) as idempotency,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $5
+               and action = 'crm.schedule_plan_updated'
+               and entity_id = plan.id::text) as update_audit,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text
+               and event_type = 'schedule.plan.changed') as plan_outbox
+         from app.schedule_plans plan where plan.id = $1`,
+        [
+          created.id,
+          created.seriesIds[0],
+          `user:${actor.userId}`,
+          updateIdempotencyKey,
+          actor.userId,
+        ],
+      );
+      expect(evidence.rows[0]).toEqual({
+        status: "ended",
+        plan_version: 2,
+        aggregate_version: 2,
+        series_count: 1,
+        continuation_count: 0,
+        lesson_count: created.lessonIds.length,
+        cancelled_count: created.lessonIds.length,
+        idempotency: 0,
+        update_audit: 0,
+        plan_outbox: 1,
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        updatePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("serializes archive before a legacy series update and leaves no continuation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let updatePromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    let legacyLessonId: string | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const insertedSeries = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '18:00', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = insertedSeries.rows[0]!.id;
+      const insertedLesson = await pool.query<{ id: string }>(
+        `insert into app.lessons (
+           student_id, teacher_id, room_id, branch_id, series_id, series_date,
+           scheduled_at, duration_minutes, status, created_by
+         ) values ($1, $2, $3, $4, $5, $6::date,
+           now() + interval '21 days', 60, 'scheduled', $7) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          legacySeriesId,
+          fixture.effectiveFrom,
+          fixture.managerId,
+        ],
+      );
+      legacyLessonId = insertedLesson.rows[0]!.id;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select id from app.schedule_series where id = $1 for update",
+        [legacySeriesId],
+      );
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentIds[0]!,
+        expectedVersion: 1,
+        reason: "test.legacy-series-update-archive-first",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedBy(pool, blockerPid);
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        effectiveFrom: fixture.effectiveFrom,
+        beginTime: "19:00",
+      });
+      const updatePid = await waitForBlockedBy(pool, archivePid);
+      await waitForSpecificBlock(pool, updatePid, archivePid);
+      await blocker.query("commit");
+      const [archiveResult, updateResult] = await Promise.allSettled([
+        archivePromise,
+        updatePromise,
+      ]);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 422,
+          response: { code: "ARCHIVED_CLIENT_REFERENCE" },
+        },
+      });
+      const evidence = await pool.query<{
+        series_version: number;
+        superseded_by: string | null;
+        series_count: number;
+        lifecycle_state: string;
+        lesson_count: number;
+        update_audit: number;
+        idempotency: number;
+        schedule_outbox: number;
+      }>(
+        `select series.version::int as series_version, series.superseded_by,
+           (select count(*)::int from app.schedule_series candidate
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as series_count,
+           lesson.lifecycle_state,
+           (select count(*)::int from app.lessons candidate
+             where candidate.series_id = series.id) as lesson_count,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $2
+               and action = 'crm.schedule_series_updated'
+               and entity_id = series.id::text) as update_audit,
+           (select count(*)::int from app.idempotency_records
+             where actor_key in ($2::text, 'user:' || $2::text)
+               and operation like 'schedule.series%') as idempotency,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_id = series.id::text
+               and aggregate_type like 'schedule:%') as schedule_outbox
+         from app.schedule_series series
+         join app.lessons lesson on lesson.id = $3
+         where series.id = $1`,
+        [legacySeriesId, actor.userId, legacyLessonId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        series_version: 2,
+        superseded_by: null,
+        series_count: 1,
+        lifecycle_state: "cancelled",
+        lesson_count: 1,
+        update_audit: 0,
+        idempotency: 0,
+        schedule_outbox: 0,
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        updatePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("lets a plan update commit before archive reconciles its continuation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let updatePromise: Promise<unknown> | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const sourceRow = row(fixture, isoWeekday(fixture.effectiveFrom), "17:00");
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Plan update wins archive race",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-update-first-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updateIdempotencyKey = `plan-update-first-${randomUUID()}`;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query("select id from app.schedule_plans where id = $1 for update", [
+        created.id,
+      ]);
+      updatePromise = plans.update(
+        actor,
+        created.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+          subscriptionId: fixture.subscriptionIds[0],
+          rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+        },
+        {
+          idempotencyKey: updateIdempotencyKey,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updatePid = await waitForBlockedBy(pool, blockerPid);
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentIds[0]!,
+        expectedVersion: 1,
+        reason: "test.plan-update-first",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedBy(pool, updatePid);
+      await waitForSpecificBlock(pool, archivePid, updatePid);
+      await blocker.query("commit");
+      const [updateResult, archiveResult] = await Promise.allSettled([
+        updatePromise,
+        archivePromise,
+      ]);
+      expect(updateResult.status).toBe("fulfilled");
+      expect(archiveResult.status).toBe("fulfilled");
+      const evidence = await pool.query<{
+        status: string;
+        plan_version: number;
+        aggregate_version: number;
+        series_count: number;
+        live_lessons: number;
+        uncancelled_live_lessons: number;
+        idempotency: number;
+        update_audit: number;
+        plan_outbox: number;
+      }>(
+        `select plan.status, plan.version::int as plan_version,
+           (select version::int from app.aggregate_versions
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text) as aggregate_version,
+           (select count(*)::int from app.schedule_series
+             where plan_id = plan.id) as series_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id and lesson.deleted_at is null)
+             as live_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id and lesson.deleted_at is null
+               and lesson.lifecycle_state <> 'cancelled')
+             as uncancelled_live_lessons,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $2 and operation = 'schedule.plan.update'
+               and idempotency_key = $3) as idempotency,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $4
+               and action = 'crm.schedule_plan_updated'
+               and entity_id = plan.id::text) as update_audit,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text
+               and event_type = 'schedule.plan.changed') as plan_outbox
+         from app.schedule_plans plan where plan.id = $1`,
+        [
+          created.id,
+          `user:${actor.userId}`,
+          updateIdempotencyKey,
+          actor.userId,
+        ],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        status: "ended",
+        plan_version: 3,
+        aggregate_version: 3,
+        series_count: 1,
+        uncancelled_live_lessons: 0,
+        idempotency: 1,
+        update_audit: 1,
+        plan_outbox: 2,
+      });
+      expect(evidence.rows[0]!.live_lessons).toBeGreaterThan(0);
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        updatePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("lets a legacy series update commit before archive reconciles its continuation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let updatePromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const insertedSeries = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '16:00', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = insertedSeries.rows[0]!.id;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select id from app.schedule_series where id = $1 for update",
+        [legacySeriesId],
+      );
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        effectiveFrom: fixture.effectiveFrom,
+        beginTime: "16:30",
+      });
+      const updatePid = await waitForBlockedBy(pool, blockerPid);
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentIds[0]!,
+        expectedVersion: 1,
+        reason: "test.legacy-series-update-first",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedBy(pool, updatePid);
+      await waitForSpecificBlock(pool, archivePid, updatePid);
+      await blocker.query("commit");
+      const [updateResult, archiveResult] = await Promise.allSettled([
+        updatePromise,
+        archivePromise,
+      ]);
+      expect(updateResult.status).toBe("fulfilled");
+      expect(archiveResult.status).toBe("fulfilled");
+      const evidence = await pool.query<{
+        series_count: number;
+        superseded_count: number;
+        live_lessons: number;
+        uncancelled_live_lessons: number;
+        update_audit: number;
+        idempotency: number;
+      }>(
+        `select
+           count(*)::int as series_count,
+           count(*) filter (where superseded_by is not null)::int
+             as superseded_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series target on target.id = lesson.series_id
+             where target.created_by = $1 and target.plan_id is null
+               and lesson.deleted_at is null) as live_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series target on target.id = lesson.series_id
+             where target.created_by = $1 and target.plan_id is null
+               and lesson.deleted_at is null
+               and lesson.lifecycle_state <> 'cancelled')
+             as uncancelled_live_lessons,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $1
+               and action = 'crm.schedule_series_updated'
+               and entity_id = $2::text) as update_audit,
+           (select count(*)::int from app.idempotency_records
+             where actor_key in ($1::text, 'user:' || $1::text)
+               and operation like 'schedule.series%') as idempotency
+         from app.schedule_series
+         where created_by = $1 and plan_id is null`,
+        [actor.userId, legacySeriesId],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        series_count: 2,
+        superseded_count: 1,
+        uncancelled_live_lessons: 0,
+        update_audit: 1,
+        idempotency: 0,
+      });
+      expect(evidence.rows[0]!.live_lessons).toBeGreaterThan(0);
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        updatePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
 });
 
 async function seriesLessonCount(client: PoolClient, seriesId: string) {
@@ -3994,8 +4521,20 @@ async function cleanup(
     await client.query("begin");
     await client.query("set local session_replication_role = replica");
     await client.query(
-      "delete from app.idempotency_records where actor_key = $1",
-      [`user:${fixture.managerId}`],
+      "delete from app.idempotency_records where actor_key = any($1::text[])",
+      [[`user:${fixture.managerId}`, fixture.managerId]],
+    );
+    await client.query(
+      `delete from app.platform_outbox_events
+       where aggregate_type = 'crm:student'
+         and aggregate_id = any($1::text[])`,
+      [fixture.studentIds],
+    );
+    await client.query(
+      `delete from app.aggregate_versions
+       where aggregate_type = 'crm:student'
+         and aggregate_id = any($1::text[])`,
+      [fixture.studentIds],
     );
     await client.query(
       `delete from app.platform_outbox_events where aggregate_type = 'schedule:plan'
@@ -4065,6 +4604,37 @@ async function cleanup(
          select lesson.id from app.lessons lesson join app.schedule_series series
            on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
          where plan.created_by = $1)`,
+      [fixture.managerId],
+    );
+    const legacyLessonIds = `select lesson.id from app.lessons lesson
+      join app.schedule_series series on series.id = lesson.series_id
+      where series.plan_id is null and series.created_by = $1`;
+    for (const table of [
+      "lesson_reservations",
+      "lesson_teacher_compensation_facts",
+      "lesson_client_charge_facts",
+      "lesson_settlement_plan_revisions",
+      "lesson_settlement_corrections",
+      "lesson_settlement_plans",
+      "lesson_transitions",
+      "lesson_participant_exclusions",
+      "lesson_snapshot_participants",
+      "lesson_snapshots",
+    ]) {
+      await client.query(
+        `delete from app.${table} where lesson_id in (${legacyLessonIds})`,
+        [fixture.managerId],
+      );
+    }
+    await client.query(
+      `delete from app.lessons where series_id in (
+         select id from app.schedule_series
+         where plan_id is null and created_by = $1)`,
+      [fixture.managerId],
+    );
+    await client.query(
+      `delete from app.schedule_series
+       where plan_id is null and created_by = $1`,
       [fixture.managerId],
     );
     await client.query(

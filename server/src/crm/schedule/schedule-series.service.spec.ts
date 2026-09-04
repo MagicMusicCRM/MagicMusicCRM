@@ -59,6 +59,9 @@ describe("ScheduleSeriesService", () => {
       if (String(sql).includes("pg_advisory_xact_lock")) {
         return Promise.resolve({ rows: [] });
       }
+      if (String(sql).includes("jsonb_to_recordset")) {
+        return Promise.resolve({ rows: [] });
+      }
       return Promise.resolve(queuedResults.shift());
     });
     const deps = buildDeps();
@@ -293,6 +296,9 @@ describe("ScheduleSeriesService", () => {
     expect(
       query.mock.calls.some((call) => String(call[0]).includes("for update")),
     ).toBe(true);
+    expect(query.mock.calls[0]?.[1]).toEqual([
+      "commerce:multi-lesson-settlement",
+    ]);
     expect(
       query.mock.calls.some((call) =>
         String(call[0]).includes("set superseded_by = $2"),

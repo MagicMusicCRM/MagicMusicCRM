@@ -10,12 +10,15 @@ import { AuditEventInput, AuditService } from "../../audit/audit.service";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { assertActiveClientReferences } from "../clients/client-reference.service";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { CrmPolicy } from "../crm.policy";
 import {
   CreateScheduleSeriesDto,
   UpdateScheduleSeriesDto,
 } from "../dto/schedule-series.dto";
 import {
+  acquireScheduleLockKeys,
   acquireScheduleSeriesLock,
   ScheduleQueryExecutor,
 } from "./schedule-locks";
@@ -53,6 +56,7 @@ interface ScheduleSeriesRow {
   trial?: boolean | null;
   occurrence_count?: number | string | null;
   version?: number | string;
+  deleted_at?: Date | string | null;
 }
 
 @Injectable()
@@ -162,24 +166,41 @@ export class ScheduleSeriesService {
     // lessons removed for a series that was never rewritten).
     const { newSeriesId, created } = await this.database.transaction(
       async (client) => {
+        await acquireLessonSettlementCoordinationGate(client);
         await acquireScheduleSeriesLock(
           client as unknown as ScheduleQueryExecutor,
           seriesId,
         );
         const existing = await client.query<ScheduleSeriesRow>(
-          `select id, plan_id, student_id, group_id, teacher_id, room_id, branch_id,
+          `select id, plan_id, client_type, client_id, student_id, group_id,
+           teacher_id, room_id, branch_id,
            weekday, begin_time, duration_minutes,
            valid_from::text as valid_from,
            valid_until::text as valid_until,
-           notes, created_at, updated_at, superseded_by
+           notes, created_at, updated_at, superseded_by, deleted_at
          from app.schedule_series
-         where id = $1 and deleted_at is null
+         where id = $1
          for update`,
           [seriesId],
         );
         const series = existing.rows[0];
         if (!series)
           throw new NotFoundException("Серия расписания не найдена.");
+        const clientRefs = series.client_type && series.client_id
+          ? [{ type: series.client_type, id: series.client_id }]
+          : series.student_id
+            ? [{ type: "student" as const, id: series.student_id }]
+            : [];
+        await acquireScheduleLockKeys(
+          client,
+          clientRefs.map((reference) =>
+            `client:${reference.type}:${reference.id}`,
+          ),
+        );
+        await assertActiveClientReferences(client, clientRefs);
+        if (series.deleted_at) {
+          throw new NotFoundException("Серия расписания не найдена.");
+        }
         this.assertLegacySeriesMutationAllowed(series.plan_id);
         if (series.superseded_by) {
           throw new ConflictException(

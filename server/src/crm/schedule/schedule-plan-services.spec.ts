@@ -315,18 +315,30 @@ describe("Schedule plan semantic owners", () => {
 
   it("preserves update lock and write ordering", async () => {
     const updateEvents: string[] = [];
-    const client = {} as PoolClient;
+    const client = {
+      query: jest.fn(async (sql: string) => {
+        if (sql.includes("pg_advisory_xact_lock")) {
+          updateEvents.push("coordination-gate");
+        }
+        return { rows: [] };
+      }),
+    } as unknown as PoolClient;
     const platform = {
       executeVersionedMutation: jest.fn(
         async ({
+          beforeVersionAdvance,
           mutate,
         }: {
+          beforeVersionAdvance?: (client: PoolClient) => Promise<void>;
           mutate: (client: PoolClient, version: number) => Promise<unknown>;
-        }) => ({
-          version: 2,
-          replayed: false,
-          resultRef: await mutate(client, 2),
-        }),
+        }) => {
+          await beforeVersionAdvance?.(client);
+          return {
+            version: 2,
+            replayed: false,
+            resultRef: await mutate(client, 2),
+          };
+        },
       ),
     } as unknown as PlatformIntegrityService;
     const definition = {
@@ -489,6 +501,7 @@ describe("Schedule plan semantic owners", () => {
     }
 
     expect(updateEvents).toEqual([
+      "coordination-gate",
       "plan-lock",
       "participant-lock",
       "resource-locks",
@@ -535,6 +548,48 @@ describe("Schedule plan semantic owners", () => {
         }),
       }),
     );
+  });
+
+  it("acquires the coordination gate before update preview plan rows", async () => {
+    const events: string[] = [];
+    const sentinel = new Error("stop after prepare");
+    const client = {
+      query: jest.fn(async (sql: string) => {
+        if (sql.includes("pg_advisory_xact_lock")) events.push("gate");
+        return { rows: [] };
+      }),
+    } as unknown as PoolClient;
+    const database = {
+      transaction: jest.fn((work: (target: PoolClient) => Promise<unknown>) =>
+        work(client),
+      ),
+    } as unknown as DatabaseService;
+    const definition = {
+      assertRows: jest.fn(),
+      prepareUpdate: jest.fn(async () => {
+        events.push("prepare-update");
+        throw sentinel;
+      }),
+    } as unknown as SchedulePlanDefinitionService;
+    const previews = new SchedulePlanConstraintPreviewService(
+      new CrmPolicy(),
+      database,
+      definition,
+      {} as LessonSeriesCommandService,
+      {} as LessonSettlementService,
+      {} as SubscriptionPreviewTokenService,
+    );
+
+    await expect(previews.previewUpdateConstraints(
+      { ...actor, role: "director" },
+      "plan-a",
+      {
+      expectedVersion: 1,
+      effectiveFrom: "2026-09-01",
+      rows: [scheduleRow()],
+      },
+    )).rejects.toBe(sentinel);
+    expect(events).toEqual(["gate", "prepare-update"]);
   });
 
   it("preserves end lock, fingerprint, history, and reservation ordering", async () => {
