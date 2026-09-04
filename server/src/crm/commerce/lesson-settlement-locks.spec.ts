@@ -1,6 +1,6 @@
 import {
   acquireLessonSettlementLocks,
-  acquireStableArchiveLessonLocks,
+  acquireStableLessonSettlementLocks,
 } from "./lesson-settlement-locks";
 
 describe("lesson settlement locks", () => {
@@ -39,14 +39,14 @@ describe("lesson settlement locks", () => {
       return rounds.shift()!;
     });
 
-    await expect(acquireStableArchiveLessonLocks(
+    await expect(acquireStableLessonSettlementLocks(
       { query },
       discover,
       async () => { events.push("creation-barrier"); },
     )).resolves.toEqual(["lesson-a", "lesson-b", "lesson-c"]);
 
     expect(events).toEqual([
-      "lock:commerce:client-archive:lesson-discovery",
+      "lock:commerce:multi-lesson-settlement",
       "discover",
       "lock:commerce:lesson-settlement:lesson-b",
       "discover",

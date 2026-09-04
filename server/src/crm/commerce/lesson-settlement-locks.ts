@@ -10,8 +10,16 @@ interface LessonSettlementLockExecutor {
 export const lessonSettlementLockKey = (lessonId: string) =>
   `commerce:lesson-settlement:${lessonId}`;
 
-const clientArchiveLessonDiscoveryLockKey =
-  "commerce:client-archive:lesson-discovery";
+const multiLessonSettlementGateKey = "commerce:multi-lesson-settlement";
+
+export async function acquireMultiLessonSettlementGate(
+  executor: LessonSettlementLockExecutor,
+): Promise<void> {
+  await executor.query(
+    "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+    [multiLessonSettlementGateKey],
+  );
+}
 
 export async function acquireLessonSettlementLocks(
   executor: LessonSettlementLockExecutor,
@@ -26,17 +34,15 @@ export async function acquireLessonSettlementLocks(
   }
 }
 
-export async function acquireStableArchiveLessonLocks(
+export async function acquireStableLessonSettlementLocks(
   executor: LessonSettlementLockExecutor,
   discoverLessonIds: () => Promise<string[]>,
   acquireCreationBarrier: () => Promise<void>,
 ): Promise<string[]> {
-  // Client archives can overlap on group lessons. Serialize their multi-round
-  // discovery so a newly discovered lower id cannot invert the lesson order.
-  await executor.query(
-    "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
-    [clientArchiveLessonDiscoveryLockKey],
-  );
+  // Multi-round discovery can find a lower id after locking a higher id.
+  // Share one gate with every multi-lesson transition before either side
+  // acquires its first per-lesson settlement lock.
+  await acquireMultiLessonSettlementGate(executor);
   const locked = new Set<string>();
   const lockUntilStable = async () => {
     while (true) {

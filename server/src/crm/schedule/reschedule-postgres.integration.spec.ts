@@ -2395,6 +2395,153 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     }
   });
 
+  it("serializes archive fixed-point discovery with bulk lesson locks", async () => {
+    const lifecycle = new LessonLifecycleRepository(database);
+    const fixture = await createFixture(pool, lifecycle);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    let lessonA = stableTransitionId("archive-bulk-lock-order-a");
+    for (let index = 0; lessonA.localeCompare(fixture.groupSourceId) >= 0; index += 1) {
+      lessonA = stableTransitionId(`archive-bulk-lock-order-a-${index}`);
+    }
+    const lessonB = fixture.groupSourceId;
+    const creator = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let bulkPromise: Promise<unknown> | undefined;
+    try {
+      expect(lessonA.localeCompare(lessonB)).toBeLessThan(0);
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const scheduledB = await pool.query<{ version: number | string }>(
+        "update app.lessons set scheduled_at = now() + interval '1 day' where id = $1 returning version",
+        [lessonB],
+      );
+      await pool.query(
+        `insert into app.lessons (
+           id, group_id, teacher_id, branch_id, room_id, scheduled_at,
+           duration_minutes, status, is_trial, created_by
+         ) select $1, group_id, teacher_id, branch_id, room_id,
+           now() + interval '2 days', duration_minutes, status, is_trial, created_by
+         from app.lessons where id = $2`,
+        [lessonA, lessonB],
+      );
+      await database.transaction((client) => lifecycle.createGroupSnapshot(client, {
+        lessonId: lessonA,
+        groupId: fixture.groupId,
+        completionType: "standard.success",
+        teacherCompensationType: "fixed",
+        teacherCompensationValue: 700,
+        trial: false,
+        participants: [{
+          studentId: fixture.studentId,
+          chargeType: "personal_account",
+          chargeValue: 800,
+        }],
+      }));
+      const decision = (clientIds: string[]) => ({
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+        clientDecisions: clientIds.map((clientId) => ({ clientId })),
+      });
+      const previewDto = {
+        reasonCode: "school.cancelled",
+        reasonText: "Проверка общего multi-lesson gate",
+        items: [
+          {
+            lessonId: lessonB,
+            operation: "cancel" as const,
+            expectedVersion: Number(scheduledB.rows[0]!.version),
+            financialDecision: decision([
+              fixture.studentId,
+              fixture.secondStudentId,
+            ]),
+          },
+          {
+            lessonId: lessonA,
+            operation: "cancel" as const,
+            expectedVersion: 1,
+            financialDecision: decision([fixture.studentId]),
+          },
+        ],
+      };
+      const preview = await service.previewBulk(actor, previewDto);
+      expect(preview.canConfirm).toBe(true);
+      await creator.query("begin");
+      await creator.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`client:student:${fixture.secondStudentId}`],
+      );
+      await creator.query(
+        `insert into app.lesson_snapshot_participants (
+           lesson_id, student_id, charge_type, charge_value
+         ) values ($1, $2, 'none', 0)`,
+        [lessonA, fixture.secondStudentId],
+      );
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.secondStudentId,
+        expectedVersion: 1,
+        reason: "test.bulk-fixed-point-lock-order",
+        confirm: true,
+      });
+      await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+      bulkPromise = service.bulk(actor, {
+        ...previewDto,
+        previewToken: preview.previewToken!,
+        confirm: true,
+      }, {
+        idempotencyKey: `bulk-fixed-point-${randomUUID()}`,
+        requestId: `bulk-fixed-point-${randomUUID()}`,
+      });
+      await waitForBlockedSessionCount(pool, 2);
+      const lessonAWasFree = await advisoryLockIsAvailable(
+        pool,
+        lessonSettlementLockKey(lessonA),
+      );
+      await creator.query("commit");
+      const [archiveResult, bulkResult] = await Promise.allSettled([
+        archivePromise,
+        bulkPromise,
+      ]);
+      expect(lessonAWasFree).toBe(true);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(bulkResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 422,
+          response: { code: "UNKNOWN_LESSON_CLIENT" },
+        },
+      });
+      const evidence = await pool.query<{
+        exclusions: number;
+        facts: number;
+        transitions: number;
+      }>(
+        `select
+           (select count(*)::int from app.lesson_participant_exclusions
+             where lesson_id = any($1::uuid[]) and student_id = $2) as exclusions,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = any($1::uuid[])) as facts,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = any($1::uuid[])) as transitions`,
+        [[lessonA, lessonB], fixture.secondStudentId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        exclusions: 2,
+        facts: 0,
+        transitions: 0,
+      });
+    } finally {
+      await creator.query("rollback").catch(() => undefined);
+      creator.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        bulkPromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("materializes one routed lesson change per audience member across an outbox retry", async () => {
     const fixture = await createFixture(
       pool,
@@ -2636,6 +2783,44 @@ async function waitForBlockedQuery(pool: Pool, fragment: string): Promise<number
   throw new Error(
     `Timed out waiting for blocked query: ${fragment}; active=${JSON.stringify(active.rows)}`,
   );
+}
+
+async function waitForBlockedSessionCount(
+  pool: Pool,
+  expected: number,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ count: number }>(
+      `select count(*)::int as count from pg_stat_activity
+       where datname = current_database()
+         and wait_event_type = 'Lock'`,
+    );
+    if (result.rows[0]!.count >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const active = await pool.query<{ state: string; wait_event_type: string | null; query: string }>(
+    `select state, wait_event_type, query from pg_stat_activity
+     where datname = current_database() and state <> 'idle' order by query_start`,
+  );
+  throw new Error(
+    `Timed out waiting for ${expected} blocked sessions; active=${JSON.stringify(active.rows)}`,
+  );
+}
+
+async function advisoryLockIsAvailable(pool: Pool, key: string): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const result = await client.query<{ acquired: boolean }>(
+      "select pg_try_advisory_xact_lock(hashtextextended($1::text, 0)) as acquired",
+      [key],
+    );
+    return result.rows[0]!.acquired;
+  } finally {
+    await client.query("rollback").catch(() => undefined);
+    client.release();
+  }
 }
 
 async function sessionHoldsAdvisoryLock(

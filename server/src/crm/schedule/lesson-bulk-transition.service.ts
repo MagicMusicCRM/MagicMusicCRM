@@ -2,6 +2,7 @@ import { Injectable, UnprocessableEntityException } from "@nestjs/common";
 import type { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { acquireMultiLessonSettlementGate } from "../commerce/lesson-settlement-locks";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
@@ -48,6 +49,7 @@ export class LessonBulkTransitionService {
     this.policy.assertCanWriteCrm(actor);
     const items = normalizeBulkTransitionItems(dto);
     return this.database.transaction(async (client) => {
+      if (items.length > 1) await acquireMultiLessonSettlementGate(client);
       const calculated: Array<{
         lessonId: string;
         operation: (typeof items)[number]["operation"];
@@ -144,6 +146,7 @@ export class LessonBulkTransitionService {
             dto.previewToken,
           );
           this.assertBulkPreview(signed, actor, previewId);
+          if (items.length > 1) await acquireMultiLessonSettlementGate(client);
           const committed: CommittedTransition[] = [];
           for (const item of items) {
             committed.push(

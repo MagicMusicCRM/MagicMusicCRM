@@ -15,7 +15,7 @@ import {
   ArchiveConvertedLeadDto,
 } from "../dto/client-archive.dto";
 import { ClientRefDto, ClientRefType } from "../dto/client-ref.dto";
-import { acquireStableArchiveLessonLocks } from "../commerce/lesson-settlement-locks";
+import { acquireStableLessonSettlementLocks } from "../commerce/lesson-settlement-locks";
 import { acquireScheduleLockKeys } from "../schedule/schedule-locks";
 
 interface ArchiveSnapshotRow {
@@ -260,7 +260,7 @@ export class ClientArchiveService {
   ) {
     const initialPlans = await this.archivePlans(client, ref, false);
     let planIds = initialPlans.rows.map((plan) => plan.id);
-    const affectedLessonIds = await acquireStableArchiveLessonLocks(
+    const affectedLessonIds = await acquireStableLessonSettlementLocks(
       client,
       () => this.discoverArchiveLessonIds(client, ref, planIds),
       async () => {
