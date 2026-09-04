@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
+import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -13,6 +14,7 @@ import 'group_schedule_participants_editor.dart';
 import 'recurring_schedule_plan_controller.dart';
 import 'recurring_schedule_plan_view.dart';
 import 'schedule_plan_mutation_flow.dart';
+import 'schedule_plan_row_removal_flow.dart';
 
 class RecurringSchedulePlanSection extends ConsumerStatefulWidget {
   const RecurringSchedulePlanSection({
@@ -120,18 +122,20 @@ class _RecurringSchedulePlanSectionState
         groupMode: _groupMode,
         hasGroupMembers: widget.groupMembers.isNotEmpty,
         fallbackLessons: widget.fallbackLessons,
-        trays: _controller.trays,
-        loadingTrayIds: _controller.loadingTrays,
-        trayErrors: _controller.trayErrors,
+        timelinePage: _controller.timelinePage,
+        timelineLoading: _controller.timelineLoading,
+        timelinePaging: _controller.timelinePaging,
+        timelineError: _controller.timelineError,
         onCreate: _createPlan,
         onRetryPlans: _controller.load,
-        onEnsureTray: _controller.ensureTray,
-        onPageTray: _controller.pageTray,
-        onRetryTray: _controller.retryTray,
+        onPreviousTimeline: _controller.previousTimeline,
+        onNextTimeline: _controller.nextTimeline,
+        onRetryTimeline: _controller.retryTimeline,
         onEditPlan: (plan, row) => _editPlan(plan, row: row),
+        onRemoveRow: _removeRow,
         onEditParticipants: _editParticipants,
         onEndPlan: _endPlan,
-        onOpenTrayItem: _openTrayItem,
+        onOpenTimelineItem: _openTimelineItem,
         emptyState: const MagicPageState(
           kind: MagicPageStateKind.empty,
           title: 'Постоянных расписаний пока нет',
@@ -142,7 +146,7 @@ class _RecurringSchedulePlanSectionState
     );
   }
 
-  Future<void> _openTrayItem(SchedulePlanTrayItem item) async {
+  Future<void> _openTimelineItem(StudentLessonTimelineItem item) async {
     try {
       final exact = await _crm.listLessons(lessonId: item.id, limit: 1);
       final lesson = exact.firstOrNull;
@@ -201,6 +205,20 @@ class _RecurringSchedulePlanSectionState
     successMessage: 'Расписание завершено',
     errorMessage: 'Не удалось завершить расписание',
   );
+
+  Future<void> _removeRow(SchedulePlan plan, SchedulePlanRow row) async {
+    try {
+      final removed = await SchedulePlanRowRemovalFlow(
+        service: _crm,
+        onInvalidated: _controller.load,
+      ).remove(context, plan: plan, row: row);
+      if (removed && mounted) {
+        await _reload('Строка расписания удалена');
+      }
+    } catch (error) {
+      _showError('Не удалось удалить строку расписания', error);
+    }
+  }
 
   Future<void> _runMutation({
     required Future<SchedulePlanMutationResult> Function() operation,

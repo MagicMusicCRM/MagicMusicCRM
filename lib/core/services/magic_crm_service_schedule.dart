@@ -841,6 +841,45 @@ extension MagicCrmSchedule on MagicCrmService {
     return SchedulePlanEndPreview.fromMap(response);
   }
 
+  Future<Map<String, dynamic>> previewSchedulePlanRowRemoval(
+    String planId,
+    String seriesId, {
+    required int expectedVersion,
+    String? effectiveFrom,
+    required String reasonText,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId/rows/$seriesId/remove/preview',
+      data: {
+        'expectedVersion': expectedVersion,
+        'effectiveFrom': ?effectiveFrom,
+        'reasonText': reasonText.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> removeSchedulePlanRow(
+    String planId,
+    String seriesId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String effectiveFrom,
+    required String reasonText,
+    required String previewToken,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId/rows/$seriesId/remove',
+      identity: identity,
+      data: {
+        'expectedVersion': expectedVersion,
+        'effectiveFrom': effectiveFrom,
+        'reasonText': reasonText.trim(),
+        'previewToken': previewToken,
+        'confirm': true,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> endSchedulePlan(
     String planId, {
     required MagicMutationIdentity identity,

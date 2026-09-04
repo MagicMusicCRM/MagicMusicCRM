@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
+import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'student_lesson_timeline_controller.dart';
 
 class RecurringSchedulePlanController extends ChangeNotifier {
   RecurringSchedulePlanController({
@@ -9,38 +11,42 @@ class RecurringSchedulePlanController extends ChangeNotifier {
     this.studentId,
     this.groupId,
   }) : assert((studentId == null) != (groupId == null)),
-       _service = service;
+       _service = service {
+    final scopedStudentId = studentId;
+    if (scopedStudentId != null) {
+      _timeline = StudentLessonTimelineController(
+        service: service,
+        studentId: scopedStudentId,
+      )..addListener(_timelineChanged);
+    }
+  }
 
   final MagicCrmService _service;
   final String? studentId;
   final String? groupId;
 
+  StudentLessonTimelineController? _timeline;
   bool loading = false;
   String? error;
   List<SchedulePlan> plans = const [];
-  final Map<String, SchedulePlanTrayPage> trays = {};
-  final Set<String> loadingTrays = {};
-  final Map<String, String> trayErrors = {};
-  final Map<String, ({String? cursor, String? direction})> trayRetryRequests =
-      {};
   bool _disposed = false;
+
+  StudentLessonTimelinePage? get timelinePage => _timeline?.page;
+  bool get timelineLoading => _timeline?.loading ?? false;
+  bool get timelinePaging => _timeline?.paging ?? false;
+  String? get timelineError => _timeline?.error;
 
   Future<void> load() async {
     loading = true;
     error = null;
     _notify();
+    final timelineLoad = _timeline?.load();
     try {
       plans = await _service.listSchedulePlans(
         studentId: studentId,
         groupId: groupId,
       );
-      final visiblePlanIds = plans.map((plan) => plan.id).toSet();
-      trays.removeWhere((planId, _) => !visiblePlanIds.contains(planId));
-      trayErrors.removeWhere((planId, _) => !visiblePlanIds.contains(planId));
-      trayRetryRequests.removeWhere(
-        (planId, _) => !visiblePlanIds.contains(planId),
-      );
-      await Future.wait(plans.where((plan) => plan.isActive).map(ensureTray));
+      if (timelineLoad != null) await timelineLoad;
     } catch (exception) {
       error = userErrorMessage(
         exception,
@@ -52,56 +58,14 @@ class RecurringSchedulePlanController extends ChangeNotifier {
     }
   }
 
-  Future<void> ensureTray(SchedulePlan plan) async {
-    if (trays.containsKey(plan.id) || loadingTrays.contains(plan.id)) return;
-    await _loadTray(plan.id);
-  }
+  Future<void> previousTimeline() =>
+      _timeline?.previous() ?? Future<void>.value();
 
-  Future<void> pageTray(SchedulePlan plan, String direction) async {
-    final current = trays[plan.id];
-    final cursor = direction == 'previous'
-        ? current?.previousCursor
-        : current?.nextCursor;
-    if (cursor == null) return;
-    await _loadTray(plan.id, cursor: cursor, direction: direction);
-  }
+  Future<void> nextTimeline() => _timeline?.next() ?? Future<void>.value();
 
-  Future<void> retryTray(SchedulePlan plan) {
-    final request = trayRetryRequests[plan.id];
-    return _loadTray(
-      plan.id,
-      cursor: request?.cursor,
-      direction: request?.direction,
-    );
-  }
+  Future<void> retryTimeline() => _timeline?.retry() ?? Future<void>.value();
 
-  Future<void> _loadTray(
-    String planId, {
-    String? cursor,
-    String? direction,
-  }) async {
-    if (loadingTrays.contains(planId)) return;
-    loadingTrays.add(planId);
-    trayErrors.remove(planId);
-    _notify();
-    try {
-      trays[planId] = await _service.getSchedulePlanTray(
-        planId,
-        cursor: cursor,
-        direction: direction,
-      );
-      trayRetryRequests.remove(planId);
-    } catch (exception) {
-      trayErrors[planId] = userErrorMessage(
-        exception,
-        fallback: 'Не удалось загрузить занятия по этому расписанию.',
-      );
-      trayRetryRequests[planId] = (cursor: cursor, direction: direction);
-    } finally {
-      loadingTrays.remove(planId);
-      _notify();
-    }
-  }
+  void _timelineChanged() => _notify();
 
   void _notify() {
     if (!_disposed) notifyListeners();
@@ -110,6 +74,8 @@ class RecurringSchedulePlanController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _timeline?.removeListener(_timelineChanged);
+    _timeline?.dispose();
     super.dispose();
   }
 }

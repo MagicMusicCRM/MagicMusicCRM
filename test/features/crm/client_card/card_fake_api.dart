@@ -67,6 +67,13 @@ class FakeCardApiClient extends MagicApiClient {
     List<Map<String, dynamic>> scheduleSeries = const [],
     List<Map<String, dynamic>> schedulePlans = const [],
     this.schedulePlanTrays = const {},
+    this.studentLessonTimelinePage = const {
+      'items': <dynamic>[],
+      'previousCursor': null,
+      'nextCursor': null,
+      'hasPrevious': false,
+      'hasNext': false,
+    },
     this.mutateSchedulePlanOnCreate = false,
     this.mutateSchedulePlanOnEnd = false,
     List<Map<String, dynamic>> schedulePlanConstraintPreviews = const [],
@@ -152,6 +159,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> scheduleSeries;
   final List<Map<String, dynamic>> schedulePlans;
   final Map<String, Map<String, dynamic>> schedulePlanTrays;
+  final Map<String, dynamic> studentLessonTimelinePage;
   final bool mutateSchedulePlanOnCreate;
   final bool mutateSchedulePlanOnEnd;
   final List<Map<String, dynamic>> schedulePlanConstraintPreviews;
@@ -305,6 +313,9 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (path == '/crm/schedule-plans') {
       return <String, dynamic>{'items': schedulePlans} as T;
+    }
+    if (RegExp(r'^/crm/students/[^/]+/lesson-timeline$').hasMatch(path)) {
+      return Map<String, dynamic>.from(studentLessonTimelinePage) as T;
     }
     final trayMatch = RegExp(
       r'^/crm/schedule-plans/([^/]+)/tray$',
@@ -767,6 +778,46 @@ class FakeCardApiClient extends MagicApiClient {
           }
           as T;
     }
+    final rowRemovalPreview = RegExp(
+      r'^/crm/schedule-plans/([^/]+)/rows/([^/]+)/remove/preview$',
+    ).firstMatch(path);
+    if (rowRemovalPreview != null) {
+      final planId = rowRemovalPreview.group(1)!;
+      final seriesId = rowRemovalPreview.group(2)!;
+      final plan = schedulePlans.firstWhere(
+        (item) => item['id']?.toString() == planId,
+      );
+      final rows = (plan['rows'] as List? ?? const [])
+          .whereType<Map>()
+          .where((row) => row['active'] == true)
+          .toList();
+      final row = rows.firstWhere((item) => item['id']?.toString() == seriesId);
+      return <String, dynamic>{
+            'plan': {
+              'id': planId,
+              'title': plan['title'],
+              'version': plan['version'],
+            },
+            'row': {
+              'id': seriesId,
+              'validFrom': row['validFrom'],
+              'validUntil': row['validUntil'],
+            },
+            'effectiveFrom': (data as Map?)?['effectiveFrom'] ?? '2026-09-04',
+            'impact': {
+              'futureUnfinishedLessons': 3,
+              'terminalLessonsPreserved': 2,
+              'changedLessonsPreserved': 1,
+              'activeReservationsToRelease': 3,
+              'endsPlan': rows.length == 1,
+            },
+            'canConfirm': true,
+            'confirmRequired': true,
+            'previewToken': 'schedule-plan-row-preview-token',
+            'previewExpiresAt': '2026-09-04T12:15:00.000Z',
+          }
+          as T;
+    }
     if (path == '/crm/schedule-plans/constraints/preview' ||
         RegExp(
           r'^/crm/schedule-plans/[^/]+/constraints/preview$',
@@ -952,6 +1003,43 @@ class FakeCardApiClient extends MagicApiClient {
         }
       }
       return <String, dynamic>{'status': 'ended', 'version': 2} as T;
+    }
+    final rowRemoval = RegExp(
+      r'^/crm/schedule-plans/([^/]+)/rows/([^/]+)/remove$',
+    ).firstMatch(path);
+    if (rowRemoval != null) {
+      final planId = rowRemoval.group(1)!;
+      final seriesId = rowRemoval.group(2)!;
+      final plan = schedulePlans.firstWhere(
+        (item) => item['id']?.toString() == planId,
+      );
+      final rows = <Map<String, dynamic>>[
+        for (final item in plan['rows'] as List? ?? const [])
+          if (item is Map) Map<String, dynamic>.from(item),
+      ];
+      final remaining = rows
+          .where((item) => item['id']?.toString() != seriesId)
+          .toList();
+      final endsPlan = remaining
+          .where((item) => item['active'] == true)
+          .isEmpty;
+      plan
+        ..['rows'] = remaining
+        ..['version'] = (body['expectedVersion'] as num).toInt() + 1;
+      if (endsPlan) plan['status'] = 'ended';
+      return <String, dynamic>{
+            'id': planId,
+            'seriesId': seriesId,
+            'status': endsPlan ? 'ended' : 'active',
+            'version': plan['version'],
+            'endsPlan': endsPlan,
+            'cancelledLessons': 3,
+            'releasedReservations': 3,
+            'preservedTerminalLessons': 2,
+            'preservedChangedLessons': 1,
+            'replayed': false,
+          }
+          as T;
     }
     if (path == '/crm/schedule-plans') {
       final planId = _schedulePlanCreateIds.putIfAbsent(

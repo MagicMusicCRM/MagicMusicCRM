@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/responsive_detail_row.dart';
 
 /// One icon+label+value row inside the lesson details sheet. Pure.
@@ -135,6 +136,7 @@ Future<void> showLessonDetailsSheet(
   void Function(EntityLink link, EntityOpenTarget target)? onOpenReference,
   required String timeRange,
   required String currentStatus,
+  bool coveredBySubscription = false,
   required List<String> conflicts,
   required String? lessonId,
   required VoidCallback onEdit,
@@ -189,6 +191,19 @@ Future<void> showLessonDetailsSheet(
           'Статус',
           lessonStatusLabel(currentStatus),
         ),
+        if (coveredBySubscription) ...[
+          const SizedBox(height: 10),
+          detailRow(
+            surfaceContext,
+            Icons.card_membership_outlined,
+            'Покрытие',
+            'Абонемент',
+            valueWidget: const Align(
+              alignment: Alignment.centerLeft,
+              child: LessonSubscriptionBadge(),
+            ),
+          ),
+        ],
         if (settlementIssue?.trim().isNotEmpty == true) ...[
           const SizedBox(height: 10),
           detailRow(

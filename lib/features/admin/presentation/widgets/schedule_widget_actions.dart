@@ -288,6 +288,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       },
       timeRange: timeRange,
       currentStatus: lifecycleState,
+      coveredBySubscription: lessonHasSubscriptionCoverage(lesson),
       conflicts: conflicts,
       settlementIssue: settlementIssue,
       settlementHistory: settlementHistory,

@@ -116,6 +116,7 @@ Widget _calendarApp(
   bool active = true,
   bool clientContext = true,
   EntityLink? initialLink,
+  CapabilitySnapshot? capabilitySnapshot,
 }) {
   return ProviderScope(
     overrides: [
@@ -123,6 +124,10 @@ Widget _calendarApp(
       crmRealtimeProvider.overrideWith(
         (ref) => const Stream<CrmChangedEvent>.empty(),
       ),
+      if (capabilitySnapshot != null)
+        capabilitySnapshotProvider.overrideWith(
+          (ref) async => capabilitySnapshot,
+        ),
     ],
     child: MaterialApp(
       theme: ThemeData(platform: TargetPlatform.windows),
@@ -243,6 +248,54 @@ void main() {
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('calendar drill-down names subscription coverage', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final api = FakeCardApiClient(
+      branches: _branches,
+      rooms: _rooms,
+      scheduleMatrix: [
+        {
+          ..._lessons.first,
+          'reservationState': 'reserved',
+          'conflictTypes': <String>[],
+          'isTrial': false,
+        },
+      ],
+    );
+    await tester.pumpWidget(
+      _calendarApp(
+        api,
+        initial: _dayState(),
+        capabilitySnapshot: const CapabilitySnapshot(
+          accountId: 'account-1',
+          role: 'admin',
+          accessVersion: 1,
+          capabilities: {'crm.client.read.basic'},
+          scopes: {'schedule': 'branch'},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final lesson = find.byKey(
+      const ValueKey('schedule-lesson-lesson-selected'),
+    );
+    final semantics = find.bySemanticsLabel(RegExp('Открыть занятие'));
+    expect(semantics, findsOneWidget);
+    await tester.ensureVisible(lesson);
+    await tester.pumpAndSettle();
+    await tester.tap(semantics);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Статус: '), findsOneWidget);
+    expect(find.text('Покрытие: '), findsOneWidget);
+    expect(find.text('Абонемент'), findsOneWidget);
   });
 
   testWidgets(

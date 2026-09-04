@@ -446,7 +446,7 @@ git commit -m "feat: load the complete student lesson timeline"
 - Consumes: Task 3 row-removal preview/commit and Task 4 global timeline controller/model.
 - Produces: one `Лента занятий` block per student card, sorted rule/history rows, and `Удалить строку` with explicit impact confirmation.
 
-- [ ] **Step 1: Write failing widget tests for the unified layout**
+- [x] **Step 1: Write failing widget tests for the unified layout**
 
 ```dart
 testWidgets('shows one timeline containing manual and all plan lessons', (tester) async {
@@ -477,19 +477,19 @@ page, and the signed impact text before final-row removal. Extend
 `client_calendar_device_test.dart` to assert the same covered lesson has the
 `Абонемент` marker in both the calendar drill-down and client timeline.
 
-- [ ] **Step 2: Run the view and flow tests**
+- [x] **Step 2: Run the view and flow tests**
 
 Run: `flutter test test/features/schedule/recurring_schedule_plan_view_test.dart test/features/schedule/recurring_schedule_plan_section_test.dart test/features/schedule/schedule_plan_row_removal_flow_test.dart`
 
 Expected: FAIL because each plan owns a tray and row removal is absent.
 
-- [ ] **Step 3: Replace per-plan trays with one student timeline**
+- [x] **Step 3: Replace per-plan trays with one student timeline**
 
 Remove `_planTray` and `_FallbackLessonTray` from the rendered structure. Keep the old tray service method only as a compatibility endpoint until release reconciliation proves no client still calls it. Place `StudentLessonTimelineView` once after all schedule-plan cards; page it with global previous/next buttons and open the exact lesson by timeline ID.
 
 For group cards, retain the group-specific plan display and use the existing group lesson list until a separate group-timeline requirement is approved; do not call a student endpoint with a group ID.
 
-- [ ] **Step 4: Render rule history and implement the adaptive removal flow**
+- [x] **Step 4: Render rule history and implement the adaptive removal flow**
 
 Each rule/exception row shows teacher, weekday/date, time, duration, range, room, and state. Current rows expose edit and delete actions. The delete action opens the existing adaptive surface, calls preview first, lists the four impact counts, requires reason text and explicit confirmation, then commits using the returned token and a fresh idempotency key.
 
@@ -507,7 +507,7 @@ const schedulePlanRowRemovalMessages = {
 };
 ```
 
-- [ ] **Step 5: Run responsive tests, analyze, and commit**
+- [x] **Step 5: Run responsive tests, analyze, and commit**
 
 Run: `flutter test test/features/schedule/recurring_schedule_plan_view_test.dart test/features/schedule/recurring_schedule_plan_section_test.dart test/features/schedule/schedule_plan_row_removal_flow_test.dart test/features/schedule/student_lesson_timeline_controller_test.dart; flutter test integration_test/recurring_plans_device_test.dart integration_test/client_calendar_device_test.dart -d windows; flutter analyze`
 
