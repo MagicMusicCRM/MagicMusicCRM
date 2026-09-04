@@ -203,10 +203,12 @@ export class StudentLessonTimelineService {
       return false;
     }
     const cursor = value as Record<string, unknown>;
+    if (typeof cursor.scheduledAt !== "string") return false;
+    const scheduledAt = new Date(cursor.scheduledAt);
     return (
       Object.keys(cursor).length === 2 &&
-      typeof cursor.scheduledAt === "string" &&
-      Number.isFinite(new Date(cursor.scheduledAt).getTime()) &&
+      Number.isFinite(scheduledAt.getTime()) &&
+      scheduledAt.toISOString() === cursor.scheduledAt &&
       typeof cursor.id === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
         cursor.id,

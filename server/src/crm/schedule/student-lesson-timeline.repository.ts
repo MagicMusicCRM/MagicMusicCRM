@@ -3,7 +3,6 @@ import type { ActorContext } from "../../common/security/actor-context";
 import { managerAdminRolesSql } from "../../common/security/role-sql";
 import { DatabaseService } from "../../db/database.service";
 import {
-  branchIdExpr,
   currentActorRoleSql,
   managerBranchScopeSql,
 } from "../branch-scope";
@@ -59,10 +58,14 @@ export class StudentLessonTimelineRepository {
     const comparison = direction === "previous" ? "<" : inclusive ? ">=" : ">";
     const order = direction === "previous" ? "desc" : "asc";
     const databaseRole = currentActorRoleSql("$2");
-    const studentBranch = branchIdExpr("student");
+    const lessonBranch =
+      "coalesce(lesson.branch_id::text, lesson_group.branch_id::text, room.branch_id::text)";
+    const canSeePayments = `(${managerAdminRolesSql(databaseRole)}
+      or ${databaseRole} = 'client')`;
     const result = await this.database.query<StudentLessonTimelineRow>(
       `with recursive visible_student as (
          select student.id,
+           profile.user_id as profile_user_id,
            nullif(trim(coalesce(profile.first_name, '') || ' ' || coalesce(profile.last_name, '')), '')
              as student_name
          from app.students student
@@ -73,48 +76,8 @@ export class StudentLessonTimelineRepository {
            and ${databaseRole} = $1::text
            and (
              ${managerAdminRolesSql(databaseRole)}
-             or (${databaseRole} = 'teacher' and exists (
-               select 1
-               from app.lessons assigned_lesson
-               join app.teachers assigned_teacher
-                 on assigned_teacher.id = assigned_lesson.teacher_id
-                and assigned_teacher.deleted_at is null
-               join app.profiles assigned_teacher_profile
-                 on assigned_teacher_profile.id = assigned_teacher.profile_id
-                and assigned_teacher_profile.deleted_at is null
-               where assigned_lesson.deleted_at is null
-                 and assigned_teacher_profile.user_id = $2::uuid
-                 and (
-                   assigned_lesson.student_id = student.id
-                   or exists (
-                     select 1
-                     from app.lesson_snapshot_participants assigned_participant
-                     where assigned_participant.lesson_id = assigned_lesson.id
-                       and assigned_participant.student_id = student.id
-                       and not exists (
-                         select 1 from app.lesson_participant_exclusions assigned_exclusion
-                         where assigned_exclusion.lesson_id = assigned_participant.lesson_id
-                           and assigned_exclusion.student_id = assigned_participant.student_id
-                       )
-                   )
-                 )
-             ))
-             or (${databaseRole} = 'client' and (
-               profile.user_id = $2::uuid
-               or exists (
-                 select 1 from app.user_crm_links student_link
-                 where student_link.user_id = $2::uuid
-                   and student_link.entity_type = 'student'
-                   and student_link.entity_id = student.id
-                   and student_link.deleted_at is null
-               )
-             ))
+             or ${databaseRole} in ('teacher', 'client')
            )
-           and ${managerBranchScopeSql({
-             roleExpression: databaseRole,
-             userIdExpression: "$2",
-             branchExpression: studentBranch,
-           })}
        ),
        student_lesson_ids as (
          select lesson.id
@@ -206,31 +169,38 @@ export class StudentLessonTimelineRepository {
            else 'generated'
          end as origin_kind,
          plan.id as plan_id, origin_series.id as series_id,
-         (
-           coalesce(charge.charge_type = 'subscription', false)
-           or exists (
-             select 1
-             from app.lesson_reservations reservation
-             join app.subscriptions subscription
-               on subscription.id = reservation.subscription_id
-             where reservation.lesson_id = lesson.id
-               and reservation.state = 'reserved'
-               and subscription.student_id = visible_student.id
-           )
-         ) as covered_by_subscription,
-         coalesce(
+         case when ${canSeePayments} then (
+           case when charge.charge_type is not null
+             then charge.charge_type = 'subscription'
+             else (
+               target_funding.charge_type = 'subscription'
+               and target_funding.subscription_id is not null
+               and exists (
+                 select 1
+                 from app.lesson_reservations reservation
+                 where reservation.lesson_id = lesson.id
+                   and reservation.state = 'reserved'
+                   and reservation.subscription_id = target_funding.subscription_id
+               )
+             )
+           end
+         ) else false end as covered_by_subscription,
+         case when ${canSeePayments} then coalesce(
            charge.settlement_type_key,
-           transition.financial_decision->>'settlementTypeKey',
-           settlement_plan.decision->>'settlementTypeKey'
-         ) as settlement_type_key,
+           participant_decision.item->>'settlementTypeKey',
+           effective_decision.decision->>'settlementTypeKey'
+         ) else null::text end as settlement_type_key,
          lesson.predecessor_id, lesson.successor_id,
          actionable_lesson.id as actionable_lesson_id
        from visible_student
        join student_lesson_ids target on true
        join app.lessons lesson on lesson.id = target.id
        left join app.groups lesson_group on lesson_group.id = lesson.group_id
-       left join app.teachers teacher on teacher.id = lesson.teacher_id
-       left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
+       left join app.teachers teacher
+         on teacher.id = lesson.teacher_id and teacher.deleted_at is null
+       left join app.profiles teacher_profile
+         on teacher_profile.id = teacher.profile_id
+        and teacher_profile.deleted_at is null
        left join app.rooms room on room.id = lesson.room_id
        left join app.branches branch
          on branch.id = coalesce(lesson.branch_id, lesson_group.branch_id, room.branch_id)
@@ -240,6 +210,13 @@ export class StudentLessonTimelineRepository {
        left join actionable_lesson on actionable_lesson.root_id = lesson.id
        left join app.lesson_settlement_plans settlement_plan
          on settlement_plan.lesson_id = lesson.id
+       left join lateral (
+         select settlement_correction.decision
+         from app.lesson_settlement_corrections settlement_correction
+         where settlement_correction.lesson_id = lesson.id
+         order by settlement_correction.version desc
+         limit 1
+       ) correction on true
        left join lateral (
          select fact.charge_type, fact.settlement_type_key
          from app.lesson_client_charge_facts_effective fact
@@ -257,8 +234,97 @@ export class StudentLessonTimelineRepository {
          order by lesson_transition.created_at desc, lesson_transition.id desc
          limit 1
        ) transition on true
+       left join lateral (
+         select coalesce(
+           correction.decision,
+           transition.financial_decision,
+           settlement_plan.decision
+         ) as decision
+       ) effective_decision on true
+       left join lateral (
+         select choice.item
+         from jsonb_array_elements(coalesce(
+           effective_decision.decision->'clientDecisions',
+           '[]'::jsonb
+         )) choice(item)
+         where choice.item->>'clientId' = visible_student.id::text
+         limit 1
+       ) participant_decision on true
+       left join lateral (
+         select source.charge_type, source.subscription_id
+         from (
+           select participant.charge_type, participant.subscription_id, 1 as priority
+           from app.lesson_snapshot_participants participant
+           where participant.lesson_id = lesson.id
+             and participant.student_id = visible_student.id
+             and not exists (
+               select 1 from app.lesson_participant_exclusions exclusion
+               where exclusion.lesson_id = participant.lesson_id
+                 and exclusion.student_id = participant.student_id
+             )
+           union all
+           select snapshot.client_charge_type, snapshot.subscription_id, 2 as priority
+           from app.lesson_snapshots snapshot
+           where snapshot.lesson_id = lesson.id
+             and snapshot.client_type = 'student'
+             and snapshot.client_id = visible_student.id
+         ) source
+         order by source.priority
+         limit 1
+       ) participant_snapshot on true
+       left join lateral (
+         select coalesce(
+           nullif(participant_decision.item->>'chargeType', ''),
+           case when nullif(participant_decision.item->>'subscriptionId', '') is not null
+             then 'subscription' end,
+           participant_snapshot.charge_type
+         ) as charge_type,
+         coalesce(
+           nullif(participant_decision.item->>'subscriptionId', '')::uuid,
+           participant_snapshot.subscription_id
+         ) as subscription_id
+       ) target_funding on true
        where (lesson.scheduled_at, lesson.id) ${comparison}
          ($4::timestamptz, $5::uuid)
+         and (
+           ${managerAdminRolesSql(databaseRole)}
+           or (${databaseRole} = 'teacher' and teacher_profile.user_id = $2::uuid)
+           or (${databaseRole} = 'client' and (
+             visible_student.profile_user_id = $2::uuid
+             or exists (
+               select 1
+               from app.user_crm_links student_link
+               where student_link.user_id = $2::uuid
+                 and student_link.entity_type = 'student'
+                 and student_link.entity_id = visible_student.id
+                 and student_link.deleted_at is null
+             )
+             or exists (
+               select 1
+               from app.profiles account_profile
+               join app.family_members account_member
+                 on account_member.entity_type = 'profile'
+                and account_member.entity_id = account_profile.id
+                and account_member.role in ('parent', 'payer')
+                and account_member.deleted_at is null
+               join app.families family
+                 on family.id = account_member.family_id
+                and family.deleted_at is null
+               join app.family_members student_member
+                 on student_member.family_id = family.id
+                and student_member.entity_type = 'student'
+                and student_member.entity_id = visible_student.id
+                and student_member.deleted_at is null
+               where account_profile.user_id = $2::uuid
+                 and account_profile.deleted_at is null
+             )
+           ))
+         )
+         and ${managerBranchScopeSql({
+           roleExpression: databaseRole,
+           userIdExpression: "$2",
+           branchExpression: lessonBranch,
+         })}
        order by lesson.scheduled_at ${order}, lesson.id ${order}
        limit $6`,
       [

@@ -248,6 +248,20 @@ describe("StudentLessonTimelineService", () => {
     ).toString("base64url"),
     Buffer.from(
       JSON.stringify({
+        scheduledAt: "2026-02-30T09:00:00.000Z",
+        id: STUDENT_ID,
+      }),
+      "utf8",
+    ).toString("base64url"),
+    Buffer.from(
+      JSON.stringify({
+        scheduledAt: "2026-09-04T09:00:00Z",
+        id: STUDENT_ID,
+      }),
+      "utf8",
+    ).toString("base64url"),
+    Buffer.from(
+      JSON.stringify({
         scheduledAt: "2026-09-04T09:00:00.000Z",
         id: "not-a-uuid",
       }),
@@ -272,6 +286,36 @@ describe("StudentLessonTimelineService", () => {
       response: { code: "STUDENT_TIMELINE_CURSOR_INVALID" },
     });
     expect(repository.listPage).not.toHaveBeenCalled();
+  });
+
+  it("accepts a canonical timestamp on a real leap day", async () => {
+    const repository = repositoryMock();
+    repository.listPage.mockResolvedValue([]);
+    const service = new StudentLessonTimelineService(repository);
+    const cursor = Buffer.from(
+      JSON.stringify({
+        scheduledAt: "2028-02-29T09:00:00.000Z",
+        id: STUDENT_ID,
+      }),
+      "utf8",
+    ).toString("base64url");
+
+    await service.list(actor, STUDENT_ID, {
+      cursor,
+      direction: "next",
+      limit: 24,
+    });
+
+    expect(repository.listPage).toHaveBeenCalledWith(
+      actor,
+      STUDENT_ID,
+      "next",
+      {
+        scheduledAt: "2028-02-29T09:00:00.000Z",
+        id: STUDENT_ID,
+      },
+      24,
+    );
   });
 
   it("projects subscription coverage and effective settlement metadata", async () => {
@@ -319,7 +363,7 @@ describe("StudentLessonTimelineService", () => {
 });
 
 describe("StudentLessonTimelineRepository scope", () => {
-  it("binds the actor and target student before selecting canonical lesson facts", async () => {
+  async function captureSql() {
     const query = jest.fn().mockResolvedValue({ rows: [] });
     const repository = new StudentLessonTimelineRepository({
       query,
@@ -338,6 +382,12 @@ describe("StudentLessonTimelineRepository scope", () => {
     );
 
     const [sql, params] = query.mock.calls[0] as [string, unknown[]];
+    return { sql, normalizedSql: sql.replace(/\s+/g, " "), params };
+  }
+
+  it("binds the actor and target student before selecting canonical lesson facts", async () => {
+    const { sql, params } = await captureSql();
+
     expect(sql).toContain("with recursive visible_student as");
     expect(sql).toContain("app.lesson_snapshot_participants");
     expect(sql).toContain("app.lesson_client_charge_facts_effective");
@@ -345,5 +395,44 @@ describe("StudentLessonTimelineRepository scope", () => {
     expect(sql).toContain("(lesson.scheduled_at, lesson.id) >=");
     expect(sql).toContain("order by lesson.scheduled_at asc, lesson.id asc");
     expect(params.slice(0, 3)).toEqual([actor.role, actor.userId, STUDENT_ID]);
+  });
+
+  it("applies teacher and delegated-manager scope to every returned lesson", async () => {
+    const { sql, normalizedSql } = await captureSql();
+
+    expect(sql).not.toContain("assigned_lesson");
+    expect(sql).toMatch(/\bteacher_profile\.user_id = \$2::uuid/);
+    expect(sql).toContain("app.family_members");
+    expect(normalizedSql).toContain(
+      "coalesce(lesson.branch_id::text, lesson_group.branch_id::text, room.branch_id::text)",
+    );
+    expect(normalizedSql).toMatch(
+      /case when .* then \(.*\) else false end as covered_by_subscription/,
+    );
+    expect(normalizedSql).toMatch(
+      /case when .* then coalesce\(.*\) else null::text end as settlement_type_key/,
+    );
+  });
+
+  it("selects coverage and settlement for the target participant", async () => {
+    const { normalizedSql } = await captureSql();
+
+    expect(normalizedSql).not.toContain(
+      "subscription.student_id = visible_student.id",
+    );
+    expect(normalizedSql).toContain("jsonb_array_elements");
+    expect(normalizedSql).toContain(
+      "choice.item->>'clientId' = visible_student.id::text",
+    );
+    expect(normalizedSql).toContain("correction.decision");
+    expect(normalizedSql).toContain(
+      "case when charge.charge_type is not null then charge.charge_type = 'subscription'",
+    );
+    expect(normalizedSql).toContain(
+      "reservation.subscription_id = target_funding.subscription_id",
+    );
+    expect(normalizedSql).toContain(
+      "participant_decision.item->>'settlementTypeKey'",
+    );
   });
 });
