@@ -1,4 +1,8 @@
-import { BadRequestException, HttpStatus } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  InternalServerErrorException
+} from '@nestjs/common';
 import * as Sentry from '@sentry/node';
 import { LessonSettlementCalculationError } from '../../crm/commerce/lesson-settlement.calculation';
 import { SubscriptionPreviewTokenError } from '../../crm/commerce/subscription-preview-token';
@@ -80,6 +84,44 @@ describe('SafeExceptionFilter diagnostics', () => {
     });
     expect(stack).toBe(boom.stack);
     expect(context).toBe('SafeExceptionFilter');
+  });
+
+  it('keeps an explicit 500 HttpException opaque while logging its cause', () => {
+    const error = jest.fn();
+    const filter = new SafeExceptionFilter({ error, warn: jest.fn() } as never);
+    const { host, status, json } = makeHost('/api/crm/lessons/x/settle', 'POST');
+    const exception = new InternalServerErrorException({
+      code: 'DATABASE_FAILURE',
+      message: 'select secret_token from private_table',
+      sql: 'select * from private_table',
+      token: 'bearer-secret'
+    });
+
+    filter.catch(exception, host);
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    const body = json.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(body).toMatchObject({
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Сервис временно недоступен. Попробуйте позже.',
+      requestId: 'req-1',
+      path: '/api/crm/lessons/x/settle'
+    });
+    expect(body).not.toHaveProperty('sql');
+    expect(body).not.toHaveProperty('token');
+    expect(JSON.stringify(body)).not.toMatch(/private_table|secret_token|bearer-secret/);
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'INTERNAL_SERVER_ERROR',
+        detail: 'select secret_token from private_table',
+        requestId: 'req-1',
+        path: '/api/crm/lessons/x/settle',
+        method: 'POST'
+      }),
+      exception.stack,
+      'SafeExceptionFilter'
+    );
   });
 
   it.each([

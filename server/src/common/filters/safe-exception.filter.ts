@@ -27,9 +27,12 @@ export class SafeExceptionFilter implements ExceptionFilter {
       safeException instanceof HttpException
         ? safeException.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
-    const code = this.safeCode(safeException, status);
+    const isServerError = status >= HttpStatus.INTERNAL_SERVER_ERROR;
+    const code = isServerError
+      ? 'INTERNAL_SERVER_ERROR'
+      : this.safeCode(safeException, status);
 
-    if (!(safeException instanceof HttpException)) {
+    if (isServerError) {
       // Carry the error's class, message and stack into the log. Sentry may be
       // unconfigured (SENTRY_DSN unset), and until this was added an unhandled
       // 500 logged only «Unhandled exception» with no cause — a Postgres check
@@ -46,7 +49,7 @@ export class SafeExceptionFilter implements ExceptionFilter {
           // class («DatabaseError») on its constructor while `.name` is a bare
           // «error».
           error: error?.constructor?.name ?? typeof exception,
-          detail: error?.message,
+          detail: this.diagnosticDetail(exception),
           requestId,
           path: request.path,
           method: request.method
@@ -91,10 +94,12 @@ export class SafeExceptionFilter implements ExceptionFilter {
       // fields next to the message (e.g. the 409 {message, conflicts:[…]} of
       // the schedule contract). Flattening it to a bare message would strip
       // the data the client renders. The envelope fields below always win.
-      ...this.extraPayload(safeException),
+      ...(isServerError ? {} : this.extraPayload(safeException)),
       statusCode: status,
       code,
-      message: this.safeMessage(safeException, status),
+      message: isServerError
+        ? 'Сервис временно недоступен. Попробуйте позже.'
+        : this.safeMessage(safeException, status),
       requestId,
       timestamp: new Date().toISOString(),
       path: request.path
@@ -147,6 +152,17 @@ export class SafeExceptionFilter implements ExceptionFilter {
     return status >= HttpStatus.INTERNAL_SERVER_ERROR
       ? 'INTERNAL_SERVER_ERROR'
       : `HTTP_${status}`;
+  }
+
+  private diagnosticDetail(exception: unknown): unknown {
+    if (exception instanceof HttpException) {
+      const response = exception.getResponse();
+      if (typeof response === 'string') return response;
+      if (typeof response === 'object' && response !== null && 'message' in response) {
+        return (response as { message: unknown }).message;
+      }
+    }
+    return exception instanceof Error ? exception.message : typeof exception;
   }
 
   private safeMessage(exception: unknown, status: number): string {
