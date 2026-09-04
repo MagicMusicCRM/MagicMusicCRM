@@ -12,6 +12,7 @@ import { PlatformIntegrityRepository } from "../../platform/platform-integrity.r
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { ClientArchiveService } from "../clients/client-archive.service";
+import { lessonSettlementLockKey } from "../commerce/lesson-settlement-locks";
 import { LessonSettlementPort } from "../commerce/lesson-settlement.port";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
@@ -31,6 +32,7 @@ import { LessonTransitionCommitService } from "./lesson-transition-commit.servic
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
 import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
+import { stableTransitionId } from "./lesson-transition.rules";
 import { LessonTransitionService } from "./lesson-transition.service";
 import { LessonSettlementCorrectionService } from "./lesson-settlement-correction.service";
 
@@ -1852,6 +1854,161 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
 
     await run("archive");
     await run("transition");
+  });
+
+  it("re-discovers and locks a reschedule successor before archive exclusions", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const decision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      clientDecisions: [fixture.studentId, fixture.secondStudentId]
+        .map((clientId) => ({ clientId })),
+    };
+    const sourceBlocker = await pool.connect();
+    const successorBlocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let reschedulePromise: Promise<unknown> | undefined;
+    let successorPreviewPromise: Promise<Awaited<ReturnType<typeof service.previewCancel>>> | undefined;
+    let successorTransition: Promise<unknown> | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const scheduled = await pool.query<{ version: number | string }>(
+        "update app.lessons set scheduled_at = now() + interval '1 day' where id = $1 returning version",
+        [fixture.groupSourceId],
+      );
+      const successorSchedule = await pool.query<{ scheduled_at: Date | string }>(
+        `select ((date_trunc('week', now() at time zone 'Europe/Moscow')
+          + interval '1 week 12 hours') at time zone 'Europe/Moscow') as scheduled_at`,
+      );
+      const expectedVersion = Number(scheduled.rows[0]!.version);
+      const rescheduleDto = {
+        expectedVersion,
+        reasonCode: "client.requested",
+        reasonText: "Проверка successor во время архива",
+        financialDecision: decision,
+        successor: {
+          scheduledAt: new Date(successorSchedule.rows[0]!.scheduled_at).toISOString(),
+        },
+      };
+      const preview = await service.previewReschedule(
+        actor,
+        fixture.groupSourceId,
+        rescheduleDto,
+      );
+      const idempotencyKey = `archive-successor-${randomUUID()}`;
+      const successorId = stableTransitionId(
+        `schedule.lesson.reschedule\0${fixture.groupSourceId}\0${actor.userId}\0${idempotencyKey}`,
+      );
+      await sourceBlocker.query("begin");
+      await sourceBlocker.query(
+        "select id from app.lessons where id = $1 for update",
+        [fixture.groupSourceId],
+      );
+      await successorBlocker.query("begin");
+      await successorBlocker.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [lessonSettlementLockKey(successorId)],
+      );
+      reschedulePromise = service.reschedule(actor, fixture.groupSourceId, {
+        ...rescheduleDto,
+        previewToken: preview.previewToken!,
+        confirm: true,
+      }, {
+        idempotencyKey,
+        requestId: `archive-successor-${randomUUID()}`,
+      });
+      await waitForBlockedQuery(pool, "select lesson.id");
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.secondStudentId,
+        expectedVersion: 1,
+        reason: "test.reschedule-successor-race",
+        confirm: true,
+      });
+      await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+      await sourceBlocker.query("commit");
+      await expect(reschedulePromise).resolves.toMatchObject({
+        successor: { id: successorId, state: "scheduled" },
+      });
+      const archivePid = await waitForBlockedQuery(
+        pool,
+        "pg_advisory_xact_lock",
+      );
+      expect(await sessionHoldsAdvisoryLock(pool, archivePid)).toBe(true);
+      const cancelDto = {
+        expectedVersion: 1,
+        reasonCode: "school.cancelled",
+        reasonText: "Параллельная отмена successor",
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: fixture.studentId }],
+        },
+      };
+      successorPreviewPromise = service.previewCancel(actor, successorId, cancelDto);
+      await successorBlocker.query("commit");
+      await archivePromise;
+      const cancelPreview = await successorPreviewPromise;
+      expect(cancelPreview.financialPreview).toMatchObject({
+        clientFacts: [expect.objectContaining({ clientId: fixture.studentId })],
+      });
+      successorTransition = service.cancel(actor, successorId, {
+        ...cancelDto,
+        previewToken: cancelPreview.previewToken!,
+        confirm: true,
+      }, {
+        idempotencyKey: `archive-successor-cancel-${randomUUID()}`,
+        requestId: `archive-successor-cancel-${randomUUID()}`,
+      });
+      await expect(successorTransition).resolves.toMatchObject({
+        source: { state: "cancelled" },
+        clientFinancialFactIds: [expect.any(String)],
+      });
+      const evidence = await pool.query<{
+        exclusions: number;
+        facts: number;
+        archived_facts: number;
+        transitions: number;
+        state: string;
+      }>(
+        `select lesson.lifecycle_state as state,
+           (select count(*)::int from app.lesson_participant_exclusions
+             where lesson_id = lesson.id and student_id = $2) as exclusions,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = lesson.id) as facts,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = lesson.id and client_id = $2) as archived_facts,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = lesson.id) as transitions
+         from app.lessons lesson where lesson.id = $1`,
+        [successorId, fixture.secondStudentId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        state: "cancelled",
+        exclusions: 1,
+        facts: 1,
+        archived_facts: 0,
+        transitions: 1,
+      });
+    } finally {
+      await sourceBlocker.query("rollback").catch(() => undefined);
+      await successorBlocker.query("rollback").catch(() => undefined);
+      sourceBlocker.release();
+      successorBlocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        reschedulePromise ?? Promise.resolve(),
+        successorPreviewPromise ?? Promise.resolve(),
+        successorTransition ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
   });
 
   it("previews and commits an exact frozen lead row", async () => {

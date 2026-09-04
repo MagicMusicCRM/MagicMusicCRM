@@ -15,7 +15,8 @@ import {
   ArchiveConvertedLeadDto,
 } from "../dto/client-archive.dto";
 import { ClientRefDto, ClientRefType } from "../dto/client-ref.dto";
-import { acquireLessonSettlementLocks } from "../commerce/lesson-settlement-locks";
+import { acquireStableArchiveLessonLocks } from "../commerce/lesson-settlement-locks";
+import { acquireScheduleLockKeys } from "../schedule/schedule-locks";
 
 interface ArchiveSnapshotRow {
   type: ClientRefType;
@@ -257,37 +258,23 @@ export class ClientArchiveService {
     actorUserId: string,
     reasonCode: string,
   ) {
-    const plans = ref.type === "student"
-      ? await client.query<{ id: string; version: number | string }>(
-          `select plan.id, plan.version
-           from app.schedule_plans plan
-           where plan.status = 'active' and (
-             plan.student_id = $1
-             or (
-               plan.kind = 'group'
-               and exists (
-                 select 1 from app.schedule_plan_participants participant
-                 where participant.plan_id = plan.id
-                   and participant.student_id = $1
-                   and participant.effective_from <= current_date
-                   and (participant.effective_until is null
-                     or participant.effective_until >= current_date)
-               )
-               and not exists (
-                 select 1 from app.schedule_plan_participants other
-                 where other.plan_id = plan.id
-                   and other.student_id <> $1
-                   and other.effective_from <= current_date
-                   and (other.effective_until is null
-                     or other.effective_until >= current_date)
-               )
-             )
-           )
-           order by plan.id for update`,
-          [ref.id],
-        )
-      : { rows: [] as Array<{ id: string; version: number | string }> };
-    const planIds = plans.rows.map((plan) => plan.id);
+    const initialPlans = await this.archivePlans(client, ref, false);
+    let planIds = initialPlans.rows.map((plan) => plan.id);
+    const affectedLessonIds = await acquireStableArchiveLessonLocks(
+      client,
+      () => this.discoverArchiveLessonIds(client, ref, planIds),
+      async () => {
+        await acquireScheduleLockKeys(client, [
+          `client:${ref.type}:${ref.id}`,
+        ]);
+        planIds = (await this.archivePlans(client, ref, false)).rows
+          .map((plan) => plan.id);
+      },
+    );
+    // The client creation barrier now prevents a plan/series command from
+    // changing this set while archive applies its recurring-action mutations.
+    const plans = await this.archivePlans(client, ref, true);
+    planIds = plans.rows.map((plan) => plan.id);
 
     if (ref.type === "student") {
       await client.query(
@@ -362,38 +349,6 @@ export class ClientArchiveService {
       [planIds, ref.type, ref.id],
     );
 
-    const affectedLessons = await client.query<{ id: string }>(
-      `select lesson.id
-       from app.lessons lesson
-       left join app.schedule_series series on series.id = lesson.series_id
-       where lesson.deleted_at is null
-         and lesson.scheduled_at >= now()
-         and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
-         and (
-           series.plan_id = any($1::uuid[])
-           or (
-             series.plan_id is null and series.id is not null and (
-               ($2::text = 'student' and series.student_id = $3::uuid)
-               or (series.client_type = $2 and series.client_id = $3::uuid)
-             )
-           )
-           or (
-             $2::text = 'student' and lesson.group_id is not null
-             and exists (
-               select 1 from app.lesson_snapshot_participants participant
-               where participant.lesson_id = lesson.id
-                 and participant.student_id = $3::uuid
-             )
-           )
-         )
-       order by lesson.id`,
-      [planIds, ref.type, ref.id],
-    );
-    await acquireLessonSettlementLocks(
-      client,
-      affectedLessons.rows.map((lesson) => lesson.id),
-    );
-
     let excludedGroupLessons = 0;
     if (ref.type === "student") {
       const exclusions = await client.query(
@@ -405,11 +360,17 @@ export class ClientArchiveService {
          join app.lesson_snapshot_participants participant
            on participant.lesson_id = lesson.id and participant.student_id = $1
          where lesson.group_id is not null
+           and lesson.id = any($4::uuid[])
            and lesson.deleted_at is null
            and lesson.scheduled_at >= now()
            and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
          on conflict (lesson_id, student_id) do nothing`,
-        [ref.id, `client.archive:${reasonCode}`, actorUserId],
+        [
+          ref.id,
+          `client.archive:${reasonCode}`,
+          actorUserId,
+          affectedLessonIds,
+        ],
       );
       excludedGroupLessons = exclusions.rowCount ?? 0;
       await client.query(
@@ -421,8 +382,9 @@ export class ClientArchiveService {
            and exclusion.lesson_id = reservation.lesson_id
            and exclusion.student_id = $1
            and subscription.student_id = $1
+           and reservation.lesson_id = any($2::uuid[])
            and reservation.state = 'reserved'`,
-        [ref.id],
+        [ref.id, affectedLessonIds],
       );
     }
 
@@ -432,20 +394,14 @@ export class ClientArchiveService {
     }>(
       `select lesson.id, lesson.lifecycle_state
        from app.lessons lesson
-       left join app.schedule_series series on series.id = lesson.series_id
        where lesson.deleted_at is null
+         and lesson.id = any($1::uuid[])
          and lesson.scheduled_at >= now()
          and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
          and (
-           series.plan_id = any($1::uuid[])
+           lesson.group_id is null
            or (
-             series.plan_id is null and series.id is not null and (
-               ($2::text = 'student' and series.student_id = $3::uuid)
-               or (series.client_type = $2 and series.client_id = $3::uuid)
-             )
-           )
-           or (
-             $2::text = 'student' and lesson.group_id is not null
+             lesson.group_id is not null
              and exists (
                select 1 from app.lesson_snapshot_participants participant
                where participant.lesson_id = lesson.id
@@ -462,7 +418,7 @@ export class ClientArchiveService {
            )
          )
        order by lesson.id for update of lesson`,
-      [planIds, ref.type, ref.id],
+      [affectedLessonIds],
     );
     const lessonIds = candidates.rows.map((lesson) => lesson.id);
     if (lessonIds.length > 0) {
@@ -511,6 +467,87 @@ export class ClientArchiveService {
       cancelledLessons: lessonIds.length,
       excludedGroupLessons,
     };
+  }
+
+  private archivePlans(
+    client: PoolClient,
+    ref: ClientRefDto,
+    lock: boolean,
+  ) {
+    if (ref.type !== "student") {
+      return Promise.resolve({
+        rows: [] as Array<{ id: string; version: number | string }>,
+      });
+    }
+    return client.query<{ id: string; version: number | string }>(
+      `select plan.id, plan.version
+       from app.schedule_plans plan
+       where plan.status = 'active' and (
+         plan.student_id = $1
+         or (
+           plan.kind = 'group'
+           and exists (
+             select 1 from app.schedule_plan_participants participant
+             where participant.plan_id = plan.id
+               and participant.student_id = $1
+               and participant.effective_from <= current_date
+               and (participant.effective_until is null
+                 or participant.effective_until >= current_date)
+           )
+           and not exists (
+             select 1 from app.schedule_plan_participants other
+             where other.plan_id = plan.id
+               and other.student_id <> $1
+               and other.effective_from <= current_date
+               and (other.effective_until is null
+                 or other.effective_until >= current_date)
+           )
+         )
+       )
+       order by plan.id ${lock ? "for update" : ""}`,
+      [ref.id],
+    );
+  }
+
+  private async discoverArchiveLessonIds(
+    client: PoolClient,
+    ref: ClientRefDto,
+    planIds: string[],
+  ): Promise<string[]> {
+    const affectedLessons = await client.query<{ id: string }>(
+      `select lesson.id
+       from app.lessons lesson
+       left join app.schedule_series series on series.id = lesson.series_id
+       where lesson.deleted_at is null
+         and lesson.scheduled_at >= now()
+         and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
+         and (
+           series.plan_id = any($1::uuid[])
+           or (
+             series.plan_id is null and series.id is not null and (
+               ($2::text = 'student' and series.student_id = $3::uuid)
+               or (series.client_type = $2 and series.client_id = $3::uuid)
+             )
+           )
+           or (
+             $2::text = 'student' and lesson.group_id is not null
+             and exists (
+               select 1 from app.lesson_snapshot_participants participant
+               where participant.lesson_id = lesson.id
+                 and participant.student_id = $3::uuid
+             )
+           )
+           or exists (
+             select 1 from app.lesson_snapshots snapshot
+             where snapshot.lesson_id = lesson.id
+               and snapshot.client_type = $2::text
+               and snapshot.client_id = $3::uuid
+           )
+         )
+       order by lesson.id`,
+      [planIds, ref.type, ref.id],
+    );
+    return affectedLessons.rows.map((lesson) => lesson.id);
   }
 
   private assertCommand(dto: ArchiveClientCommandDto): void {
