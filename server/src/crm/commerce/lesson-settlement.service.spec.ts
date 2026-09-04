@@ -35,6 +35,12 @@ function catalogRow(
         clientDurationMode: "manual", teacherDurationMode: "manual",
         defaultTeacherCompensationRuleKey: "percent", colorToken: "warning",
       },
+      {
+        stableKey: "paid_miss", label: "Оплачиваемый пропуск", active: true, order: 3,
+        allowedContexts: ["cancel"], hourShareBasisPoints: 10_000,
+        clientDurationMode: "full", teacherDurationMode: "full",
+        defaultTeacherCompensationRuleKey: "standard", colorToken: "blue",
+      },
     ],
     compensation_rules: [
       { stableKey: "none", label: "Нет", active: true, order: 0, mode: "none", value: "0" },
@@ -114,6 +120,38 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
       expect(resolved.teacherCompensationValueMinor).toBe(valueMinor);
     },
   );
+
+  it("preserves explicit client and teacher minutes after paid-miss autofill", async () => {
+    await expect(service.resolvePlannedDecision(catalogClient(), {
+      branchId: "branch-a",
+      durationMinutes: 60,
+      decision: {
+        settlementTypeKey: "paid_miss",
+        teacherCompensationRuleKey: "percent",
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: "manual",
+        clientDecisions: [{
+          clientId: "student-a",
+          chargeType: "subscription",
+          subscriptionId: "subscription-a",
+          chargeDurationMinutes: 30,
+        }],
+      },
+      requiredClientIds: ["student-a"],
+      actorUserId: "director-a",
+      authorization: actor("director"),
+      reasonText: "Согласованы отдельные часы",
+    })).resolves.toMatchObject({
+      teacherCompensationRuleKey: "percent",
+      teacherCompensationValueMinor: "7500",
+      teacherCreditedDurationMinutes: 45,
+      teacherCompensationSource: "manual",
+      clientDecisions: [{
+        clientId: "student-a",
+        chargeDurationMinutes: 30,
+      }],
+    });
+  });
 
   it.each([30, 45, 60, 90])(
     "normalizes automatic zero and full decisions for %i minutes",

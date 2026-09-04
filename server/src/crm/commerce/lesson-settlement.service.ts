@@ -130,11 +130,12 @@ export class LessonSettlementService implements LessonSettlementPort {
           `clientDecisions.${decision.clientId}.chargeDurationMinutes`,
         );
       }
-      const chargeDurationMinutes = resolveDurationMinutes(
-        policy.clientDurationMode,
-        input.durationMinutes,
-        decision.chargeDurationMinutes,
-      );
+      const chargeDurationMinutes = decision.chargeDurationMinutes ??
+        resolveDurationMinutes(
+          policy.clientDurationMode,
+          input.durationMinutes,
+          undefined,
+        );
       assertDurationWithinLesson(
         chargeDurationMinutes,
         input.durationMinutes,

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
-import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -146,9 +145,9 @@ class _RecurringSchedulePlanSectionState
     );
   }
 
-  Future<void> _openTimelineItem(StudentLessonTimelineItem item) async {
+  Future<void> _openTimelineItem(String lessonId) async {
     try {
-      final exact = await _crm.listLessons(lessonId: item.id, limit: 1);
+      final exact = await _crm.listLessons(lessonId: lessonId, limit: 1);
       final lesson = exact.firstOrNull;
       if (!mounted) return;
       if (lesson == null) {

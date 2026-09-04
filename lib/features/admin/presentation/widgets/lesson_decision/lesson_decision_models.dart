@@ -158,15 +158,27 @@ class LessonDecisionClientDraft {
     required this.clientId,
     required this.chargeType,
     required this.chargeDurationMinutes,
+    this.preferredChargeType,
+    this.payerStudentId,
+    this.subscriptionId,
+    this.retainedFunding = const {},
   });
 
   final String clientId;
   final String chargeType;
   final int? chargeDurationMinutes;
+  final String? preferredChargeType;
+  final String? payerStudentId;
+  final String? subscriptionId;
+  final Map<String, dynamic> retainedFunding;
 
   Map<String, dynamic> toJson() => {
+    ...retainedFunding,
     'clientId': clientId,
     'chargeType': chargeType,
+    if (preferredChargeType != null) 'preferredChargeType': preferredChargeType,
+    if (payerStudentId != null) 'payerStudentId': payerStudentId,
+    if (subscriptionId != null) 'subscriptionId': subscriptionId,
     if (chargeDurationMinutes != null)
       'chargeDurationMinutes': chargeDurationMinutes,
   };
@@ -189,6 +201,7 @@ class LessonDecisionDraft {
     required LessonDecisionCatalog catalog,
     required Map<String, dynamic> lesson,
     required List<LessonDecisionParticipant> clients,
+    List<Map<String, dynamic>> existingClientDecisions = const [],
   }) {
     final settlement = catalog.settlementTypes.where(
       (item) => item.key == 'unpaid_miss',
@@ -204,18 +217,21 @@ class LessonDecisionDraft {
         catalog.defaultDurationMinutes ??
         60;
     final teacherRuleKey = policy.defaultTeacherCompensationRuleKey ?? 'none';
+    final existingByClientId = <String, Map<String, dynamic>>{
+      for (final decision in existingClientDecisions)
+        if (decision['clientId']?.toString() case final String clientId)
+          clientId: decision,
+    };
     return LessonDecisionDraft(
       settlementTypeKey: policy.key,
       teacherCompensationRuleKey: teacherRuleKey,
       clientDecisions: List.unmodifiable([
         for (final client in clients)
-          LessonDecisionClientDraft(
-            clientId: client.id,
-            chargeType: 'none',
-            chargeDurationMinutes: _recommendedDuration(
-              policy.clientDurationMode,
-              durationMinutes,
-            ),
+          _cancelClientDraft(
+            client,
+            existingByClientId[client.id],
+            policy.clientDurationMode,
+            durationMinutes,
           ),
       ]),
       teacherCreditedDurationMinutes: _recommendedDuration(
@@ -224,6 +240,32 @@ class LessonDecisionDraft {
       ),
     );
   }
+}
+
+LessonDecisionClientDraft _cancelClientDraft(
+  LessonDecisionParticipant client,
+  Map<String, dynamic>? existing,
+  String? durationMode,
+  int durationMinutes,
+) {
+  final preferredChargeType = switch (existing?['chargeType']?.toString()) {
+    'subscription' => 'subscription',
+    'personal_account' => 'personal_account',
+    _ => null,
+  };
+  final retainedFunding = <String, dynamic>{
+    for (final key in const ['basePriceMinor', 'discount', 'surcharge'])
+      if (existing?[key] != null) key: existing![key],
+  };
+  return LessonDecisionClientDraft(
+    clientId: client.id,
+    chargeType: 'none',
+    chargeDurationMinutes: _recommendedDuration(durationMode, durationMinutes),
+    preferredChargeType: preferredChargeType,
+    payerStudentId: existing?['payerStudentId']?.toString(),
+    subscriptionId: existing?['subscriptionId']?.toString(),
+    retainedFunding: Map.unmodifiable(retainedFunding),
+  );
 }
 
 int? _recommendedDuration(String? mode, int lessonDurationMinutes) =>

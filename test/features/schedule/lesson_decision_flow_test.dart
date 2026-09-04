@@ -53,6 +53,7 @@ class _LessonDecisionApi extends MagicApiClient {
   final String catalogBranchId;
   final String operationKey;
   final previews = <Map<String, dynamic>>[];
+  final normalizedDecisions = <Map<String, dynamic>>[];
   final commits = <Map<String, dynamic>>[];
   final identities = <MagicMutationIdentity>[];
 
@@ -62,6 +63,13 @@ class _LessonDecisionApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    if (path == '/crm/students/$_firstGroupStudentId/commerce') {
+      return _studentCommerce(
+            _firstGroupStudentId,
+            subscriptionId: _crossPayerSubscriptionId,
+          )
+          as T;
+    }
     expect(path, '/crm/configuration/lesson-decisions');
     expect(queryParameters?['branchId'], catalogBranchId);
     return <String, dynamic>{
@@ -174,6 +182,13 @@ class _LessonDecisionApi extends MagicApiClient {
   }) async {
     expect(path, '/crm/lessons/$_lessonId/$operationKey/preview');
     previews.add(Map<String, dynamic>.from(data as Map));
+    final requestDecision = Map<String, dynamic>.from(
+      previews.last['financialDecision'] as Map,
+    );
+    final normalizedDecision = operationKey == 'cancel'
+        ? _normalizeCancelDecision(requestDecision)
+        : requestDecision;
+    normalizedDecisions.add(normalizedDecision);
     return <String, dynamic>{
           'operation': operationKey,
           'source': {
@@ -182,7 +197,7 @@ class _LessonDecisionApi extends MagicApiClient {
             'state': completed ? 'successfully_completed' : 'scheduled',
           },
           'successor': _successor,
-          'financialDecision': previews.last['financialDecision'],
+          'financialDecision': normalizedDecision,
           'violations': conflict
               ? const [
                   {
@@ -557,6 +572,28 @@ Future<void> _openAndFill(
   );
 }
 
+Map<String, dynamic> _normalizeCancelDecision(Map<String, dynamic> decision) {
+  final settlementTypeKey = decision['settlementTypeKey']?.toString();
+  final recommendedMinutes = switch (settlementTypeKey) {
+    'paid_miss' => 60,
+    'unpaid_miss' => 0,
+    _ => null,
+  };
+  return {
+    ...decision,
+    'clientDecisions': [
+      for (final item in decision['clientDecisions'] as List? ?? const [])
+        if (item is Map)
+          {
+            ...Map<String, dynamic>.from(item),
+            if (item['chargeDurationMinutes'] == null &&
+                recommendedMinutes != null)
+              'chargeDurationMinutes': recommendedMinutes,
+          },
+    ],
+  };
+}
+
 void main() {
   testWidgets(
     'cancel opens unpaid and paid miss autofills full duration once',
@@ -579,6 +616,14 @@ void main() {
               'teacherCompensationRuleKey': 'standard',
               'teacherCreditedDurationMinutes': 60,
               'teacherCompensationSource': 'automatic',
+              'clientDecisions': [
+                {
+                  'clientId': _firstGroupStudentId,
+                  'chargeType': 'subscription',
+                  'payerStudentId': _firstGroupStudentId,
+                  'subscriptionId': _crossPayerSubscriptionId,
+                },
+              ],
             },
           },
         ),
@@ -603,11 +648,7 @@ void main() {
       expect(api.previews.single['financialDecision'], {
         'settlementTypeKey': 'unpaid_miss',
         'clientDecisions': [
-          {
-            'clientId': _firstGroupStudentId,
-            'chargeDurationMinutes': 0,
-            'chargeType': 'none',
-          },
+          {'clientId': _firstGroupStudentId, 'chargeType': 'none'},
         ],
         'teacherCompensationRuleKey': 'none',
         'teacherCreditedDurationMinutes': 0,
@@ -625,6 +666,17 @@ void main() {
             ..._lesson,
             'studentId': _firstGroupStudentId,
             'durationMinutes': 60,
+            'financialDecision': {
+              'settlementTypeKey': 'lesson',
+              'clientDecisions': [
+                {
+                  'clientId': _firstGroupStudentId,
+                  'chargeType': 'subscription',
+                  'payerStudentId': _firstGroupStudentId,
+                  'subscriptionId': _crossPayerSubscriptionId,
+                },
+              ],
+            },
           },
         ),
       );
@@ -648,8 +700,24 @@ void main() {
         'clientDecisions': [
           {
             'clientId': _firstGroupStudentId,
+            'chargeType': 'subscription',
+            'payerStudentId': _firstGroupStudentId,
+            'subscriptionId': _crossPayerSubscriptionId,
+          },
+        ],
+        'teacherCompensationRuleKey': 'standard',
+        'teacherCreditedDurationMinutes': 60,
+        'teacherCompensationSource': 'automatic',
+      });
+      expect(paidApi.normalizedDecisions.single, {
+        'settlementTypeKey': 'paid_miss',
+        'clientDecisions': [
+          {
+            'clientId': _firstGroupStudentId,
+            'chargeType': 'subscription',
+            'payerStudentId': _firstGroupStudentId,
+            'subscriptionId': _crossPayerSubscriptionId,
             'chargeDurationMinutes': 60,
-            'chargeType': 'none',
           },
         ],
         'teacherCompensationRuleKey': 'standard',
@@ -674,6 +742,17 @@ void main() {
             ..._lesson,
             'studentId': _firstGroupStudentId,
             'durationMinutes': 60,
+            'financialDecision': {
+              'settlementTypeKey': 'lesson',
+              'clientDecisions': [
+                {
+                  'clientId': _firstGroupStudentId,
+                  'chargeType': 'subscription',
+                  'payerStudentId': _firstGroupStudentId,
+                  'subscriptionId': _crossPayerSubscriptionId,
+                },
+              ],
+            },
           },
         ),
       );
@@ -721,7 +800,25 @@ void main() {
           {
             'clientId': _firstGroupStudentId,
             'chargeDurationMinutes': 30,
-            'chargeType': 'none',
+            'chargeType': 'subscription',
+            'payerStudentId': _firstGroupStudentId,
+            'subscriptionId': _crossPayerSubscriptionId,
+          },
+        ],
+        'teacherCompensationRuleKey': 'percent',
+        'teacherCompensationValueMinor': '6250',
+        'teacherCreditedDurationMinutes': 45,
+        'teacherCompensationSource': 'manual',
+      });
+      expect(api.normalizedDecisions.single, {
+        'settlementTypeKey': 'paid_miss',
+        'clientDecisions': [
+          {
+            'clientId': _firstGroupStudentId,
+            'chargeDurationMinutes': 30,
+            'chargeType': 'subscription',
+            'payerStudentId': _firstGroupStudentId,
+            'subscriptionId': _crossPayerSubscriptionId,
           },
         ],
         'teacherCompensationRuleKey': 'percent',
@@ -870,11 +967,7 @@ void main() {
         if (operation == LessonDecisionOperation.cancel) {
           expect(preview['settlementTypeKey'], 'unpaid_miss');
           expect(preview['clientDecisions'], [
-            {
-              'clientId': _leadId,
-              'chargeDurationMinutes': 0,
-              'chargeType': 'none',
-            },
+            {'clientId': _leadId, 'chargeType': 'none'},
           ]);
         } else {
           expect(preview['clientDecisions'], [

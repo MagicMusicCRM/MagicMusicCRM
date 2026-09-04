@@ -49,7 +49,7 @@ void main() {
     var nextCalls = 0;
     await _pumpView(
       tester,
-      onOpenTimelineItem: (item) async => openedId = item.id,
+      onOpenTimelineItem: (lessonId) async => openedId = lessonId,
       onNextTimeline: () => nextCalls++,
     );
 
@@ -60,6 +60,25 @@ void main() {
 
     expect(openedId, 'lesson-cancelled');
     expect(nextCalls, 1);
+  });
+
+  testWidgets('opens the actionable successor from a rescheduled source', (
+    tester,
+  ) async {
+    String? openedId;
+    await _pumpView(
+      tester,
+      onOpenTimelineItem: (lessonId) async => openedId = lessonId,
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('student-timeline-successor-lesson-rescheduled'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(openedId, 'lesson-successor');
   });
 
   testWidgets('shows rule history and actions only on the current row', (
@@ -113,7 +132,7 @@ void main() {
 Future<void> _pumpView(
   WidgetTester tester, {
   double width = 768,
-  Future<void> Function(StudentLessonTimelineItem item)? onOpenTimelineItem,
+  Future<void> Function(String lessonId)? onOpenTimelineItem,
   VoidCallback? onNextTimeline,
   void Function(SchedulePlan plan, SchedulePlanRow? row)? onEditPlan,
   void Function(SchedulePlan plan, SchedulePlanRow row)? onRemoveRow,

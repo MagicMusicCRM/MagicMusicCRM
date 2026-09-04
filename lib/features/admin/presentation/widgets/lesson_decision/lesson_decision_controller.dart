@@ -84,16 +84,6 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
 
   @override
   List<Map<String, dynamic>> get initialClientDecisions {
-    if (operation == LessonDecisionOperation.cancel) {
-      return List.unmodifiable([
-        for (final participant in settlementClients)
-          Map<String, dynamic>.unmodifiable({
-            'clientId': participant.id,
-            'chargeType': 'none',
-            'chargeDurationMinutes': 0,
-          }),
-      ]);
-    }
     final stored = [
       for (final item
           in _initialFinancialDecision?['clientDecisions'] as List? ?? const [])

@@ -25,6 +25,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   final Map<String, String?> _payerNames = {};
   final Map<String, String?> _subscriptionIds = {};
   final Map<String, String?> _chargeTypes = {};
+  final Map<String, String?> _preferredChargeTypes = {};
   final Map<String, Map<String, dynamic>> _clientDecisionsById = {};
   final Map<String, List<LessonDecisionSubscription>> _subscriptions = {};
   final Set<String> _loadingSubscriptions = {};
@@ -87,12 +88,14 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     });
     try {
       final catalog = await widget.controller.loadCatalog();
+      final storedClientDecisions = widget.controller.initialClientDecisions;
       final cancellationDraft =
           widget.controller.operation == LessonDecisionOperation.cancel
           ? LessonDecisionDraft.forCancel(
               catalog: catalog,
               lesson: widget.controller.lesson,
               clients: widget.controller.settlementClients,
+              existingClientDecisions: storedClientDecisions,
             )
           : null;
       final defaults = cancellationDraft == null
@@ -113,7 +116,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
           ? widget.controller.initialTeacherCreditedDurationMinutes
           : cancellationDraft.teacherCreditedDurationMinutes;
       final initialClientDecisions = cancellationDraft == null
-          ? widget.controller.initialClientDecisions
+          ? storedClientDecisions
           : [
               for (final decision in cancellationDraft.clientDecisions)
                 decision.toJson(),
@@ -132,6 +135,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       await Future.wait([
         for (final entry in initialById.entries)
           if ((entry.value['chargeType'] == 'subscription' ||
+                  entry.value['preferredChargeType'] == 'subscription' ||
                   (entry.value['chargeType'] == null &&
                       entry.value['subscriptionId'] != null)) &&
               entry.value['payerStudentId'] != null)
@@ -246,6 +250,20 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
                   MapEntry(entry.key, entry.value['chargeType']?.toString()),
             ),
           );
+        _preferredChargeTypes
+          ..clear()
+          ..addEntries(
+            initialById.entries.map(
+              (entry) => MapEntry(
+                entry.key,
+                entry.value['preferredChargeType']?.toString() ??
+                    (entry.value['chargeType'] == 'subscription' ||
+                            entry.value['chargeType'] == 'personal_account'
+                        ? entry.value['chargeType']?.toString()
+                        : null),
+              ),
+            ),
+          );
         _subscriptions
           ..clear()
           ..addAll(initialSubscriptions);
@@ -338,6 +356,9 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
               clientMinutes,
             );
           }
+          if (applyRecommendation) {
+            _applyFundingRecommendation(participant.id, settlement);
+          }
         }
         if (applyRecommendation) {
           _clientDecisionTouched.clear();
@@ -381,6 +402,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
           'chargeDurationMinutes',
           _clientDurationMinutes[clientId],
         );
+        _applyFundingRecommendation(clientId, settlement);
       }
       _clearPreview();
     });
@@ -460,6 +482,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   ) async {
     final payerId = payer?.id;
     setState(() {
+      _clientDecisionTouched.add(clientId);
       _payerIds[clientId] = payerId;
       _payerNames[clientId] = payer?.name;
       _subscriptionIds.remove(clientId);
@@ -490,6 +513,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
 
   void _selectSubscription(String clientId, String? subscriptionId) {
     setState(() {
+      _clientDecisionTouched.add(clientId);
       _subscriptionIds[clientId] = subscriptionId;
       _writeClientDecision(clientId, 'subscriptionId', subscriptionId);
     });
@@ -498,6 +522,12 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
 
   void _selectChargeType(String clientId, String? chargeType) {
     setState(() {
+      _clientDecisionTouched.add(clientId);
+      if (chargeType == 'subscription' || chargeType == 'personal_account') {
+        _preferredChargeTypes[clientId] = chargeType;
+      } else if (chargeType == 'none') {
+        _preferredChargeTypes.remove(clientId);
+      }
       _chargeTypes[clientId] = chargeType;
       _writeClientDecision(clientId, 'chargeType', chargeType);
       if (chargeType != 'subscription') {
@@ -524,6 +554,18 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       decision[key] = value;
     }
     if (decision.length == 1) _clientDecisionsById.remove(clientId);
+  }
+
+  void _applyFundingRecommendation(
+    String clientId,
+    LessonDecisionCatalogItem settlement,
+  ) {
+    final recommendedChargeType = settlement.clientDurationMode == 'zero'
+        ? 'none'
+        : _preferredChargeTypes[clientId];
+    if (recommendedChargeType == null) return;
+    _chargeTypes[clientId] = recommendedChargeType;
+    _writeClientDecision(clientId, 'chargeType', recommendedChargeType);
   }
 
   Future<void> _calculate() async {
@@ -554,10 +596,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
             widget.controller.canManageTeacherCompensation
             ? _teacherCompensationSource
             : null,
-        clientDecisions: _clientDecisions(
-          widget.controller.settlementClients,
-          _clientDecisionsById,
-        ),
+        clientDecisions: _clientDecisionsForPreview(),
       );
       if (!mounted) return;
       setState(() => _preview = preview);
@@ -567,6 +606,29 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  List<Map<String, dynamic>> _clientDecisionsForPreview() => [
+    for (final decision in _clientDecisions(
+      widget.controller.settlementClients,
+      _clientDecisionsById,
+    ))
+      () {
+        final result = Map<String, dynamic>.from(decision);
+        final clientId = result['clientId']?.toString();
+        final settlement = _catalogItem(
+          _catalog?.settlementTypes ?? const [],
+          (clientId == null ? null : _clientSettlementKeys[clientId]) ??
+              _settlementKey ??
+              '',
+        );
+        if (clientId == null ||
+            (!_clientDurationTouched.contains(clientId) &&
+                settlement?.clientDurationMode != 'manual')) {
+          result.remove('chargeDurationMinutes');
+        }
+        return result;
+      }(),
+  ];
 
   Future<void> _commit() async {
     final preview = _preview;

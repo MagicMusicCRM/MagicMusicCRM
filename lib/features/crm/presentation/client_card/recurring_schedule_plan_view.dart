@@ -61,8 +61,7 @@ class RecurringSchedulePlanView extends StatefulWidget {
   final SchedulePlanRemoveRowIntent onRemoveRow;
   final ValueChanged<SchedulePlan> onEditParticipants;
   final ValueChanged<SchedulePlan> onEndPlan;
-  final Future<void> Function(StudentLessonTimelineItem item)
-  onOpenTimelineItem;
+  final Future<void> Function(String lessonId) onOpenTimelineItem;
   final Widget? emptyState;
   final ValueChanged<Map<String, dynamic>>? onOpenFallbackLesson;
 
@@ -463,11 +462,12 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
   );
 
   Future<void> _openTimelineItem(StudentLessonTimelineItem item) async {
-    if (!_openingLessonIds.add(item.id)) return;
+    final actionableLessonId = item.reschedule.actionableLessonId;
+    if (!_openingLessonIds.add(actionableLessonId)) return;
     try {
-      await widget.onOpenTimelineItem(item);
+      await widget.onOpenTimelineItem(actionableLessonId);
     } finally {
-      _openingLessonIds.remove(item.id);
+      _openingLessonIds.remove(actionableLessonId);
     }
   }
 
