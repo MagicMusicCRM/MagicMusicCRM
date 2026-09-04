@@ -157,7 +157,7 @@ export class SchedulePlanDefinitionService {
       plan.kind === "individual"
         ? [plan.student_id!]
         : participants.map((participant) => participant.studentId);
-    await this.lockAndValidate(client, {
+    const validation = {
       planId,
       kind: plan.kind,
       studentId: plan.student_id,
@@ -165,9 +165,11 @@ export class SchedulePlanDefinitionService {
       subscriptionId,
       participants,
       rows: dto.rows,
-    });
+    };
+    const locked = await this.lockValidationBarriers(client, validation);
     this.assertEditable(plan, dto);
     this.assertPeriod(effectiveFrom, activeUntil);
+    await this.assertLockedSemantics(client, validation, locked);
     const activeSeries = (await this.repository.activeSeries(client, planId))
       .rows;
     mode = await prepareSchedulePlanUpdateMode({
@@ -203,6 +205,14 @@ export class SchedulePlanDefinitionService {
     client: PoolClient,
     input: SchedulePlanValidationInput,
   ): Promise<void> {
+    const locked = await this.lockValidationBarriers(client, input);
+    await this.assertLockedSemantics(client, input, locked);
+  }
+
+  private async lockValidationBarriers(
+    client: PoolClient,
+    input: SchedulePlanValidationInput,
+  ) {
     const subscriptionIds = this.subscriptionIds(input);
     const studentIds = this.studentIds(input);
     await this.lockResources(client, input, subscriptionIds, studentIds);
@@ -210,6 +220,15 @@ export class SchedulePlanDefinitionService {
       client,
       studentIds.map((id) => ({ type: "student", id })),
     );
+    return { subscriptionIds, studentIds };
+  }
+
+  private async assertLockedSemantics(
+    client: PoolClient,
+    input: SchedulePlanValidationInput,
+    locked: { subscriptionIds: string[]; studentIds: string[] },
+  ) {
+    const { subscriptionIds, studentIds } = locked;
     await this.assertSubscriptionAssignments(client, input, subscriptionIds);
     await this.assertResources(client, input.rows, studentIds);
     if (input.kind === "group") {

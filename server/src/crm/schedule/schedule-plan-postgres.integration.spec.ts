@@ -3661,6 +3661,116 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("preserves stale, ended and period precedence before locked semantic validation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const sourceRow = row(fixture, isoWeekday(fixture.effectiveFrom), "15:00");
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Plan validation precedence",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-precedence-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const invalidSubscriptionId = randomUUID();
+      const invalidRow = {
+        ...sourceRow,
+        seriesId: created.seriesIds[0],
+        roomId: randomUUID(),
+      };
+      const attempt = (suffix: string, input: {
+        expectedVersion: number;
+        effectiveFrom: string;
+        activeUntil: string | null;
+      }) => plans.update(
+        actor,
+        created.id,
+        {
+          ...input,
+          subscriptionId: invalidSubscriptionId,
+          rows: [invalidRow],
+        },
+        {
+          idempotencyKey: `plan-precedence-${suffix}-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+
+      await expect(attempt("stale", {
+        expectedVersion: 99,
+        effectiveFrom: fixture.effectiveFrom,
+        activeUntil: fixture.until60,
+      })).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_VERSION_STALE" },
+      });
+      await expect(attempt("period", {
+        expectedVersion: 1,
+        effectiveFrom: fixture.effectiveFrom,
+        activeUntil: addDays(fixture.effectiveFrom, -1),
+      })).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_PERIOD_INVALID" },
+      });
+      await pool.query(
+        `update app.schedule_plans
+         set status = 'ended', ended_at = now(), ended_by = $2,
+             end_reason = 'test.validation-precedence'
+         where id = $1`,
+        [created.id, actor.userId],
+      );
+      await expect(attempt("ended", {
+        expectedVersion: 1,
+        effectiveFrom: fixture.effectiveFrom,
+        activeUntil: fixture.until60,
+      })).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_ENDED" },
+      });
+      const evidence = await pool.query<{
+        version: number;
+        aggregate_version: number;
+        update_idempotency: number;
+        update_audit: number;
+        outbox: number;
+      }>(
+        `select plan.version::int as version,
+           (select version::int from app.aggregate_versions
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text) as aggregate_version,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $2 and operation = 'schedule.plan.update')
+             as update_idempotency,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $3
+               and action = 'crm.schedule_plan_updated'
+               and entity_id = plan.id::text) as update_audit,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text
+               and event_type = 'schedule.plan.changed') as outbox
+         from app.schedule_plans plan where plan.id = $1`,
+        [created.id, `user:${actor.userId}`, actor.userId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        version: 1,
+        aggregate_version: 1,
+        update_idempotency: 0,
+        update_audit: 0,
+        outbox: 1,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("serializes archive before a plan update and rejects the tombstoned client without writes", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "director" as const };
