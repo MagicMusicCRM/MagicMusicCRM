@@ -716,4 +716,67 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
       client.release();
     }
   });
+
+  it("caps total chain traversal when opened near the middle", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      await client.query("set local statement_timeout = '5s'");
+      const branch = await client.query<{ id: string }>(
+        "insert into app.branches (name) values ($1) returning id",
+        [`Overlong chain ${randomUUID()}`],
+      );
+      const actor = await client.query<{ id: string }>(
+        `insert into app.users (email, role, email_verified_at)
+         values ($1, 'system_admin', now()) returning id`,
+        [`overlong-chain-${randomUUID()}@example.test`],
+      );
+      const group = await client.query<{ id: string }>(
+        `insert into app.groups (branch_id, name)
+         values ($1, $2) returning id`,
+        [branch.rows[0]!.id, `Overlong group ${randomUUID()}`],
+      );
+      const chainIds = Array.from({ length: 62 }, () => randomUUID());
+      await client.query(
+        `insert into app.lessons (
+           id, group_id, branch_id, scheduled_at, created_by
+         )
+         select chain.id, $2, $3,
+           now() + (chain.ordinality * interval '1 day'), $4
+         from unnest($1::uuid[]) with ordinality as chain(id, ordinality)`,
+        [
+          chainIds,
+          group.rows[0]!.id,
+          branch.rows[0]!.id,
+          actor.rows[0]!.id,
+        ],
+      );
+      await client.query(
+        `with links as (
+           select chain.id,
+             lag(chain.id) over (order by chain.ordinality) as predecessor_id,
+             lead(chain.id) over (order by chain.ordinality) as successor_id
+           from unnest($1::uuid[]) with ordinality as chain(id, ordinality)
+         )
+         update app.lessons lesson set
+           predecessor_id = links.predecessor_id,
+           successor_id = links.successor_id,
+           lifecycle_state = case when links.successor_id is null
+             then 'scheduled' else 'rescheduled' end
+         from links where lesson.id = links.id`,
+        [chainIds],
+      );
+
+      await expect(actionableChains.resolve({
+        userId: actor.rows[0]!.id,
+        role: "system_admin",
+      }, chainIds[40]!, client)).rejects.toMatchObject({
+        status: 422,
+        response: { code: "LESSON_RESCHEDULE_CHAIN_INVALID" },
+      });
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
 });

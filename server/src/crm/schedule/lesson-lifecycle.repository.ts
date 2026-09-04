@@ -102,12 +102,13 @@ export class LessonLifecycleRepository {
             and in_scope
         ), walk (
           id, predecessor_id, successor_id, lifecycle_state, deleted_at,
-          in_scope, phase, depth, path, cycle_detected, overlong,
+          in_scope, phase, traversal_depth, chain_order, path,
+          cycle_detected, overlong,
           missing_link, deleted_link, scope_violation, broken_link
         ) as (
           select requested.id, requested.predecessor_id, requested.successor_id,
             requested.lifecycle_state, requested.deleted_at,
-            requested.in_scope, 'backward'::text, 0,
+            requested.in_scope, 'backward'::text, 0, 0,
             array[requested.id]::uuid[], false, false, false, false, false, false
           from requested
 
@@ -116,16 +117,28 @@ export class LessonLifecycleRepository {
           select target.id, target.predecessor_id, target.successor_id,
             target.lifecycle_state, target.deleted_at, target.in_scope,
             step.next_phase,
-            case when step.switch_to_forward then 0 else walk.depth + 1 end,
-            case when step.switch_to_forward then array[walk.id]::uuid[]
-              else walk.path || step.next_id end,
+            case when step.switch_to_forward then walk.traversal_depth
+              else walk.traversal_depth + 1 end,
+            case
+              when step.switch_to_forward then 0
+              when walk.phase = 'forward' then walk.chain_order + 1
+              else 0
+            end,
+            case
+              when step.switch_to_forward then array[walk.id]::uuid[]
+              when walk.traversal_depth < 64 then walk.path || step.next_id
+              else walk.path
+            end,
             (not step.switch_to_forward and step.next_id = any(walk.path)),
-            (not step.switch_to_forward and walk.depth >= 64),
-            target.id is null,
+            (not step.switch_to_forward and walk.traversal_depth >= 64),
+            target.id is null and (
+              step.switch_to_forward or walk.traversal_depth < 64
+            ),
             target.deleted_at is not null,
             target.id is not null and not target.in_scope,
             case
               when step.switch_to_forward then false
+              when walk.traversal_depth >= 64 then false
               when walk.phase = 'backward'
                 then target.successor_id is distinct from walk.id
               else target.predecessor_id is distinct from walk.id
@@ -147,7 +160,9 @@ export class LessonLifecycleRepository {
               walk.phase = 'backward' and walk.predecessor_id is null
                 as switch_to_forward
           ) step
-          left join lesson_rows target on target.id = step.next_id
+          left join lesson_rows target
+            on target.id = step.next_id
+           and (step.switch_to_forward or walk.traversal_depth < 64)
           where not walk.cycle_detected
             and not walk.overlong
             and not walk.missing_link
@@ -161,7 +176,7 @@ export class LessonLifecycleRepository {
         ), summary as (
           select
             coalesce(
-              array_agg(id order by depth) filter (
+              array_agg(id order by chain_order) filter (
                 where phase = 'forward'
                   and id is not null
                   and not cycle_detected
