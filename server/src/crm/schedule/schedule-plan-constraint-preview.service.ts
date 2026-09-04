@@ -83,6 +83,7 @@ export class SchedulePlanConstraintPreviewService {
     dto: SchedulePlanConstraintPreviewDto,
   ): Promise<SchedulePlanConstraintProjection> {
     this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     const normalized = this.definition.normalizeCreate(dto);
     return this.database.transaction(async (client) => {
       const studentIds = this.createStudentIds(normalized);
@@ -135,6 +136,7 @@ export class SchedulePlanConstraintPreviewService {
     dto: UpdateSchedulePlanDto,
   ): Promise<SchedulePlanConstraintProjection> {
     this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     this.definition.assertRows(dto.rows);
     return this.database.transaction(async (client) => {
       const prepared = await this.definition.prepareUpdate(client, planId, dto);

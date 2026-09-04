@@ -6,11 +6,11 @@ import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import type { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import type { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import type { LessonSettlementService } from "../commerce/lesson-settlement.service";
-import type { CrmPolicy } from "../crm.policy";
+import { CrmPolicy } from "../crm.policy";
 import type { SchedulePlanRowDto } from "../dto/schedule-plan.dto";
 import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
-import type { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
+import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
 import { SchedulePlanDefinitionService } from "./schedule-plan-definition.service";
 import { SchedulePlanEndService } from "./schedule-plan-end.service";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
@@ -42,6 +42,121 @@ const scheduleRow = (
 });
 
 describe("Schedule plan semantic owners", () => {
+  it.each(["create", "update"] as const)(
+    "rejects raw %s teacher compensation before platform integrity",
+    async (operation) => {
+      const platform = {
+        executeVersionedMutation: jest.fn(async () => ({
+          version: 1,
+          replayed: false,
+          resultRef: {},
+        })),
+      } as unknown as PlatformIntegrityService;
+      const definition = {
+        normalizeCreate: jest.fn((dto) => dto),
+        planId: jest.fn(() => "plan-a"),
+        assertRows: jest.fn(),
+      } as unknown as SchedulePlanDefinitionService;
+      const mutation = new SchedulePlanMutationService(
+        platform,
+        new CrmPolicy(),
+        {} as SchedulePlanRepository,
+        {} as LessonSeriesCommandService,
+        {} as ScheduleSeriesMaterializerService,
+        definition,
+        {} as SchedulePlanConstraintPreviewService,
+      );
+      const rows = [
+        scheduleRow({
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+          } as SchedulePlanRowDto["financialDecision"],
+        }),
+        scheduleRow({
+          beginTime: "11:00",
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "fixed",
+            teacherCompensationValueMinor: "50000",
+            teacherCreditedDurationMinutes: 30,
+            teacherCompensationSource: "manual",
+          },
+        }),
+      ];
+
+      const result = operation === "create"
+        ? mutation.create(actor, {
+            kind: "individual",
+            title: "Plan",
+            studentId: "student-a",
+            activeFrom: "2026-09-01",
+            rows,
+          }, metadata)
+        : mutation.update(actor, "plan-a", {
+            expectedVersion: 1,
+            effectiveFrom: "2026-09-01",
+            rows,
+          }, metadata);
+
+      await expect(result).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      expect(platform.executeVersionedMutation).not.toHaveBeenCalled();
+      expect(definition.normalizeCreate).not.toHaveBeenCalled();
+      expect(definition.assertRows).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["create", "update"] as const)(
+    "rejects raw %s preview teacher compensation before a transaction",
+    async (operation) => {
+      const database = {
+        transaction: jest.fn(),
+      } as unknown as DatabaseService;
+      const definition = {
+        normalizeCreate: jest.fn((dto) => dto),
+        assertRows: jest.fn(),
+      } as unknown as SchedulePlanDefinitionService;
+      const previews = new SchedulePlanConstraintPreviewService(
+        new CrmPolicy(),
+        database,
+        definition,
+        {} as LessonSeriesCommandService,
+        {} as LessonSettlementService,
+        {} as SubscriptionPreviewTokenService,
+      );
+      const rows = [scheduleRow({
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationSource: "manual",
+        } as SchedulePlanRowDto["financialDecision"],
+      })];
+
+      const result = operation === "create"
+        ? previews.previewConstraints(actor, {
+            kind: "individual",
+            title: "Plan",
+            studentId: "student-a",
+            activeFrom: "2026-09-01",
+            rows,
+          })
+        : previews.previewUpdateConstraints(actor, "plan-a", {
+            expectedVersion: 1,
+            effectiveFrom: "2026-09-01",
+            rows,
+          });
+
+      await expect(result).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      expect(database.transaction).not.toHaveBeenCalled();
+      expect(definition.normalizeCreate).not.toHaveBeenCalled();
+      expect(definition.assertRows).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     [0, 13, 0, 13],
     [13, 0, 13, 0],

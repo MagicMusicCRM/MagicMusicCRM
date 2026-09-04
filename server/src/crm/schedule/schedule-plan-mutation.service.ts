@@ -60,6 +60,7 @@ export class SchedulePlanMutationService {
     metadata: LessonCommandMetadata,
   ): Promise<SchedulePlanMutationResult> {
     this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     assertMetadata(metadata);
     const normalized = this.definition.normalizeCreate(dto);
     const planId = this.definition.planId(
@@ -112,6 +113,7 @@ export class SchedulePlanMutationService {
     metadata: LessonCommandMetadata,
   ): Promise<SchedulePlanMutationResult> {
     this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     assertMetadata(metadata);
     this.definition.assertRows(dto.rows);
     const mutation = await this.platform.executeVersionedMutation({

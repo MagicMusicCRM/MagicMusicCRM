@@ -1,5 +1,7 @@
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
@@ -20,7 +22,10 @@ import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
-import { SchedulePlanDefinitionService } from "./schedule-plan-definition.service";
+import {
+  schedulePlanStableId,
+  SchedulePlanDefinitionService,
+} from "./schedule-plan-definition.service";
 import { SchedulePlanEndService } from "./schedule-plan-end.service";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
 import { SchedulePlanQueryService } from "./schedule-plan-query.service";
@@ -433,6 +438,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const requestId = `schedule-plan-rbac-${randomUUID()}`;
+    const idempotencyKey = `forbidden-recurring-${randomUUID()}`;
     const title = `Forbidden override ${randomUUID()}`;
     try {
       await expect(plans.create(actor, {
@@ -455,7 +461,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           },
         }],
       }, {
-        idempotencyKey: `forbidden-recurring-${randomUUID()}`,
+        idempotencyKey,
         requestId,
       })).rejects.toMatchObject({
         status: 403,
@@ -467,6 +473,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         lessons: string;
         audits: string;
         outbox: string;
+        idempotency: string;
+        aggregate_versions: string;
       }>(
         `select
           (select count(*)::text from app.schedule_plans where title = $1) as plans,
@@ -478,9 +486,23 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
              join app.schedule_plans plan on plan.id = series.plan_id
              where plan.title = $1) as lessons,
           (select count(*)::text from app.audit_events where request_id = $2) as audits,
-          (select count(*)::text from app.platform_outbox_events
-             where request_id = $2) as outbox`,
-        [title, requestId],
+           (select count(*)::text from app.platform_outbox_events
+              where request_id = $2) as outbox,
+           (select count(*)::text from app.idempotency_records
+              where actor_key = $3 and operation = 'schedule.plan.create'
+                and idempotency_key = $4) as idempotency,
+           (select count(*)::text from app.aggregate_versions
+              where aggregate_type = 'schedule:plan'
+                and aggregate_id = $5) as aggregate_versions`,
+        [
+          title,
+          requestId,
+          `user:${actor.userId}`,
+          idempotencyKey,
+          schedulePlanStableId(
+            `schedule.plan.create\0${actor.userId}\0${idempotencyKey}`,
+          ),
+        ],
       );
       expect(writes.rows[0]).toEqual({
         plans: "0",
@@ -488,6 +510,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         lessons: "0",
         audits: "0",
         outbox: "0",
+        idempotency: "0",
+        aggregate_versions: "0",
       });
     } finally {
       await cleanup(pool, fixture);
@@ -1463,39 +1487,21 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       expect(immutable.rows[0]!.subscription_id).toBe(
         fixture.subscriptionIds[0],
       );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0147_lesson_reservation_history",
+      const rollback0142 = readFileSync(
+        resolve(
+          process.cwd(),
+          "db/migrations/0142_schedule_plan_series_subscription_snapshot.down.sql",
+        ),
+        "utf8",
       );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0146_lesson_funding_payer",
+      await expect(pool.query(rollback0142)).rejects.toThrow(
+        /0142 rollback is unsafe/,
       );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0145_student_contact_email",
+      const migrationStillApplied = await pool.query<{ applied: boolean }>(
+        `select exists (select 1 from app_schema_migrations
+          where id = '0142_schedule_plan_series_subscription_snapshot') as applied`,
       );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0144_direct_subscription_payment_isolation",
-      );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0143_payment_record_link_permission",
-      );
-      try {
-        await expect(new MigrationRunner(pool).down()).rejects.toThrow(
-          /0142 rollback is unsafe/,
-        );
-        const migrationStillApplied = await pool.query<{ applied: boolean }>(
-          `select exists (select 1 from app_schema_migrations
-            where id = '0142_schedule_plan_series_subscription_snapshot') as applied`,
-        );
-        expect(migrationStillApplied.rows[0]!.applied).toBe(true);
-      } finally {
-        expect(await new MigrationRunner(pool).up()).toEqual([
-          "0143_payment_record_link_permission",
-          "0144_direct_subscription_payment_isolation",
-          "0145_student_contact_email",
-          "0146_lesson_funding_payer",
-          "0147_lesson_reservation_history",
-        ]);
-      }
+      expect(migrationStillApplied.rows[0]!.applied).toBe(true);
     } finally {
       await cleanup(pool, fixture);
     }

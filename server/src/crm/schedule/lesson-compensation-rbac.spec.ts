@@ -737,7 +737,7 @@ describe("lesson compensation service RBAC", () => {
   );
 
   it.each(roles)(
-    "keeps legacy schedule-plan payload compatible for %s",
+    "keeps authorized and sparse schedule-plan payloads compatible for %s",
     async (role) => {
       const reachedAuthorizedWork = new Error("AUTHORIZED_WORK");
       const service = new SchedulePlanMutationService(
@@ -768,7 +768,10 @@ describe("lesson compensation service RBAC", () => {
               branchId: "branch-1",
               weekday: 1,
               beginTime: "10:00",
-              financialDecision,
+              financialDecision:
+                role === "director" || role === "system_admin"
+                  ? financialDecision
+                  : { settlementTypeKey: "free_lesson" } as never,
             },
           ],
         },
