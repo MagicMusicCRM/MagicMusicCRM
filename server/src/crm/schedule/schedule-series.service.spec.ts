@@ -55,12 +55,23 @@ describe("ScheduleSeriesService", () => {
     results: { rows: Record<string, unknown>[] }[],
   ) => {
     const queuedResults = [...results];
+    let legacyPreRead: { rows: Record<string, unknown>[] } | undefined;
     const query = jest.fn().mockImplementation((sql: unknown) => {
       if (String(sql).includes("pg_advisory_xact_lock")) {
         return Promise.resolve({ rows: [] });
       }
       if (String(sql).includes("jsonb_to_recordset")) {
         return Promise.resolve({ rows: [] });
+      }
+      if (
+        String(sql).includes("from app.schedule_series s") &&
+        String(sql).includes("client_refs")
+      ) {
+        if (String(sql).includes("for update of s")) {
+          return Promise.resolve(legacyPreRead);
+        }
+        legacyPreRead = queuedResults.shift();
+        return Promise.resolve(legacyPreRead);
       }
       return Promise.resolve(queuedResults.shift());
     });
@@ -280,6 +291,8 @@ describe("ScheduleSeriesService", () => {
       String(call[0]).includes("insert into app.schedule_series"),
     );
     expect(continuationCall?.[1]).toEqual([
+      null,
+      null,
       "student-a",
       null,
       "teacher-b",
@@ -289,6 +302,15 @@ describe("ScheduleSeriesService", () => {
       "16:00",
       60,
       "2026-08-01",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null,
       "manager-a",
@@ -363,6 +385,191 @@ describe("ScheduleSeriesService", () => {
     expect(sql).not.toContain("series_date >= $2::date");
     expect(sql).not.toContain("original_scheduled_at is null");
     expect(lessonUpdate?.[1]).toEqual(["series-a", "2026-12-01"]);
+  });
+
+  it("locks legacy client and old plus requested resources before the series row", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-18T09:00:00.000Z"));
+    const events: string[] = [];
+    let continuationValues: unknown[] | undefined;
+    const snapshot = {
+      id: "series-a",
+      plan_id: null,
+      client_type: "lead" as const,
+      client_id: "lead-a",
+      student_id: null,
+      group_id: null,
+      teacher_id: "teacher-a",
+      room_id: "room-a",
+      branch_id: "branch-a",
+      weekday: 2,
+      begin_time: "15:00:00",
+      duration_minutes: 60,
+      valid_from: "2026-07-15",
+      valid_until: "2026-12-31",
+      notes: null,
+      superseded_by: null,
+      deleted_at: null,
+      version: 1,
+      timezone_name: "Europe/Moscow",
+      completion_type: "standard.success",
+      client_charge_type: "none",
+      client_charge_value: 0,
+      teacher_compensation_type: "fixed",
+      teacher_compensation_value: 1000,
+      subscription_id: null,
+      trial: false,
+      occurrence_count: 12,
+      client_refs: [{ type: "lead", id: "lead-a" }],
+    };
+    const query = jest.fn(async (sqlValue: unknown, values?: unknown[]) => {
+      const sql = String(sqlValue);
+      if (sql.includes("pg_advisory_xact_lock")) {
+        events.push(`lock:${String(values?.[0])}`);
+        return { rows: [] };
+      }
+      if (sql.includes("for update")) {
+        events.push("series-row");
+        return { rows: [snapshot] };
+      }
+      if (
+        sql.includes("from app.schedule_series") &&
+        sql.includes("client_refs")
+      ) {
+        events.push("pre-read");
+        return { rows: [snapshot] };
+      }
+      if (sql.includes("jsonb_to_recordset")) {
+        events.push("active-client-recheck");
+        return { rows: [] };
+      }
+      if (sql.includes("insert into app.schedule_series")) {
+        events.push("write");
+        continuationValues = values;
+        return { rows: [{ id: "series-b" }] };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+    const database = {
+      transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query }),
+    } as unknown as DatabaseService;
+    const service = new ScheduleSeriesService(
+      database,
+      { record: jest.fn() } as unknown as AuditService,
+      { assertCanWriteCrm: jest.fn() } as unknown as CrmPolicy,
+      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+      {
+        materializeSeries: jest.fn().mockResolvedValue(0),
+      } as unknown as ScheduleSeriesMaterializerService,
+    );
+
+    await expect(
+      service.updateScheduleSeries(actor, "series-a", {
+        teacherId: "teacher-b",
+        roomId: "room-b",
+        effectiveFrom: "2026-08-01",
+      }),
+    ).resolves.toMatchObject({ id: "series-b" });
+
+    expect(events).toEqual([
+      "lock:commerce:multi-lesson-settlement",
+      "pre-read",
+      "lock:branch:branch-a",
+      "lock:client:lead:lead-a",
+      "lock:room:room-a",
+      "lock:room:room-b",
+      "lock:teacher:teacher-a",
+      "lock:teacher:teacher-b",
+      "lock:series:series-a",
+      "series-row",
+      "active-client-recheck",
+      "write",
+    ]);
+    expect(continuationValues?.slice(0, 4)).toEqual([
+      "lead",
+      "lead-a",
+      null,
+      null,
+    ]);
+    expect(continuationValues?.slice(13, 22)).toEqual([
+      "Europe/Moscow",
+      "standard.success",
+      "none",
+      0,
+      "fixed",
+      1000,
+      null,
+      false,
+      12,
+    ]);
+  });
+
+  it("returns a typed stale conflict when the legacy pre-read changes before the row lock", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-18T09:00:00.000Z"));
+    const writes: string[] = [];
+    const before = {
+      id: "series-a",
+      plan_id: null,
+      client_type: null,
+      client_id: null,
+      student_id: "student-a",
+      group_id: null,
+      teacher_id: "teacher-a",
+      room_id: "room-a",
+      branch_id: "branch-a",
+      weekday: 2,
+      begin_time: "15:00:00",
+      duration_minutes: 60,
+      valid_from: "2026-07-15",
+      valid_until: null,
+      notes: null,
+      superseded_by: null,
+      deleted_at: null,
+      version: 1,
+      client_refs: [{ type: "student", id: "student-a" }],
+    };
+    const after = { ...before, teacher_id: "teacher-other", version: 2 };
+    const query = jest.fn(async (sqlValue: unknown) => {
+      const sql = String(sqlValue);
+      if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
+      if (sql.includes("for update")) return { rows: [after] };
+      if (
+        sql.includes("from app.schedule_series") &&
+        sql.includes("client_refs")
+      ) {
+        return { rows: [before] };
+      }
+      if (/\b(update|insert|delete)\b/i.test(sql)) writes.push(sql);
+      if (sql.includes("insert into app.schedule_series")) {
+        return { rows: [{ id: "series-b" }] };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+    const database = {
+      transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query }),
+    } as unknown as DatabaseService;
+    const service = new ScheduleSeriesService(
+      database,
+      { record: jest.fn() } as unknown as AuditService,
+      { assertCanWriteCrm: jest.fn() } as unknown as CrmPolicy,
+      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+      {
+        materializeSeries: jest.fn().mockResolvedValue(0),
+      } as unknown as ScheduleSeriesMaterializerService,
+    );
+
+    await expect(
+      service.updateScheduleSeries(actor, "series-a", {
+        effectiveFrom: "2026-08-01",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_SERIES_VERSION_STALE" },
+    });
+    expect(writes).toEqual([]);
   });
 
   it("serializes series edits and rejects a second continuation", async () => {

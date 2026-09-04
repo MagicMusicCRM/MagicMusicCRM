@@ -105,6 +105,19 @@ describe("ScheduleSeriesMaterializerService", () => {
 
     await service.materializePlanSeries({ query } as never, "series-a");
 
+    expect(events.filter((event) => event === "candidate-read")).toHaveLength(2);
+    expect(events.filter((event) => event.startsWith("lock:"))).toEqual([
+      "lock:branch:branch-a",
+      "lock:client:student:student-a",
+      "lock:client:student:student-b",
+      "lock:plan:plan-a",
+      "lock:room:room-a",
+      "lock:teacher:teacher-a",
+      "lock:series:series-a",
+    ]);
+    expect(events.lastIndexOf("candidate-read")).toBeGreaterThan(
+      events.indexOf("lock:series:series-a"),
+    );
     expect(activeReferences).toEqual([
       { type: "student", id: "student-a" },
       { type: "student", id: "student-b" },
@@ -117,5 +130,57 @@ describe("ScheduleSeriesMaterializerService", () => {
     expect(events.indexOf("lesson-insert")).toBeGreaterThan(
       events.indexOf("active-client-recheck"),
     );
+  });
+
+  it("rejects a resource key introduced by the post-lock candidate reread", async () => {
+    let candidateRead = 0;
+    const writes: string[] = [];
+    const candidate = {
+      series_date: "2026-09-07",
+      plan_id: null,
+      group_id: null,
+      teacher_id: "teacher-a",
+      branch_id: "branch-a",
+      room_id: "room-a",
+      starts_at: "2026-09-07T07:00:00.000Z",
+      ends_at: "2026-09-07T08:00:00.000Z",
+      client_refs: [{ type: "student", id: "student-a" }],
+    };
+    const query = jest.fn(async (sql: string) => {
+      if (sql.includes("with recursive target") && sql.includes("client_refs")) {
+        candidateRead += 1;
+        return {
+          rows: [
+            {
+              ...candidate,
+              teacher_id: candidateRead === 1 ? "teacher-a" : "teacher-b",
+            },
+          ],
+        };
+      }
+      if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
+      if (
+        sql.includes("jsonb_to_recordset") ||
+        sql.includes("insert into app.lessons")
+      ) {
+        writes.push(sql);
+      }
+      return { rows: [] };
+    });
+    const service = new ScheduleSeriesMaterializerService(
+      {} as DatabaseService,
+      {
+        validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+      } as unknown as ScheduleConstraintEngine,
+    );
+
+    await expect(
+      service.materializePlanSeries({ query } as never, "series-a"),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_SERIES_RESOURCES_CHANGED" },
+    });
+    expect(candidateRead).toBe(2);
+    expect(writes).toEqual([]);
   });
 });

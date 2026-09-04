@@ -3912,6 +3912,228 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("orders legacy update and materializer locks without a row-blocker deadlock", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let updatePromise: Promise<unknown> | undefined;
+    let materializerPromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const inserted = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '18:00', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = inserted.rows[0]!.id;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select id from app.schedule_series where id = $1 for update",
+        [legacySeriesId],
+      );
+
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        teacherId: additional.teacherId,
+        roomId: additional.roomId,
+        effectiveFrom: fixture.effectiveFrom,
+      });
+      const updatePid = await waitForBlockedBy(pool, blockerPid);
+      await waitForSpecificBlock(pool, updatePid, blockerPid);
+
+      materializerPromise = database.transaction((client) =>
+        materializer.materializePlanSeries(client, legacySeriesId!),
+      );
+      const materializerPid = await waitForBlockedBy(pool, updatePid);
+      await waitForSpecificBlock(pool, materializerPid, updatePid);
+
+      await blocker.query("commit");
+      const [updateResult, materializerResult] = await Promise.allSettled([
+        updatePromise,
+        materializerPromise,
+      ]);
+      expect(updateResult.status).toBe("fulfilled");
+      expect(materializerResult.status).toBe("fulfilled");
+
+      const evidence = await pool.query<{
+        series_count: number;
+        superseded_count: number;
+        old_future_live_lessons: number;
+        continuation_live_lessons: number;
+        wrong_continuation_resources: number;
+        duplicate_dates: number;
+      }>(
+        `select count(*)::int as series_count,
+           count(*) filter (where superseded_by is not null)::int
+             as superseded_count,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = $2 and lesson.deleted_at is null
+               and lesson.series_date >= $5::date)
+             as old_future_live_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series continuation
+               on continuation.id = lesson.series_id
+             where continuation.created_by = $1
+               and continuation.plan_id is null
+               and continuation.id <> $2
+               and lesson.deleted_at is null) as continuation_live_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series continuation
+               on continuation.id = lesson.series_id
+             where continuation.created_by = $1
+               and continuation.plan_id is null
+               and continuation.id <> $2
+               and lesson.deleted_at is null
+               and (lesson.teacher_id <> $3 or lesson.room_id <> $4))
+             as wrong_continuation_resources,
+           (select count(*)::int from (
+             select lesson.series_id, lesson.series_date
+             from app.lessons lesson
+             join app.schedule_series target on target.id = lesson.series_id
+             where target.created_by = $1 and target.plan_id is null
+               and lesson.deleted_at is null
+             group by lesson.series_id, lesson.series_date
+             having count(*) > 1
+           ) duplicates) as duplicate_dates
+         from app.schedule_series
+         where created_by = $1 and plan_id is null`,
+        [
+          fixture.managerId,
+          legacySeriesId,
+          additional.teacherId,
+          additional.roomId,
+          fixture.effectiveFrom,
+        ],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        series_count: 2,
+        superseded_count: 1,
+        old_future_live_lessons: 0,
+        wrong_continuation_resources: 0,
+        duplicate_dates: 0,
+      });
+      expect(evidence.rows[0]!.continuation_live_lessons).toBeGreaterThan(0);
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        updatePromise ?? Promise.resolve(),
+        materializerPromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
+  it("rejects a legacy update when its pre-read resources change before the row lock", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let updatePromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const inserted = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '17:00', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = inserted.rows[0]!.id;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`branch:${fixture.branchId}`],
+      );
+
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        effectiveFrom: fixture.effectiveFrom,
+        beginTime: "17:30",
+      });
+      const updatePid = await waitForBlockedBy(pool, blockerPid);
+      await waitForSpecificBlock(pool, updatePid, blockerPid);
+      await pool.query(
+        `update app.schedule_series
+         set teacher_id = $2, version = version + 1
+         where id = $1`,
+        [legacySeriesId, additional.teacherId],
+      );
+      await blocker.query("commit");
+
+      await expect(updatePromise).rejects.toMatchObject({
+        status: 409,
+        response: { code: "SCHEDULE_SERIES_VERSION_STALE" },
+      });
+      const evidence = await pool.query<{
+        version: number;
+        teacher_id: string;
+        superseded_by: string | null;
+        series_count: number;
+        lesson_count: number;
+        update_audit: number;
+      }>(
+        `select series.version::int as version, series.teacher_id,
+           series.superseded_by,
+           (select count(*)::int from app.schedule_series candidate
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as series_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series candidate on candidate.id = lesson.series_id
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as lesson_count,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $2
+               and action = 'crm.schedule_series_updated'
+               and entity_id = series.id::text) as update_audit
+         from app.schedule_series series where series.id = $1`,
+        [legacySeriesId, fixture.managerId],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        version: 2,
+        teacher_id: additional.teacherId,
+        superseded_by: null,
+        series_count: 1,
+        lesson_count: 0,
+        update_audit: 0,
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([updatePromise ?? Promise.resolve()]);
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
   it("serializes archive before a legacy series update and leaves no continuation", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "director" as const };
