@@ -344,17 +344,10 @@ export class LessonSettlementService implements LessonSettlementPort {
         teacherCompensationSource: "manual",
       };
     }
-    const selectedRule = catalog.compensation_rules.find(
-      (rule) =>
-        rule.active && rule.stableKey === decision.teacherCompensationRuleKey,
-    );
     return {
       ...decision,
       teacherCreditedDurationMinutes:
-        requestedMinutes ?? creditedMinutesForRule(
-          selectedRule?.mode,
-          input.durationMinutes,
-        ),
+        requestedMinutes ?? recommendedMinutes,
       teacherCompensationSource: "manual",
     };
   }
@@ -550,17 +543,6 @@ function assertDurationWithinLesson(
     }
     throw error;
   }
-}
-
-function creditedMinutesForRule(
-  mode: "none" | "standard" | "percent" | "fixed" | "hourly" | undefined,
-  durationMinutes: number,
-): number | undefined {
-  if (mode === "none") return 0;
-  if (mode === "standard" || mode === "fixed" || mode === "hourly") {
-    return durationMinutes;
-  }
-  return undefined;
 }
 
 function hasSuppliedTeacherDecision(

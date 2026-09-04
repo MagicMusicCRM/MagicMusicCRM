@@ -41,6 +41,7 @@ function catalogRow(
       { stableKey: "standard", label: "Стандарт", active: true, order: 1, mode: "standard", value: "0" },
       { stableKey: "percent", label: "Процент", active: true, order: 2, mode: "percent", value: "5000" },
       { stableKey: "fixed", label: "Фиксировано", active: true, order: 3, mode: "fixed", value: "100000" },
+      { stableKey: "hourly", label: "Почасовая", active: true, order: 4, mode: "hourly", value: "120000" },
     ],
   };
 }
@@ -77,6 +78,42 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
       }],
     });
   });
+
+  it.each([
+    ["standard", undefined, "lesson", 60],
+    ["fixed", "125000", "lesson", 60],
+    ["hourly", "140000", "lesson", 60],
+    ["percent", "5000", "lesson", 60],
+    ["fixed", "125000", "free_lesson", 0],
+  ] as const)(
+    "preserves authorized manual %s compensation with omitted minutes",
+    async (ruleKey, valueMinor, settlementTypeKey, expectedMinutes) => {
+      const resolved = await service.resolvePlannedDecision(catalogClient(), {
+        branchId: "branch-a",
+        durationMinutes: 60,
+        decision: {
+          settlementTypeKey,
+          teacherCompensationRuleKey: ruleKey,
+          ...(valueMinor === undefined
+            ? {}
+            : { teacherCompensationValueMinor: valueMinor }),
+          teacherCompensationSource: "manual",
+          clientDecisions: [{ clientId: "student-a" }],
+        },
+        requiredClientIds: ["student-a"],
+        actorUserId: "director-a",
+        authorization: actor("director"),
+        reasonText: "Согласовано директором",
+      });
+
+      expect(resolved).toMatchObject({
+        teacherCompensationRuleKey: ruleKey,
+        teacherCreditedDurationMinutes: expectedMinutes,
+        teacherCompensationSource: "manual",
+      });
+      expect(resolved.teacherCompensationValueMinor).toBe(valueMinor);
+    },
+  );
 
   it.each([30, 45, 60, 90])(
     "normalizes automatic zero and full decisions for %i minutes",

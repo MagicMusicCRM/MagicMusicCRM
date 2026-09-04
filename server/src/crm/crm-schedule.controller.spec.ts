@@ -1,4 +1,7 @@
-import { ServiceUnavailableException } from "@nestjs/common";
+import {
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { V4DomainFlagsService } from "../platform/rollout/v4/domain-flags";
 import { CrmScheduleController } from "./crm-schedule.controller";
 
@@ -35,6 +38,8 @@ describe("CrmScheduleController rollout boundary", () => {
     const lessonCommands = {
       create: jest.fn().mockResolvedValue({ path: "v4" }),
       update: jest.fn().mockResolvedValue({ path: "v4" }),
+      previewSettlementPlan: jest.fn(),
+      updateSettlementPlan: jest.fn(),
       previewConstraints: jest
         .fn()
         .mockResolvedValue({ valid: true, violations: [] }),
@@ -47,6 +52,11 @@ describe("CrmScheduleController rollout boundary", () => {
         valid: true,
         rows: [],
       }),
+    };
+    const settlementCorrections = {
+      preview: jest.fn(),
+      commit: jest.fn(),
+      history: jest.fn(),
     };
     const flags = {
       get: jest.fn(() => ({ effectivePath })),
@@ -65,7 +75,7 @@ describe("CrmScheduleController rollout boundary", () => {
         lessonTransitions as never,
         flags,
         schedulePlans as never,
-        {} as never,
+        settlementCorrections as never,
       ),
       lessonMutations,
       lessonTeacherRates,
@@ -74,6 +84,7 @@ describe("CrmScheduleController rollout boundary", () => {
       scheduleSeries,
       lessonCommands,
       schedulePlans,
+      settlementCorrections,
     };
   }
 
@@ -131,6 +142,32 @@ describe("CrmScheduleController rollout boundary", () => {
       },
     );
     expect(lessonCommands.previewConstraints).toHaveBeenCalledWith(actor, dto);
+  });
+
+  it("keeps missing manual duration as a typed 422 at HTTP command boundaries", async () => {
+    const {
+      controller: subject,
+      lessonCommands,
+      settlementCorrections,
+    } = controller("v4");
+    const error = new UnprocessableEntityException({
+      code: "TEACHER_PARTIAL_DURATION_REQUIRED",
+      field: "teacherCreditedDurationMinutes",
+    });
+    lessonCommands.previewSettlementPlan.mockRejectedValueOnce(error);
+    settlementCorrections.preview.mockRejectedValueOnce(error);
+
+    await expect(
+      subject.previewLessonSettlementPlan(actor, "lesson-a", {} as never),
+    ).rejects.toBe(error);
+    await expect(
+      subject.previewLessonSettlementCorrection(actor, "lesson-a", {} as never),
+    ).rejects.toBe(error);
+    expect(error.getStatus()).toBe(422);
+    expect(error.getResponse()).toEqual({
+      code: "TEACHER_PARTIAL_DURATION_REQUIRED",
+      field: "teacherCreditedDurationMinutes",
+    });
   });
 
   it("routes Plan update preview through the authoritative Plan service", async () => {

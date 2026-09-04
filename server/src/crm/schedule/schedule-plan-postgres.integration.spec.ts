@@ -237,6 +237,45 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       expect(reservations.rows.map((item) => item.units)).toEqual(
         reservations.rows.map(() => "0.50"),
       );
+
+      const fixed = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Ручная фиксированная оплата",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [{
+            ...row(fixture, 2, "14:00"),
+            plannedSettlementReason: "Согласовано директором",
+            financialDecision: {
+              settlementTypeKey: "lesson",
+              teacherCompensationRuleKey: "fixed",
+              teacherCompensationValueMinor: "125000",
+              teacherCompensationSource: "manual" as const,
+              clientDecisions: [{ clientId: fixture.studentIds[0]! }],
+            },
+          }],
+        },
+        {
+          idempotencyKey: `plan-manual-fixed-${randomUUID()}`,
+          requestId: randomUUID(),
+        },
+      );
+      const fixedSeries = await pool.query<{
+        planned_financial_decision: Record<string, unknown>;
+      }>(
+        "select planned_financial_decision from app.schedule_series where id = $1",
+        [fixed.seriesIds[0]],
+      );
+      expect(fixedSeries.rows[0]!.planned_financial_decision).toMatchObject({
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "125000",
+        teacherCreditedDurationMinutes: 60,
+        teacherCompensationSource: "manual",
+      });
     } finally {
       await cleanup(pool, fixture);
     }
@@ -513,6 +552,82 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         idempotency: "0",
         aggregate_versions: "0",
       });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects omitted recurring manual duration with typed 422 and no writes", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const requestId = `schedule-plan-manual-duration-${randomUUID()}`;
+    const idempotencyKey = `manual-duration-recurring-${randomUUID()}`;
+    const title = `Missing manual duration ${randomUUID()}`;
+    const writeShape = () => pool.query<{
+      plans: string;
+      series: string;
+      lessons: string;
+      settlement_plans: string;
+      corrections: string;
+      client_facts: string;
+      teacher_facts: string;
+      reservations: string;
+      audits: string;
+      outbox: string;
+      idempotency: string;
+      aggregate_versions: string;
+    }>(
+      `select
+        (select count(*)::text from app.schedule_plans) as plans,
+        (select count(*)::text from app.schedule_series) as series,
+        (select count(*)::text from app.lessons) as lessons,
+        (select count(*)::text from app.lesson_settlement_plans) as settlement_plans,
+        (select count(*)::text from app.lesson_settlement_corrections) as corrections,
+        (select count(*)::text from app.lesson_client_charge_facts) as client_facts,
+        (select count(*)::text from app.lesson_teacher_compensation_facts) as teacher_facts,
+        (select count(*)::text from app.lesson_reservations) as reservations,
+        (select count(*)::text from app.audit_events where request_id = $1) as audits,
+        (select count(*)::text from app.platform_outbox_events where request_id = $1) as outbox,
+        (select count(*)::text from app.idempotency_records
+           where actor_key = $2 and idempotency_key = $3) as idempotency,
+        (select count(*)::text from app.aggregate_versions) as aggregate_versions`,
+      [requestId, `user:${actor.userId}`, idempotencyKey],
+    );
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        actor.userId,
+      ]);
+      const before = (await writeShape()).rows[0];
+      const request = plans.create(actor, {
+        kind: "individual",
+        title,
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [{
+          ...row(fixture, 3, "15:00"),
+          plannedSettlementReason: "Частичная оплата согласована директором",
+          financialDecision: {
+            settlementTypeKey: "partially_paid_lesson",
+            teacherCompensationRuleKey: "percent",
+            teacherCompensationSource: "manual" as const,
+            clientDecisions: [{
+              clientId: fixture.studentIds[0]!,
+              chargeDurationMinutes: 30,
+            }],
+          },
+        }],
+      }, { idempotencyKey, requestId });
+
+      await expect(request).rejects.toMatchObject({
+        status: 422,
+        response: {
+          code: "TEACHER_PARTIAL_DURATION_REQUIRED",
+          field: "teacherCreditedDurationMinutes",
+        },
+      });
+      expect((await writeShape()).rows[0]).toEqual(before);
     } finally {
       await cleanup(pool, fixture);
     }

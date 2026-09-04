@@ -642,6 +642,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
         financialDecision: {
           settlementTypeKey: "free_lesson",
           teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: fixture.studentId }],
         },
         reasonText: "Сотрудник исправил ошибочный расчёт после проверки",
       };
