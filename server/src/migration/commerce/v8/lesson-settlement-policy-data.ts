@@ -899,7 +899,7 @@ async function loadActor(
     role: UserRole;
   }>(
     `select id, role::text as role from app.users
-     where id = $1 and is_active = true`,
+     where id = $1 and deleted_at is null and is_app_account = true`,
     [actorUserId],
   );
   const actor = result.rows[0];
