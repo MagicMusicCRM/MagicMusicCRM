@@ -656,12 +656,10 @@ Future<void> _chooseReferences(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Бесплатное занятие').last);
   await tester.pumpAndSettle();
-  await tester.tap(
+  expect(
     find.byKey(const ValueKey('schedule-plan-compensation-rule')),
+    findsNothing,
   );
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Не оплачивать').last);
-  await tester.pumpAndSettle();
 }
 
 Future<void> _chooseSearchable(

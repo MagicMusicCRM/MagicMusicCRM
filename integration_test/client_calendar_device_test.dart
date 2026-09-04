@@ -81,7 +81,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final api = FakeCardApiClient(
+    final api = _CalendarDeviceApi(
       student: const {
         'id': 'student-2',
         'firstName': 'Иван',
@@ -309,12 +309,12 @@ void main() {
     expect(scrollBeforeEditor, greaterThan(0));
     await tester.tap(lateLesson);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Перенести или изменить'));
+    await tester.tap(find.text('Изменить занятие'));
     await tester.pumpAndSettle();
-    expect(find.text('Перенести или изменить занятие'), findsOneWidget);
+    expect(find.text('Изменить занятие'), findsOneWidget);
     await captureEvidence(tester, 'client-calendar-canonical-editor');
 
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Закрыть').last);
     await tester.pumpAndSettle();
     expect(find.byType(ScheduleDayCanvas), findsOneWidget);
     expect(find.text('вт, 4 августа 2026'), findsOneWidget);
@@ -410,25 +410,28 @@ void main() {
               (ref) async => capabilitySnapshot,
             ),
           ],
-          child: MaterialApp(
-            theme: AppTheme.dark,
-            home: Scaffold(
-              body: SizedBox(
-                height: 760,
-                child: ScheduleWidget(
-                  title: 'Календарь занятий',
-                  clientType: 'student',
-                  clientId: 'student-1',
-                  clientName: 'Анна Смирнова',
-                  initialBranchId: 'branch-a',
-                  canWrite: false,
-                  initialViewState: ContextViewState(
-                    filters: const {
-                      'section': 'lessons',
-                      'clientCalendarMode': 'day',
-                      'clientCalendarBranchId': 'branch-a',
-                    },
-                    date: DateTime(2026, 8, 4),
+          child: RepaintBoundary(
+            key: evidenceRootKey,
+            child: MaterialApp(
+              theme: AppTheme.dark,
+              home: Scaffold(
+                body: SizedBox(
+                  height: 760,
+                  child: ScheduleWidget(
+                    title: 'Календарь занятий',
+                    clientType: 'student',
+                    clientId: 'student-1',
+                    clientName: 'Анна Смирнова',
+                    initialBranchId: 'branch-a',
+                    canWrite: false,
+                    initialViewState: ContextViewState(
+                      filters: const {
+                        'section': 'lessons',
+                        'clientCalendarMode': 'day',
+                        'clientCalendarBranchId': 'branch-a',
+                      },
+                      date: DateTime(2026, 8, 4),
+                    ),
                   ),
                 ),
               ),
@@ -449,24 +452,32 @@ void main() {
       expect(find.text('Абонемент'), findsOneWidget);
       await captureEvidence(tester, 'client-calendar-covered-lesson-details');
 
-      await tester.pageBack();
+      await tester.tap(find.byTooltip('Закрыть').last);
       await tester.pumpAndSettle();
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [magicApiClientProvider.overrideWithValue(api)],
-          child: MaterialApp(
-            theme: AppTheme.dark,
-            home: Scaffold(
-              body: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: RecurringSchedulePlanSection(
-                  studentId: 'student-1',
-                  fallbackLessons: const [],
-                  branches: api.branches,
-                  defaultBranchId: 'branch-a',
-                  subscriptions: const [],
-                  canWrite: false,
-                  onChanged: () {},
+          overrides: [
+            magicApiClientProvider.overrideWithValue(api),
+            capabilitySnapshotProvider.overrideWith(
+              (ref) async => capabilitySnapshot,
+            ),
+          ],
+          child: RepaintBoundary(
+            key: evidenceRootKey,
+            child: MaterialApp(
+              theme: AppTheme.dark,
+              home: Scaffold(
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RecurringSchedulePlanSection(
+                    studentId: 'student-1',
+                    fallbackLessons: const [],
+                    branches: api.branches,
+                    defaultBranchId: 'branch-a',
+                    subscriptions: const [],
+                    canWrite: false,
+                    onChanged: () {},
+                  ),
                 ),
               ),
             ),
@@ -502,4 +513,50 @@ double _maxVerticalScrollOffset(WidgetTester tester, Finder root) {
     0,
     (maximum, value) => value > maximum ? value : maximum,
   );
+}
+
+class _CalendarDeviceApi extends FakeCardApiClient {
+  _CalendarDeviceApi({
+    super.student,
+    super.branches,
+    super.teachers,
+    super.rooms,
+    super.scheduleMatrix,
+  });
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/lessons') {
+      return <String, dynamic>{
+            'items': scheduleMatrix
+                .where((lesson) => lesson['id'] == queryParameters?['lessonId'])
+                .toList(),
+          }
+          as T;
+    }
+    if (path == '/crm/clients/resolve') {
+      final lesson = scheduleMatrix.firstWhere(
+        (item) => item['studentId'] == queryParameters?['id'],
+      );
+      return <String, dynamic>{
+            'ref': {'type': 'student', 'id': lesson['studentId']},
+            'label': lesson['studentName'],
+            'branchId': lesson['branchId'],
+            'lifecycleState': 'active',
+            'version': 1,
+            'tombstone': false,
+            'links': [],
+          }
+          as T;
+    }
+    return super.get<T>(
+      path,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
 }

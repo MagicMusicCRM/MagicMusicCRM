@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart' show ResponseType;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -42,7 +43,13 @@ void main() {
     expect(find.text('Исправить расчёт'), findsNothing);
     expect(find.text('Изменить занятие'), findsOneWidget);
     expect(find.text('Перенести'), findsOneWidget);
-    expect(find.text('Отменить занятие'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('magic-sheet-desktop')),
+        matching: find.text('Отменить занятие'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Изменить расчёт'), findsNothing);
     await captureEvidence(tester, 'lesson-quick-view');
     await captureEvidence(tester, 'lesson-settlement-review-required');
@@ -71,8 +78,8 @@ void main() {
 
     await tester.tap(find.text('Быстрый просмотр'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Отменить занятие'));
-    await tester.tap(find.text('Отменить занятие'));
+    await tester.ensureVisible(find.text('Отменить занятие').last);
+    await tester.tap(find.text('Отменить занятие').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsOneWidget);
     expect(find.byKey(const Key('lesson-decision-reason')), findsOneWidget);
@@ -196,7 +203,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('lesson-decision-submit')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Версия обновлена'), findsOneWidget);
+    expect(find.textContaining('Занятие уже изменилось'), findsOneWidget);
     expect(find.text('Рассчитать'), findsOneWidget);
     await captureEvidence(tester, 'lesson-cancel-stale-version-recovered');
 
@@ -231,14 +238,13 @@ void main() {
 
     await tester.tap(find.text('Открыть форму переноса'));
     await tester.pumpAndSettle();
-    expect(find.text('Перенести или изменить занятие'), findsOneWidget);
+    expect(find.text('Изменить занятие'), findsOneWidget);
     expect(
-      tester
-          .widget<SearchablePickerField>(
-            find.byKey(const ValueKey('lesson-client-field')),
-          )
-          .selectedLabel,
-      'Анна Смирнова · Student',
+      find.descendant(
+        of: find.byKey(const ValueKey('lesson-client-field')),
+        matching: find.text('Анна Смирнова · Ученик'),
+      ),
+      findsOneWidget,
     );
     expect(find.text('07.08.2026'), findsOneWidget);
 
@@ -251,43 +257,11 @@ void main() {
     expect(find.text('08.08.2026'), findsOneWidget);
     await captureEvidence(tester, 'lesson-reschedule-real-form');
 
-    await tester.ensureVisible(find.text('Перейти к расчёту'));
-    await tester.tap(find.text('Перейти к расчёту'));
-    for (var frame = 0; frame < 8; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.enterText(
-      find.byKey(const Key('lesson-decision-reason')),
-      'Клиент попросил перенести на субботу',
-    );
-    await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.tap(find.text('Бесплатное занятие').last);
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.ensureVisible(
-      find.byKey(const Key('lesson-decision-compensation')),
-    );
-    await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.tap(find.text('Не оплачивать').last);
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
-    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-    for (var frame = 0; frame < 10; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    await _previewEditor(tester, 'Клиент попросил перенести на субботу');
     expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
     await captureEvidence(tester, 'lesson-reschedule-real-form-preview');
-    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
-    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+    await tester.ensureVisible(find.text('Подтвердить изменения'));
+    await tester.tap(find.text('Подтвердить изменения'));
     for (var frame = 0; frame < 10; frame++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -301,9 +275,15 @@ void main() {
     expect(preview['reasonText'], 'Клиент попросил перенести на субботу');
     expect(preview['successor']['scheduledAt'], '2026-08-08T09:00:00.000Z');
     expect(commit['successor'], preview['successor']);
-    expect(commit['financialDecision'], {
+    expect(commit, isNot(contains('financialDecision')));
+    expect(commit['successorFinancialDecision'], {
       'settlementTypeKey': 'free_lesson',
-      'teacherCompensationRuleKey': 'none',
+      'clientDecisions': [
+        {
+          'clientId': '30000000-0000-4000-8000-000000000001',
+          'chargeType': 'none',
+        },
+      ],
     });
     debugPrint('UAT_090_REAL_FORM_DEVICE_PASS');
   });
@@ -359,42 +339,13 @@ void main() {
     );
     await captureEvidence(tester, 'lesson-replacement-options');
 
-    await tester.ensureVisible(find.text('Перейти к расчёту'));
-    await tester.tap(find.text('Перейти к расчёту'));
-    for (var frame = 0; frame < 8; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.enterText(
-      find.byKey(const Key('lesson-decision-reason')),
+    await _previewEditor(
+      tester,
       'Согласованная подмена преподавателя и аудитории',
     );
-    await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.tap(find.text('Бесплатное занятие').last);
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.ensureVisible(
-      find.byKey(const Key('lesson-decision-compensation')),
-    );
-    await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.tap(find.text('Не оплачивать').last);
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
-    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-    for (var frame = 0; frame < 10; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
     expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
     await captureEvidence(tester, 'lesson-replacement-preview');
-    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+    await tester.tap(find.text('Подтвердить изменения'));
     for (var frame = 0; frame < 10; frame++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -402,11 +353,11 @@ void main() {
     expect(api.previews, hasLength(1));
     expect(api.commits, hasLength(1));
     expect(
-      api.commits.single['successor']['teacherId'],
+      api.commits.single['resources']['teacherId'],
       '40000000-0000-4000-8000-000000000002',
     );
     expect(
-      api.commits.single['successor']['roomId'],
+      api.commits.single['resources']['roomId'],
       '50000000-0000-4000-8000-000000000002',
     );
     debugPrint('UAT_091_REPLACEMENT_DEVICE_PASS');
@@ -444,40 +395,7 @@ void main() {
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     debugPrint('UAT_092_STEP_DATE_CHANGED');
-    await tester.ensureVisible(find.text('Перейти к расчёту'));
-    await tester.tap(find.text('Перейти к расчёту'));
-    for (var frame = 0; frame < 8; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    debugPrint('UAT_092_STEP_DECISION_OPEN');
-    await tester.enterText(
-      find.byKey(const Key('lesson-decision-reason')),
-      'Проверка ограничений перед переносом',
-    );
-    await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.tap(find.text('Бесплатное занятие').last);
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.ensureVisible(
-      find.byKey(const Key('lesson-decision-compensation')),
-    );
-    await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.tap(find.text('Не оплачивать').last);
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
-    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
-    for (var frame = 0; frame < 12; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    await _previewEditor(tester, 'Проверка ограничений перед переносом');
     debugPrint('UAT_092_STEP_PREVIEW_READY');
 
     expect(find.text('Изменение заблокировано'), findsOneWidget);
@@ -552,16 +470,10 @@ void main() {
     for (var frame = 0; frame < 4; frame++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
-    await tester.tap(
+    expect(
       find.byKey(const ValueKey('lesson-compensation-rule-field')),
+      findsNothing,
     );
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    await tester.tap(find.text('Не оплачивать').last);
-    for (var frame = 0; frame < 4; frame++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
     await tester.ensureVisible(
       find.byKey(const ValueKey('lesson-duration-field')),
     );
@@ -659,16 +571,29 @@ Future<void> _chooseDeviceSearchable(
   for (var frame = 0; frame < 6; frame++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
-  await tester.tap(
-    find.descendant(
-      of: find.byType(Scrollbar).last,
-      matching: find.text(option),
-    ),
-  );
+  await tester.tap(find.text(option).last);
   for (var frame = 0; frame < 6; frame++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
 }
+
+const _editableDeviceLesson = {
+  'id': '10000000-0000-4000-8000-000000000090',
+  'version': 4,
+  'student_id': '30000000-0000-4000-8000-000000000001',
+  'student_name': 'Анна Смирнова',
+  'teacher_id': '40000000-0000-4000-8000-000000000001',
+  'branch_id': '20000000-0000-4000-8000-000000000001',
+  'room_id': '50000000-0000-4000-8000-000000000001',
+  'scheduled_at': '2026-08-07T09:00:00.000Z',
+  'duration_minutes': 60,
+  'snapshot_trial': false,
+  'completion_type': 'standard.success',
+  'client_charge_type': 'none',
+  'client_charge_value': 0,
+  'teacher_compensation_type': 'none',
+  'teacher_compensation_value': 0,
+};
 
 class _RescheduleFormDeviceHome extends StatefulWidget {
   const _RescheduleFormDeviceHome({required this.api});
@@ -695,23 +620,7 @@ class _RescheduleFormDeviceHomeState extends State<_RescheduleFormDeviceHome> {
               onPressed: () async {
                 final changed = await CreateLessonDialog.show(
                   context,
-                  lesson: const {
-                    'id': '10000000-0000-4000-8000-000000000090',
-                    'version': 4,
-                    'student_id': '30000000-0000-4000-8000-000000000001',
-                    'student_name': 'Анна Смирнова',
-                    'teacher_id': '40000000-0000-4000-8000-000000000001',
-                    'branch_id': '20000000-0000-4000-8000-000000000001',
-                    'room_id': '50000000-0000-4000-8000-000000000001',
-                    'scheduled_at': '2026-08-07T09:00:00.000Z',
-                    'duration_minutes': 60,
-                    'snapshot_trial': false,
-                    'completion_type': 'standard.success',
-                    'client_charge_type': 'none',
-                    'client_charge_value': 0,
-                    'teacher_compensation_type': 'none',
-                    'teacher_compensation_value': 0,
-                  },
+                  lesson: _editableDeviceLesson,
                 );
                 if (mounted && changed == true) {
                   setState(() => _applied = true);
@@ -923,6 +832,35 @@ class _DecisionDeviceApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    if (path == '/crm/lessons') {
+      return <String, dynamic>{
+            'items': [
+              {
+                for (final entry in _editableDeviceLesson.entries)
+                  entry.key.replaceAllMapped(
+                    RegExp(r'_([a-z])'),
+                    (match) => match[1]!.toUpperCase(),
+                  ): entry.value,
+              },
+            ],
+          }
+          as T;
+    }
+    if (path == '/crm/clients/resolve') {
+      return <String, dynamic>{
+            'ref': {
+              'type': 'student',
+              'id': '30000000-0000-4000-8000-000000000001',
+            },
+            'label': 'Анна Смирнова',
+            'branchId': '20000000-0000-4000-8000-000000000001',
+            'lifecycleState': 'active',
+            'tombstone': false,
+            'version': 1,
+            'links': [],
+          }
+          as T;
+    }
     if (path == '/crm/teachers') {
       return <String, dynamic>{
             'items': [
@@ -1168,7 +1106,9 @@ class _DecisionDeviceApi extends MagicApiClient {
     }
     previews.add(Map<String, dynamic>.from(data as Map));
     final decision = Map<String, dynamic>.from(
-      previews.last['financialDecision'] as Map,
+      (previews.last['successorFinancialDecision'] ??
+              previews.last['financialDecision'])
+          as Map,
     );
     final settlementKey = decision['settlementTypeKey']?.toString();
     const settlementLabels = {
@@ -1231,7 +1171,9 @@ class _DecisionDeviceApi extends MagicApiClient {
             ],
           ],
           if (!constraintViolations)
-            'financialPreview': {
+            (previews.last.containsKey('successorFinancialDecision')
+                ? 'successorPlannedSettlementPreview'
+                : 'financialPreview'): {
               'clientFacts': [
                 {
                   'settlementLabel': settlementLabels[settlementKey],
@@ -1251,6 +1193,27 @@ class _DecisionDeviceApi extends MagicApiClient {
           ],
         }
         as T;
+  }
+
+  @override
+  Future<T> request<T>(
+    String method,
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+    ResponseType? responseType,
+    MagicMutationIdentity? mutationIdentity,
+  }) async {
+    if (method == 'PUT' && path.endsWith('/planned-settlement')) {
+      commits.add(Map<String, dynamic>.from(data as Map));
+      return <String, dynamic>{
+            'lessonId': _editableDeviceLesson['id'],
+            'version': 5,
+          }
+          as T;
+    }
+    throw UnimplementedError('$method $path');
   }
 
   @override
@@ -1275,4 +1238,20 @@ class _DecisionDeviceApi extends MagicApiClient {
     }
     return <String, dynamic>{'transitionId': 'device-transition'} as T;
   }
+}
+
+Future<void> _previewEditor(WidgetTester tester, String reason) async {
+  final settlement = find.byKey(const ValueKey('lesson-settlement-type-field'));
+  await tester.ensureVisible(settlement);
+  await tester.tap(settlement);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Бесплатное занятие').last);
+  await tester.pumpAndSettle();
+  final reasonField = find.byKey(const Key('lesson-edit-reason'));
+  await tester.ensureVisible(reasonField);
+  await tester.enterText(reasonField, reason);
+  await tester.ensureVisible(find.text('Рассчитать'));
+  await tester.tap(find.text('Рассчитать'));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
 }

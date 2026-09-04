@@ -930,6 +930,7 @@ void main() {
       'settlementTypeKey': 'free_lesson',
       'teacherCompensationRuleKey': 'hourly',
       'teacherCompensationValueMinor': '125000',
+      'teacherCompensationSource': 'manual',
     });
     expect(
       api.previews.single['reasonText'],
@@ -1029,6 +1030,7 @@ void main() {
           {'clientId': _studentId, 'settlementTypeKey': 'lesson'},
         ],
         'teacherCompensationRuleKey': 'standard',
+        'teacherCompensationSource': 'manual',
       });
       expect(find.textContaining('Анна Иванова: Занятие'), findsOneWidget);
       expect(
@@ -1052,6 +1054,7 @@ void main() {
           {'clientId': _studentId, 'settlementTypeKey': 'lesson'},
         ],
         'teacherCompensationRuleKey': 'standard',
+        'teacherCompensationSource': 'manual',
       });
       expect(tester.takeException(), isNull);
       debugPrint('V7_GROUP_SETTLEMENT_OVERRIDE_DEVICE_PASS');
