@@ -19,17 +19,22 @@ HTTP contract Task 2: 11 authenticated schedule-commerce сценариев и 6
 calculation/token errors возвращают typed 422; programmer/DB failures остаются
 safe 500 с correlation ID без raw detail в response.
 
-Один полный release-candidate pass выполнен на
-`176eda6a241eb67af7cda73f922ec76a5d82d692` и **не прошёл**. Backend schedule
-focus `75/75` и payroll/HTTP/V8 focus `37/37` PASS, commerce `78/81` FAIL;
-полный backend показал не менее 15 ошибок и завершился heap OOM до итогового
-счётчика. Flutter analyze чистый, full Flutter `1609/1641`; Windows device
-тесты не стартовали из-за длинных путей `sentry-native`. Fresh production-like
-DB дошла до migration `0149`, V7 `issues=[]`, но scrubbed/authorized backup для
-V8 restore отсутствует. Docker недоступен, exact image и Trivy image не
-проверены. Strict security `9/11`; Git-index missing blob затем исправлен
-отдельно, но gate не перезапускался. RepoWise намеренно пропущен из-за
-повторной порчи индекса. Полное evidence:
+Актуальный кандидат сервера: `61284c7a3dc503469e0cb6499d2d007c5eb8c376`,
+`1.5.31+211`, **выпуск остановлен 2026-09-04 22:49 MSK**. На изолированной
+копии свежего production backup V8 apply меняет резерв абонемента `1.00 → 2.00`
+при неизменных 3 будущих занятиях и 1 факте оплаты преподавателю. Сработал
+`RECONCILIATION_INVARIANT_CHANGED`. Не отключать проверку: нужно устранить
+побочное перераспределение резервов при исправлении политики старых расписаний.
+Обычный update плана пересоздаёт серии/материализует занятия; точная причина
+дополнительного резерва ещё не установлена. Apply/repeat/rollback пока не PASS.
+
+Предшествующие полные тесты: backend 4002/4002, Flutter 1949/1949. Последние
+V8 focused 23/23 и typecheck PASS. Exact image/degraded readiness и Trivy PASS.
+Windows device последний прогон: 10/18 PASS, 8 FAIL; незакоммиченные fixture
+правки находятся в четырёх integration_test файлах и требуют завершения.
+Windows/Android артефакты собраны из `e31a23738`, не опубликованы. Prod по-прежнему
+210/hotfix2, migration 0147. Encrypted backup скопирован off-host, hash проверен.
+RepoWise не запускать: повреждает индекс. Актуальное evidence:
 `docs/audits/v8-unified-schedule-commerce-release-211.md`.
 
 Артефакты 211 и deploy не начинать до исправления release blockers и нового

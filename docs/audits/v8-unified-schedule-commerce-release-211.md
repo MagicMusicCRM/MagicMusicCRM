@@ -1,5 +1,68 @@
 # Release 211 — unified schedule and commerce verification
 
+## Current decision — 2026-09-04 22:49 MSK
+
+**BLOCKED. Production was not deployed; public update manifests were not changed.**
+Candidate server: `61284c7a3dc503469e0cb6499d2d007c5eb8c376`, image
+`magicmusiccrm-server:1.5.31-211-final`. Client artifacts are built from
+`e31a2373821288561e9d84e42efa4d1896601a64` (`1.5.31+211`); later candidate
+changes only concern the backend migration. Artifacts are local/unpublished.
+
+The owner authorized deployment only if verification succeeds. A fresh encrypted
+production backup was created and copied off-host with matching SHA-256
+`1763e831cad6b77050e1012a2e1be0e7b34ba3d47314b058dafbfb2dc5121f64`.
+Rehearsals restored it into temporary isolated networks/volumes, never the live DB.
+
+### Confirmed release blocker
+
+V8 policy apply fails `RECONCILIATION_INVARIANT_CHANGED`. The diagnostic rehearsal
+on the same exact image retained the assertion and exposed only aggregate values:
+
+| Invariant | Before | After |
+| --- | --- | --- |
+| Future lesson count | 3 | 3 |
+| Reserved subscription units | 1.00 | 2.00 |
+| Effective teacher compensation facts | 1 | 1 |
+
+The assumption requiring correction is that an ordinary schedule-plan update can
+repair only teacher policy without changing reservation allocation. The update
+path retires/recreates series and materializes lessons; the precise allocation
+step responsible has not yet been isolated. Do not relax the invariant or apply
+this candidate to production. V8 apply/repeat-idempotency and rollback proof have
+**not passed**. The V7 restore reconciliation and schema migration pass before
+this V8 failure; that is not evidence for a successful complete drill.
+
+The rehearsal first exposed an obsolete `users.is_active` actor lookup (fixed in
+`ac0d9a6d0`), then missing frozen client identities on legacy decisions (fixed in
+`61284c7a3`). Current focused V8 tests: **23/23**, typecheck: **PASS**.
+
+### Other current evidence
+
+- Full backend on the preceding combined fixes: 296 suites / 4002 tests PASS;
+  full Flutter: 1949 tests PASS. These do not supersede the current restore failure.
+- Exact-image production/degraded-readiness gate for `61284c7a3`: PASS. Trivy
+  HIGH/CRITICAL vulnerability and secret scan: PASS. Strict security preflight:
+  11/11. Semgrep differential: zero findings. Gitleaks has one reviewed false
+  positive: the public constant `v8-settlement-policy-v1`, not a credential.
+- Windows setup/ZIP and Android APK/AAB built. Windows package file checks pass;
+  Android signatures match the existing release certificate. No Android device
+  was connected, so Android runtime checks were not performed.
+- Combined Windows device run after updating obsolete test fixtures: **10/18 PASS,
+  8 FAIL**. Failures remain in calendar editor hydration/closing, stale-version
+  recovery fixture, read-only client field assertion, replacement picker finder,
+  and manager/recurring-plan assertions about hidden teacher-pay controls.
+  Four integration-test files have uncommitted fixture updates; analyze passes,
+  but the scenario suite does not. Do not label these tests complete.
+- RepoWise remains disabled due repeated index corruption. The exact worktree
+  index was backed up and rebuilt from HEAD without updating working files.
+
+Local ignored evidence: `dist/release211/pre-restore-policy-final.log`,
+`dist/release211/invariant-values.log`, `dist/release211/image-final-gate.log`,
+`dist/release211/trivy-final.json`; Windows device log:
+`C:/Users/Alinka/mm211/dist/release211/windows-device-final.log`.
+
+## Earlier candidate evidence (historical; superseded above)
+
 **Verification window:** 2026-09-04 20:18–20:33 MSK  
 **Candidate ref:** `176eda6a241eb67af7cda73f922ec76a5d82d692`  
 **Branch:** `codex/unified-schedule-settlement`  
