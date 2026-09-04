@@ -901,7 +901,6 @@ describe("Schedule plan semantic owners", () => {
       "insert-continuations",
       "retire-old-series",
       "replace-participants",
-      "validate-new-series",
       "materialize-new-series",
     ]);
     expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
