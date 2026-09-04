@@ -9,6 +9,7 @@ import type {
   LessonReschedulePreviewDto,
   LessonSettlePreviewDto,
 } from "../dto/lesson-transition.dto";
+import { normalizeRescheduleDto } from "../dto/lesson-transition.dto";
 import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
 import { assertTransitionReason } from "./lesson-transition.rules";
 import type {
@@ -31,7 +32,7 @@ export class LessonTransitionPreviewService {
     lessonId: string,
     dto: LessonReschedulePreviewDto,
   ): Promise<LessonTransitionPreviewResult> {
-    return this.preview(actor, lessonId, dto, "reschedule");
+    return this.preview(actor, lessonId, normalizeRescheduleDto(dto), "reschedule");
   }
 
   previewCancel(
@@ -39,7 +40,12 @@ export class LessonTransitionPreviewService {
     lessonId: string,
     dto: LessonCancelPreviewDto,
   ): Promise<LessonTransitionPreviewResult> {
-    return this.preview(actor, lessonId, dto, "cancel");
+    return this.preview(
+      actor,
+      lessonId,
+      { ...dto, operation: "cancel" },
+      "cancel",
+    );
   }
 
   previewSettle(
@@ -47,7 +53,12 @@ export class LessonTransitionPreviewService {
     lessonId: string,
     dto: LessonSettlePreviewDto,
   ): Promise<LessonTransitionPreviewResult> {
-    return this.preview(actor, lessonId, dto, "settle");
+    return this.preview(
+      actor,
+      lessonId,
+      { ...dto, operation: "settle" },
+      "settle",
+    );
   }
 
   private async preview(

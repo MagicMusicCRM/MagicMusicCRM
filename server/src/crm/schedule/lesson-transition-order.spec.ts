@@ -12,7 +12,7 @@ import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonTransitionCommandService } from "./lesson-transition-command.service";
 import { LessonTransitionCommitService } from "./lesson-transition-commit.service";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
-import type { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
+import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
 import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
 import * as transitionRules from "./lesson-transition.rules";
 import { transitionAdvisoryKeys } from "./lesson-transition.rules";
@@ -116,6 +116,72 @@ const settlementResult: LessonSettlementResult = {
 settlementResult.clientFact = settlementResult.clientFacts[0]!;
 
 describe("Lesson transition runtime ordering", () => {
+  it("prepares a server-owned zero source and editable partial successor", async () => {
+    const settlement = {
+      loadPlan: jest.fn(async () => null),
+      resolvePlannedPlan: jest.fn(async (_client, input) => ({
+        decision: {
+          ...input.decision,
+          teacherCompensationSource: "automatic",
+        },
+        settlementRevisionId: "settlement-revision",
+        compensationRevisionId: "compensation-revision",
+      })),
+    } as unknown as LessonSettlementPort;
+    const preparation = new LessonTransitionPreparationService(
+      {} as never,
+      {
+        canManageTeacherCompensation: jest.fn(() => true),
+        assertCanSupplyTeacherCompensation: jest.fn(),
+        teacherCompensationMutationAuthorization: jest.fn(() => ({})),
+      } as never,
+      { update: jest.fn(() => successor) } as never,
+      {} as never,
+      settlement,
+      {} as never,
+      {} as never,
+    );
+    const successorFinancialDecision = {
+      settlementTypeKey: "partial_lesson",
+      clientDecisions: [{
+        clientId: source.studentId!,
+        chargeDurationMinutes: 30,
+      }],
+      teacherCompensationRuleKey: "standard",
+      teacherCreditedDurationMinutes: 45,
+    };
+
+    const prepared = await preparation.resolvedEffectiveTransitionDto(
+      {} as PoolClient,
+      { userId: "actor", role: "manager" },
+      source,
+      "reschedule",
+      {
+        expectedVersion: 1,
+        reasonText: "Перенос",
+        successor: {} as never,
+        successorFinancialDecision,
+      } as never,
+    ) as unknown as {
+      sourceFinancialDecision: Record<string, unknown>;
+      successorFinancialDecision: typeof successorFinancialDecision;
+    };
+
+    expect(prepared.sourceFinancialDecision).toMatchObject({
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      clientDecisions: [{
+        clientId: source.studentId,
+        chargeType: "none",
+        chargeDurationMinutes: 0,
+      }],
+    });
+    expect(prepared.successorFinancialDecision).toEqual({
+      ...successorFinancialDecision,
+      teacherCompensationSource: "automatic",
+    });
+  });
+
   it("gates a direct reschedule preview before source preparation", async () => {
     const events: string[] = [];
     const client = {

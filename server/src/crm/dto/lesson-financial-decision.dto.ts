@@ -13,6 +13,7 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { IssueSubscriptionDiscountDto, IssueSubscriptionSurchargeDto } from "./issue-subscription.dto";
 
 const stableKey = /^[A-Za-z0-9._:-]{1,120}$/;
@@ -94,3 +95,17 @@ export class ConfiguredLessonFinancialDecisionDto {
   @Matches(/^\d+$/)
   teacherCompensationValueMinor?: string;
 }
+
+const canonicalClientDecision = (decision: LessonClientFinancialDecisionDto) => ({
+  ...decision,
+});
+
+/** Compares rolling-contract aliases without depending on JSON property order. */
+export const lessonFinancialDecisionCanonicalHash = (
+  decision: ConfiguredLessonFinancialDecisionDto,
+): string => fingerprintPayload({
+  ...decision,
+  clientDecisions: [...(decision.clientDecisions ?? [])]
+    .sort((left, right) => left.clientId.localeCompare(right.clientId))
+    .map(canonicalClientDecision),
+});

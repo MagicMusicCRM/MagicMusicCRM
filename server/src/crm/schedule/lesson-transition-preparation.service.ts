@@ -14,14 +14,26 @@ import { CrmPolicy } from "../crm.policy";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import type { LessonDraftInput } from "./lesson-draft.contracts";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
+import {
+  prepareResolvedRescheduleTransition,
+  previewDecisionProjection,
+  previewFinancialProjection,
+} from "./lesson-reschedule-financial-preparation";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import { groupTransitionSuccessorDraft } from "./lesson-transition-group-draft";
+import {
+  assertCompleteTransitionSource,
+  assertTransitionSourceAllowed,
+  isCompletedReschedule,
+} from "./lesson-transition-source-rules";
 import {
   draftProjection,
   effectiveTransitionDto,
   hasTransitionClientCharge,
   legacySnapshotTeacherDecision,
+  plannedSettlementProjection,
   requiredTransitionClientIds,
+  resolveSuccessorFinancialDecision,
   selectedTransitionSubscriptionIds,
   sourceProjection,
   transitionDecisionForResolution,
@@ -124,8 +136,8 @@ export class LessonTransitionPreparationService {
         currentVersion: source.version,
       });
     }
-    this.assertTransitionAllowed(source, operation);
-    this.assertCompleteSnapshot(source);
+    assertTransitionSourceAllowed(source, operation);
+    assertCompleteTransitionSource(source);
   }
 
   async assertSettlementReviewPlan(
@@ -217,7 +229,7 @@ export class LessonTransitionPreparationService {
       operation,
       source: sourceProjection(source),
       successor: successor ? draftProjection(successor) : null,
-      financialDecision: resolvedDto.financialDecision,
+      ...previewDecisionProjection(operation, resolvedDto),
       violations: validation.violations,
       canConfirm: validation.valid,
       confirmRequired: true,
@@ -239,7 +251,12 @@ export class LessonTransitionPreparationService {
     const financial = transitionFinancialProjection(settled);
     return {
       ...base,
-      financialPreview: financial,
+      ...previewFinancialProjection(
+        operation,
+        financial,
+        plannedSettlementProjection(resolvedDto.successorFinancialDecision ??
+          resolvedDto.financialDecision),
+      ),
       warnings:
         source.lifecycleState === "successfully_completed"
           ? ["COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED"]
@@ -253,6 +270,9 @@ export class LessonTransitionPreparationService {
         dto: resolvedDto,
         coverage,
         financial,
+        successorPlannedSettlement: operation === "reschedule"
+          ? plannedSettlementProjection(resolvedDto.successorFinancialDecision!)
+          : undefined,
       }),
     };
   }
@@ -270,6 +290,9 @@ export class LessonTransitionPreparationService {
       operation,
       dto,
     );
+    if (operation === "reschedule") {
+      return this.prepareRescheduleFinancials(client, actor, source, dto);
+    }
     return this.resolvedTransitionDto(
       client,
       actor,
@@ -285,10 +308,35 @@ export class LessonTransitionPreparationService {
     operation: TransitionOperation,
     dto: TransitionPreviewDto,
   ): void {
-    if (!this.isCompletedReschedule(source, operation)) return;
+    if (!isCompletedReschedule(source, operation)) return;
     this.policy.assertCanSupplyTeacherCompensation(
       actor,
-      dto.financialDecision,
+      resolveSuccessorFinancialDecision(dto),
+    );
+  }
+
+  async prepareRescheduleFinancials(
+    client: PoolClient,
+    actor: ActorContext,
+    source: TransitionSource,
+    dto: TransitionPreviewDto,
+  ): Promise<ResolvedTransitionDto> {
+    const successor = this.successorDraft(dto.successor!, source);
+    const preservedTeacherDecision = await this.teacherDecisionToPreserve(
+      client,
+      actor,
+      source,
+      "reschedule",
+    );
+    return prepareResolvedRescheduleTransition(
+      client,
+      actor,
+      this.policy,
+      this.settlement,
+      source,
+      successor,
+      { ...dto, successorFinancialDecision: resolveSuccessorFinancialDecision(dto) },
+      preservedTeacherDecision,
     );
   }
 
@@ -309,7 +357,7 @@ export class LessonTransitionPreparationService {
       branchId: source.branchId!,
       durationMinutes: source.durationMinutes,
       decision: transitionDecisionForResolution(
-        dto.financialDecision,
+        dto.financialDecision!,
         Boolean(preservedTeacherDecision),
       ),
       actorUserId: actor.userId,
@@ -318,19 +366,20 @@ export class LessonTransitionPreparationService {
       requiredClientIds: requiredTransitionClientIds(source),
       ...(preservedTeacherDecision ? { preservedTeacherDecision } : {}),
     });
-    const teacherCompensationSource =
-      prepared.decision.teacherCompensationSource;
+    const teacherCompensationSource = prepared.decision.teacherCompensationSource;
     if (!teacherCompensationSource) {
       throw new ConflictException({
         code: "TEACHER_COMPENSATION_SOURCE_UNRESOLVED",
       });
     }
+    const {
+      sourceFinancialDecision: _sourceFinancialDecision,
+      successorFinancialDecision: _successorFinancialDecision,
+      ...ordinaryDto
+    } = dto;
     return {
-      ...dto,
-      financialDecision: {
-        ...prepared.decision,
-        teacherCompensationSource,
-      },
+      ...ordinaryDto,
+      financialDecision: { ...prepared.decision, teacherCompensationSource },
       configurationRevisionIds: {
         settlementRevisionId: prepared.settlementRevisionId,
         compensationRevisionId: prepared.compensationRevisionId,
@@ -346,8 +395,7 @@ export class LessonTransitionPreparationService {
   ) {
     if (this.policy.canManageTeacherCompensation(actor)) return undefined;
     if (
-      operation === "reschedule" &&
-      source.lifecycleState === "successfully_completed"
+      isCompletedReschedule(source, operation)
     ) return undefined;
     return this.preservedTeacherDecision(client, source);
   }
@@ -455,65 +503,4 @@ export class LessonTransitionPreparationService {
     return true;
   }
 
-  private assertTransitionAllowed(
-    source: TransitionSource,
-    operation: TransitionOperation,
-  ): void {
-    if (
-      this.isSettleAllowed(source, operation) ||
-      this.isOrdinaryTransitionAllowed(source, operation) ||
-      this.isCompletedReschedule(source, operation)
-    )
-      return;
-    throw new ConflictException({
-      code:
-        operation === "settle"
-          ? "LESSON_SETTLEMENT_REVIEW_NOT_REQUIRED"
-          : "LESSON_ALREADY_TERMINAL",
-      state: source.lifecycleState,
-    });
-  }
-
-  private isSettleAllowed(
-    source: TransitionSource,
-    operation: TransitionOperation,
-  ): boolean {
-    return (
-      operation === "settle" && source.lifecycleState === "settlement_pending"
-    );
-  }
-
-  private isOrdinaryTransitionAllowed(
-    source: TransitionSource,
-    operation: TransitionOperation,
-  ): boolean {
-    return (
-      operation !== "settle" &&
-      ["scheduled", "settlement_pending"].includes(source.lifecycleState)
-    );
-  }
-
-  private isCompletedReschedule(
-    source: TransitionSource,
-    operation: TransitionOperation,
-  ): boolean {
-    return (
-      operation === "reschedule" &&
-      source.lifecycleState === "successfully_completed"
-    );
-  }
-
-  private assertCompleteSnapshot(source: TransitionSource): void {
-    const individualValid =
-      source.snapshot?.validationState === "valid" && !source.groupId;
-    const groupValid =
-      source.groupSnapshot?.validationState === "valid" &&
-      Boolean(source.groupId) &&
-      source.participants.length > 0;
-    if (individualValid || groupValid) return;
-    throw new UnprocessableEntityException({
-      code: "LESSON_SNAPSHOT_INCOMPLETE",
-      fields: ["snapshot"],
-    });
-  }
 }

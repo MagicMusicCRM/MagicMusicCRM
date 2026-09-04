@@ -39,7 +39,7 @@
 - Produces: a transport contract where cancel/settle keep `financialDecision`, while reschedule carries `successorFinancialDecision`; the source zero decision is server-generated and never client-selectable. Build-210 `financialDecision` is accepted temporarily as an alias for the successor decision.
 - Produces: `normalizeRescheduleDto(dto: LessonReschedulePreviewDto): NormalizedReschedulePreview` with resolved `sourceFinancialDecision` and `successorFinancialDecision`.
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 ```ts
 it("rejects a client-supplied source charge for reschedule", async () => {
@@ -76,13 +76,13 @@ it("prepares a server-owned zero source and editable successor", async () => {
 
 Also assert that partial successor decisions retain `chargeDurationMinutes` and `teacherCreditedDurationMinutes`.
 
-- [ ] **Step 2: Run the transition contract tests**
+- [x] **Step 2: Run the transition contract tests**
 
 Run: `cd server; npm test -- --runTestsByPath src/crm/schedule/lesson-transition-boundaries.spec.ts src/crm/schedule/lesson-transition-order.spec.ts`
 
 Expected: FAIL because reschedule currently reuses one `financialDecision` for both source settlement and successor planning.
 
-- [ ] **Step 3: Split the DTO and internal types**
+- [x] **Step 3: Split the DTO and internal types**
 
 ```ts
 export class LessonReschedulePreviewDto {
@@ -137,7 +137,7 @@ to each `LessonBulkTransitionItemDto`: reschedule items use
 items use `financialDecision`. Return both resolved decisions in committed
 reschedule projections instead of a single ambiguous `financialDecision`.
 
-- [ ] **Step 4: Update preview fingerprints and projections**
+- [x] **Step 4: Update preview fingerprints and projections**
 
 The signed reschedule fingerprint includes both resolved decisions, successor draft, source version, reservation coverage snapshot, and calculated financial projections. The preview response exposes `sourceFinancialPreview` and `successorPlannedSettlementPreview` with Russian-safe labels; it never accepts or echoes a source decision from the client.
 
@@ -145,7 +145,7 @@ Run: `cd server; npm test -- --runTestsByPath src/crm/schedule/lesson-transition
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the split transition contract**
+- [x] **Step 5: Commit the split transition contract**
 
 ```powershell
 git add server/src/crm/dto/lesson-transition.dto.ts server/src/crm/dto/lesson-financial-decision.dto.ts server/src/crm/schedule/lesson-transition.types.ts server/src/crm/schedule/lesson-transition.rules.ts server/src/crm/schedule/lesson-transition-preparation.service.ts server/src/crm/schedule/lesson-transition-preview.service.ts server/src/crm/schedule/lesson-bulk-transition.service.ts server/src/crm/schedule/lesson-transition-boundaries.spec.ts server/src/crm/schedule/lesson-transition-order.spec.ts
