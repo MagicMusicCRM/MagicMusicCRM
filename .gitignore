@@ -85,6 +85,7 @@ app.*.map.json
 /_archive/
 /installer_output/
 /outputs/stage9-release-*/
+/dist/release211/
 /ast_nodes*.json
 /bugreport-*.zip
 /docs/Supabase_Custom_Domain_Setup_Guide.docx
