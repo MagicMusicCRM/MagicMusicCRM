@@ -1,45 +1,45 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-09-04
-> Production: client `1.5.30+210`, server hotfix `61937d47`,
-> image `sha256:2d3c369d…`, migration `0147_lesson_reservation_history`
+> Обновлено: 2026-09-04 23:32 MSK
+> Production: client/server `1.5.31+211`, source `b4f1d0ddd79bafb274b7307a32711e9b31c3970f`
+> Image: `magicmusiccrm-server:1.5.31-211-final`, ID `sha256:b4f16c64daabba2e4b7f311c6e4b20c07fb9e491b194532db3e45543e8679b5c`
+> Migration: `0149_lesson_settlement_policy_revision`
 > Рабочая ветка: `codex/unified-schedule-settlement`
-> Статус: production не изменён; release gate кандидата 211 заблокирован
+> Статус: сервер обновлён, установщик/ZIP/APK/AAB и публичные манифесты опубликованы
 
-Локальный кандидат `1.5.31+211` (ещё не опубликован) объединяет системную
-политику расчётов, независимые минуты клиента/преподавателя, canonical timeline
-ученика, историю правил и исключений Plan, signed удаление строки, а также один
-редактор изменения/переноса/отмены. Source переноса всегда получает серверный
-zero-effect, successor — отдельный редактируемый settlement и новый резерв.
-Старые automatic defaults сверяются PII-free dry-run/apply командой через
-существующие versioned domain services; ручные решения и история не меняются.
+Выпуск объединяет системную политику расчётов, независимые минуты клиента и
+преподавателя, общую ленту ученика, историю правил и исключений Plan, удаление
+строки через signed preview и единый редактор изменения, переноса и отмены.
+Источник переноса получает серверный zero-effect; продолжение имеет отдельный
+редактируемый расчёт и новый резерв. Ручные решения и история сохраняются.
 
-HTTP contract Task 2: 11 authenticated schedule-commerce сценариев и 6 тестов
-общего exception filter, всего `17/17` PASS, hard `5xx=0`. Известные pure-domain
-calculation/token errors возвращают typed 422; programmer/DB failures остаются
-safe 500 с correlation ID без raw detail в response.
+Блокер V8 устранён: обычное обновление расписания пересоздавало индивидуально
+изменённое неоплачиваемое занятие по оплачиваемому шаблону. Общий predicate
+сохраняет исключения по расчётам и ресурсам при обновлении строки. На production
+V8 выполнил две автоматические правки без issues; повтор не внёс изменений.
+Будущие занятия 3 → 3, резерв 1.00 → 1.00, факты оплаты преподавателю 1 → 1.
+Readiness и read-only monitor PASS, очереди ошибок пусты.
 
-Актуальный кандидат сервера: `61284c7a3dc503469e0cb6499d2d007c5eb8c376`,
-`1.5.31+211`, **выпуск остановлен 2026-09-04 22:49 MSK**. На изолированной
-копии свежего production backup V8 apply меняет резерв абонемента `1.00 → 2.00`
-при неизменных 3 будущих занятиях и 1 факте оплаты преподавателю. Сработал
-`RECONCILIATION_INVARIANT_CHANGED`. Не отключать проверку: нужно устранить
-побочное перераспределение резервов при исправлении политики старых расписаний.
-Обычный update плана пересоздаёт серии/материализует занятия; точная причина
-дополнительного резерва ещё не установлена. Apply/repeat/rollback пока не PASS.
+Финальная проверка: backend 296 suites / 4005 tests PASS, typecheck PASS;
+Flutter 1949 tests PASS на неизменённых продуктовых Dart-файлах. Windows:
+16 сценариев PASS в общем прогоне, оставшиеся два PASS после исправления
+устаревших fixtures в отдельном повторе. Integration analyze PASS. Exact-image
+healthy/degraded/invalid flags gate и Trivy PASS. Android проверен по сборке и
+подписи; проверки на Android-устройстве не было. Клиенты собраны из `e31a23738`;
+последующие изменения касаются backend, тестов и документации.
 
-Предшествующие полные тесты: backend 4002/4002, Flutter 1949/1949. Последние
-V8 focused 23/23 и typecheck PASS. Exact image/degraded readiness и Trivy PASS.
-Windows device последний прогон: 10/18 PASS, 8 FAIL; незакоммиченные fixture
-правки находятся в четырёх integration_test файлах и требуют завершения.
-Windows/Android артефакты собраны из `e31a23738`, не опубликованы. Prod по-прежнему
-210/hotfix2, migration 0147. Encrypted backup скопирован off-host, hash проверен.
-RepoWise не запускать: повреждает индекс. Актуальное evidence:
+Pre/post encrypted backups `20260904T201832Z` и `20260904T202458Z` скопированы
+вне сервера, хеши совпали. Оба восстановлены в изоляции, V8 и совместимость
+rollback image со схемой 0149 прошли. Текущий rollback:
+`magicmusiccrm-server:1.5.30-210-hotfix2-61937d47`, без отката схемы и истории.
+Операционные файлы: `/opt/magicmusiccrm/releases/1.5.31-211-e31a2373/`.
+Публичные манифесты показывают build 211, хеши четырёх файлов совпадают с локальными.
+
+RepoWise не запускать: повторно повреждает индекс. Проверенные результаты,
+полные хеши backup и пути к логам:
 `docs/audits/v8-unified-schedule-commerce-release-211.md`.
 
-Артефакты 211 и deploy не начинать до исправления release blockers и нового
-полного PASS. Production остаётся `1.5.30+210`; публикация требует отдельной
-прямой команды владельца после готовых backup/rollback checks.
+## История предыдущего production 210 (не текущий статус)
 
 Server `1.5.30+210-hotfix.2`: обязательные имена в PATCH источника клиента
 и дополнительного поля допускают отсутствие, но отклоняют явный `null`
@@ -56,7 +56,7 @@ Guarded cutover PASS; readiness `ok`, reconciliation `issues=[]`, API/Caddy
 Pre/post encrypted backups сверены off-host и восстановлены с обоими images
 в isolated drill. Повторная production reconciliation и monitor PASS.
 
-Текущий rollback: `89c3c36f8f0696df771d6934c6c2f5b0ba050d9f`, image
+Rollback прежнего hotfix.2: `89c3c36f8f0696df771d6934c6c2f5b0ba050d9f`, image
 `magicmusiccrm-server:1.5.30-210-hotfix1-89c3c36f`, migration 0147 сохраняется.
 В hotfix.2 нет изменения схемы или исправления production-данных.
 Evidence: `docs/audits/v7-production-patch-validation-hotfix-210.md`.

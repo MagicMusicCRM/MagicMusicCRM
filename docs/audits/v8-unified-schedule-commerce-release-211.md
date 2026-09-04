@@ -1,6 +1,75 @@
 # Release 211 — unified schedule and commerce verification
 
-## Current decision — 2026-09-04 22:49 MSK
+## Current decision — 2026-09-04 23:32 MSK
+
+**DEPLOYED. Server and public client update manifests are on `1.5.31+211`.**
+The owner authorized release after successful verification. Runtime source:
+`b4f1d0ddd79bafb274b7307a32711e9b31c3970f`; image
+`magicmusiccrm-server:1.5.31-211-final`, image ID
+`sha256:b4f16c64daabba2e4b7f311c6e4b20c07fb9e491b194532db3e45543e8679b5c`.
+Schema: `0149_lesson_settlement_policy_revision`. Client artifacts remain built
+from `e31a2373821288561e9d84e42efa4d1896601a64`; subsequent changes are backend,
+test fixtures and documentation. Verification checkout: `375f595a3`.
+
+### Root cause and completed correction
+
+Recurring-plan update retired and recreated a manually changed unpaid occurrence
+using the paid series template. Policy repair therefore added a reservation.
+The shared unchanged-template predicate now preserves individual settlement and
+resource exceptions during plan changes. Preview and materialization use the
+same distinction; moved lessons still block conflicting bookings. Redundant
+template-wide validation was removed from update because the materializer checks
+actual missing occurrences under the existing locks. The PostgreSQL regression
+covers financial and teacher/room exceptions, update, rematerialization, stable
+lesson identities and unchanged reservations.
+
+### Final verification and production reconciliation
+
+- Full backend: **296 suites / 4005 tests PASS**; typecheck PASS. Focused
+  PostgreSQL/materializer/policy regression: **77 tests PASS**. Full Flutter:
+  **1949 tests PASS** on unchanged product Dart sources. Integration analyze PASS.
+- Windows device scenarios: **18 verified**. The combined run passed 16; two
+  remaining obsolete fixture assertions were corrected and both passed in the
+  targeted rerun. This is not a claim of one subsequent 18-scenario full run.
+- Exact runtime-image healthy/degraded-503/invalid-production-flags gate PASS.
+  Trivy HIGH/CRITICAL vulnerabilities and secrets: zero. Strict security: 11/11;
+  Semgrep differential: zero. Gitleaks retains one reviewed public-constant false
+  positive (`v8-settlement-policy-v1`). Windows package checks and Android signing
+  checks PASS; **Android device runtime was not tested**.
+- Guarded production cutover PASS. V8 applied two automatic repairs, reported
+  zero issues and zero repeat mutations. Future lessons stayed **3 → 3**, reserved
+  units **1.00 → 1.00**, effective teacher facts **1 → 1**. Manual decisions and
+  history were preserved. Readiness and read-only monitor PASS; poison, due,
+  unpublished and dead-letter queues were zero. The reserved lesson had its
+  subscription badge in the calendar projection.
+- Setup, Windows ZIP, APK and AAB were published. All four remote SHA-256 values
+  match local artifacts; both public manifests advertise build 211 and the
+  matching ZIP hash. Public artifact URLs respond with the expected lengths.
+
+### Backup and rollback evidence
+
+Fresh pre-deploy encrypted backup:
+`magicmusiccrm-staging-20260904T201832Z.tgz.enc`, SHA-256
+`467b8c954dba93e61f65ef767bd9af0ccdc4478d61f9f4cd0daaaa0d1b3c61cb`.
+Post-deploy encrypted backup:
+`magicmusiccrm-staging-20260904T202458Z.tgz.enc`, SHA-256
+`4c136ca61304d46588e1ff26fd9c4eeb57b78e2120d04213a05794b41111c778`.
+Both were copied off-host with matching hashes and restored in isolated Docker
+networks/volumes. Restore, V8 dry/apply/repeat invariants and old-image
+compatibility over schema 0149 PASS. The post-deploy restore needed zero repairs.
+Rollback image: `magicmusiccrm-server:1.5.30-210-hotfix2-61937d47`; keep schema
+0149 and history, use the guarded image rollback, not a down migration.
+
+Ignored local evidence in `dist/release211/`: `backend-final-verified.log`,
+`policy-regression-final.log`, `image-preserved-gate.log`, `trivy-preserved.json`,
+`restore-fresh-final.log`, `production-cutover.log`, `post-deploy-checks.log`,
+`restore-post-final.log`, `publish-final.log`. Windows evidence in
+`C:/Users/Alinka/mm211/dist/release211/`: `windows-device-repaired.log` and
+`windows-device-last-two.log`. Remote operational files:
+`/opt/magicmusiccrm/releases/1.5.31-211-e31a2373/` (directory name reflects the
+client source; deployed server revision is the b4f1d0 commit above).
+
+## Previous blocked candidate — 2026-09-04 22:49 MSK (superseded)
 
 **BLOCKED. Production was not deployed; public update manifests were not changed.**
 Candidate server: `61284c7a3dc503469e0cb6499d2d007c5eb8c376`, image
