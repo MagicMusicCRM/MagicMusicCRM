@@ -95,7 +95,7 @@ export class LessonWriteCommandService {
         const effectiveDraft = canManageTeacherCompensation
           ? draft
           : await this.withEffectiveTeacherRate(client, draft);
-        const financialDecision = await this.settlement.resolvePlannedDecision(
+        const preparedPlan = await this.settlement.resolvePlannedPlan(
           client,
           {
             branchId: effectiveDraft.branchId,
@@ -105,6 +105,7 @@ export class LessonWriteCommandService {
             authorization:
               this.policy.teacherCompensationMutationAuthorization(actor),
             reasonText: dto.plannedSettlementReason,
+            requiredClientIds: [effectiveDraft.clientRef.id],
           },
         );
         await this.acquireLocks(client, effectiveDraft);
@@ -128,12 +129,11 @@ export class LessonWriteCommandService {
           subscriptionId: effectiveDraft.subscriptionId ?? undefined,
           trial: effectiveDraft.isTrial,
         });
-        const plan = await this.settlement.assignPlan(client, {
+        const plan = await this.settlement.assignPreparedPlan(client, {
           lessonId,
-          branchId: effectiveDraft.branchId,
-          decision: financialDecision,
           selectedBy: actor.userId,
           reasonText: dto.plannedSettlementReason,
+          ...preparedPlan,
         });
         for (const allocation of await this.settlement.plannedSubscriptionAllocations(
           client,

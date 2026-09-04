@@ -205,7 +205,7 @@ export class LessonPlannedSettlementCommandService {
       "select duration_minutes from app.lessons where id = $1",
       [lessonId],
     );
-    const decision = await this.settlement.resolvePlannedDecision(client, {
+    const prepared = await this.settlement.resolvePlannedPlan(client, {
       branchId: resources.branchId,
       durationMinutes: duration.rows[0]!.duration_minutes,
       decision: {
@@ -216,6 +216,7 @@ export class LessonPlannedSettlementCommandService {
       authorization:
         this.policy.teacherCompensationMutationAuthorization(actor),
       reasonText: dto.reasonText,
+      requiredClientIds: resources.requiredClientIds,
       ...(storedTeacherDecision
         ? {
             preservedTeacherDecision: {
@@ -231,12 +232,6 @@ export class LessonPlannedSettlementCommandService {
           }
         : {}),
     });
-    const prepared = await this.settlement.preparePlan(
-      client,
-      resources.branchId,
-      decision,
-      actor.userId,
-    );
     const warnings = await this.settlement.partialDurationWarnings(client, {
       branchId: resources.branchId,
       durationMinutes: duration.rows[0]!.duration_minutes,
@@ -310,7 +305,7 @@ export class LessonPlannedSettlementCommandService {
     client: PoolClient,
     lessonId: string,
     dto: LessonSettlementPlanPreviewDto,
-    prepared: Awaited<ReturnType<LessonSettlementService["preparePlan"]>>,
+    prepared: Awaited<ReturnType<LessonSettlementService["resolvePlannedPlan"]>>,
   ) {
     await client.query("savepoint lesson_planned_financial_preview");
     try {

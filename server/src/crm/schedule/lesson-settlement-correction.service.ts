@@ -349,7 +349,7 @@ export class LessonSettlementCorrectionService {
           lessonId,
           dto.financialDecision,
         );
-    const decision = await this.settlement.resolvePlannedDecision(client, {
+    const prepared = await this.settlement.resolvePlannedPlan(client, {
       branchId: resources.branchId,
       durationMinutes: source.duration_minutes,
       decision: {
@@ -360,6 +360,7 @@ export class LessonSettlementCorrectionService {
       authorization:
         this.policy.teacherCompensationMutationAuthorization(actor),
       reasonText: dto.reasonText,
+      requiredClientIds: resources.requiredClientIds,
       ...(storedTeacherDecision
         ? {
             preservedTeacherDecision: {
@@ -375,12 +376,7 @@ export class LessonSettlementCorrectionService {
           }
         : {}),
     });
-    const prepared = await this.settlement.preparePlan(
-      client,
-      resources.branchId,
-      decision,
-      actor.userId,
-    );
+    const decision = prepared.decision;
     const warnings = await this.settlement.partialDurationWarnings(client, {
       branchId: resources.branchId,
       durationMinutes: source.duration_minutes,

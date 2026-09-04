@@ -56,6 +56,28 @@ function catalogClient(): PoolClient {
 describe("LessonSettlementService.resolvePlannedDecision", () => {
   const service = new LessonSettlementService({} as DatabaseService);
 
+  it("autofills omitted teacher fields for an operational actor", async () => {
+    await expect(service.resolvePlannedDecision(catalogClient(), {
+      branchId: "branch-a",
+      durationMinutes: 60,
+      decision: {
+        settlementTypeKey: "lesson",
+        clientDecisions: [{ clientId: "student-a" }],
+      } as never,
+      requiredClientIds: ["student-a"],
+      actorUserId: "admin-a",
+      authorization: actor("admin"),
+    })).resolves.toMatchObject({
+      teacherCompensationRuleKey: "standard",
+      teacherCreditedDurationMinutes: 60,
+      teacherCompensationSource: "automatic",
+      clientDecisions: [{
+        clientId: "student-a",
+        chargeDurationMinutes: 60,
+      }],
+    });
+  });
+
   it.each([30, 45, 60, 90])(
     "normalizes automatic zero and full decisions for %i minutes",
     async (durationMinutes) => {
@@ -239,16 +261,13 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
     })).rejects.toMatchObject({ status: 422, response: { code, field } });
   });
 
-  it("uses a trusted preserved teacher decision without accepting payload changes", async () => {
+  it("uses a trusted preserved teacher decision when payload teacher fields are omitted", async () => {
     await expect(service.resolvePlannedDecision(catalogClient(), {
       branchId: "branch-a",
       durationMinutes: 60,
       decision: {
         settlementTypeKey: "lesson",
-        teacherCompensationRuleKey: "fixed",
-        teacherCompensationValueMinor: "999999",
-        teacherCompensationSource: "manual",
-      },
+      } as never,
       actorUserId: "admin-a",
       authorization: actor("admin"),
       preservedTeacherDecision: {
@@ -262,6 +281,32 @@ describe("LessonSettlementService.resolvePlannedDecision", () => {
       teacherCompensationValueMinor: "125000",
       teacherCreditedDurationMinutes: 60,
       teacherCompensationSource: "manual",
+    });
+  });
+
+  it("rejects a supplied unauthorized override before reusing a preserved decision", async () => {
+    await expect(service.resolvePlannedDecision(catalogClient(), {
+      branchId: "branch-a",
+      durationMinutes: 60,
+      decision: {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationSource: "manual",
+        clientDecisions: [{ clientId: "student-a" }],
+      },
+      requiredClientIds: ["student-a"],
+      actorUserId: "admin-a",
+      authorization: actor("admin"),
+      reasonText: "Попытка ручного изменения",
+      preservedTeacherDecision: {
+        teacherCompensationRuleKey: "standard",
+        teacherCompensationValueMinor: undefined,
+        teacherCreditedDurationMinutes: 60,
+        teacherCompensationSource: "automatic",
+      },
+    })).rejects.toMatchObject({
+      status: 403,
+      response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
     });
   });
 

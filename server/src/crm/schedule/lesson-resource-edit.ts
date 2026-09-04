@@ -45,8 +45,6 @@ export async function applyLessonResourceEdit(
     ([key, value]) => resources[key as keyof LessonResourcesDto] !== value,
   );
   let teacherRateSnapshot = source.teacher_rate_snapshot ?? undefined;
-  if (!changed) return { branchId: source.branch_id, teacherRateSnapshot, change: null };
-
   const participants = await client.query<{ type: "student" | "lead"; id: string }>(
     `select client_type as type, client_id as id from app.lesson_snapshots
      where lesson_id = $1 and group_id is null
@@ -58,6 +56,16 @@ export async function applyLessonResourceEdit(
          and exclusion.student_id = participant.student_id)
      order by id`, [lessonId],
   );
+  if (!participants.rows.length) throw new UnprocessableEntityException({ code: "LESSON_SNAPSHOT_INCOMPLETE" });
+  const requiredClientIds = [...new Set(participants.rows.map((item) => item.id))];
+  if (!changed) {
+    return {
+      branchId: source.branch_id,
+      teacherRateSnapshot,
+      change: null,
+      requiredClientIds,
+    };
+  }
   const keys = [...new Set([
     `branch:${resources.branchId}`,
     `teacher:${before.teacherId}`, `teacher:${resources.teacherId}`,
@@ -67,7 +75,6 @@ export async function applyLessonResourceEdit(
   for (const key of keys) {
     await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
   }
-  if (!participants.rows.length) throw new UnprocessableEntityException({ code: "LESSON_SNAPSHOT_INCOMPLETE" });
   for (const participant of participants.rows) {
     const validation = await constraints.validate({
       clientRef: participant,
@@ -96,5 +103,10 @@ export async function applyLessonResourceEdit(
     [lessonId, resources.teacherId, resources.branchId, resources.roomId,
       before.teacherId !== resources.teacherId ? teacherRateSnapshot!.value : null],
   );
-  return { branchId: resources.branchId, teacherRateSnapshot, change: { before, after: resources } };
+  return {
+    branchId: resources.branchId,
+    teacherRateSnapshot,
+    change: { before, after: resources },
+    requiredClientIds,
+  };
 }

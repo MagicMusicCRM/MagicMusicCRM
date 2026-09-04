@@ -26,6 +26,7 @@ import { resolveSettlementPolicy } from "./lesson-settlement-policy";
 import {
   assignLessonSettlementPlan,
   cloneLessonSettlementPlan,
+  insertPreparedLessonSettlementPlan,
   loadLessonSettlementPlan,
   markLessonSettlementPlanState,
   plannedLessonSubscriptionAllocations,
@@ -167,6 +168,9 @@ export class LessonSettlementService implements LessonSettlementPort {
       ...(clientDecisions ? { clientDecisions } : {}),
     };
     if (input.preservedTeacherDecision) {
+      if (hasSuppliedTeacherDecision(decision)) {
+        this.resolveTeacherDecision(catalog, input, decision);
+      }
       if (
         input.preservedTeacherDecision.teacherCreditedDurationMinutes !==
         undefined
@@ -246,6 +250,29 @@ export class LessonSettlementService implements LessonSettlementPort {
       catalog,
       decision.settlementTypeKey,
     );
+    const recommendedMinutes = policy.teacherDurationMode === "manual"
+      ? undefined
+      : resolveDurationMinutes(
+          policy.teacherDurationMode,
+          input.durationMinutes,
+          undefined,
+        );
+    const teacherFieldsOmitted = !hasSuppliedTeacherDecision(decision);
+    if (teacherFieldsOmitted) {
+      if (policy.teacherDurationMode === "manual") {
+        invalidLessonSettlementDecision(
+          "TEACHER_PARTIAL_DURATION_REQUIRED",
+          "teacherCreditedDurationMinutes",
+        );
+      }
+      return {
+        ...decision,
+        teacherCompensationRuleKey: policy.teacherCompensationRuleKey,
+        teacherCompensationValueMinor: undefined,
+        teacherCreditedDurationMinutes: recommendedMinutes,
+        teacherCompensationSource: "automatic",
+      };
+    }
     if (
       !decision.teacherCompensationRuleKey ||
       !catalog.compensation_rules.some(
@@ -268,13 +295,6 @@ export class LessonSettlementService implements LessonSettlementPort {
         "teacherCreditedDurationMinutes",
       );
     }
-    const recommendedMinutes = policy.teacherDurationMode === "manual"
-      ? undefined
-      : resolveDurationMinutes(
-          policy.teacherDurationMode,
-          input.durationMinutes,
-          undefined,
-        );
     const legacyAutomatic = decision.teacherCompensationSource === undefined &&
       policy.teacherDurationMode !== "manual" &&
       decision.teacherCompensationValueMinor === undefined &&
@@ -380,6 +400,22 @@ export class LessonSettlementService implements LessonSettlementPort {
     },
   ) {
     return assignLessonSettlementPlan(client, input);
+  }
+
+  async assignPreparedPlan(
+    client: PoolClient,
+    input: PreparedLessonSettlementPlan & {
+      lessonId: string;
+      selectedBy: string;
+      reasonText?: string;
+    },
+  ): Promise<PreparedLessonSettlementPlan> {
+    await insertPreparedLessonSettlementPlan(client, input);
+    return {
+      decision: input.decision,
+      settlementRevisionId: input.settlementRevisionId,
+      compensationRevisionId: input.compensationRevisionId,
+    };
   }
 
   clonePlan(
@@ -549,6 +585,15 @@ function creditedMinutesForRule(
     return durationMinutes;
   }
   return undefined;
+}
+
+function hasSuppliedTeacherDecision(
+  decision: LessonFinancialDecision,
+): boolean {
+  return decision.teacherCompensationRuleKey !== undefined ||
+    decision.teacherCompensationValueMinor !== undefined ||
+    decision.teacherCreditedDurationMinutes !== undefined ||
+    decision.teacherCompensationSource !== undefined;
 }
 
 function addDurationBoundaryWarning(
