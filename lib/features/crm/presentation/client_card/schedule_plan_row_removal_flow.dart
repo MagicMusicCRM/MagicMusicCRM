@@ -78,6 +78,7 @@ class _SchedulePlanRowRemovalFormState
   DateTime? _effectiveFrom;
   MagicMutationIdentity? _identity;
   bool _confirmed = false;
+  bool _dateRecoveryEnabled = false;
   bool _loading = false;
   String? _error;
 
@@ -104,20 +105,24 @@ class _SchedulePlanRowRemovalFormState
   }
 
   Future<void> _pickDate() async {
-    final current = _effectiveFrom;
+    final current = _effectiveFrom ?? DateTime.tryParse(widget.row.validFrom);
     if (current == null || _loading) return;
     final picked = await showMagicDatePicker(
       context: context,
-      initialDate: current,
+      initialDate: DateUtils.dateOnly(current),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked == null || DateUtils.isSameDay(picked, current)) return;
+    if (picked == null ||
+        (_effectiveFrom != null && DateUtils.isSameDay(picked, current))) {
+      return;
+    }
     setState(() {
       _effectiveFrom = DateUtils.dateOnly(picked);
       _preview = null;
       _confirmed = false;
       _identity = null;
+      _dateRecoveryEnabled = false;
       _error = null;
     });
   }
@@ -148,6 +153,7 @@ class _SchedulePlanRowRemovalFormState
         _preview = preview;
         _effectiveFrom = preview.effectiveFrom;
         _confirmed = false;
+        _dateRecoveryEnabled = false;
         _identity = MagicMutationIdentity.create('schedule-plan-row-remove');
       });
     } catch (error) {
@@ -191,11 +197,14 @@ class _SchedulePlanRowRemovalFormState
   }) async {
     final code = _errorCode(error);
     final mapped = schedulePlanRowRemovalMessage(code);
-    final refresh =
-        code == 'SCHEDULE_PLAN_VERSION_STALE' ||
-        code == 'SCHEDULE_PLAN_ROW_PREVIEW_INVALID';
+    final stale = code == 'SCHEDULE_PLAN_VERSION_STALE';
+    final refresh = stale || code == 'SCHEDULE_PLAN_ROW_PREVIEW_INVALID';
     if (refresh) await widget.onInvalidated();
     if (!mounted) return;
+    if (stale) {
+      Navigator.of(context).pop(false);
+      return;
+    }
     setState(() {
       _error =
           mapped ??
@@ -208,6 +217,7 @@ class _SchedulePlanRowRemovalFormState
         _confirmed = false;
         _identity = null;
       }
+      _dateRecoveryEnabled = code == 'SCHEDULE_PLAN_ROW_HAS_NO_FUTURE_BOUNDARY';
     });
   }
 
@@ -219,7 +229,7 @@ class _SchedulePlanRowRemovalFormState
       children: [
         InkWell(
           key: const Key('schedule-plan-row-removal-date'),
-          onTap: preview == null ? null : _pickDate,
+          onTap: preview != null || _dateRecoveryEnabled ? _pickDate : null,
           child: InputDecorator(
             decoration: const InputDecoration(labelText: 'Не действует с'),
             child: Text(
@@ -364,8 +374,17 @@ class _SchedulePlanRowRemovalPreview {
       map['effectiveFrom']?.toString() ?? '',
     );
     final rawImpact = map['impact'];
-    final previewToken = map['previewToken']?.toString() ?? '';
-    if (effectiveFrom == null || rawImpact is! Map || previewToken.isEmpty) {
+    final previewToken = map['previewToken'];
+    final canConfirm = map['canConfirm'];
+    final confirmRequired = map['confirmRequired'];
+    if (effectiveFrom == null ||
+        rawImpact is! Map ||
+        previewToken is! String ||
+        previewToken.trim().isEmpty ||
+        canConfirm is! bool ||
+        confirmRequired is! bool ||
+        !canConfirm ||
+        !confirmRequired) {
       throw const FormatException('Invalid schedule plan row removal preview');
     }
     return _SchedulePlanRowRemovalPreview(
@@ -391,24 +410,45 @@ class _SchedulePlanRowRemovalImpact {
     required this.endsPlan,
   });
 
-  factory _SchedulePlanRowRemovalImpact.fromMap(Map<String, dynamic> map) =>
-      _SchedulePlanRowRemovalImpact(
-        futureUnfinishedLessons:
-            (map['futureUnfinishedLessons'] as num?)?.toInt() ?? 0,
-        terminalLessonsPreserved:
-            (map['terminalLessonsPreserved'] as num?)?.toInt() ?? 0,
-        changedLessonsPreserved:
-            (map['changedLessonsPreserved'] as num?)?.toInt() ?? 0,
-        activeReservationsToRelease:
-            (map['activeReservationsToRelease'] as num?)?.toInt() ?? 0,
-        endsPlan: map['endsPlan'] == true,
-      );
+  factory _SchedulePlanRowRemovalImpact.fromMap(Map<String, dynamic> map) {
+    final endsPlan = map['endsPlan'];
+    if (endsPlan is! bool) {
+      throw const FormatException('Invalid schedule plan row removal impact');
+    }
+    return _SchedulePlanRowRemovalImpact(
+      futureUnfinishedLessons: _requiredImpactCount(
+        map,
+        'futureUnfinishedLessons',
+      ),
+      terminalLessonsPreserved: _requiredImpactCount(
+        map,
+        'terminalLessonsPreserved',
+      ),
+      changedLessonsPreserved: _requiredImpactCount(
+        map,
+        'changedLessonsPreserved',
+      ),
+      activeReservationsToRelease: _requiredImpactCount(
+        map,
+        'activeReservationsToRelease',
+      ),
+      endsPlan: endsPlan,
+    );
+  }
 
   final int futureUnfinishedLessons;
   final int terminalLessonsPreserved;
   final int changedLessonsPreserved;
   final int activeReservationsToRelease;
   final bool endsPlan;
+}
+
+int _requiredImpactCount(Map<String, dynamic> map, String field) {
+  final value = map[field];
+  if (value is! int || value < 0) {
+    throw const FormatException('Invalid schedule plan row removal impact');
+  }
+  return value;
 }
 
 String? _errorCode(Object error) {

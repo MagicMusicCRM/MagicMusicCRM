@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -86,6 +87,209 @@ void main() {
     expect(find.byKey(const ValueKey('magic-modal-close')), findsOneWidget);
   });
 
+  testWidgets('stale preview refreshes, closes, and reopens at new version', (
+    tester,
+  ) async {
+    final api = _PreviewSequenceApi([
+      const MagicApiException(
+        statusCode: 409,
+        message: 'stale',
+        details: {'code': 'SCHEDULE_PLAN_VERSION_STALE'},
+      ),
+      _validPreview(),
+    ]);
+    var plan = _plan;
+    var refreshes = 0;
+    bool? result;
+
+    await _pumpLauncher(
+      tester,
+      width: 1440,
+      platform: TargetPlatform.windows,
+      onPressed: (context) async {
+        result = await SchedulePlanRowRemovalFlow(
+          service: MagicCrmService(api),
+          onInvalidated: () async {
+            refreshes++;
+            plan = _planV5;
+          },
+        ).remove(context, plan: plan, row: _row);
+      },
+    );
+
+    await tester.tap(find.text('Удалить'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('schedule-plan-row-removal-reason')),
+      'Смена преподавателя',
+    );
+    await tester.tap(find.byKey(const Key('schedule-plan-row-removal-submit')));
+    await tester.pumpAndSettle();
+
+    expect(refreshes, 1);
+    expect(result, isFalse);
+    expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsNothing);
+    expect(api.previewData.single['expectedVersion'], 4);
+
+    await tester.tap(find.text('Удалить'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('schedule-plan-row-removal-reason')),
+      'Повтор после обновления',
+    );
+    await tester.tap(find.byKey(const Key('schedule-plan-row-removal-submit')));
+    await tester.pumpAndSettle();
+
+    expect(api.previewData.last['expectedVersion'], 5);
+    expect(
+      find.byKey(const Key('schedule-plan-row-removal-impact')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'missing future boundary keeps reason and enables date recovery',
+    (tester) async {
+      final api = _PreviewSequenceApi([
+        const MagicApiException(
+          statusCode: 422,
+          message: 'boundary required',
+          details: {'code': 'SCHEDULE_PLAN_ROW_HAS_NO_FUTURE_BOUNDARY'},
+        ),
+        _validPreview(),
+      ]);
+      var refreshes = 0;
+      await _pumpLauncher(
+        tester,
+        width: 1440,
+        platform: TargetPlatform.windows,
+        onPressed: (context) => SchedulePlanRowRemovalFlow(
+          service: MagicCrmService(api),
+          onInvalidated: () async {
+            refreshes++;
+          },
+        ).remove(context, plan: _plan, row: _row),
+      );
+
+      await tester.tap(find.text('Удалить'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('schedule-plan-row-removal-reason')),
+        'Нет будущего занятия',
+      );
+      await tester.tap(
+        find.byKey(const Key('schedule-plan-row-removal-submit')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(refreshes, 0);
+      expect(
+        find.text('Укажите дату, с которой строка перестаёт действовать.'),
+        findsOneWidget,
+      );
+      expect(find.text('Нет будущего занятия'), findsOneWidget);
+      final dateControl = find.byKey(
+        const Key('schedule-plan-row-removal-date'),
+      );
+      expect(tester.widget<InkWell>(dateControl).onTap, isNotNull);
+      await tester.tap(dateControl);
+      await tester.pumpAndSettle();
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      expect(
+        tester
+            .widget<DatePickerDialog>(find.byType(DatePickerDialog))
+            .initialDate,
+        DateTime(2026, 9, 10),
+      );
+      Navigator.of(
+        tester.element(find.byType(DatePickerDialog)),
+      ).pop(DateTime(2026, 9, 10));
+      await tester.pumpAndSettle();
+
+      expect(find.text('С 10.09.2026'), findsOneWidget);
+      expect(find.text('Нет будущего занятия'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const Key('schedule-plan-row-removal-submit')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(api.previewData.last['effectiveFrom'], '2026-09-10');
+      expect(
+        find.byKey(const Key('schedule-plan-row-removal-impact')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('malformed previews never expose impact or commit controls', (
+    tester,
+  ) async {
+    final malformed = <(String, Map<String, dynamic>)>[
+      for (final field in const [
+        'futureUnfinishedLessons',
+        'terminalLessonsPreserved',
+        'changedLessonsPreserved',
+        'activeReservationsToRelease',
+      ])
+        ('missing $field', _previewWithoutImpactField(field)),
+      ('negative count', _validPreview(futureUnfinishedLessons: -1)),
+      ('fractional count', _validPreview(futureUnfinishedLessons: 1.5)),
+      ('non-boolean endsPlan', _validPreview(endsPlan: 'false')),
+      ('missing canConfirm', _previewWithoutRootField('canConfirm')),
+      ('non-boolean canConfirm', _validPreview(canConfirm: 'true')),
+      ('blocked canConfirm', _validPreview(canConfirm: false)),
+      ('missing confirmRequired', _previewWithoutRootField('confirmRequired')),
+      ('non-boolean confirmRequired', _validPreview(confirmRequired: 1)),
+      ('optional confirmation', _validPreview(confirmRequired: false)),
+      ('missing token', _previewWithoutRootField('previewToken')),
+      ('non-string token', _validPreview(previewToken: 7)),
+      ('blank token', _validPreview(previewToken: '   ')),
+    ];
+
+    for (final (name, payload) in malformed) {
+      await _pumpLauncher(
+        tester,
+        width: 1440,
+        platform: TargetPlatform.windows,
+        onPressed: (context) => SchedulePlanRowRemovalFlow(
+          service: MagicCrmService(_PreviewSequenceApi([payload])),
+          onInvalidated: () async {},
+        ).remove(context, plan: _plan, row: _row),
+      );
+      await tester.tap(find.text('Удалить'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('schedule-plan-row-removal-reason')),
+        'Проверка строгого ответа',
+      );
+      await tester.tap(
+        find.byKey(const Key('schedule-plan-row-removal-submit')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('schedule-plan-row-removal-impact')),
+        findsNothing,
+        reason: name,
+      );
+      expect(
+        find.byKey(const Key('schedule-plan-row-removal-confirm')),
+        findsNothing,
+        reason: name,
+      );
+      expect(find.text('Проверить'), findsOneWidget, reason: name);
+      expect(
+        find.byKey(const Key('schedule-plan-row-removal-error')),
+        findsOneWidget,
+        reason: name,
+      );
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+    }
+  });
+
   test('maps row-removal conflicts to exact Russian messages', () {
     expect(
       schedulePlanRowRemovalMessage('SCHEDULE_PLAN_VERSION_STALE'),
@@ -134,6 +338,18 @@ final _plan = SchedulePlan.fromMap(const {
   'activeFrom': '2026-09-01',
   'status': 'active',
   'version': 4,
+  'rows': [],
+  'participants': [],
+});
+
+final _planV5 = SchedulePlan.fromMap(const {
+  'id': 'plan-a',
+  'title': 'Вокал',
+  'kind': 'individual',
+  'studentId': 'student-1',
+  'activeFrom': '2026-09-01',
+  'status': 'active',
+  'version': 5,
   'rows': [],
   'participants': [],
 });
@@ -217,4 +433,63 @@ class _RowRemovalApi extends MagicApiClient {
         }
         as T;
   }
+}
+
+class _PreviewSequenceApi extends MagicApiClient {
+  _PreviewSequenceApi(this.outcomes)
+    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+
+  final List<Object> outcomes;
+  final List<Map<String, dynamic>> previewData = [];
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    previewData.add(Map<String, dynamic>.from(data! as Map));
+    final outcome = outcomes.removeAt(0);
+    if (outcome is Exception) throw outcome;
+    return Map<String, dynamic>.from(outcome as Map) as T;
+  }
+}
+
+Map<String, dynamic> _validPreview({
+  String effectiveFrom = '2026-09-10',
+  Object futureUnfinishedLessons = 3,
+  Object terminalLessonsPreserved = 2,
+  Object changedLessonsPreserved = 1,
+  Object activeReservationsToRelease = 3,
+  Object endsPlan = false,
+  Object canConfirm = true,
+  Object confirmRequired = true,
+  Object previewToken = 'signed-row-preview',
+}) => {
+  'plan': {'id': 'plan-a', 'title': 'Вокал', 'version': 4},
+  'row': {'id': 'series-a', 'validFrom': '2026-09-10', 'validUntil': null},
+  'effectiveFrom': effectiveFrom,
+  'impact': {
+    'futureUnfinishedLessons': futureUnfinishedLessons,
+    'terminalLessonsPreserved': terminalLessonsPreserved,
+    'changedLessonsPreserved': changedLessonsPreserved,
+    'activeReservationsToRelease': activeReservationsToRelease,
+    'endsPlan': endsPlan,
+  },
+  'canConfirm': canConfirm,
+  'confirmRequired': confirmRequired,
+  'previewToken': previewToken,
+  'previewExpiresAt': '2026-09-04T12:15:00.000Z',
+};
+
+Map<String, dynamic> _previewWithoutImpactField(String field) {
+  final preview = _validPreview();
+  (preview['impact']! as Map<String, dynamic>).remove(field);
+  return preview;
+}
+
+Map<String, dynamic> _previewWithoutRootField(String field) {
+  final preview = _validPreview()..remove(field);
+  return preview;
 }
