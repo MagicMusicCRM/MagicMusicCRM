@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { CrmPolicy } from "../crm.policy";
 import type {
@@ -58,6 +59,9 @@ export class LessonTransitionPreviewService {
     this.policy.assertCanWriteCrm(actor);
     assertTransitionReason(dto, operation);
     return this.database.transaction(async (client) => {
+      if (operation === "reschedule") {
+        await acquireLessonSettlementCoordinationGate(client);
+      }
       const calculated = await this.preparation.calculatePreview(
         client,
         actor,

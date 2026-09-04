@@ -54,6 +54,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
   let completionWorker: LessonCompletionWorker;
   let corrections: LessonSettlementCorrectionService;
   let archives: ClientArchiveService;
+  let tokens: SubscriptionPreviewTokenService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
@@ -75,7 +76,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       emitCrmChanged: jest.fn(),
       emitFinanceChanged: jest.fn(),
     } as unknown as RealtimeBus);
-    const tokens = new SubscriptionPreviewTokenService(config);
+    tokens = new SubscriptionPreviewTokenService(config);
     const platform = new PlatformIntegrityService(
       database,
       new PlatformIntegrityRepository(),
@@ -2542,6 +2543,171 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     }
   });
 
+  it("gates a single reschedule before archive fixed-point lesson locks", async () => {
+    const lifecycle = new LessonLifecycleRepository(database);
+    const fixture = await createFixture(pool, lifecycle);
+    const archiveActor = {
+      userId: fixture.managerId,
+      role: "director" as const,
+    };
+    const rescheduleActor = {
+      userId: fixture.teacherUserId,
+      role: "director" as const,
+    };
+    const lessonA = stableTransitionId(`archive-single-reschedule-${randomUUID()}`);
+    const creator = await pool.connect();
+    const lessonBlocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let reschedulePromise: Promise<unknown> | undefined;
+    try {
+      await pool.query(
+        "update app.users set role = 'director' where id = any($1::uuid[])",
+        [[fixture.managerId, fixture.teacherUserId]],
+      );
+      await pool.query(
+        "update app.lessons set scheduled_at = now() + interval '1 day' where id = $1",
+        [fixture.groupSourceId],
+      );
+      const successorSchedule = await pool.query<{ scheduled_at: Date | string }>(
+        `select ((date_trunc('week', now() at time zone 'Europe/Moscow')
+          + interval '1 week 12 hours') at time zone 'Europe/Moscow') as scheduled_at`,
+      );
+      await lessonBlocker.query("begin");
+      await lessonBlocker.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [lessonSettlementLockKey(lessonA)],
+      );
+      await pool.query(
+        `insert into app.aggregate_versions (
+           aggregate_type, aggregate_id, version
+         ) values ('schedule:lesson', $1, 1)`,
+        [lessonA],
+      );
+      await creator.query("begin");
+      await creator.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`client:student:${fixture.secondStudentId}`],
+      );
+      await creator.query(
+        `insert into app.lessons (
+           id, group_id, teacher_id, branch_id, room_id, scheduled_at,
+           duration_minutes, status, is_trial, created_by
+         ) select $1, group_id, teacher_id, branch_id, room_id,
+           now() + interval '2 days', duration_minutes, status, is_trial, created_by
+         from app.lessons where id = $2`,
+        [lessonA, fixture.groupSourceId],
+      );
+      await lifecycle.createGroupSnapshot(creator, {
+        lessonId: lessonA,
+        groupId: fixture.groupId,
+        completionType: "standard.success",
+        teacherCompensationType: "fixed",
+        teacherCompensationValue: 700,
+        trial: false,
+        participants: [fixture.studentId, fixture.secondStudentId].map(
+          (studentId) => ({
+            studentId,
+            chargeType: "personal_account" as const,
+            chargeValue: 800,
+          }),
+        ),
+      });
+      archivePromise = archives.archive(archiveActor, {
+        type: "student",
+        id: fixture.secondStudentId,
+        expectedVersion: 1,
+        reason: "test.single-reschedule-fixed-point-lock-order",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedQuery(
+        pool,
+        "pg_advisory_xact_lock",
+      );
+      const previewToken = tokens.issueLessonTransition({
+        kind: "lesson.transition",
+        operation: "reschedule",
+        actorUserId: rescheduleActor.userId,
+        lessonId: lessonA,
+        expectedVersion: 1,
+        transitionFingerprint: "a".repeat(64),
+      }).token;
+      reschedulePromise = service.reschedule(rescheduleActor, lessonA, {
+        expectedVersion: 1,
+        reasonCode: "client.requested",
+        reasonText: "Параллельный перенос во время архива клиента",
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          clientDecisions: [fixture.studentId, fixture.secondStudentId]
+            .map((clientId) => ({ clientId })),
+        },
+        successor: {
+          scheduledAt: new Date(
+            successorSchedule.rows[0]!.scheduled_at,
+          ).toISOString(),
+        },
+        previewToken,
+        confirm: true,
+      }, {
+        idempotencyKey: `single-reschedule-gate-${randomUUID()}`,
+        requestId: `single-reschedule-gate-${randomUUID()}`,
+      });
+      expect(await promiseStateAfter(reschedulePromise, 100)).toBe("pending");
+      await waitForBlockedSessionCount(pool, 2);
+      await creator.query("commit");
+      await waitForHeldAdvisoryLockCount(pool, archivePid, 3);
+      await lessonBlocker.query("commit");
+      const [archiveResult, rescheduleResult] = await Promise.allSettled([
+        archivePromise,
+        reschedulePromise,
+      ]);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(rescheduleResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 422,
+          response: { code: "UNKNOWN_LESSON_CLIENT" },
+        },
+      });
+      const evidence = await pool.query<{
+        state: string;
+        exclusions: number;
+        facts: number;
+        transitions: number;
+        successors: number;
+      }>(
+        `select lesson.lifecycle_state as state,
+           (select count(*)::int from app.lesson_participant_exclusions
+             where lesson_id = lesson.id and student_id = $2) as exclusions,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = lesson.id) as facts,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = lesson.id) as transitions,
+           (select count(*)::int from app.lessons successor
+             where successor.predecessor_id = lesson.id) as successors
+         from app.lessons lesson where lesson.id = $1`,
+        [lessonA, fixture.secondStudentId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        state: "scheduled",
+        exclusions: 1,
+        facts: 0,
+        transitions: 0,
+        successors: 0,
+      });
+    } finally {
+      await creator.query("rollback").catch(() => undefined);
+      await lessonBlocker.query("rollback").catch(() => undefined);
+      creator.release();
+      lessonBlocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        reschedulePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("materializes one routed lesson change per audience member across an outbox retry", async () => {
     const fixture = await createFixture(
       pool,
@@ -2821,6 +2987,41 @@ async function advisoryLockIsAvailable(pool: Pool, key: string): Promise<boolean
     await client.query("rollback").catch(() => undefined);
     client.release();
   }
+}
+
+async function waitForHeldAdvisoryLockCount(
+  pool: Pool,
+  pid: number,
+  expected: number,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ count: number }>(
+      `select count(*)::int as count from pg_locks
+       where pid = $1 and locktype = 'advisory' and granted`,
+      [pid],
+    );
+    if (result.rows[0]!.count >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(
+    `Timed out waiting for ${expected} held advisory locks on pid ${pid}`,
+  );
+}
+
+async function promiseStateAfter(
+  promise: Promise<unknown>,
+  milliseconds: number,
+): Promise<"pending" | "fulfilled" | { rejected: unknown }> {
+  return Promise.race([
+    promise.then(
+      () => "fulfilled" as const,
+      (error) => ({ rejected: error }),
+    ),
+    new Promise<"pending">((resolve) =>
+      setTimeout(() => resolve("pending"), milliseconds),
+    ),
+  ]);
 }
 
 async function sessionHoldsAdvisoryLock(

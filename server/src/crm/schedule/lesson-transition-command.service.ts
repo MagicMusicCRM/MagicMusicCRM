@@ -1,6 +1,7 @@
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
 import type { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
@@ -126,6 +127,9 @@ export class LessonTransitionCommandService {
             dto.previewToken,
           );
           this.assertSignedPreview(signed, actor, lessonId, dto, operation);
+          if (operation === "reschedule") {
+            await acquireLessonSettlementCoordinationGate(client);
+          }
           return this.commits.commit(client, {
             actor,
             lessonId,

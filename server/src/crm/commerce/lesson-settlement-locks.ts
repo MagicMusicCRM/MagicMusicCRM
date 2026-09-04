@@ -10,14 +10,18 @@ interface LessonSettlementLockExecutor {
 export const lessonSettlementLockKey = (lessonId: string) =>
   `commerce:lesson-settlement:${lessonId}`;
 
-const multiLessonSettlementGateKey = "commerce:multi-lesson-settlement";
+// Keep the established key string so mixed-version transactions coordinate
+// during a rolling deployment. The gate covers archive discovery, every
+// reschedule path, and transitions that lock multiple lessons.
+const lessonSettlementCoordinationGateKey =
+  "commerce:multi-lesson-settlement";
 
-export async function acquireMultiLessonSettlementGate(
+export async function acquireLessonSettlementCoordinationGate(
   executor: LessonSettlementLockExecutor,
 ): Promise<void> {
   await executor.query(
     "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
-    [multiLessonSettlementGateKey],
+    [lessonSettlementCoordinationGateKey],
   );
 }
 
@@ -40,9 +44,9 @@ export async function acquireStableLessonSettlementLocks(
   acquireCreationBarrier: () => Promise<void>,
 ): Promise<string[]> {
   // Multi-round discovery can find a lower id after locking a higher id.
-  // Share one gate with every multi-lesson transition before either side
-  // acquires its first per-lesson settlement lock.
-  await acquireMultiLessonSettlementGate(executor);
+  // Share one gate with multi-lesson transitions and every reschedule before
+  // either side acquires its first per-lesson settlement lock.
+  await acquireLessonSettlementCoordinationGate(executor);
   const locked = new Set<string>();
   const lockUntilStable = async () => {
     while (true) {

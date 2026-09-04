@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import type { DatabaseService } from "../../db/database.service";
 import type { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import type {
   LessonSettlementPort,
@@ -12,6 +13,7 @@ import { LessonTransitionCommandService } from "./lesson-transition-command.serv
 import { LessonTransitionCommitService } from "./lesson-transition-commit.service";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import type { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
+import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
 import * as transitionRules from "./lesson-transition.rules";
 import { transitionAdvisoryKeys } from "./lesson-transition.rules";
 import type {
@@ -114,14 +116,71 @@ const settlementResult: LessonSettlementResult = {
 settlementResult.clientFact = settlementResult.clientFacts[0]!;
 
 describe("Lesson transition runtime ordering", () => {
+  it("gates a direct reschedule preview before source preparation", async () => {
+    const events: string[] = [];
+    const client = {
+      query: jest.fn(async (_query: string, params?: unknown[]) => {
+        if (params?.[0] === "commerce:multi-lesson-settlement") {
+          events.push("settlement-gate");
+        }
+        return { rows: [] };
+      }),
+    } as unknown as PoolClient;
+    const database = {
+      transaction: jest.fn(async (work: (target: PoolClient) => unknown) =>
+        work(client)),
+    } as unknown as DatabaseService;
+    const preparation = {
+      calculatePreview: jest.fn(async () => {
+        events.push("source-preparation");
+        return {
+          operation: "reschedule",
+          source: { id: source.id, version: 1, state: "scheduled" },
+          successor: null,
+          financialDecision: {},
+          violations: [],
+          canConfirm: false,
+          confirmRequired: true,
+        };
+      }),
+    } as unknown as LessonTransitionPreparationService;
+    const previews = new LessonTransitionPreviewService(
+      database,
+      { assertCanWriteCrm: jest.fn() } as unknown as CrmPolicy,
+      preparation,
+      {} as SubscriptionPreviewTokenService,
+    );
+
+    await previews.previewReschedule(
+      { userId: "actor", role: "manager" },
+      source.id,
+      {
+        expectedVersion: 1,
+        reasonText: "reason",
+        financialDecision: {},
+        successor: {},
+      } as never,
+    );
+
+    expect(events).toEqual(["settlement-gate", "source-preparation"]);
+  });
+
   it("preserves commit and post-commit publication order", async () => {
     const events: string[] = [];
     let committedRef: CommittedTransition | undefined;
     let advisoryRecorded = false;
     const client = {
-      query: jest.fn(async (query: string) => {
+      query: jest.fn(async (query: string, params?: unknown[]) => {
         const normalized = query.trim().replace(/\s+/g, " ").toLowerCase();
-        if (normalized.includes("pg_advisory_xact_lock") && !advisoryRecorded) {
+        if (
+          normalized.includes("pg_advisory_xact_lock") &&
+          params?.[0] === "commerce:multi-lesson-settlement"
+        ) {
+          events.push("settlement-gate");
+        } else if (
+          normalized.includes("pg_advisory_xact_lock") &&
+          !advisoryRecorded
+        ) {
           advisoryRecorded = true;
           events.push("advisory-locks");
         }
@@ -282,6 +341,7 @@ describe("Lesson transition runtime ordering", () => {
       fingerprint.mockRestore();
     }
     expect(events).toEqual([
+      "settlement-gate",
       "source-for-update",
       "settlement-review",
       "advisory-locks",
