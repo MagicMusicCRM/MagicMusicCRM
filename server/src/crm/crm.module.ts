@@ -104,6 +104,7 @@ import { LessonTransitionPreparationService } from "./schedule/lesson-transition
 import { LessonTransitionFinancialService } from "./schedule/lesson-transition-financial.service";
 import { LessonTransitionCommitService } from "./schedule/lesson-transition-commit.service";
 import { LessonTransitionPreviewService } from "./schedule/lesson-transition-preview.service";
+import { LessonActionableChainService } from "./schedule/lesson-actionable-chain.service";
 import { LessonTransitionCommandService } from "./schedule/lesson-transition-command.service";
 import { LessonBulkTransitionService } from "./schedule/lesson-bulk-transition.service";
 import { LESSON_SETTLEMENT_PORT } from "./commerce/lesson-settlement.port";
@@ -277,6 +278,7 @@ import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline
     ClientCardReadService,
     ClientInternalContextService,
     LessonLifecycleRepository,
+    LessonActionableChainService,
     AvailabilityRepository,
     AvailabilityService,
     ConstraintEngineRepository,

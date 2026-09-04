@@ -1,3 +1,4 @@
+import { UnprocessableEntityException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -5,6 +6,7 @@ import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
+import { LessonActionableChainService } from "./lesson-actionable-chain.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 
 const defaultTestDatabaseUrl =
@@ -43,6 +45,7 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
   let pool: Pool;
   let database: DatabaseService;
   let repository: LessonLifecycleRepository;
+  let actionableChains: LessonActionableChainService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: testDatabaseUrl });
@@ -51,6 +54,7 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
       getOrThrow: () => testDatabaseUrl,
     } as unknown as ConfigService);
     repository = new LessonLifecycleRepository(database);
+    actionableChains = new LessonActionableChainService(repository);
   });
 
   afterAll(async () => {
@@ -576,6 +580,137 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
         [lessonId],
       );
       expect(Number(aggregate.rows[0]!.version)).toBe(2);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
+  it("resolves a scoped A to B to C chain and rejects corrupt successors", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const branches = await client.query<{ id: string }>(
+        `insert into app.branches (name)
+         values ($1), ($2) returning id`,
+        [`Chain assigned ${randomUUID()}`, `Chain foreign ${randomUUID()}`],
+      );
+      const assignedBranchId = branches.rows[0]!.id;
+      const foreignBranchId = branches.rows[1]!.id;
+      const users = await client.query<{ id: string; role: string }>(
+        `insert into app.users (email, role, email_verified_at)
+         values ($1, 'manager', now()), ($2, 'client', now())
+         returning id, role::text as role`,
+        [
+          `chain-manager-${randomUUID()}@example.test`,
+          `chain-client-${randomUUID()}@example.test`,
+        ],
+      );
+      const managerId = users.rows.find((row) => row.role === "manager")!.id;
+      const clientUserId = users.rows.find((row) => row.role === "client")!.id;
+      const profiles = await client.query<{ id: string; user_id: string }>(
+        `insert into app.profiles (user_id, first_name)
+         values ($1, 'Chain manager'), ($2, 'Chain client')
+         returning id, user_id`,
+        [managerId, clientUserId],
+      );
+      const managerProfileId = profiles.rows.find(
+        (row) => row.user_id === managerId,
+      )!.id;
+      const clientProfileId = profiles.rows.find(
+        (row) => row.user_id === clientUserId,
+      )!.id;
+      const staff = await client.query<{ id: string }>(
+        `insert into app.staff_members (profile_id, role)
+         values ($1, 'manager') returning id`,
+        [managerProfileId],
+      );
+      await client.query(
+        `insert into app.user_crm_links (
+           user_id, entity_type, entity_id, link_source, confirmed_at
+         ) values ($1, 'staff', $2, 'manual_email', now())`,
+        [managerId, staff.rows[0]!.id],
+      );
+      await client.query(
+        `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+         values ($1, $2)`,
+        [staff.rows[0]!.id, assignedBranchId],
+      );
+      const student = await client.query<{ id: string }>(
+        `insert into app.students (profile_id, branch_id)
+         values ($1, $2) returning id`,
+        [clientProfileId, assignedBranchId],
+      );
+      const lessons = await client.query<{ id: string }>(
+        `insert into app.lessons (
+           student_id, branch_id, scheduled_at, created_by
+         ) values
+           ($1, $2, now() + interval '1 day', $3),
+           ($1, $2, now() + interval '2 days', $3),
+           ($1, $2, now() + interval '3 days', $3),
+           ($1, $4, now() + interval '4 days', $3),
+           ($1, $2, now() + interval '5 days', $3),
+           ($1, $2, now() + interval '6 days', $3)
+         returning id`,
+        [student.rows[0]!.id, assignedBranchId, managerId, foreignBranchId],
+      );
+      const [lessonA, lessonB, lessonC, foreignLesson, deletedSource, deletedSuccessor] =
+        lessons.rows.map((row) => row.id);
+      await client.query(
+        `update app.lessons set
+           predecessor_id = case id
+             when $2 then $1::uuid when $3 then $2::uuid else predecessor_id end,
+           successor_id = case id
+             when $1 then $2::uuid when $2 then $3::uuid else successor_id end,
+           lifecycle_state = case when id in ($1, $2) then 'rescheduled'
+             else lifecycle_state end
+         where id = any($4::uuid[])`,
+        [lessonA, lessonB, lessonC, [lessonA, lessonB, lessonC]],
+      );
+      await client.query(
+        `update app.lessons set successor_id = $2, lifecycle_state = 'rescheduled'
+         where id = $1`,
+        [deletedSource, deletedSuccessor],
+      );
+      await client.query(
+        `update app.lessons set predecessor_id = $1, deleted_at = now()
+         where id = $2`,
+        [deletedSource, deletedSuccessor],
+      );
+
+      const actor = { userId: managerId, role: "manager" as const };
+      for (const openedLessonId of [lessonA, lessonB, lessonC]) {
+        await expect(
+          actionableChains.resolve(actor, openedLessonId, client),
+        ).resolves.toEqual({
+          requestedLessonId: openedLessonId,
+          actionableLessonId: lessonC,
+          chainIds: [lessonA, lessonB, lessonC],
+          redirected: openedLessonId !== lessonC,
+        });
+      }
+      await expect(actionableChains.resolve(actor, foreignLesson, client))
+        .rejects.toMatchObject({ status: 404 });
+      await expect(actionableChains.resolve(actor, deletedSource, client))
+        .rejects.toBeInstanceOf(UnprocessableEntityException);
+
+      await client.query("savepoint chain_cycle");
+      await client.query(
+        `update app.lessons set successor_id = $1,
+           lifecycle_state = 'rescheduled' where id = $2`,
+        [lessonA, lessonC],
+      );
+      await client.query(
+        `update app.lessons set predecessor_id = $2 where id = $1`,
+        [lessonA, lessonC],
+      );
+      await expect(actionableChains.resolve(actor, lessonA, client))
+        .rejects.toMatchObject({
+          status: 422,
+          response: { code: "LESSON_RESCHEDULE_CHAIN_INVALID" },
+        });
+      await client.query("rollback to savepoint chain_cycle");
+      await client.query("release savepoint chain_cycle");
     } finally {
       await client.query("rollback");
       client.release();

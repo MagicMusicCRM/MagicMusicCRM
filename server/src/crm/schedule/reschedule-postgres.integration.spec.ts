@@ -24,6 +24,7 @@ import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { LessonCompletionWorkerRepository } from "./completion-worker.repository";
 import { LessonCompletionService } from "./lesson-completion.service";
 import { LessonCompletionWorker } from "./lesson-completion.worker";
+import { LessonActionableChainService } from "./lesson-actionable-chain.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonCommandRepository } from "./lesson-command.repository";
 import { LessonPlannedSettlementCommandService } from "./lesson-planned-settlement-command.service";
@@ -75,6 +76,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       ),
     );
     const lifecycle = new LessonLifecycleRepository(database);
+    const actionableChains = new LessonActionableChainService(lifecycle);
     const reservations = new SubscriptionReservationService(database, {
       emitCrmChanged: jest.fn(),
       emitFinanceChanged: jest.fn(),
@@ -132,6 +134,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         policy,
         preparation,
         tokens,
+        actionableChains,
       );
       const commands = new LessonTransitionCommandService(
         platform,
@@ -139,6 +142,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         tokens,
         commits,
         reservations,
+        actionableChains,
       );
       const bulkTransitions = new LessonBulkTransitionService(
         database,
@@ -682,6 +686,9 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         successor: { scheduledAt: "2026-07-27T11:00:00.000Z" },
       });
       expect(preview).toMatchObject({
+        requestedLessonId: fixture.sourceId,
+        actionableLessonId: fixture.sourceId,
+        redirected: false,
         canConfirm: true,
         sourceFinancialDecision: {
           settlementTypeKey: "free_lesson",
@@ -750,6 +757,23 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         source: { id: fixture.sourceId, state: "rescheduled", version: 2 },
         successor: { state: "scheduled", version: 1 },
         replayed: false,
+      });
+      const redirectedPreview = await service.previewReschedule(
+        actor,
+        fixture.sourceId,
+        {
+          expectedVersion: 1,
+          reasonCode: "client.requested",
+          reasonText: "Повторный перенос из исходной карточки",
+          financialDecision: freeDecision,
+          successor: { scheduledAt: "2026-07-27T14:00:00.000Z" },
+        },
+      );
+      expect(redirectedPreview).toMatchObject({
+        requestedLessonId: fixture.sourceId,
+        actionableLessonId: result.successor!.id,
+        redirected: true,
+        source: { id: result.successor!.id, version: 1 },
       });
       const replay = await service.reschedule(
         actor,
@@ -2450,7 +2474,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     });
     try {
       const left = await preview("2026-07-27T11:00:00.000Z");
-      const right = await preview("2026-07-27T12:00:00.000Z");
+      const right = await preview("2026-07-27T14:00:00.000Z");
       await expect(
         service.reschedule(
           actor,
@@ -2545,7 +2569,6 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         plan_state: "review_required",
         facts: 0,
       });
-
       const results = await Promise.allSettled([
         service.reschedule(
           actor,
@@ -2569,7 +2592,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             reasonCode: "schedule.concurrent",
             reasonText: "Проверка конкурентного переноса",
             financialDecision: decision,
-            successor: { scheduledAt: "2026-07-27T12:00:00.000Z" },
+            successor: { scheduledAt: "2026-07-27T14:00:00.000Z" },
             previewToken: right.previewToken!,
             confirm: true,
           },
@@ -2582,6 +2605,18 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(
         results.filter((result) => result.status === "rejected"),
       ).toHaveLength(1);
+      const loser = results.find((result) => result.status === "rejected");
+      expect(loser).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 409,
+          response: {
+            code: expect.stringMatching(
+              /^LESSON_(VERSION_STALE|ALREADY_RESCHEDULED)$/,
+            ),
+          },
+        },
+      });
       const counts = await transitionCounts(pool, fixture.sourceId);
       expect(counts).toEqual({
         lifecycle_state: "rescheduled",

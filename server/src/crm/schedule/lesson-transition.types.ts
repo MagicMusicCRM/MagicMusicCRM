@@ -206,6 +206,9 @@ export interface BulkTransitionResultRef {
 }
 
 export interface LessonTransitionPreviewResult {
+  requestedLessonId?: string;
+  actionableLessonId?: string;
+  redirected?: boolean;
   operation: TransitionOperation;
   source: { id: string; version: number; state: string };
   successor: Record<string, unknown> | null;

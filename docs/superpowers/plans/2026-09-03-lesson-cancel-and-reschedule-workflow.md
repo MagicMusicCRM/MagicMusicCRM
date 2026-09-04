@@ -257,7 +257,7 @@ git commit -m "fix: move lesson finances and reservation atomically"
 - Consumes: unique predecessor/successor constraints from migration `0083_lesson_lifecycle_schema.up.sql`.
 - Produces: `LessonActionableChainService.resolve(actor, lessonId, client?): Promise<LessonActionableResolution>`.
 
-- [ ] **Step 1: Write failing A → B → C resolution tests**
+- [x] **Step 1: Write failing A → B → C resolution tests**
 
 ```ts
 it.each(["lesson-a", "lesson-b", "lesson-c"])(
@@ -274,13 +274,13 @@ it.each(["lesson-a", "lesson-b", "lesson-c"])(
 
 Add cycle/overlong-chain defense returning `422 LESSON_RESCHEDULE_CHAIN_INVALID`, cross-organization denial, deleted successor handling, and concurrent second reschedule returning `409 LESSON_VERSION_STALE` or `409 LESSON_ALREADY_RESCHEDULED`.
 
-- [ ] **Step 2: Run chain and schema tests**
+- [x] **Step 2: Run chain and schema tests**
 
 Run: `cd server; npm test -- --runTestsByPath src/crm/schedule/lesson-actionable-chain.service.spec.ts src/crm/schedule/lesson-schema-postgres.integration.spec.ts`
 
 Expected: FAIL because the current transition services only load the requested lesson.
 
-- [ ] **Step 3: Implement bounded chain resolution**
+- [x] **Step 3: Implement bounded chain resolution**
 
 ```ts
 export interface LessonActionableResolution {
@@ -293,7 +293,7 @@ export interface LessonActionableResolution {
 
 Use one recursive CTE scoped to the actor’s organization, cap depth at 64, require every forward link to point back through `predecessor_id`, and reject cycles or forks as invalid data. The final node is actionable unless terminal without successor.
 
-- [ ] **Step 4: Resolve before preview and revalidate under commit lock**
+- [x] **Step 4: Resolve before preview and revalidate under commit lock**
 
 Preview responses include `requestedLessonId`, `actionableLessonId`, and `redirected`. Commit resolves again inside the transaction before checking expected version and signed fingerprint, preventing a new successor from racing between preview and commit.
 
@@ -301,7 +301,7 @@ Run: `cd server; npm test -- --runTestsByPath src/crm/schedule/lesson-actionable
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit actionable-chain routing**
+- [x] **Step 5: Commit actionable-chain routing**
 
 ```powershell
 git add server/src/crm/schedule/lesson-actionable-chain.service.ts server/src/crm/schedule/lesson-actionable-chain.service.spec.ts server/src/crm/schedule/lesson-lifecycle.repository.ts server/src/crm/schedule/lesson-transition.service.ts server/src/crm/schedule/lesson-transition-preview.service.ts server/src/crm/schedule/lesson-transition-command.service.ts server/src/crm/schedule/lesson-schema-postgres.integration.spec.ts server/src/crm/crm.module.ts

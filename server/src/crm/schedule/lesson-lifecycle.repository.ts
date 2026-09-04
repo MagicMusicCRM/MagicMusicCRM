@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { PoolClient } from "pg";
+import { PoolClient, QueryResult, QueryResultRow } from "pg";
+import type { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
+import { managerBranchScopeSql } from "../branch-scope";
 
 export type LessonLifecycleState =
   | "scheduled"
@@ -38,9 +40,181 @@ export interface LessonTransitionInput {
   teacherFinancialFactId?: string;
 }
 
+export interface LessonActionableChainRow {
+  chain_ids: string[];
+  invalid: boolean;
+  scope_violation: boolean;
+}
+
+type LessonLifecycleQueryable = Pick<PoolClient, "query"> | DatabaseService;
+
+function runLifecycleQuery<T extends QueryResultRow>(
+  queryable: LessonLifecycleQueryable,
+  text: string,
+  params: unknown[],
+): Promise<QueryResult<T>> {
+  return (
+    queryable.query as (
+      query: string,
+      values?: unknown[],
+    ) => Promise<QueryResult<T>>
+  )(text, params);
+}
+
 @Injectable()
 export class LessonLifecycleRepository {
   constructor(private readonly database: DatabaseService) {}
+
+  async resolveActionableChain(
+    actor: ActorContext,
+    lessonId: string,
+    client?: PoolClient,
+  ): Promise<LessonActionableChainRow | null> {
+    const queryable: LessonLifecycleQueryable = client ?? this.database;
+    const result = await runLifecycleQuery<LessonActionableChainRow>(
+      queryable,
+      `
+        with recursive scope_actor as (
+          select actor.id, actor.role
+          from app.users actor
+          where actor.id = $2
+            and actor.deleted_at is null
+            and actor.is_app_account = true
+            and actor.role in ('admin', 'manager', 'director', 'system_admin')
+        ), lesson_rows as (
+          select lesson.id, lesson.predecessor_id, lesson.successor_id,
+            lesson.lifecycle_state, lesson.deleted_at,
+            (
+              scope_actor.id is not null
+              and ${managerBranchScopeSql({
+                roleExpression: "scope_actor.role",
+                userIdExpression: "scope_actor.id",
+                branchExpression: "lesson.branch_id::text",
+              })}
+            ) as in_scope
+          from app.lessons lesson
+          left join scope_actor on true
+        ), requested as (
+          select *
+          from lesson_rows
+          where id = $1
+            and deleted_at is null
+            and in_scope
+        ), walk (
+          id, predecessor_id, successor_id, lifecycle_state, deleted_at,
+          in_scope, phase, depth, path, cycle_detected, overlong,
+          missing_link, deleted_link, scope_violation, broken_link
+        ) as (
+          select requested.id, requested.predecessor_id, requested.successor_id,
+            requested.lifecycle_state, requested.deleted_at,
+            requested.in_scope, 'backward'::text, 0,
+            array[requested.id]::uuid[], false, false, false, false, false, false
+          from requested
+
+          union all
+
+          select target.id, target.predecessor_id, target.successor_id,
+            target.lifecycle_state, target.deleted_at, target.in_scope,
+            step.next_phase,
+            case when step.switch_to_forward then 0 else walk.depth + 1 end,
+            case when step.switch_to_forward then array[walk.id]::uuid[]
+              else walk.path || step.next_id end,
+            (not step.switch_to_forward and step.next_id = any(walk.path)),
+            (not step.switch_to_forward and walk.depth >= 64),
+            target.id is null,
+            target.deleted_at is not null,
+            target.id is not null and not target.in_scope,
+            case
+              when step.switch_to_forward then false
+              when walk.phase = 'backward'
+                then target.successor_id is distinct from walk.id
+              else target.predecessor_id is distinct from walk.id
+            end
+          from walk
+          cross join lateral (
+            select
+              case
+                when walk.phase = 'backward' and walk.predecessor_id is not null
+                  then walk.predecessor_id
+                when walk.phase = 'backward' then walk.id
+                else walk.successor_id
+              end as next_id,
+              case
+                when walk.phase = 'backward' and walk.predecessor_id is null
+                  then 'forward'::text
+                else walk.phase
+              end as next_phase,
+              walk.phase = 'backward' and walk.predecessor_id is null
+                as switch_to_forward
+          ) step
+          left join lesson_rows target on target.id = step.next_id
+          where not walk.cycle_detected
+            and not walk.overlong
+            and not walk.missing_link
+            and not walk.deleted_link
+            and not walk.scope_violation
+            and not walk.broken_link
+            and (
+              walk.phase = 'backward'
+              or walk.successor_id is not null
+            )
+        ), summary as (
+          select
+            coalesce(
+              array_agg(id order by depth) filter (
+                where phase = 'forward'
+                  and id is not null
+                  and not cycle_detected
+              ),
+              array[]::uuid[]
+            ) as chain_ids,
+            coalesce(bool_or(scope_violation), false) as scope_violation,
+            coalesce(bool_or(
+              cycle_detected or overlong or missing_link or deleted_link
+              or broken_link
+            ), false)
+            or exists (
+              select 1
+              from walk current_node
+              where current_node.phase = 'forward'
+                and current_node.id is not null
+                and (
+                  (
+                    select count(*)
+                    from app.lessons child
+                    where child.predecessor_id = current_node.id
+                  ) > 1
+                  or (
+                    current_node.successor_id is null
+                    and exists (
+                      select 1 from app.lessons child
+                      where child.predecessor_id = current_node.id
+                    )
+                  )
+                  or (
+                    current_node.successor_id is not null
+                    and not exists (
+                      select 1 from app.lessons child
+                      where child.id = current_node.successor_id
+                        and child.predecessor_id = current_node.id
+                    )
+                  )
+                  or (
+                    current_node.lifecycle_state = 'rescheduled'
+                    and current_node.successor_id is null
+                  )
+                )
+            ) as invalid
+          from walk
+        )
+        select chain_ids, invalid, scope_violation
+        from summary
+        where exists (select 1 from requested)
+      `,
+      [lessonId, actor.userId],
+    );
+    return result.rows[0] ?? null;
+  }
 
   get(lessonId: string) {
     return this.database.query(

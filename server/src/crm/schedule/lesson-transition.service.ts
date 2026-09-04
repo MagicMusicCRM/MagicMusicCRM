@@ -19,6 +19,7 @@ export type {
   CommittedTransition,
   LessonTransitionPreviewResult,
 } from "./lesson-transition.types";
+export type { LessonActionableResolution } from "./lesson-actionable-chain.service";
 
 @Injectable()
 export class LessonTransitionService {
