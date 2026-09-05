@@ -562,10 +562,12 @@ run_bounded "${DOCKER_TIMEOUT_SECONDS}" "start isolated PostgreSQL" \
   die "isolated PostgreSQL start failed"
 
 postgres_ready=0
+# PostgreSQL's entrypoint first starts a socket-only initialization server.
+# Wait for the final TCP listener so restore cannot race that server's restart.
 for ((attempt = 1; attempt <= WAIT_SECONDS; attempt++)); do
   if run_bounded "${DOCKER_TIMEOUT_SECONDS}" "probe isolated PostgreSQL" \
     docker exec "${postgres_container}" \
-      pg_isready -U "${database_owner}" -d "${database_name}" \
+      pg_isready -h 127.0.0.1 -U "${database_owner}" -d "${database_name}" \
     >/dev/null 2>&1; then
     postgres_ready=1
     break

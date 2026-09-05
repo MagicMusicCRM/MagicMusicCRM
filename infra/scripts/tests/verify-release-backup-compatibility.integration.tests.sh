@@ -143,6 +143,9 @@ case "${1:-}" in
     joined='|'
     for value in "$@"; do joined+="${value}|"; done
     if [[ "${joined}" == *'|pg_isready|'* ]]; then
+      # The entrypoint's temporary initialization server accepts Unix sockets
+      # before it restarts. Only TCP readiness identifies the final server.
+      [[ "${joined}" == *'|-h|127.0.0.1|'* ]] || exit 64
       [[ "${FAKE_PHASE}" != postgres-ready ]] || exit 65
       exit 0
     fi
@@ -407,7 +410,7 @@ if [[ "${1:-}" == -c ]]; then
     esac
   done
   [[ -n "${checksum_file}" ]] || exit 89
-  exec /usr/bin/sha256sum -cs "${checksum_file}"
+  exec /usr/bin/sha256sum -c "${checksum_file}" >/dev/null
 fi
 exec /usr/bin/sha256sum "$@"
 FAKE_SHA256SUM
@@ -433,7 +436,7 @@ set +e
   "${duration}" "$@"
 status=$?
 set -e
-if [[ "${status}" == 137 || "${status}" == 143 ]]; then
+if [[ "${status}" == 124 || "${status}" == 137 || "${status}" == 143 ]]; then
   printf 'timeout|expired|status=%s\n' "${status}" >>"${FAKE_LOG}"
   exit 124
 fi
