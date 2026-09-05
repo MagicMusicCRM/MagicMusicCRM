@@ -528,13 +528,12 @@ export class ScheduleReadService {
           and (
             $3::uuid is null
             or l.student_id = $3
-            or exists (
-              select 1
+            or l.group_id = any(array(
+              select filter_gs.group_id
               from app.group_students filter_gs
-              where filter_gs.group_id = l.group_id
-                and filter_gs.student_id = $3
+              where filter_gs.student_id = $3
                 and filter_gs.left_at is null
-            )
+            ))
           )
           and ($4::uuid is null or l.teacher_id = $4)
           and ($5::timestamptz is null or l.scheduled_at >= $5)

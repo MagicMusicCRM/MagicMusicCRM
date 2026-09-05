@@ -149,9 +149,20 @@ export class PaymentLifecycleService {
               });
             }
             if (actualPaymentId) {
+              if (dto.lessonId) {
+                const lesson = await client.query(
+                  "select id from app.lessons where id=$1 and student_id=$2 and deleted_at is null for share",
+                  [dto.lessonId, studentId],
+                );
+                if (!lesson.rows[0])
+                  throw new NotFoundException(
+                    "Занятие не найдено у этого ученика.",
+                  );
+              }
               await this.issueRepository.createActualPayment(client, {
                 id: actualPaymentId,
                 studentId,
+                lessonId: dto.lessonId,
                 issuedSubscriptionId:
                   target?.issued_subscription_id ??
                   dto.issuedSubscriptionId ??
@@ -219,10 +230,7 @@ export class PaymentLifecycleService {
           },
         },
       );
-    const response = await this.loadStableResult(
-      result.resultRef.entityId,
-      result.resultRef.version,
-    );
+    const response = await this.loadCurrentResult(result.resultRef.entityId);
     if (!result.replayed) {
       await this.reservations.publishPostCommit({
         studentId: recipientStudentId,
@@ -392,10 +400,7 @@ export class PaymentLifecycleService {
           },
         },
       );
-    const response = await this.loadStableResult(
-      result.resultRef.entityId,
-      result.resultRef.version,
-    );
+    const response = await this.loadCurrentResult(result.resultRef.entityId);
     if (!result.replayed) {
       await this.reservations.publishPostCommit({
         studentId: recipientStudentId,
@@ -406,7 +411,9 @@ export class PaymentLifecycleService {
     return response;
   }
 
-  async loadStableResult(paymentRecordId: string, version?: number) {
+  // Replay preserves the command effect but returns current state. Its version
+  // and history must describe the same record, never the old command version.
+  private async loadCurrentResult(paymentRecordId: string) {
     const record = await this.repository.findRecord(paymentRecordId);
     if (!record) {
       throw new ConflictException({
@@ -421,8 +428,8 @@ export class PaymentLifecycleService {
         : null,
     ]);
     return {
-      paymentRecord: mapRecord(record, version),
-      statusHistory: events.map((event) => ({
+      paymentRecord: mapRecord(record),
+      statusHistory: events.filter(event => Number(event.aggregate_version) <= Number(record.version)).map((event) => ({
         id: event.id,
         beforeStatus: event.before_status,
         afterStatus: event.after_status,
@@ -565,10 +572,9 @@ export class PaymentLifecycleService {
       "Укажите причину добавления оплаты.",
     );
     const paid = this.normalizePaidFields(dto.status, dto);
-    const dueAt = dto.dueAt
-      ? validDate(dto.dueAt, "dueAt")
-      : paid.occurredAt;
+    const dueAt = dto.dueAt ? validDate(dto.dueAt, "dueAt") : paid.occurredAt;
     return {
+      ...(dto.lessonId ? { lessonId: dto.lessonId } : {}),
       amountMinor,
       currencyCode: dto.currencyCode ?? null,
       status: dto.status,
@@ -681,7 +687,7 @@ export class PaymentLifecycleService {
   }
 }
 
-function mapRecord(record: PaymentRecordRow, version?: number) {
+function mapRecord(record: PaymentRecordRow) {
   return {
     id: record.id,
     studentId: record.student_id,
@@ -695,7 +701,7 @@ function mapRecord(record: PaymentRecordRow, version?: number) {
     externalIdentifier: record.external_identifier,
     verificationNote: record.verification_note,
     actualPaymentId: record.actual_payment_id,
-    version: version ?? Number(record.version),
+    version: Number(record.version),
     createdBy: {
       userId: record.created_by,
       name: record.created_by_name ?? null,

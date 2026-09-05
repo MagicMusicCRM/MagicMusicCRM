@@ -360,7 +360,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   // ── Data fetching ─────────────────────────────────────────────────────────
-  Future<void> _fetchAll() async {
+  Future<void> _fetchAll() => AppPerformance.measureScreen(
+    AppOperation.schedule,
+    _fetchAllData,
+    isVisible: () => mounted && TickerMode.valuesOf(context).enabled,
+  );
+
+  Future<void> _fetchAllData() async {
     _emitState(() {
       _isLoading = true;
       _loadError = null;
@@ -946,8 +952,12 @@ extension _ScheduleActions on _ScheduleWidgetState {
       initialValue: _scheduleSearchQuery,
     );
 
-    final normalized = query?.trim().toLowerCase();
-    if (normalized == null) return;
+    if (query != null && mounted) await _runScheduleSearch(query);
+  }
+
+  Future<void> _runScheduleSearch(String query) async {
+    final normalized = query.trim().toLowerCase();
+
     if (normalized.isEmpty) {
       _clearScheduleSearch();
       return;
@@ -998,7 +1008,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
     } catch (error) {
       debugPrint('Exact schedule search failed: $error');
     }
-    if (!mounted) return;
+    if (!mounted || _scheduleSearchQuery != normalized) return;
     matches = _lessonsInCurrentView().where(
       (lesson) => _matchesScheduleSearch(lesson, normalized),
     );
@@ -1096,7 +1106,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
         }
       }
     }
-    if (!mounted) return;
+    if (!mounted || _scheduleSearchQuery != query) return;
     _emitState(() {
       _lessons = byId.values.toList();
       _teacherNames = teacherNames;
@@ -1158,6 +1168,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   void _clearScheduleSearch() {
+    _desktopSearchController.clear();
     if (!_hasScheduleSearch && _highlightLessonId == null) return;
     _emitState(() {
       _scheduleSearchQuery = '';

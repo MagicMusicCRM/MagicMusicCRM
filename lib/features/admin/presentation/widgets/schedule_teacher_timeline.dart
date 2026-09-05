@@ -42,8 +42,9 @@ class _TimelineLane {
 }
 
 Map<ScheduleEntry, _TimelineLane> _layoutTeacherEntries(
-  List<ScheduleEntry> entries,
-) {
+  List<ScheduleEntry> entries, {
+  double minimumMinutes = 0,
+}) {
   final sorted = [...entries]
     ..sort((left, right) {
       final byStart = left.startLocal.compareTo(right.startLocal);
@@ -69,7 +70,9 @@ Map<ScheduleEntry, _TimelineLane> _layoutTeacherEntries(
   for (final entry in sorted) {
     if (clusterEnd != null && !entry.startLocal.isBefore(clusterEnd!)) flush();
     var lane = laneEnds.indexWhere((end) => !entry.startLocal.isBefore(end));
-    final end = entry.startLocal.add(Duration(minutes: entry.durationMinutes));
+    final end = entry.startLocal.add(
+      Duration(minutes: math.max(entry.durationMinutes, minimumMinutes.ceil())),
+    );
     if (lane < 0) {
       lane = laneEnds.length;
       laneEnds.add(end);
@@ -168,8 +171,11 @@ class _ScheduleTeacherTimelineState extends State<ScheduleTeacherTimeline> {
     super.dispose();
   }
 
-  double _rowHeight(List<ScheduleEntry> entries) {
-    final lanes = _layoutTeacherEntries(entries);
+  double _rowHeight(List<ScheduleEntry> entries, double hourWidth) {
+    final lanes = _layoutTeacherEntries(
+      entries,
+      minimumMinutes: 48 / hourWidth * 60,
+    );
     final maxLanes = lanes.values.fold<int>(
       1,
       (value, lane) => math.max(value, lane.count),
@@ -180,34 +186,18 @@ class _ScheduleTeacherTimelineState extends State<ScheduleTeacherTimeline> {
     );
   }
 
-  String _dayTitle() {
-    const names = [
-      'Понедельник',
-      'Вторник',
-      'Среда',
-      'Четверг',
-      'Пятница',
-      'Суббота',
-      'Воскресенье',
-    ];
-    return names[widget.date.weekday - 1];
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final range = scheduleVisibleHours(widget.entries);
+    final startHour = range.$1;
+    final endHour = range.$2;
     final entriesByTeacher = <String, List<ScheduleEntry>>{
       for (final row in widget.rows) row.id: <ScheduleEntry>[],
     };
     for (final entry in widget.entries) {
       entriesByTeacher[entry.columnId]?.add(entry);
     }
-    final rowHeights = <String, double>{
-      for (final row in widget.rows)
-        row.id: _rowHeight(entriesByTeacher[row.id] ?? const []),
-    };
-    final totalHeight = rowHeights.values.fold<double>(0, (a, b) => a + b);
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableTimelineWidth = math.max(
@@ -215,28 +205,20 @@ class _ScheduleTeacherTimelineState extends State<ScheduleTeacherTimeline> {
           constraints.maxWidth - _teacherColumnWidth,
         );
         final hourWidth = math.max(
-          _minimumHourWidth,
-          availableTimelineWidth / (kDayEndHour - kDayStartHour),
+          constraints.maxWidth >= 720 ? 40.0 : _minimumHourWidth,
+          availableTimelineWidth / (endHour - startHour),
         );
-        final timelineWidth = (kDayEndHour - kDayStartHour) * hourWidth;
+        final timelineWidth = (endHour - startHour) * hourWidth;
+
+        final rowHeights = <String, double>{
+          for (final row in widget.rows)
+            row.id: _rowHeight(entriesByTeacher[row.id] ?? const [], hourWidth),
+        };
+        final totalHeight = rowHeights.values.fold<double>(0, (a, b) => a + b);
 
         return Column(
           key: const ValueKey('schedule-teacher-timeline'),
           children: [
-            SizedBox(
-              height: 46,
-              child: Center(
-                child: Text(
-                  _dayTitle(),
-                  style: TextStyle(
-                    color: cs.onSurface,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.25,
-                  ),
-                ),
-              ),
-            ),
             Container(
               decoration: BoxDecoration(
                 color: cs.surface,
@@ -288,13 +270,14 @@ class _ScheduleTeacherTimelineState extends State<ScheduleTeacherTimeline> {
                         child: Row(
                           children: [
                             for (
-                              var hour = kDayStartHour;
-                              hour < kDayEndHour;
+                              var hour = startHour;
+                              hour < endHour;
                               hour += 2
                             )
                               _TimeBandHeader(
                                 startHour: hour,
-                                width: hourWidth * 2,
+                                width: hourWidth * math.min(2, endHour - hour),
+                                endHour: math.min(hour + 2, endHour),
                               ),
                           ],
                         ),
@@ -346,6 +329,8 @@ class _ScheduleTeacherTimelineState extends State<ScheduleTeacherTimeline> {
                                           for (final row in widget.rows)
                                             _TeacherTimelineRow(
                                               date: widget.date,
+                                              startHour: startHour,
+                                              endHour: endHour,
                                               row: row,
                                               height: rowHeights[row.id]!,
                                               width: timelineWidth,
@@ -376,7 +361,12 @@ class _ScheduleTeacherTimelineState extends State<ScheduleTeacherTimeline> {
 }
 
 class _TimeBandHeader extends StatelessWidget {
-  const _TimeBandHeader({required this.startHour, required this.width});
+  const _TimeBandHeader({
+    required this.startHour,
+    required this.endHour,
+    required this.width,
+  });
+  final int endHour;
 
   final int startHour;
   final double width;
@@ -384,7 +374,7 @@ class _TimeBandHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final endHour = (startHour + 2) % 24;
+    final endHour = this.endHour % 24;
     String hh(int hour) => hour.toString().padLeft(2, '0');
     return Container(
       width: width,
@@ -493,7 +483,11 @@ class _TeacherLabelCell extends StatelessWidget {
 }
 
 class _TeacherTimelineRow extends StatelessWidget {
+  final int startHour;
+  final int endHour;
   const _TeacherTimelineRow({
+    required this.startHour,
+    required this.endHour,
     required this.date,
     required this.row,
     required this.height,
@@ -516,14 +510,14 @@ class _TeacherTimelineRow extends StatelessWidget {
   final void Function(Map<String, dynamic>) onOpenLesson;
 
   double _xForTime(DateTime time) =>
-      ((time.hour - kDayStartHour) + time.minute / 60) * hourWidth;
+      ((time.hour - startHour) + time.minute / 60) * hourWidth;
 
   void _createAt(double x) {
     if (!allowCreate) return;
     final rawMinutes = ((x / hourWidth) * 60).round();
     final snappedMinutes = ((rawMinutes / 30).round() * 30).clamp(
       0,
-      (kDayEndHour - kDayStartHour) * 60 - 60,
+      (endHour - startHour) * 60 - 60,
     );
     onCreateSlot(
       row.id,
@@ -531,7 +525,7 @@ class _TeacherTimelineRow extends StatelessWidget {
         date.year,
         date.month,
         date.day,
-        kDayStartHour + snappedMinutes ~/ 60,
+        startHour + snappedMinutes ~/ 60,
         snappedMinutes % 60,
       ),
       60,
@@ -541,7 +535,10 @@ class _TeacherTimelineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final lanes = _layoutTeacherEntries(entries);
+    final lanes = _layoutTeacherEntries(
+      entries,
+      minimumMinutes: 48 / hourWidth * 60,
+    );
     return SizedBox(
       height: height,
       width: width,
@@ -566,7 +563,7 @@ class _TeacherTimelineRow extends StatelessWidget {
               ),
             ),
           ),
-          for (var index = 0; index <= kDayEndHour - kDayStartHour; index++)
+          for (var index = 0; index <= endHour - startHour; index++)
             Positioned(
               left: index * hourWidth,
               top: 0,
@@ -590,7 +587,7 @@ class _TeacherTimelineRow extends StatelessWidget {
   ) {
     final naturalLeft = _xForTime(entry.startLocal);
     final naturalRight = naturalLeft + entry.durationMinutes / 60 * hourWidth;
-    final left = naturalLeft.clamp(0.0, width).toDouble();
+    final left = naturalLeft.clamp(0.0, math.max(0.0, width - 45)).toDouble();
     final right = naturalRight.clamp(0.0, width).toDouble();
     final cardWidth = math.max(42.0, right - left - 5);
     final top = 10 + (lane?.index ?? 0) * _lessonLaneHeight;
@@ -640,113 +637,120 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
       Duration(minutes: widget.entry.durationMinutes),
     );
     final time = '${_hm(widget.entry.startLocal)}-${_hm(end)}';
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: AppMotion.effective(context, AppMotion.fast),
-        transform: Matrix4.translationValues(0, _hovered ? -1 : 0, 0),
-        decoration: BoxDecoration(
-          color: accent.withAlpha(_hovered ? 54 : 38),
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(
-            color: borderColor,
-            width: widget.entry.highlighted ? 2 : 1,
-          ),
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            key: ValueKey('schedule-lesson-${widget.entry.id}'),
+    return Tooltip(
+      message:
+          '${widget.entry.title}\n$time\n${widget.entry.subtitle}\n${projection.label}',
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: AppMotion.effective(context, AppMotion.fast),
+          transform: Matrix4.translationValues(0, _hovered ? -1 : 0, 0),
+          decoration: BoxDecoration(
+            color: accent.withAlpha(_hovered ? 54 : 38),
             borderRadius: BorderRadius.circular(AppRadius.sm),
-            onTap: widget.onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final showTrailingMetadata = constraints.maxWidth >= 96;
-                  return Row(
-                    children: [
-                      if (widget.entry.clientContext ||
-                          widget.entry.searchContext) ...[
-                        Tooltip(
-                          message: widget.entry.relatedClient
-                              ? 'Связанное занятие'
-                              : 'Другое занятие',
-                          child: Icon(
-                            widget.entry.relatedClient
-                                ? Icons.person_pin_circle_outlined
-                                : Icons.people_outline_rounded,
-                            color: accent,
-                            size: 12,
-                          ),
-                        ),
-                        const SizedBox(width: 3),
-                      ],
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.entry.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: cs.onSurface,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              '${widget.entry.subtitle} · $time',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: cs.onSurfaceVariant,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w500,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (showTrailingMetadata)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 3),
-                          child: Tooltip(
-                            message: projection.label,
+            border: Border.all(
+              color: borderColor,
+              width: widget.entry.highlighted ? 2 : 1,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: ValueKey('schedule-lesson-${widget.entry.id}'),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              onTap: widget.onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final showTrailingMetadata = constraints.maxWidth >= 96;
+                    return Row(
+                      children: [
+                        if (widget.entry.clientContext ||
+                            widget.entry.searchContext) ...[
+                          Tooltip(
+                            message: widget.entry.relatedClient
+                                ? 'Связанное занятие'
+                                : 'Другое занятие',
                             child: Icon(
-                              projection.token.icon,
+                              widget.entry.relatedClient
+                                  ? Icons.person_pin_circle_outlined
+                                  : Icons.people_outline_rounded,
                               color: accent,
-                              size: 13,
+                              size: 12,
                             ),
                           ),
-                        ),
-                      if (showTrailingMetadata && widget.entry.isTrial)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 3),
-                          child: LessonTrialBadge(compact: true),
-                        ),
-                      if (constraints.maxWidth >=
-                              (widget.entry.clientContext ||
-                                      widget.entry.searchContext
-                                  ? 36
-                                  : 20) &&
-                          lessonHasSubscriptionCoverage(widget.entry.lesson))
-                        const Padding(
-                          padding: EdgeInsets.only(left: 3),
-                          child: LessonSubscriptionBadge(
-                            compact: true,
-                            iconOnly: true,
+                          const SizedBox(width: 3),
+                        ],
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.entry.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: cs.onSurface,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (constraints.maxHeight >=
+                                  30 *
+                                      MediaQuery.textScalerOf(context).scale(1))
+                                Text(
+                                  '${widget.entry.subtitle} · $time',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: cs.onSurfaceVariant,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w500,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                    ],
-                  );
-                },
+                        if (showTrailingMetadata)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 3),
+                            child: Tooltip(
+                              message: projection.label,
+                              child: Icon(
+                                projection.token.icon,
+                                color: accent,
+                                size: 13,
+                              ),
+                            ),
+                          ),
+                        if (showTrailingMetadata && widget.entry.isTrial)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 3),
+                            child: LessonTrialBadge(compact: true),
+                          ),
+                        if (constraints.maxWidth >=
+                                (widget.entry.clientContext ||
+                                        widget.entry.searchContext
+                                    ? 36
+                                    : 20) &&
+                            lessonHasSubscriptionCoverage(widget.entry.lesson))
+                          const Padding(
+                            padding: EdgeInsets.only(left: 3),
+                            child: LessonSubscriptionBadge(
+                              compact: true,
+                              iconOnly: true,
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),

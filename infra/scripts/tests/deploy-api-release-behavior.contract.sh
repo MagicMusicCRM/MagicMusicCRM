@@ -652,6 +652,30 @@ assert_log_contains 'public-ready:0146_lesson_funding_payer'
 rollback_image_migration_head=0141_previous
 candidate_image_migration_head=0142_candidate
 
+rollback_image_migration_head=0149_lesson_settlement_policy_revision
+candidate_image_migration_head=0154_retire_partial_miss
+reset_rollback_scenario expense_history_incompatible
+automatic_rollback 83 2>/dev/null
+assert_log_excludes 'recreate:1:workers-enabled'
+assert_log_excludes start-caddy
+[[ "$(cat -- "${api_running_file}")" == false &&
+   "$(cat -- "${caddy_running_file}")" == false ]] || {
+  printf 'deploy-api-release behavior: unsafe expense writer rollback remained live\n' >&2
+  exit 1
+}
+
+reset_rollback_scenario rollback_original_schema
+automatic_rollback 84 2>/dev/null
+assert_log_contains 'public-ready:0149_lesson_settlement_policy_revision'
+
+rollback_image_migration_head=0151_expense_command_history
+reset_rollback_scenario expense_history_compatible
+automatic_rollback 85 2>/dev/null
+assert_log_contains 'recreate:1:workers-enabled'
+assert_log_contains 'public-ready:0154_retire_partial_miss'
+rollback_image_migration_head=0141_previous
+candidate_image_migration_head=0142_candidate
+
 reset_rollback_scenario post_public_failure
 automatic_rollback 79 2>/dev/null
 assert_event_before start-caddy 'compose:stop caddy:2'

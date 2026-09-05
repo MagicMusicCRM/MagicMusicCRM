@@ -6,6 +6,20 @@ const STRONG_SECRET = 'a'.repeat(40); // 40-символьный сильный 
 const baseEnv = {
   DATABASE_URL: 'postgres://user:pass@localhost:5432/db',
 };
+
+describe('DATABASE_POOL_MAX', () => {
+  it('keeps the existing per-process default', () => {
+    expect(envValidationSchema.validate(baseEnv).value.DATABASE_POOL_MAX).toBe(10);
+  });
+  it('accepts an explicit integer budget from the environment', () => {
+    const result = envValidationSchema.validate({ ...baseEnv, DATABASE_POOL_MAX: '4' });
+    expect(result.error).toBeUndefined();
+    expect(result.value.DATABASE_POOL_MAX).toBe(4);
+  });
+  it.each([0, -1, 1.5, 51, 'invalid', ''])('rejects invalid budget %s', value => {
+    expect(envValidationSchema.validate({ ...baseEnv, DATABASE_POOL_MAX: value }).error).toBeDefined();
+  });
+});
 const productionV4 = {
   MANAGED_PASSWORD_ENCRYPTION_KEY: STRONG_SECRET,
   V4_ACCESS_MODE: 'v4',

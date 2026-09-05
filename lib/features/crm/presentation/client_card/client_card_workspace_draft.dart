@@ -39,7 +39,7 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
       'schemaVersion': _clientCardWorkspaceDraftSchema,
       'entityType': widget.entityType,
       'entityId': _entityId,
-      if (_autoSaveConflict) 'requiresExplicitApply': true,
+      if (_draft.conflict) 'requiresExplicitApply': true,
       if (_hasPendingLeadDraft) 'lead': _buildLeadWorkspaceDraft(),
       if (_hasPendingStudentDraft) 'student': _buildStudentWorkspaceDraft(),
       if (note != null) 'internalNote': note.toJson(),
@@ -47,16 +47,16 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
   }
 
   bool get _hasPendingLeadDraft =>
-      _leadCoreEditRevisions.isNotEmpty ||
-      _leadCustomEditRevisions.isNotEmpty ||
-      _leadStatusEditRevision != null ||
-      _leadResponsibleEditRevision != null;
+      _draft.leadCoreEdits.isNotEmpty ||
+      _draft.leadCustomEdits.isNotEmpty ||
+      _draft.leadStatusEdit != null ||
+      _draft.leadResponsibleEdit != null;
 
   bool get _hasPendingStudentDraft =>
-      _studentCoreEditRevisions.isNotEmpty ||
-      _studentCustomEditRevisions.isNotEmpty ||
-      _studentStatusEditRevision != null ||
-      _studentResponsibleEditRevision != null;
+      _draft.studentCoreEdits.isNotEmpty ||
+      _draft.studentCustomEdits.isNotEmpty ||
+      _draft.studentStatusEdit != null ||
+      _draft.studentResponsibleEdit != null;
 
   Map<String, Object?> _buildLeadWorkspaceDraft() {
     final customData = Map<String, dynamic>.from(
@@ -67,14 +67,14 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
     return {
       ..._expectedVersionEntry(expectedVersion),
       'core': {
-        for (final key in _leadCoreEditRevisions.keys)
+        for (final key in _draft.leadCoreEdits.keys)
           key: _leadCoreDraftValue(key),
       },
       'custom': {
-        for (final key in _leadCustomEditRevisions.keys) key: customData[key],
+        for (final key in _draft.leadCustomEdits.keys) key: customData[key],
       },
-      if (_leadStatusEditRevision != null) 'status': _leadData['status'],
-      if (_leadResponsibleEditRevision != null)
+      if (_draft.leadStatusEdit != null) 'status': _leadData['status'],
+      if (_draft.leadResponsibleEdit != null)
         'responsible': {
           'changed': _leadResponsibleChanged,
           'assignedTo': _leadData['assigned_to'],
@@ -103,15 +103,15 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
     return {
       ..._expectedVersionEntry(expectedVersion),
       'core': {
-        for (final key in _studentCoreEditRevisions.keys)
+        for (final key in _draft.studentCoreEdits.keys)
           key: _studentCoreDraftValue(key),
       },
       'custom': {
-        for (final key in _studentCustomEditRevisions.keys)
+        for (final key in _draft.studentCustomEdits.keys)
           key: customData[key],
       },
-      if (_studentStatusEditRevision != null) 'status': student['status'],
-      if (_studentResponsibleEditRevision != null)
+      if (_draft.studentStatusEdit != null) 'status': student['status'],
+      if (_draft.studentResponsibleEdit != null)
         'responsible': {
           'changed': _studentResponsibleChanged,
           for (final key in const [
@@ -177,7 +177,7 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
       return;
     }
 
-    final revision = ++_editRevision;
+    final revision = ++_draft.revision;
     var restoredCardFields = false;
     final requiresExplicitApply = draft['requiresExplicitApply'] == true;
     _emitState(() {
@@ -191,8 +191,8 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
       }
       if (restoredCardFields) {
         _workspaceController.edited = true;
-        _autoSaveConflict = requiresExplicitApply;
-        _autoSaveFailed = requiresExplicitApply;
+        _draft.conflict = requiresExplicitApply;
+        _draft.failed = requiresExplicitApply;
         _editorEpoch++;
       }
       _restoredWorkspaceDraftApplied = true;
@@ -222,7 +222,7 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
         default:
           continue;
       }
-      _leadCoreEditRevisions[entry.key] = revision;
+      _draft.leadCoreEdits[entry.key] = revision;
     }
     final custom = _stringMap(draft['custom']) ?? const {};
     final customData = Map<String, dynamic>.from(
@@ -234,18 +234,18 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
       } else {
         customData[entry.key] = entry.value;
       }
-      _leadCustomEditRevisions[entry.key] = revision;
+      _draft.leadCustomEdits[entry.key] = revision;
     }
     _leadData['custom_data'] = customData;
     if (draft.containsKey('status')) {
       _leadData['status'] = draft['status'];
-      _leadStatusEditRevision = revision;
+      _draft.leadStatusEdit = revision;
     }
     if (_stringMap(draft['responsible']) case final responsible?) {
       _leadResponsibleChanged = responsible['changed'] == true;
       _putOrRemove(_leadData, 'assigned_to', responsible['assignedTo']);
       _putOrRemove(_leadData, 'assigned_name', responsible['assignedName']);
-      _leadResponsibleEditRevision = revision;
+      _draft.leadResponsibleEdit = revision;
     }
   }
 
@@ -275,7 +275,7 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
         default:
           continue;
       }
-      _studentCoreEditRevisions[entry.key] = revision;
+      _draft.studentCoreEdits[entry.key] = revision;
     }
     final custom = _stringMap(draft['custom']) ?? const {};
     final customData = Map<String, dynamic>.from(
@@ -283,11 +283,11 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
     );
     for (final entry in custom.entries) {
       _putOrRemove(customData, entry.key, entry.value);
-      _studentCustomEditRevisions[entry.key] = revision;
+      _draft.studentCustomEdits[entry.key] = revision;
     }
     if (draft.containsKey('status')) {
       student['status'] = draft['status'];
-      _studentStatusEditRevision = revision;
+      _draft.studentStatusEdit = revision;
     }
     if (_stringMap(draft['responsible']) case final responsible?) {
       _studentResponsibleChanged = responsible['changed'] == true;
@@ -298,7 +298,7 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
       ]) {
         _putOrRemove(customData, key, responsible[key]);
       }
-      _studentResponsibleEditRevision = revision;
+      _draft.studentResponsibleEdit = revision;
     }
     student['custom_data'] = customData;
   }

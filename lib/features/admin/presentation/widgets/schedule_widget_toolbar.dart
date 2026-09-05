@@ -32,201 +32,104 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
     };
   }
 
-  // ── One responsive schedule toolbar ───────────────────────────────────────
-  // Date, mode, scope and the single primary action belong to one surface.
-  // Keeping them together removes the old stack of unrelated header strips and
-  // makes the same controls predictable at desktop and phone widths.
-  Widget _buildScheduleToolbar({required bool firstLoad}) {
-    final cs = Theme.of(context).colorScheme;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 720;
-        final createButton = FilledButton.icon(
-          key: const ValueKey('schedule-create-lesson'),
-          onPressed: firstLoad ? null : _openLessonCreate,
-          icon: const Icon(Icons.add_rounded, size: 19),
-          label: const Text('Создать занятие'),
-          style: FilledButton.styleFrom(
-            minimumSize: Size(0, compact ? 42 : 44),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
-            backgroundColor: AppColor.gold,
-            foregroundColor: AppColor.onGold,
-          ),
-        );
-        final controls = <Widget>[
-          _buildViewSwitcher(),
-          _buildDateNavigation(),
-          if (compact) _buildBranchSelector(),
-        ];
-
-        return Container(
-          margin: EdgeInsets.fromLTRB(
-            compact ? AppSpace.sm : AppSpace.lg,
-            AppSpace.sm,
-            compact ? AppSpace.sm : AppSpace.lg,
-            AppSpace.xs,
-          ),
-          padding: EdgeInsets.all(compact ? AppSpace.md : AppSpace.lg),
-          decoration: BoxDecoration(
-            color: cs.surface,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(color: cs.onSurfaceVariant.withAlpha(32)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+  Widget _buildScheduleToolbar({required bool firstLoad}) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.maxWidth >= 720) {
+        return _buildDesktopToolbar(constraints, firstLoad: firstLoad);
+      }
+      final cs = Theme.of(context).colorScheme;
+      return Container(
+        margin: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+        padding: const EdgeInsets.all(AppSpace.md),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: cs.onSurfaceVariant.withAlpha(32)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: cs.onSurface,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (!firstLoad)
                         Text(
-                          widget.title,
+                          _schedulePeriodLabel,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: cs.onSurface,
-                            fontSize: compact ? 19 : 22,
-                            fontWeight: FontWeight.w700,
+                            color: cs.onSurfaceVariant,
+                            fontSize: 12,
                           ),
                         ),
-                        if (!firstLoad)
-                          Text(
-                            _schedulePeriodLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: cs.onSurfaceVariant,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.search_rounded, size: 21),
-                    color: _hasScheduleSearch
-                        ? AppColor.gold
-                        : cs.onSurfaceVariant,
-                    tooltip: _hasScheduleSearch
-                        ? 'Поиск: $_scheduleSearchQuery'
-                        : 'Найти занятие',
-                    onPressed: firstLoad ? null : _showScheduleSearch,
-                  ),
-                  if (compact)
-                    IconButton(
-                      icon: Icon(
-                        _hasExtraFilters
-                            ? Icons.filter_alt_rounded
-                            : Icons.tune_rounded,
-                        size: 21,
-                      ),
-                      color: _hasExtraFilters
-                          ? AppColor.gold
-                          : cs.onSurfaceVariant,
-                      tooltip: _hasExtraFilters
-                          ? 'Фильтры расписания применены'
-                          : 'Фильтры расписания',
-                      onPressed: firstLoad ? null : _showScheduleFilters,
-                    )
-                  else
-                    OutlinedButton.icon(
-                      key: const ValueKey('schedule-filter-toggle'),
-                      onPressed: firstLoad
-                          ? null
-                          : () => _emitState(
-                              () => _filtersExpanded = !_filtersExpanded,
-                            ),
-                      icon: Icon(
-                        _hasExtraFilters
-                            ? Icons.filter_alt_rounded
-                            : Icons.tune_rounded,
-                        size: 18,
-                        color: _hasExtraFilters
-                            ? AppColor.gold
-                            : cs.onSurfaceVariant,
-                      ),
-                      label: Text(
-                        _activeScheduleFilterCount == 0
-                            ? 'Фильтры'
-                            : 'Фильтры ($_activeScheduleFilterCount)',
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 40),
-                        foregroundColor: _hasExtraFilters
-                            ? AppColor.gold
-                            : cs.onSurface,
-                        side: BorderSide(
-                          color: _filtersExpanded || _hasExtraFilters
-                              ? AppColor.goldLine
-                              : cs.onSurfaceVariant.withAlpha(48),
-                        ),
-                      ),
-                    ),
-                  if (!compact)
-                    IconButton(
-                      tooltip: 'Обновить расписание',
-                      icon: const Icon(Icons.refresh_rounded, size: 21),
-                      color: cs.onSurfaceVariant,
-                      onPressed: _fetchAll,
-                    ),
-                  if (!compact && widget.canWrite) ...[
-                    const SizedBox(width: AppSpace.xs),
-                    createButton,
-                  ],
-                ],
-              ),
-              if (compact && widget.canWrite) ...[
-                const SizedBox(height: AppSpace.sm),
-                SizedBox(width: double.infinity, child: createButton),
-              ],
-              if (!firstLoad) ...[
-                const SizedBox(height: AppSpace.md),
-                if (compact)
-                  ...controls.expand(
-                    (control) => [
-                      control,
-                      if (control != controls.last)
-                        const SizedBox(height: AppSpace.sm),
                     ],
-                  )
-                else
-                  Wrap(
-                    spacing: AppSpace.md,
-                    runSpacing: AppSpace.sm,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: controls,
                   ),
-                if (!compact && _filtersExpanded) ...[
-                  const SizedBox(height: AppSpace.md),
-                  Divider(color: cs.onSurfaceVariant.withAlpha(28), height: 1),
-                  const SizedBox(height: AppSpace.md),
-                  ScheduleFiltersPanel(
-                    initialBranchId: _selectedBranchId,
-                    initialMode: _dayViewMode,
-                    branches: _branches,
-                    isDayView: _currentView == ScheduleView.day,
-                    initialOnlyTrial: _onlyTrial,
-                    initialOnlyConflicts: _onlyConflicts,
-                    initialTeacherId: _filterTeacherId,
-                    teacherOptions: _teacherFilterOptions,
-                    showHeader: true,
-                    onApply: (result) {
-                      _filtersExpanded = false;
-                      _applyScheduleFilterResult(result);
-                    },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.search_rounded, size: 21),
+                  color: _hasScheduleSearch
+                      ? AppColor.gold
+                      : cs.onSurfaceVariant,
+                  tooltip: _hasScheduleSearch
+                      ? 'Поиск: $_scheduleSearchQuery'
+                      : 'Найти занятие',
+                  onPressed: firstLoad ? null : _showScheduleSearch,
+                ),
+                IconButton(
+                  icon: Icon(
+                    _hasExtraFilters
+                        ? Icons.filter_alt_rounded
+                        : Icons.tune_rounded,
+                    size: 21,
                   ),
-                ],
+                  color: _hasExtraFilters ? AppColor.gold : cs.onSurfaceVariant,
+                  tooltip: _hasExtraFilters
+                      ? 'Фильтры расписания применены'
+                      : 'Фильтры расписания',
+                  onPressed: firstLoad ? null : _showScheduleFilters,
+                ),
               ],
+            ),
+            if (widget.canWrite) ...[
+              const SizedBox(height: AppSpace.sm),
+              FilledButton.icon(
+                key: const ValueKey('schedule-create-lesson'),
+                onPressed: firstLoad ? null : _openLessonCreate,
+                icon: const Icon(Icons.add_rounded, size: 19),
+                label: const Text('Создать занятие'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 42),
+                  backgroundColor: AppColor.gold,
+                  foregroundColor: AppColor.onGold,
+                ),
+              ),
             ],
-          ),
-        );
-      },
-    );
-  }
+            if (!firstLoad) ...[
+              const SizedBox(height: AppSpace.md),
+              _buildViewSwitcher(),
+              const SizedBox(height: AppSpace.sm),
+              _buildDateNavigation(),
+              const SizedBox(height: AppSpace.sm),
+              _buildBranchSelector(),
+            ],
+          ],
+        ),
+      );
+    },
+  );
 
   void _openLessonCreate() {
     if (!widget.canWrite) return;
@@ -260,7 +163,7 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
   Widget _buildViewSwitcher() {
     final cs = Theme.of(context).colorScheme;
     return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 280, maxWidth: 340),
+      constraints: const BoxConstraints(minWidth: 200, maxWidth: 340),
       child: SegmentedButton<ScheduleView>(
         key: const ValueKey('schedule-view-switcher'),
         segments: [
@@ -276,10 +179,14 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
         showSelectedIcon: false,
         onSelectionChanged: (selection) => _switchView(selection.single),
         style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size(88, 40)),
+          minimumSize: const WidgetStatePropertyAll(Size(64, 36)),
           visualDensity: VisualDensity.compact,
           textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
@@ -433,7 +340,7 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
   // ── Day-view mode toggle (По аудиториям / По педагогу) ────────────────────
 
   // ── Date navigation ───────────────────────────────────────────────────────
-  Widget _buildDateNavigation() {
+  Widget _buildDateNavigation({bool compact = false}) {
     VoidCallback onPrev, onNext;
 
     if (_currentView == ScheduleView.month) {
@@ -463,15 +370,19 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
             icon: const Icon(Icons.chevron_left_rounded, size: 22),
           ),
           Expanded(
-            child: Text(
-              _dateNavigationLabel(),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+            child: Tooltip(
+              message: _dateNavigationLabel(),
+              child: Text(
+                _dateNavigationLabel(compact: compact),
+                key: const ValueKey('schedule-date-label'),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: compact ? 12 : 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -486,7 +397,7 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
     );
   }
 
-  String _dateNavigationLabel() {
+  String _dateNavigationLabel({bool compact = false}) {
     if (_currentView == ScheduleView.month) {
       return '${monthNamesNominative[_displayedMonth.month]} '
           '${_displayedMonth.year}';
@@ -496,6 +407,12 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
         Duration(days: _selectedDate.weekday - 1),
       );
       final sunday = monday.add(const Duration(days: 6));
+      if (compact) {
+        String dayMonth(DateTime date) =>
+            '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}';
+        final startYear = monday.year == sunday.year ? '' : '.${monday.year}';
+        return '${dayMonth(monday)}$startYear – ${dayMonth(sunday)}.${sunday.year}';
+      }
       return '${monday.day} ${monthNamesGenitive[monday.month]} - '
           '${sunday.day} ${monthNamesGenitive[sunday.month]} ${sunday.year}';
     }

@@ -129,7 +129,12 @@ export class SchedulePlanMutationService {
       },
       beforeVersionAdvance: async (client) => {
         await acquireLessonSettlementCoordinationGate(client);
-        prepared = await this.definition.prepareUpdate(client, planId, dto);
+        prepared = await this.definition.prepareUpdate(
+          client,
+          planId,
+          dto,
+          actor,
+        );
       },
       mutate: (client, version) =>
         this.updateInTransaction(
@@ -162,15 +167,19 @@ export class SchedulePlanMutationService {
       normalized.kind === "individual"
         ? [normalized.studentId!]
         : normalized.participants.map((participant) => participant.studentId);
-    await this.definition.lockAndValidate(client, {
-      planId,
-      kind: normalized.kind,
-      studentId: normalized.studentId,
-      groupId: normalized.groupId,
-      subscriptionId: normalized.subscriptionId,
-      participants: normalized.participants,
-      rows: normalized.rows,
-    });
+    await this.definition.lockAndValidate(
+      client,
+      {
+        planId,
+        kind: normalized.kind,
+        studentId: normalized.studentId,
+        groupId: normalized.groupId,
+        subscriptionId: normalized.subscriptionId,
+        participants: normalized.participants,
+        rows: normalized.rows,
+      },
+      actor,
+    );
     await this.series.assertPlanExpansionBounds(
       client,
       normalized.rows,

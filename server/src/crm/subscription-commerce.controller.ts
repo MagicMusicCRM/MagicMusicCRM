@@ -1,3 +1,6 @@
+import { PaymentCorrectionPreviewDto, PaymentCorrectionResponseDto, PaymentReversalPreviewDto, PaymentReversalResponseDto } from './dto/payment-adjustment-response.dto';
+import { PaymentCommandApi } from './dto/payment-api.decorator';
+import { PaymentCommandResponseDto } from './dto/payment-response.dto';
 import {
   Body,
   Controller,
@@ -66,16 +69,18 @@ export class SubscriptionCommerceController {
   }
 
   @Post(":studentId/payment-records/:paymentRecordId/reversal/preview")
+  @PaymentCommandApi("previewPaymentReversal", true, PaymentReversalPreviewDto, true)
   previewPaymentReversal(
     @CurrentActor() actor: ActorContext,
     @Param("studentId", ParseUUIDPipe) studentId: string,
     @Param("paymentRecordId", ParseUUIDPipe) paymentRecordId: string,
     @Body() dto: PreviewPaymentReversalDto,
-  ) {
+  ): Promise<PaymentReversalPreviewDto> {
     return this.paymentReversal.preview(actor, studentId, paymentRecordId, dto);
   }
 
   @Post(":studentId/payment-records/:paymentRecordId/reversal")
+  @PaymentCommandApi("reversePayment", true, PaymentReversalResponseDto, false)
   reversePayment(
     @CurrentActor() actor: ActorContext,
     @Param("studentId", ParseUUIDPipe) studentId: string,
@@ -83,7 +88,7 @@ export class SubscriptionCommerceController {
     @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: ReversePaymentDto,
-  ) {
+  ): Promise<PaymentReversalResponseDto> {
     return this.paymentReversal.reverse(
       actor,
       studentId,
@@ -97,12 +102,13 @@ export class SubscriptionCommerceController {
   }
 
   @Post(":studentId/payment-records/:paymentRecordId/correction/preview")
+  @PaymentCommandApi("previewPaymentCorrection", true, PaymentCorrectionPreviewDto, true)
   previewPaymentCorrection(
     @CurrentActor() actor: ActorContext,
     @Param("studentId", ParseUUIDPipe) studentId: string,
     @Param("paymentRecordId", ParseUUIDPipe) paymentRecordId: string,
     @Body() dto: PreviewPaymentCorrectionDto,
-  ) {
+  ): Promise<PaymentCorrectionPreviewDto> {
     return this.paymentCorrection.preview(
       actor,
       studentId,
@@ -112,6 +118,7 @@ export class SubscriptionCommerceController {
   }
 
   @Post(":studentId/payment-records/:paymentRecordId/correction")
+  @PaymentCommandApi("correctPayment", true, PaymentCorrectionResponseDto, false)
   correctPayment(
     @CurrentActor() actor: ActorContext,
     @Param("studentId", ParseUUIDPipe) studentId: string,
@@ -119,7 +126,7 @@ export class SubscriptionCommerceController {
     @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: CorrectPaymentDto,
-  ) {
+  ): Promise<PaymentCorrectionResponseDto> {
     return this.paymentCorrection.correct(
       actor,
       studentId,
@@ -169,13 +176,14 @@ export class SubscriptionCommerceController {
   }
 
   @Post(":studentId/payment-records")
+  @PaymentCommandApi("createPaymentRecord")
   createPaymentRecord(
     @CurrentActor() actor: ActorContext,
     @Param("studentId", ParseUUIDPipe) studentId: string,
     @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: CreatePaymentRecordDto,
-  ) {
+  ): Promise<PaymentCommandResponseDto> {
     return this.paymentLifecycle.create(actor, studentId, dto, {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
@@ -183,6 +191,7 @@ export class SubscriptionCommerceController {
   }
 
   @Post(":studentId/payment-records/:paymentRecordId/transition")
+  @PaymentCommandApi("transitionPaymentRecord", true)
   transitionPaymentRecord(
     @CurrentActor() actor: ActorContext,
     @Param("studentId", ParseUUIDPipe) studentId: string,
@@ -190,7 +199,7 @@ export class SubscriptionCommerceController {
     @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: TransitionPaymentRecordDto,
-  ) {
+  ): Promise<PaymentCommandResponseDto> {
     return this.paymentLifecycle.transition(
       actor,
       studentId,

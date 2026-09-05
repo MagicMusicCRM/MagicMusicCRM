@@ -78,7 +78,7 @@ void main() {
       expect(find.text('Год'), findsNothing);
       expect(api.matrixQuery?.containsKey('studentId'), isFalse);
 
-      await tester.tap(find.text('Создать занятие'));
+      await tester.tap(find.byKey(const ValueKey('schedule-create-lesson')));
       await tester.pumpAndSettle();
       expect(
         find.descendant(

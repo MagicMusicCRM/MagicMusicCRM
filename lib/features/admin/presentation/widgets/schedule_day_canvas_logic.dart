@@ -18,20 +18,24 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
   }
 
   double _yForTime(DateTime time) =>
-      ((time.hour - kDayStartHour) + time.minute / 60.0) * kHourHeight;
+      _ScheduleDayCanvasState._edgeInset +
+      ((time.hour - _startHour) + time.minute / 60.0) * _hourHeight;
 
   DateTime _timeForY(double y, {DateTime? date}) {
-    final minutes = (kDayStartHour * 60 + (y / kHourHeight) * 60).round().clamp(
-      kDayStartHour * 60,
-      kDayEndHour * 60 - 60,
+    final minutes =
+        (_startHour * 60 +
+        ((y - _ScheduleDayCanvasState._edgeInset) / _hourHeight) * 60);
+    final snapped = ((minutes / 15).floor() * 15).clamp(
+      _startHour * 60,
+      _endHour * 60 - 60,
     );
     final target = date ?? widget.date;
     return DateTime(
       target.year,
       target.month,
       target.day,
-      minutes ~/ 60,
-      minutes % 60,
+      snapped ~/ 60,
+      snapped % 60,
     );
   }
 
@@ -45,7 +49,11 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     final entries = widget.entries
         .where((entry) => entry.columnId == column.id)
         .toList();
-    final lanes = _layoutOverlappingEntries(entries);
+    final lanes = _layoutOverlappingEntries(
+      entries,
+      minimumMinutes:
+          18 * MediaQuery.textScalerOf(context).scale(1) / _hourHeight * 60,
+    );
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border(
@@ -72,10 +80,9 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
 
   Widget _entryBlock(ScheduleEntry entry, double colWidth, {_EntryLane? lane}) {
     final top = _yForTime(entry.startLocal);
-    final height = ((entry.durationMinutes / 60) * kHourHeight).clamp(
-      22.0,
-      _gridHeight,
-    );
+    final height = ((entry.durationMinutes / 60) * _hourHeight)
+        .clamp(18 * MediaQuery.textScalerOf(context).scale(1), _gridHeight)
+        .clamp(0.0, _gridHeight - top);
     const gap = 3.0;
     final laneCount = lane?.count ?? 1;
     final width = (colWidth - 6 - (laneCount - 1) * gap) / laneCount;

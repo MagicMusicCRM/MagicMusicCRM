@@ -46,6 +46,7 @@ Widget _host({
     home: Scaffold(
       body: ScheduleDayCanvas(
         date: _day,
+        fitToViewport: false,
         columns: const [
           ScheduleColumn(id: 'room-1', name: 'Кабинет 1', color: Colors.blue),
         ],

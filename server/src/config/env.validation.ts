@@ -9,6 +9,7 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string()
     .uri({ scheme: ["postgres", "postgresql"] })
     .required(),
+  DATABASE_POOL_MAX: Joi.number().integer().min(1).max(50).default(10),
   JWT_ACCESS_SECRET: Joi.string().when("NODE_ENV", {
     is: "production",
     then: Joi.string()

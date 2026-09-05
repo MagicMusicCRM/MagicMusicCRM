@@ -124,7 +124,7 @@ export class StudentMutationExecutor {
           select id, $6, $7, $8::jsonb, $9::uuid, $10::uuid, $3::text
           from inserted_profile
           returning id, version, status, profile_id, lead_id, source_id, custom_data, created_at,
-            blacklisted, blacklist_reason
+            blacklisted, blacklist_reason, contact_email
         ),
         inserted_student_link as (
           insert into app.user_crm_links (

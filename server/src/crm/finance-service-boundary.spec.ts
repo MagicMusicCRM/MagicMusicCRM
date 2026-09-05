@@ -41,11 +41,16 @@ const classDeclaration = (name: string, source: string) =>
   );
 
 const isPrivateReadonly = (parameter: ts.ParameterDeclaration) => {
-  const modifiers = ts.getModifiers(parameter)?.map((modifier) => modifier.kind);
-  return JSON.stringify(modifiers) === JSON.stringify([
-    ts.SyntaxKind.PrivateKeyword,
-    ts.SyntaxKind.ReadonlyKeyword,
-  ]);
+  const modifiers = ts
+    .getModifiers(parameter)
+    ?.map((modifier) => modifier.kind);
+  return (
+    JSON.stringify(modifiers) ===
+    JSON.stringify([
+      ts.SyntaxKind.PrivateKeyword,
+      ts.SyntaxKind.ReadonlyKeyword,
+    ])
+  );
 };
 
 const callCount = (source: string, methodName: string) => {
@@ -85,12 +90,20 @@ const facadeContracts = [
   ["listExpectedPayments", "queries", ["actor", "query"]],
   ["listStudentBalances", "queries", ["actor", "query"]],
   ["listStudentLedger", "queries", ["actor", "studentId", "query"]],
-  ["createAccountTransfer", "transfers", ["actor", "fromStudentId", "dto"]],
-  ["createPayment", "payments", ["actor", "dto"]],
+  [
+    "createAccountTransfer",
+    "transfers",
+    ["actor", "fromStudentId", "dto", "metadata"],
+  ],
+  ["createPayment", "payments", ["actor", "dto", "metadata"]],
   ["listExpenses", "expenses", ["actor", "query"]],
-  ["createExpense", "expenses", ["actor", "dto"]],
-  ["updateExpense", "expenses", ["actor", "expenseId", "dto"]],
-  ["deleteExpense", "expenses", ["actor", "expenseId"]],
+  ["createExpense", "expenses", ["actor", "dto", "metadata"]],
+  ["updateExpense", "expenses", ["actor", "expenseId", "dto", "metadata"]],
+  [
+    "deleteExpense",
+    "expenses",
+    ["actor", "expenseId", "expectedVersion", "metadata"],
+  ],
 ] as const;
 
 describe("FinanceService semantic boundary", () => {
@@ -162,10 +175,11 @@ describe("FinanceService semantic boundary", () => {
       expect(declaration).toBeDefined();
       const decorators = declaration && ts.getDecorators(declaration);
       expect(
-        decorators?.some((decorator) =>
-          ts.isCallExpression(decorator.expression) &&
-          ts.isIdentifier(decorator.expression.expression) &&
-          decorator.expression.expression.text === "Injectable"
+        decorators?.some(
+          (decorator) =>
+            ts.isCallExpression(decorator.expression) &&
+            ts.isIdentifier(decorator.expression.expression) &&
+            decorator.expression.expression.text === "Injectable",
         ),
       ).toBe(true);
       expect(sourceNloc(source)).toBeLessThanOrEqual(350);
@@ -173,10 +187,11 @@ describe("FinanceService semantic boundary", () => {
   });
 
   it("retains command transaction envelopes and soft expense deletion", () => {
-    expect(callCount(sources.payments, "transaction")).toBe(1);
-    expect(callCount(sources.transfers, "transaction")).toBe(1);
+    expect(callCount(sources.payments, "transaction")).toBe(0);
+    expect(sources.payments).not.toMatch(/insert into app\.payments/);
+    expect(callCount(sources.transfers, "executeVersionedMutation")).toBe(1);
     expect(callCount(sources.queries, "transaction")).toBe(0);
-    expect(callCount(sources.expenses, "transaction")).toBe(0);
+    expect(callCount(sources.expenses, "executeVersionedMutation")).toBe(1);
     expect(sources.expenses).toMatch(/set\s+deleted_at\s*=\s*now\(\)/i);
     expect(sources.expenses).not.toMatch(/delete\s+from\s+app\.expenses/i);
   });

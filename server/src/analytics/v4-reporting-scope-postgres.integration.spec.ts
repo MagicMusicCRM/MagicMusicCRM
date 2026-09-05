@@ -1,3 +1,6 @@
+import { PaymentLifecycleService } from "../crm/commerce/payment-lifecycle.service";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
+import { PlatformIntegrityRepository } from "../platform/platform-integrity.repository";
 import { ForbiddenException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "crypto";
@@ -172,10 +175,28 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
     const typedAudit = audit as unknown as AuditService;
     const typedRealtime = realtime as unknown as RealtimeBus;
     const finance = new FinanceService(
-      new FinancePaymentService(database, typedAudit, policy, typedRealtime),
+      new FinancePaymentService(
+        database,
+        policy,
+        {} as PaymentLifecycleService,
+      ),
       new StudentFinanceQueryService(database, policy),
-      new StudentAccountTransferService(database, typedAudit, policy),
-      new ExpenseService(database, typedAudit, policy, typedRealtime),
+      new StudentAccountTransferService(
+        database,
+        new PlatformIntegrityService(
+          database,
+          new PlatformIntegrityRepository(),
+        ),
+        policy,
+      ),
+      new ExpenseService(
+        database,
+        new PlatformIntegrityService(
+          database,
+          new PlatformIntegrityRepository(),
+        ),
+        policy,
+      ),
     );
 
     await expect(
@@ -191,15 +212,16 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
-    const created = await finance.createExpense(fixture.director, {
-      amount: 1250,
-      category: "rent",
-      description: "UAT-114 initial expense",
-      branchId: fixture.assignedBranchId,
-    });
-    await database.query(
-      "update app.expenses set created_at = '2026-07-15T12:00:00Z' where id = $1",
-      [created.id],
+    const created = await finance.createExpense(
+      fixture.director,
+      {
+        amount: 1250,
+        category: "rent",
+        description: "UAT-114 initial expense",
+        occurredAt: "2026-07-15T12:00:00Z",
+        branchId: fixture.assignedBranchId,
+      },
+      { idempotencyKey: randomUUID(), requestId: randomUUID() },
     );
 
     await expect(
@@ -209,11 +231,17 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
       finance.deleteExpense(fixture.manager, created.id),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
-    const updated = await finance.updateExpense(fixture.director, created.id, {
-      amount: 1750,
-      category: "utilities",
-      description: "UAT-114 corrected expense",
-    });
+    const updated = await finance.updateExpense(
+      fixture.director,
+      created.id,
+      {
+        amount: 1750,
+        category: "utilities",
+        description: "UAT-114 corrected expense",
+        expectedVersion: 1,
+      },
+      { idempotencyKey: randomUUID(), requestId: randomUUID() },
+    );
     expect(updated).toMatchObject({
       id: created.id,
       amount: 1750,
@@ -239,18 +267,21 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
     expect(withExpense.rows[0]).toMatchObject({ expensesMinor: "175000" });
 
     await expect(
-      finance.deleteExpense(fixture.director, created.id),
+      finance.deleteExpense(fixture.director, created.id, 2, {
+        idempotencyKey: randomUUID(),
+        requestId: randomUUID(),
+      }),
     ).resolves.toEqual({ success: true });
     const afterDelete = await finance.listExpenses(fixture.director, {
       branchId: fixture.assignedBranchId,
       from: range.from,
       to: range.to,
     });
-    expect(afterDelete).toEqual({ items: [], total: 0 });
-    const analyticsAfterDelete = await service.schoolFinance(
-      fixture.director,
-      { ...range, branchId: fixture.assignedBranchId },
-    );
+    expect(afterDelete).toEqual({ items: [], total: 0, nextCursor: null });
+    const analyticsAfterDelete = await service.schoolFinance(fixture.director, {
+      ...range,
+      branchId: fixture.assignedBranchId,
+    });
     expect(analyticsAfterDelete.expensesMinor).toBe("0");
 
     const persisted = await database.query<{
@@ -263,22 +294,24 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
       deleted_at: expect.any(Date),
       amount: "1750.00",
     });
-    expect(audit.record.mock.calls.map(([entry]) => entry.action)).toEqual([
+    const auditRows = await database.query(
+      "select action from app.audit_events where entity_type='expense' and entity_id=$1 order by created_at,id",
+      [created.id],
+    );
+    expect(auditRows.rows.map((row) => row.action).sort()).toEqual([
       "crm.expense_created",
-      "crm.expense_updated",
       "crm.expense_deleted",
-    ]);
-    expect(realtime.emitCrmChanged.mock.calls.map(([event]) => event.action)).toEqual([
-      "created",
-      "updated",
-      "deleted",
+      "crm.expense_updated",
     ]);
   });
 });
 
 async function createFixture(database: DatabaseService) {
   const marker = `v4-report-scope-${randomUUID()}`;
-  const users = await database.query<{ id: string; role: ActorContext["role"] }>(
+  const users = await database.query<{
+    id: string;
+    role: ActorContext["role"];
+  }>(
     `
       insert into app.users (email, role, email_verified_at)
       values

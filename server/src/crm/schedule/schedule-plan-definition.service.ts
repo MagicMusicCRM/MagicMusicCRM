@@ -5,6 +5,8 @@ import {
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
+import type { ActorContext } from "../../common/security/actor-context";
+import { assertSchedulePlanDraftScope } from "./schedule-plan-access";
 import { assertActiveClientReferences } from "../clients/client-reference.service";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import type {
@@ -101,8 +103,9 @@ export class SchedulePlanDefinitionService {
     client: PoolClient,
     planId: string,
     dto: UpdateSchedulePlanDto,
+    actor: ActorContext,
   ): Promise<PreparedSchedulePlanUpdate> {
-    const plan = await this.repository.lock(client, planId);
+    const plan = await this.repository.lock(client, planId, actor);
     const effectiveFrom = dto.effectiveFrom.slice(0, 10);
     let mode = initialSchedulePlanUpdateMode(plan, effectiveFrom);
     const participantsAtOldStart =
@@ -138,6 +141,7 @@ export class SchedulePlanDefinitionService {
       participants,
       rows: dto.rows,
     };
+    await assertSchedulePlanDraftScope(client, actor, validation);
     const locked = await this.lockValidationBarriers(client, validation);
     this.assertEditable(plan, dto);
     this.assertPeriod(effectiveFrom, activeUntil);
@@ -176,7 +180,9 @@ export class SchedulePlanDefinitionService {
   async lockAndValidate(
     client: PoolClient,
     input: SchedulePlanValidationInput,
+    actor: ActorContext,
   ): Promise<void> {
+    await assertSchedulePlanDraftScope(client, actor, input);
     const locked = await this.lockValidationBarriers(client, input);
     await this.assertLockedSemantics(client, input, locked);
   }

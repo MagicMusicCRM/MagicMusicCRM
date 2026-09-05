@@ -81,6 +81,7 @@ const globalSchoolFinancePaths = [
   "/crm/expected-payments",
 ] as const;
 const clientFinanceFragments = [
+  "/transfer",
   "/subscriptions",
   "/subscription-payments",
   "/payment-records",

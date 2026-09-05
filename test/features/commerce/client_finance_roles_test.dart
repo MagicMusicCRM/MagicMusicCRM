@@ -210,9 +210,38 @@ class _ExpenseApiClient extends _CommerceApiClient {
   _ExpenseApiClient({List<Map<String, dynamic>>? seed})
     : expenses = [...?seed?.map((item) => Map<String, dynamic>.from(item))];
 
+  int? pageSize;
   final List<Map<String, dynamic>> expenses;
   final List<({String method, String path, Map<String, dynamic>? data})>
   mutations = [];
+
+  @override
+  Future<T> postIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) => post<T>(
+    path,
+    data: data,
+    queryParameters: queryParameters,
+    authenticated: authenticated,
+  );
+
+  @override
+  Future<T> patchIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) => patch<T>(
+    path,
+    data: data,
+    queryParameters: queryParameters,
+    authenticated: authenticated,
+  );
 
   @override
   Future<T> get<T>(
@@ -222,8 +251,17 @@ class _ExpenseApiClient extends _CommerceApiClient {
   }) async {
     if (path == '/crm/expenses') {
       getRequests.add(path);
+      final start =
+          int.tryParse(queryParameters?['cursor']?.toString() ?? '') ?? 0;
+      final end = pageSize == null
+          ? expenses.length
+          : (start + pageSize!).clamp(0, expenses.length);
       return <String, dynamic>{
-            'items': expenses.map(Map<String, dynamic>.from).toList(),
+            'nextCursor': end < expenses.length ? end.toString() : null,
+            'items': expenses
+                .sublist(start, end)
+                .map(Map<String, dynamic>.from)
+                .toList(),
             'total': expenses.fold<num>(
               0,
               (sum, item) => sum + (item['amount'] as num? ?? 0),
@@ -250,6 +288,7 @@ class _ExpenseApiClient extends _CommerceApiClient {
       mutations.add((method: 'POST', path: path, data: body));
       final created = <String, dynamic>{
         'id': 'expense-created',
+        'version': 1,
         ...body,
         'createdAt': DateTime(2026, 8, 12).toIso8601String(),
       };
@@ -276,7 +315,12 @@ class _ExpenseApiClient extends _CommerceApiClient {
       mutations.add((method: 'PATCH', path: path, data: body));
       final id = path.split('/').last;
       final index = expenses.indexWhere((item) => item['id'] == id);
-      expenses[index] = {...expenses[index], ...body};
+      expect(body['expectedVersion'], expenses[index]['version']);
+      expenses[index] = {
+        ...expenses[index],
+        ...body,
+        'version': (expenses[index]['version'] as int) + 1,
+      };
       return expenses[index] as T;
     }
     return super.patch<T>(
@@ -295,6 +339,7 @@ class _ExpenseApiClient extends _CommerceApiClient {
     bool authenticated = true,
   }) async {
     if (path.startsWith('/crm/expenses/')) {
+      expect(queryParameters?['expectedVersion'], 2);
       mutations.add((method: 'DELETE', path: path, data: null));
       final id = path.split('/').last;
       expenses.removeWhere((item) => item['id'] == id);
@@ -618,6 +663,43 @@ void main() {
     },
   );
 
+  testWidgets('director loads the next expense page from the visible control', (
+    tester,
+  ) async {
+    final api = _ExpenseApiClient(
+      seed: List.generate(
+        3,
+        (i) => {
+          'id': 'page-expense-$i',
+          'version': 1,
+          'amount': 100,
+          'category': 'other',
+          'description': 'Расход страницы $i',
+          'createdAt': '2026-08-12T08:00:00Z',
+        },
+      ),
+    )..pageSize = 2;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        child: const MaterialApp(home: Scaffold(body: FinanceWidget())),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final more = find.text('Загрузить ещё');
+    await tester.ensureVisible(more);
+    await tester.pumpAndSettle();
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey('expense-history-list')),
+      const Offset(0, -160),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Расход страницы 2'), findsOneWidget);
+    expect(find.text('Загрузить ещё'), findsNothing);
+  });
+
   testWidgets('director completes expense create edit delete with readback', (
     tester,
   ) async {
@@ -626,6 +708,7 @@ void main() {
       seed: const [
         {
           'id': 'expense-a',
+          'version': 1,
           'amount': 1200,
           'category': 'rent',
           'description': 'Старая аренда',

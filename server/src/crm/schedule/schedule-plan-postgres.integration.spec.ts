@@ -170,18 +170,146 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it.each(["manager", "admin"] as const)(
+    "restricts %s plan reads and commands to assigned branches",
+    async (role) => {
+      const own = await createFixture(pool);
+      const other = await createFixture(pool);
+      const owner = { userId: own.managerId, role: "manager" as const };
+      const outsider = { userId: other.managerId, role };
+      await pool.query("update app.users set role=$2 where id=$1", [
+        outsider.userId,
+        role,
+      ]);
+      try {
+        const draft = {
+          kind: "individual" as const,
+          title: "Branch scope regression",
+          studentId: own.studentIds[0]!,
+          subscriptionId: own.subscriptionIds[0]!,
+          activeFrom: own.effectiveFrom,
+          activeUntil: own.until60,
+          rows: [row(own, isoWeekday(own.effectiveFrom), "10:00")],
+        };
+        const created = await plans.create(owner, draft, {
+          idempotencyKey: randomUUID(),
+          requestId: randomUUID(),
+        });
+        const visible = await plans.list(outsider, {
+          studentId: own.studentIds[0],
+        });
+        expect(visible.items).toEqual([]);
+        expect((await plans.tray(outsider, created.id, {})).items).toEqual([]);
+        const end = {
+          expectedVersion: 1,
+          lastDate: own.effectiveFrom,
+          reasonText: "Проверка доступа",
+        };
+        const edit = {
+          expectedVersion: 1,
+          effectiveFrom: own.effectiveFrom,
+          rows: [{ ...draft.rows[0]!, seriesId: created.seriesIds[0]! }],
+        };
+        await expect(
+          plans.previewEnd(outsider, created.id, end),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.previewRemoveRow(outsider, created.id, created.seriesIds[0]!, {
+            expectedVersion: 1,
+            effectiveFrom: own.effectiveFrom,
+            reasonText: "Проверка доступа",
+          }),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.previewUpdateConstraints(outsider, created.id, edit),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.previewConstraints(outsider, draft),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.create(outsider, draft, {
+            idempotencyKey: randomUUID(),
+            requestId: randomUUID(),
+          }),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.update(outsider, created.id, edit, {
+            idempotencyKey: randomUUID(),
+            requestId: randomUUID(),
+          }),
+        ).rejects.toMatchObject({ status: 404 });
+        // A stale wider JWT role must not restore global resource access.
+        expect(
+          (
+            await plans.list(
+              { ...outsider, role: "director" },
+              { studentId: own.studentIds[0] },
+            )
+          ).items,
+        ).toEqual([]);
+        const before = (
+          await pool.query(
+            "select version,status from app.schedule_plans where id=$1",
+            [created.id],
+          )
+        ).rows;
+        expect(before).toEqual([{ version: "1", status: "active" }]);
+        // Revocation after a valid preview must invalidate commit too.
+        const preview = await plans.previewEnd(owner, created.id, end);
+        await pool.query(
+          `update app.staff_branch_assignments set deleted_at=now()
+          where staff_member_id in (select entity_id from app.user_crm_links
+            where user_id=$1 and entity_type='staff')`,
+          [owner.userId],
+        );
+        await expect(
+          plans.end(
+            owner,
+            created.id,
+            { ...end, confirm: true, previewToken: preview.previewToken },
+            { idempotencyKey: randomUUID(), requestId: randomUUID() },
+          ),
+        ).rejects.toMatchObject({ status: 404 });
+        expect(
+          (
+            await pool.query(
+              "select version,status from app.schedule_plans where id=$1",
+              [created.id],
+            )
+          ).rows,
+        ).toEqual(before);
+      } finally {
+        await cleanup(pool, other);
+        await cleanup(pool, own);
+      }
+    },
+  );
+
   it("preserves individual unpaid and resource exceptions when a recurring policy changes", async () => {
     const fixture = await createFixture(pool);
-    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const additional = await createAdditionalPlanResource(
+      pool,
+      fixture.branchId,
+    );
     const actor = { userId: fixture.managerId, role: "director" as const };
-    await pool.query("update app.users set role='director' where id=$1", [fixture.managerId]);
+    await pool.query("update app.users set role='director' where id=$1", [
+      fixture.managerId,
+    ]);
     try {
       const template = row(fixture, isoWeekday(fixture.effectiveFrom), "10:00");
-      const created = await plans.create(actor, {
-        kind: "individual", title: "Preserve individual decisions",
-        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
-        activeFrom: fixture.effectiveFrom, activeUntil: fixture.until60, rows: [template],
-      }, { idempotencyKey: randomUUID(), requestId: randomUUID() });
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Preserve individual decisions",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+          rows: [template],
+        },
+        { idempotencyKey: randomUUID(), requestId: randomUUID() },
+      );
       const ordered = await pool.query<{ id: string }>(
         "select id from app.lessons where series_id=$1 and deleted_at is null order by scheduled_at",
         [created.seriesIds[0]],
@@ -190,47 +318,97 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       const replacementId = ordered.rows[1]!.id;
       await database.transaction(async (client) => {
         const current = (await settlement.loadPlan(client, unpaidId))!;
-        const prepared = await settlement.preparePlan(client, fixture.branchId, {
-          ...current.decision, settlementTypeKey: "unpaid_miss",
-          teacherCompensationRuleKey: "none",
-          clientDecisions: [{ clientId: fixture.studentIds[0]!, chargeType: "subscription",
-            subscriptionId: fixture.subscriptionIds[0]! }],
+        const prepared = await settlement.preparePlan(
+          client,
+          fixture.branchId,
+          {
+            ...current.decision,
+            settlementTypeKey: "unpaid_miss",
+            teacherCompensationRuleKey: "none",
+            clientDecisions: [
+              {
+                clientId: fixture.studentIds[0]!,
+                chargeType: "subscription",
+                subscriptionId: fixture.subscriptionIds[0]!,
+              },
+            ],
+          },
+        );
+        await settlement.replacePlan(client, {
+          ...prepared,
+          lessonId: unpaidId,
+          expectedVersion: current.version,
+          selectedBy: actor.userId,
+          reasonText: "Индивидуальный пропуск",
         });
-        await settlement.replacePlan(client, { ...prepared, lessonId: unpaidId,
-          expectedVersion: current.version, selectedBy: actor.userId, reasonText: "Индивидуальный пропуск" });
         await reservations.releaseForLessons(client, [unpaidId]);
-        await client.query("update app.lessons set teacher_id=$2, room_id=$3 where id=$1",
-          [replacementId, additional.teacherId, additional.roomId]);
+        await client.query(
+          "update app.lessons set teacher_id=$2, room_id=$3 where id=$1",
+          [replacementId, additional.teacherId, additional.roomId],
+        );
       });
-      const snapshot = async () => (await pool.query(`select lesson.id,
+      const snapshot = async () =>
+        (
+          await pool.query(
+            `select lesson.id,
           lesson.teacher_id, lesson.room_id, decision.decision, decision.version,
           (select coalesce(sum(units),0)::text from app.lesson_reservations
             where lesson_id=lesson.id and state='reserved') as reserved
         from app.lessons lesson join app.lesson_settlement_plans decision on decision.lesson_id=lesson.id
         where lesson.id=any($1::uuid[]) and lesson.deleted_at is null order by lesson.id`,
-        [[unpaidId, replacementId]])).rows;
+            [[unpaidId, replacementId]],
+          )
+        ).rows;
       const before = await snapshot();
-      const dto = { expectedVersion: created.version, effectiveFrom: fixture.effectiveFrom,
-        activeUntil: fixture.until60, rows: [{ ...template, seriesId: created.seriesIds[0],
-          financialDecision: { ...template.financialDecision, teacherCompensationSource: "automatic" as const } }] };
-      const preview = await plans.previewUpdateConstraints(actor, created.id, dto);
+      const dto = {
+        expectedVersion: created.version,
+        effectiveFrom: fixture.effectiveFrom,
+        activeUntil: fixture.until60,
+        rows: [
+          {
+            ...template,
+            seriesId: created.seriesIds[0],
+            financialDecision: {
+              ...template.financialDecision,
+              teacherCompensationSource: "automatic" as const,
+            },
+          },
+        ],
+      };
+      const preview = await plans.previewUpdateConstraints(
+        actor,
+        created.id,
+        dto,
+      );
       expect(preview.rows.flatMap((item) => item.failures)).toEqual([]);
-      const updated = await plans.update(actor, created.id, dto,
-        { idempotencyKey: randomUUID(), requestId: randomUUID() });
-      await database.transaction((client) => materializer.materializePlanSeries(client, updated.seriesIds[0]!));
+      const updated = await plans.update(actor, created.id, dto, {
+        idempotencyKey: randomUUID(),
+        requestId: randomUUID(),
+      });
+      await database.transaction((client) =>
+        materializer.materializePlanSeries(client, updated.seriesIds[0]!),
+      );
       expect(await snapshot()).toEqual(before);
-      const live = await pool.query<{ count: number }>(`select count(*)::int as count
+      const live = await pool.query<{ count: number }>(
+        `select count(*)::int as count
         from app.lessons lesson join app.schedule_series series on series.id=lesson.series_id
-        where series.plan_id=$1 and lesson.deleted_at is null`, [created.id]);
+        where series.plan_id=$1 and lesson.deleted_at is null`,
+        [created.id],
+      );
       expect(live.rows[0]!.count).toBe(ordered.rows.length);
-    } finally { await cleanup(pool, fixture, additional); }
+    } finally {
+      await cleanup(pool, fixture, additional);
+    }
   });
 
   it("materializes canonical completion and hourly teacher snapshot, preserving a lesson's edited personal-account funding", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     try {
-      await pool.query("insert into app.teacher_rates (teacher_id, rate, effective_from) values ($1, 1200, '2020-01-01')", [fixture.teacherId]);
+      await pool.query(
+        "insert into app.teacher_rates (teacher_id, rate, effective_from) values ($1, 1200, '2020-01-01')",
+        [fixture.teacherId],
+      );
       const fundingRow = row(fixture, 1, "10:00");
       const dto = {
         kind: "individual" as const,
@@ -239,42 +417,89 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         subscriptionId: fixture.subscriptionIds[0],
         activeFrom: fixture.today,
         activeUntil: null,
-        rows: [{
-          ...fundingRow,
-          durationMinutes: 45,
-          financialDecision: {
-            ...fundingRow.financialDecision,
-            clientDecisions: [{
-              clientId: fixture.studentIds[0]!,
-              chargeDurationMinutes: 45,
-            }],
+        rows: [
+          {
+            ...fundingRow,
+            durationMinutes: 45,
+            financialDecision: {
+              ...fundingRow.financialDecision,
+              clientDecisions: [
+                {
+                  clientId: fixture.studentIds[0]!,
+                  chargeDurationMinutes: 45,
+                },
+              ],
+            },
           },
-        }],
+        ],
       };
-      const created = await plans.create(actor, dto, { idempotencyKey: `funding-plan-${randomUUID()}`, requestId: randomUUID() });
+      const created = await plans.create(actor, dto, {
+        idempotencyKey: `funding-plan-${randomUUID()}`,
+        requestId: randomUUID(),
+      });
       const lessonId = created.lessonIds[0]!;
-      const snapshots = await pool.query("select completion_type, teacher_compensation_type, teacher_compensation_value::text from app.lesson_snapshots where lesson_id=$1", [lessonId]);
-      expect(snapshots.rows[0]).toMatchObject({ completion_type: "standard.success", teacher_compensation_type: "hourly", teacher_compensation_value: "1200.00" });
+      const snapshots = await pool.query(
+        "select completion_type, teacher_compensation_type, teacher_compensation_value::text from app.lesson_snapshots where lesson_id=$1",
+        [lessonId],
+      );
+      expect(snapshots.rows[0]).toMatchObject({
+        completion_type: "standard.success",
+        teacher_compensation_type: "hourly",
+        teacher_compensation_value: "1200.00",
+      });
       await database.transaction(async (client) => {
         const service = new LessonSettlementService(database);
         const current = (await service.loadPlan(client, lessonId))!;
-        const decision = { ...current.decision, clientDecisions: [{ clientId: fixture.studentIds[0]!, payerStudentId: fixture.studentIds[0]!, chargeType: "personal_account" as const, basePriceMinor: "60000" }] };
-        const prepared = await service.preparePlan(client, fixture.branchId, decision);
-        await service.replacePlan(client, { ...prepared, lessonId, expectedVersion: current.version, selectedBy: actor.userId, reasonText: "Личный счёт" });
+        const decision = {
+          ...current.decision,
+          clientDecisions: [
+            {
+              clientId: fixture.studentIds[0]!,
+              payerStudentId: fixture.studentIds[0]!,
+              chargeType: "personal_account" as const,
+              basePriceMinor: "60000",
+            },
+          ],
+        };
+        const prepared = await service.preparePlan(
+          client,
+          fixture.branchId,
+          decision,
+        );
+        await service.replacePlan(client, {
+          ...prepared,
+          lessonId,
+          expectedVersion: current.version,
+          selectedBy: actor.userId,
+          reasonText: "Личный счёт",
+        });
         await reservations.releaseForLessons(client, [lessonId]);
         await materializer.allocatePlanReservations(client, [lessonId]);
-        const reserved = await client.query("select count(*)::int as count from app.lesson_reservations where lesson_id=$1 and state='reserved'", [lessonId]);
+        const reserved = await client.query(
+          "select count(*)::int as count from app.lesson_reservations where lesson_id=$1 and state='reserved'",
+          [lessonId],
+        );
         expect(reserved.rows[0].count).toBe(0);
         await client.query("savepoint priced_plan_preview");
         try {
-          await client.query("update app.lessons set lifecycle_state='successfully_completed' where id=$1", [lessonId]);
-          const settled = await service.settle(client, lessonId, { context: "settle", decision });
+          await client.query(
+            "update app.lessons set lifecycle_state='successfully_completed' where id=$1",
+            [lessonId],
+          );
+          const settled = await service.settle(client, lessonId, {
+            context: "settle",
+            decision,
+          });
           expect(settled.clientFact.amountMinor).toBe("60000");
           expect(settled.teacherFact.amountMinor).toBe("90000");
-        } finally { await client.query("rollback to savepoint priced_plan_preview"); }
+        } finally {
+          await client.query("rollback to savepoint priced_plan_preview");
+        }
       });
     } finally {
-      await pool.query("delete from app.teacher_rates where teacher_id=$1", [fixture.teacherId]);
+      await pool.query("delete from app.teacher_rates where teacher_id=$1", [
+        fixture.teacherId,
+      ]);
       await cleanup(pool, fixture);
     }
   });
@@ -319,7 +544,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           requestId: randomUUID(),
         },
       );
-      const series = await pool.query<{ planned_financial_decision: Record<string, unknown> }>(
+      const series = await pool.query<{
+        planned_financial_decision: Record<string, unknown>;
+      }>(
         "select planned_financial_decision from app.schedule_series where id = $1",
         [created.seriesIds[0]],
       );
@@ -400,56 +627,76 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       activeFrom: fixture.today,
       activeUntil: fixture.until60,
       participants,
-      rows: [{
-        ...row(fixture, 2, "11:00"),
-        financialDecision: {
-          settlementTypeKey: "lesson",
-          clientDecisions,
-        } as ConfiguredLessonFinancialDecisionDto,
-      }],
+      rows: [
+        {
+          ...row(fixture, 2, "11:00"),
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            clientDecisions,
+          } as ConfiguredLessonFinancialDecisionDto,
+        },
+      ],
     });
     try {
-      await expect(plans.create(actor, {
-        kind: "individual",
-        title: "Нет решения ученика",
-        studentId: fixture.studentIds[0],
-        subscriptionId: fixture.subscriptionIds[0],
-        activeFrom: fixture.today,
-        activeUntil: fixture.until60,
-        rows: [row(fixture, 1, "10:00", { omitClientDecisions: true })],
-      }, {
-        idempotencyKey: `plan-client-missing-${randomUUID()}`,
-        requestId: randomUUID(),
-      })).rejects.toMatchObject({
+      await expect(
+        plans.create(
+          actor,
+          {
+            kind: "individual",
+            title: "Нет решения ученика",
+            studentId: fixture.studentIds[0],
+            subscriptionId: fixture.subscriptionIds[0],
+            activeFrom: fixture.today,
+            activeUntil: fixture.until60,
+            rows: [row(fixture, 1, "10:00", { omitClientDecisions: true })],
+          },
+          {
+            idempotencyKey: `plan-client-missing-${randomUUID()}`,
+            requestId: randomUUID(),
+          },
+        ),
+      ).rejects.toMatchObject({
         status: 422,
         response: { code: "CLIENT_DECISION_MISSING" },
       });
-      await expect(plans.create(actor, groupDto([
-        { clientId: fixture.studentIds[0]! },
-      ]), {
-        idempotencyKey: `plan-group-client-missing-${randomUUID()}`,
-        requestId: randomUUID(),
-      })).rejects.toMatchObject({
+      await expect(
+        plans.create(actor, groupDto([{ clientId: fixture.studentIds[0]! }]), {
+          idempotencyKey: `plan-group-client-missing-${randomUUID()}`,
+          requestId: randomUUID(),
+        }),
+      ).rejects.toMatchObject({
         status: 422,
         response: { code: "CLIENT_DECISION_MISSING" },
       });
-      await expect(plans.create(actor, groupDto([
-        { clientId: fixture.studentIds[0]! },
-        { clientId: fixture.studentIds[0]! },
-      ]), {
-        idempotencyKey: `plan-group-client-duplicate-${randomUUID()}`,
-        requestId: randomUUID(),
-      })).rejects.toMatchObject({
+      await expect(
+        plans.create(
+          actor,
+          groupDto([
+            { clientId: fixture.studentIds[0]! },
+            { clientId: fixture.studentIds[0]! },
+          ]),
+          {
+            idempotencyKey: `plan-group-client-duplicate-${randomUUID()}`,
+            requestId: randomUUID(),
+          },
+        ),
+      ).rejects.toMatchObject({
         status: 422,
         response: { code: "DUPLICATE_CLIENT_DECISION" },
       });
-      await expect(plans.create(actor, groupDto([
-        { clientId: fixture.studentIds[0]! },
-        { clientId: randomUUID() },
-      ]), {
-        idempotencyKey: `plan-group-client-unrelated-${randomUUID()}`,
-        requestId: randomUUID(),
-      })).rejects.toMatchObject({
+      await expect(
+        plans.create(
+          actor,
+          groupDto([
+            { clientId: fixture.studentIds[0]! },
+            { clientId: randomUUID() },
+          ]),
+          {
+            idempotencyKey: `plan-group-client-unrelated-${randomUUID()}`,
+            requestId: randomUUID(),
+          },
+        ),
+      ).rejects.toMatchObject({
         status: 422,
         response: { code: "UNKNOWN_LESSON_CLIENT" },
       });
@@ -504,7 +751,11 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         return prepared;
       });
     const scenarios = [
-      { role: "manager" as const, settlementTypeKey: "free_lesson", weekday: 1 },
+      {
+        role: "manager" as const,
+        settlementTypeKey: "free_lesson",
+        weekday: 1,
+      },
       { role: "admin" as const, settlementTypeKey: "unpaid_miss", weekday: 2 },
     ];
     try {
@@ -512,11 +763,13 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         const actor = { userId: fixture.managerId, role: scenario.role };
         const financialDecision = {
           settlementTypeKey: scenario.settlementTypeKey,
-          clientDecisions: [{
-            clientId: fixture.studentIds[0]!,
-            settlementTypeKey: scenario.settlementTypeKey,
-            chargeType: "none" as const,
-          }],
+          clientDecisions: [
+            {
+              clientId: fixture.studentIds[0]!,
+              settlementTypeKey: scenario.settlementTypeKey,
+              chargeType: "none" as const,
+            },
+          ],
         } as ConfiguredLessonFinancialDecisionDto;
         const dto = {
           kind: "individual" as const,
@@ -525,10 +778,12 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           subscriptionId: fixture.subscriptionIds[0],
           activeFrom: fixture.today,
           activeUntil: fixture.until60,
-          rows: [{
-            ...row(fixture, scenario.weekday, "14:00"),
-            financialDecision,
-          }],
+          rows: [
+            {
+              ...row(fixture, scenario.weekday, "14:00"),
+              financialDecision,
+            },
+          ],
         };
 
         preparedPlans.length = 0;
@@ -536,7 +791,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         const preview = await plans.previewConstraints(actor, dto);
         expect(preview.valid).toBe(true);
         expect(resolveSpy).toHaveBeenCalledTimes(1);
-        expect(resolveSpy.mock.calls[0]![1].decision).toEqual(financialDecision);
+        expect(resolveSpy.mock.calls[0]![1].decision).toEqual(
+          financialDecision,
+        );
         expect(preparedPlans[0]!.decision).toMatchObject({
           teacherCompensationRuleKey: "none",
           teacherCreditedDurationMinutes: 0,
@@ -585,29 +842,39 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const idempotencyKey = `forbidden-recurring-${randomUUID()}`;
     const title = `Forbidden override ${randomUUID()}`;
     try {
-      await expect(plans.create(actor, {
-        kind: "individual",
-        title,
-        studentId: fixture.studentIds[0],
-        subscriptionId: fixture.subscriptionIds[0],
-        activeFrom: fixture.today,
-        activeUntil: fixture.until60,
-        rows: [{
-          ...row(fixture, 3, "15:00"),
-          financialDecision: {
-            settlementTypeKey: "free_lesson",
-            teacherCompensationRuleKey: "standard",
-            clientDecisions: [{
-              clientId: fixture.studentIds[0]!,
-              settlementTypeKey: "free_lesson",
-              chargeType: "none",
-            }],
+      await expect(
+        plans.create(
+          actor,
+          {
+            kind: "individual",
+            title,
+            studentId: fixture.studentIds[0],
+            subscriptionId: fixture.subscriptionIds[0],
+            activeFrom: fixture.today,
+            activeUntil: fixture.until60,
+            rows: [
+              {
+                ...row(fixture, 3, "15:00"),
+                financialDecision: {
+                  settlementTypeKey: "free_lesson",
+                  teacherCompensationRuleKey: "standard",
+                  clientDecisions: [
+                    {
+                      clientId: fixture.studentIds[0]!,
+                      settlementTypeKey: "free_lesson",
+                      chargeType: "none",
+                    },
+                  ],
+                },
+              },
+            ],
           },
-        }],
-      }, {
-        idempotencyKey,
-        requestId,
-      })).rejects.toMatchObject({
+          {
+            idempotencyKey,
+            requestId,
+          },
+        ),
+      ).rejects.toMatchObject({
         status: 403,
         response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
       });
@@ -668,21 +935,22 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const requestId = `schedule-plan-manual-duration-${randomUUID()}`;
     const idempotencyKey = `manual-duration-recurring-${randomUUID()}`;
     const title = `Missing manual duration ${randomUUID()}`;
-    const writeShape = () => pool.query<{
-      plans: string;
-      series: string;
-      lessons: string;
-      settlement_plans: string;
-      corrections: string;
-      client_facts: string;
-      teacher_facts: string;
-      reservations: string;
-      audits: string;
-      outbox: string;
-      idempotency: string;
-      aggregate_versions: string;
-    }>(
-      `select
+    const writeShape = () =>
+      pool.query<{
+        plans: string;
+        series: string;
+        lessons: string;
+        settlement_plans: string;
+        corrections: string;
+        client_facts: string;
+        teacher_facts: string;
+        reservations: string;
+        audits: string;
+        outbox: string;
+        idempotency: string;
+        aggregate_versions: string;
+      }>(
+        `select
         (select count(*)::text from app.schedule_plans) as plans,
         (select count(*)::text from app.schedule_series) as series,
         (select count(*)::text from app.lessons) as lessons,
@@ -696,34 +964,43 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         (select count(*)::text from app.idempotency_records
            where actor_key = $2 and idempotency_key = $3) as idempotency,
         (select count(*)::text from app.aggregate_versions) as aggregate_versions`,
-      [requestId, `user:${actor.userId}`, idempotencyKey],
-    );
+        [requestId, `user:${actor.userId}`, idempotencyKey],
+      );
     try {
       await pool.query("update app.users set role = 'director' where id = $1", [
         actor.userId,
       ]);
       const before = (await writeShape()).rows[0];
-      const request = plans.create(actor, {
-        kind: "individual",
-        title,
-        studentId: fixture.studentIds[0],
-        subscriptionId: fixture.subscriptionIds[0],
-        activeFrom: fixture.today,
-        activeUntil: fixture.until60,
-        rows: [{
-          ...row(fixture, 3, "15:00"),
-          plannedSettlementReason: "Частичная оплата согласована директором",
-          financialDecision: {
-            settlementTypeKey: "partially_paid_lesson",
-            teacherCompensationRuleKey: "percent",
-            teacherCompensationSource: "manual" as const,
-            clientDecisions: [{
-              clientId: fixture.studentIds[0]!,
-              chargeDurationMinutes: 30,
-            }],
-          },
-        }],
-      }, { idempotencyKey, requestId });
+      const request = plans.create(
+        actor,
+        {
+          kind: "individual",
+          title,
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [
+            {
+              ...row(fixture, 3, "15:00"),
+              plannedSettlementReason:
+                "Частичная оплата согласована директором",
+              financialDecision: {
+                settlementTypeKey: "partially_paid_lesson",
+                teacherCompensationRuleKey: "percent",
+                teacherCompensationSource: "manual" as const,
+                clientDecisions: [
+                  {
+                    clientId: fixture.studentIds[0]!,
+                    chargeDurationMinutes: 30,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        { idempotencyKey, requestId },
+      );
 
       await expect(request).rejects.toMatchObject({
         status: 422,
@@ -743,7 +1020,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const key = `plan-individual-${randomUUID()}`;
     let additional:
-      Awaited<ReturnType<typeof createAdditionalPlanResource>> | undefined;
+      | Awaited<ReturnType<typeof createAdditionalPlanResource>>
+      | undefined;
     try {
       additional = await createAdditionalPlanResource(pool, fixture.branchId);
       const dto = {
@@ -1199,83 +1477,194 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     try {
-      await pool.query("update app.subscriptions set lessons_total = 12 where id = $1", [fixture.subscriptionIds[0]]);
+      await pool.query(
+        "update app.subscriptions set lessons_total = 12 where id = $1",
+        [fixture.subscriptionIds[0]],
+      );
       const dto = {
-        kind: "individual" as const, title: "Пятницы сентября — декабря",
-        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
-        activeFrom: "2026-09-01", activeUntil: "2026-12-01",
+        kind: "individual" as const,
+        title: "Пятницы сентября — декабря",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: "2026-09-01",
+        activeUntil: "2026-12-01",
         rows: [row(fixture, 5, "10:00")],
       };
       const preview = await plans.previewConstraints(actor, dto);
       expect(preview.valid).toBe(true);
-      const historical = (preview as unknown as { historical: { confirmRequired: boolean; previewToken?: string } }).historical;
-      const created = await plans.create(actor, {
-        ...dto,
-        ...(historical.confirmRequired ? { confirmHistorical: true, previewToken: historical.previewToken } : {}),
-      } as never, { idempotencyKey: `full-fridays-${randomUUID()}`, requestId: `request-${randomUUID()}` });
+      const historical = (
+        preview as unknown as {
+          historical: { confirmRequired: boolean; previewToken?: string };
+        }
+      ).historical;
+      const created = await plans.create(
+        actor,
+        {
+          ...dto,
+          ...(historical.confirmRequired
+            ? { confirmHistorical: true, previewToken: historical.previewToken }
+            : {}),
+        } as never,
+        {
+          idempotencyKey: `full-fridays-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
       const lessons = await pool.query<{ day: string; covered: boolean }>(
         `select lesson.series_date::text as day,
           exists(select 1 from app.lesson_reservations reservation where reservation.lesson_id = lesson.id and reservation.state = 'reserved') as covered
          from app.lessons lesson where lesson.id = any($1::uuid[]) order by lesson.scheduled_at`,
         [created.lessonIds],
       );
-      expect(lessons.rows.map(item => item.day)).toEqual([
-        "2026-09-04", "2026-09-11", "2026-09-18", "2026-09-25",
-        "2026-10-02", "2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30",
-        "2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27",
+      expect(lessons.rows.map((item) => item.day)).toEqual([
+        "2026-09-04",
+        "2026-09-11",
+        "2026-09-18",
+        "2026-09-25",
+        "2026-10-02",
+        "2026-10-09",
+        "2026-10-16",
+        "2026-10-23",
+        "2026-10-30",
+        "2026-11-06",
+        "2026-11-13",
+        "2026-11-20",
+        "2026-11-27",
       ]);
-      expect(lessons.rows.map(item => item.covered)).toEqual([
-        true, true, true, true, true, true, true, true, true, true, true, true, false,
+      expect(lessons.rows.map((item) => item.covered)).toEqual([
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
       ]);
-      const listed = await plans.list(actor, { studentId: fixture.studentIds[0] });
-      expect(listed.items.find(item => item.id === created.id)).toMatchObject({
-        scheduledLessonCount: 13, coveredLessonCount: 12,
+      const listed = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
       });
-      const tray = await plans.tray(actor, created.id, { limit: 40,
-        cursor: Buffer.from(JSON.stringify({ scheduledAt: '2026-09-01T00:00:00Z', id: randomUUID() })).toString('base64url'),
-        direction: 'next' });
-      expect(tray.items.filter(item => item.settlementMarkers.some(marker => marker.key === 'subscription_reserved'))).toHaveLength(12);
-      expect(await database.transaction(client => materializer.materializePlanSeries(client, created.seriesIds[0]!))).toBe(0);
-    } finally { await cleanup(pool, fixture); }
+      expect(listed.items.find((item) => item.id === created.id)).toMatchObject(
+        {
+          scheduledLessonCount: 13,
+          coveredLessonCount: 12,
+        },
+      );
+      const tray = await plans.tray(actor, created.id, {
+        limit: 40,
+        cursor: Buffer.from(
+          JSON.stringify({
+            scheduledAt: "2026-09-01T00:00:00Z",
+            id: randomUUID(),
+          }),
+        ).toString("base64url"),
+        direction: "next",
+      });
+      expect(
+        tray.items.filter((item) =>
+          item.settlementMarkers.some(
+            (marker) => marker.key === "subscription_reserved",
+          ),
+        ),
+      ).toHaveLength(12);
+      expect(
+        await database.transaction((client) =>
+          materializer.materializePlanSeries(client, created.seriesIds[0]!),
+        ),
+      ).toBe(0);
+    } finally {
+      await cleanup(pool, fixture);
+    }
   });
 
-  it.each([[182, 26], [365, 53]])("materializes the entire %i-day plan (%i Fridays)", async (days, count) => {
-    const fixture = await createFixture(pool);
-    const actor = { userId: fixture.managerId, role: "manager" as const };
-    try {
-      const weekday = new Date(`${fixture.today}T00:00:00Z`).getUTCDay();
-      const start = addDays(fixture.today, (5 - weekday + 7) % 7 + 7);
-      const created = await plans.create(actor, {
-        kind: "individual", title: "Длительное расписание",
-        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
-        activeFrom: start, activeUntil: addDays(start, days - 1),
-        rows: [row(fixture, 5, "10:00")],
-      }, { idempotencyKey: `long-plan-${randomUUID()}`, requestId: `request-${randomUUID()}` });
-      expect(created.lessonIds).toHaveLength(count);
-    } finally { await cleanup(pool, fixture); }
-  });
+  it.each([
+    [182, 26],
+    [365, 53],
+  ])(
+    "materializes the entire %i-day plan (%i Fridays)",
+    async (days, count) => {
+      const fixture = await createFixture(pool);
+      const actor = { userId: fixture.managerId, role: "manager" as const };
+      try {
+        const weekday = new Date(`${fixture.today}T00:00:00Z`).getUTCDay();
+        const start = addDays(fixture.today, ((5 - weekday + 7) % 7) + 7);
+        const created = await plans.create(
+          actor,
+          {
+            kind: "individual",
+            title: "Длительное расписание",
+            studentId: fixture.studentIds[0],
+            subscriptionId: fixture.subscriptionIds[0],
+            activeFrom: start,
+            activeUntil: addDays(start, days - 1),
+            rows: [row(fixture, 5, "10:00")],
+          },
+          {
+            idempotencyKey: `long-plan-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        );
+        expect(created.lessonIds).toHaveLength(count);
+      } finally {
+        await cleanup(pool, fixture);
+      }
+    },
+  );
 
   it("reserves the earliest lessons across multiple weekdays", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     try {
-      await pool.query('update app.subscriptions set lessons_total = 3 where id = $1', [fixture.subscriptionIds[0]]);
-      const created = await plans.create(actor, {
-        kind: 'individual', title: 'Два дня недели', studentId: fixture.studentIds[0],
-        subscriptionId: fixture.subscriptionIds[0], activeFrom: fixture.today,
-        activeUntil: addDays(fixture.today, 27), rows: [row(fixture, 5, '10:00'), row(fixture, 1, '10:00')],
-      }, { idempotencyKey: `two-days-${randomUUID()}`, requestId: `request-${randomUUID()}` });
+      await pool.query(
+        "update app.subscriptions set lessons_total = 3 where id = $1",
+        [fixture.subscriptionIds[0]],
+      );
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Два дня недели",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: addDays(fixture.today, 27),
+          rows: [row(fixture, 5, "10:00"), row(fixture, 1, "10:00")],
+        },
+        {
+          idempotencyKey: `two-days-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
       const covered = await pool.query<{ covered: boolean }>(
         `select exists(select 1 from app.lesson_reservations r where r.lesson_id = l.id and r.state = 'reserved') as covered
-         from app.lessons l where l.id = any($1::uuid[]) order by l.scheduled_at`, [created.lessonIds]);
-      expect(covered.rows.map(item => item.covered)).toEqual([true, true, true, false, false, false, false, false]);
-    } finally { await cleanup(pool, fixture); }
+         from app.lessons l where l.id = any($1::uuid[]) order by l.scheduled_at`,
+        [created.lessonIds],
+      );
+      expect(covered.rows.map((item) => item.covered)).toEqual([
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+      ]);
+    } finally {
+      await cleanup(pool, fixture);
+    }
   });
 
   it("reviews and confirms historical occurrences without directly using subscription units", async () => {
     const fixture = await createFixture(pool);
     let additional:
-      Awaited<ReturnType<typeof createAdditionalPlanResource>> | undefined;
+      | Awaited<ReturnType<typeof createAdditionalPlanResource>>
+      | undefined;
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const activeFrom = addDays(fixture.today, -21);
     const activeUntil = addDays(fixture.today, 21);
@@ -2782,7 +3171,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         [fixture.subscriptionIds[0]],
       );
       const beforeFailure = await planPersistenceShape(pool, created.id);
-      const allocationFailure = jest.spyOn(reservations, 'allocate').mockRejectedValueOnce(new Error('injected reservation failure'));
+      const allocationFailure = jest
+        .spyOn(reservations, "allocate")
+        .mockRejectedValueOnce(new Error("injected reservation failure"));
       await expect(
         plans.update(
           actor,
@@ -2797,7 +3188,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
             requestId: `request-${randomUUID()}`,
           },
         ),
-      ).rejects.toThrow('injected reservation failure');
+      ).rejects.toThrow("injected reservation failure");
       allocationFailure.mockRestore();
       expect(await planPersistenceShape(pool, created.id)).toEqual(
         beforeFailure,
@@ -3330,7 +3721,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
          where lesson.series_id = $1`,
         [created.seriesIds[0]],
       );
-      expect(plansPerLesson.rows[0]!.count).toBe(String(created.lessonIds.length));
+      expect(plansPerLesson.rows[0]!.count).toBe(
+        String(created.lessonIds.length),
+      );
     } finally {
       await cleanup(pool, fixture);
     }
@@ -4466,36 +4859,44 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         seriesId: created.seriesIds[0],
         roomId: randomUUID(),
       };
-      const attempt = (suffix: string, input: {
-        expectedVersion: number;
-        effectiveFrom: string;
-        activeUntil: string | null;
-      }) => plans.update(
-        actor,
-        created.id,
-        {
-          ...input,
-          subscriptionId: invalidSubscriptionId,
-          rows: [invalidRow],
+      const attempt = (
+        suffix: string,
+        input: {
+          expectedVersion: number;
+          effectiveFrom: string;
+          activeUntil: string | null;
         },
-        {
-          idempotencyKey: `plan-precedence-${suffix}-${randomUUID()}`,
-          requestId: `request-${randomUUID()}`,
-        },
-      );
+      ) =>
+        plans.update(
+          actor,
+          created.id,
+          {
+            ...input,
+            subscriptionId: invalidSubscriptionId,
+            rows: [invalidRow],
+          },
+          {
+            idempotencyKey: `plan-precedence-${suffix}-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        );
 
-      await expect(attempt("stale", {
-        expectedVersion: 99,
-        effectiveFrom: fixture.effectiveFrom,
-        activeUntil: fixture.until60,
-      })).rejects.toMatchObject({
+      await expect(
+        attempt("stale", {
+          expectedVersion: 99,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+        }),
+      ).rejects.toMatchObject({
         response: { code: "SCHEDULE_PLAN_VERSION_STALE" },
       });
-      await expect(attempt("period", {
-        expectedVersion: 1,
-        effectiveFrom: fixture.effectiveFrom,
-        activeUntil: addDays(fixture.effectiveFrom, -1),
-      })).rejects.toMatchObject({
+      await expect(
+        attempt("period", {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: addDays(fixture.effectiveFrom, -1),
+        }),
+      ).rejects.toMatchObject({
         response: { code: "SCHEDULE_PLAN_PERIOD_INVALID" },
       });
       await pool.query(
@@ -4505,11 +4906,13 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
          where id = $1`,
         [created.id, actor.userId],
       );
-      await expect(attempt("ended", {
-        expectedVersion: 1,
-        effectiveFrom: fixture.effectiveFrom,
-        activeUntil: fixture.until60,
-      })).rejects.toMatchObject({
+      await expect(
+        attempt("ended", {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+        }),
+      ).rejects.toMatchObject({
         response: { code: "SCHEDULE_PLAN_ENDED" },
       });
       const evidence = await pool.query<{
@@ -4585,9 +4988,10 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       const updateIdempotencyKey = `archive-plan-update-${randomUUID()}`;
       await blocker.query("begin");
       const blockerPid = await backendPid(blocker);
-      await blocker.query("select id from app.schedule_plans where id = $1 for update", [
-        created.id,
-      ]);
+      await blocker.query(
+        "select id from app.schedule_plans where id = $1 for update",
+        [created.id],
+      );
       archivePromise = archives.archive(actor, {
         type: "student",
         id: fixture.studentIds[0]!,
@@ -5252,9 +5656,10 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       const updateIdempotencyKey = `plan-update-first-${randomUUID()}`;
       await blocker.query("begin");
       const blockerPid = await backendPid(blocker);
-      await blocker.query("select id from app.schedule_plans where id = $1 for update", [
-        created.id,
-      ]);
+      await blocker.query(
+        "select id from app.schedule_plans where id = $1 for update",
+        [created.id],
+      );
       updatePromise = plans.update(
         actor,
         created.id,
@@ -5733,6 +6138,18 @@ async function createFixture(pool: Pool) {
   const teacherProfileId = profiles.rows.find(
     (profile) => profile.user_id === teacherUserId,
   )!.id;
+  const staff = await pool.query<{ id: string }>(
+    "insert into app.staff_members(profile_id) values ($1) returning id",
+    [profiles.rows.find((profile) => profile.user_id === managerId)!.id],
+  );
+  await pool.query(
+    "insert into app.user_crm_links(user_id,entity_type,entity_id) values ($1,'staff',$2)",
+    [managerId, staff.rows[0]!.id],
+  );
+  await pool.query(
+    "insert into app.staff_branch_assignments(staff_member_id,branch_id) values ($1,$2)",
+    [staff.rows[0]!.id, branchId],
+  );
   const teacher = await pool.query<{ id: string }>(
     "insert into app.teachers (profile_id) values ($1) returning id",
     [teacherProfileId],
@@ -5976,6 +6393,19 @@ async function cleanup(
     await client.query("delete from app.rooms where id = any($1::uuid[])", [
       roomIds,
     ]);
+    await client.query(
+      `delete from app.staff_branch_assignments where staff_member_id in
+      (select id from app.staff_members where profile_id=any($1::uuid[]))`,
+      [fixture.profileIds],
+    );
+    await client.query(
+      "delete from app.user_crm_links where user_id=$1 and entity_type='staff'",
+      [fixture.managerId],
+    );
+    await client.query(
+      "delete from app.staff_members where profile_id=any($1::uuid[])",
+      [fixture.profileIds],
+    );
     await client.query("delete from app.profiles where id = any($1::uuid[])", [
       [
         ...fixture.profileIds,

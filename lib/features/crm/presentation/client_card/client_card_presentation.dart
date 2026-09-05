@@ -81,8 +81,8 @@ extension _ClientCardPresentation on _ClientCardState {
       : _nonEmpty(_leadData['email']);
 
   bool get _clientEmailWasEdited =>
-      _leadCoreEditRevisions.containsKey('email') ||
-      _studentCoreEditRevisions.containsKey('email');
+      _draft.leadCoreEdits.containsKey('email') ||
+      _draft.studentCoreEdits.containsKey('email');
 
   String? get _clientEmailValidationError {
     final email = _clientEmail;

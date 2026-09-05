@@ -700,6 +700,19 @@ select not (
 FUNDING_ROLLBACK_SQL
 }
 
+assert_versioned_expense_rollback() {
+  local actual_migration
+  actual_migration="$(get_migration)" || return 1
+  [[ "${actual_migration}" =~ ^[0-9]{4}_[a-z0-9_]+$ ]] || return 1
+  # Old writers do not append expense revisions or advance expected versions.
+  # After 0151, remain closed instead of resuming writes with a pre-0151 image.
+  if [[ "${actual_migration:0:4}" > 0150 &&
+        "${rollback_image_migration_head:0:4}" < 0151 ]]; then
+    printf 'AUTOMATIC_ROLLBACK|BLOCKED|expense-history-aware-image-required\n' >&2
+    return 1
+  fi
+}
+
 assert_legacy_lesson_funding_rollback() {
   local actual_migration funding_compatible
 
@@ -804,6 +817,7 @@ automatic_rollback() {
   # Restore only the canonical production runtime; disabled workers are invalid in production.
   if stop_service_fail_closed caddy &&
     stop_service_fail_closed api &&
+    assert_versioned_expense_rollback &&
     assert_legacy_lesson_funding_rollback &&
     recreate_api "${rollback_override}" "${workers_enabled_override}" &&
     rollback_schema="$(verify_rollback_stage \

@@ -25,6 +25,16 @@ export async function acquireLessonSettlementCoordinationGate(
   );
 }
 
+/** Single-lesson terminal transitions never discover additional lesson locks. */
+export async function acquireSingleLessonSettlementGate(
+  executor: LessonSettlementLockExecutor,
+): Promise<void> {
+  await executor.query(
+    "select pg_advisory_xact_lock_shared(hashtextextended($1::text, 0))",
+    [lessonSettlementCoordinationGateKey],
+  );
+}
+
 export async function acquireLessonSettlementLocks(
   executor: LessonSettlementLockExecutor,
   lessonIds: string[],

@@ -45,7 +45,7 @@ describe("resolveSettlementPolicy", () => {
       },
     ],
     [
-      "partially_paid_miss",
+      "partially_paid_lesson",
       {
         clientDurationMode: "manual",
         teacherDurationMode: "manual",

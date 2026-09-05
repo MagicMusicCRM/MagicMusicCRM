@@ -7,6 +7,7 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  Matches,
 } from "class-validator";
 
 /**
@@ -26,6 +27,10 @@ export class CreateTransferDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   amount!: number;
+
+  @IsOptional()
+  @Matches(/^[A-Z]{3}$/)
+  currencyCode?: string;
 
   @IsOptional()
   @IsString()

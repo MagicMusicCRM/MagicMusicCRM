@@ -10,6 +10,48 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canWriteSchedule,
     required bool canReadTasks,
   }) {
+    if (_desktopCalendarExpanded && canReadSchedule) {
+      return Column(
+        key: const Key('client-calendar-focus'),
+        children: [
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                TextButton.icon(
+                  key: const Key('client-calendar-back'),
+                  onPressed: () =>
+                      _emitState(() => _desktopCalendarExpanded = false),
+                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                  label: const Text('К карточке клиента'),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Календарь занятий',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ScheduleWidget(
+              key: const Key('client-calendar-widget'),
+              title: 'Календарь занятий',
+              clientType: _isStudent ? 'student' : 'lead',
+              clientId: _isStudent ? _studentId : _leadId,
+              clientName: [
+                _clientFirstName,
+                _clientLastName,
+              ].whereType<String>().join(' '),
+              initialBranchId: _clientBranchId,
+              canWrite: canWriteSchedule,
+              initialViewState: widget.initialViewState,
+              onViewStateChanged: widget.onViewStateChanged,
+            ),
+          ),
+        ],
+      );
+    }
     return ColoredBox(
       color: cs.surfaceContainerLowest,
       child: Row(
@@ -517,41 +559,15 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         borderRadius: BorderRadius.circular(AppRadius.control),
         border: Border.all(color: cs.outlineVariant),
       ),
-      child: ExpansionTile(
-        initiallyExpanded: _desktopCalendarExpanded,
-        maintainState: false,
-        onExpansionChanged: (expanded) {
-          _emitState(() => _desktopCalendarExpanded = expanded);
-        },
+      child: ListTile(
         leading: const Icon(Icons.calendar_month_rounded, color: AppColor.gold),
         title: const Text(
           'Календарь занятий',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
-        subtitle: const Text('Месяц, неделя и день по этому клиенту'),
-        children: _desktopCalendarExpanded
-            ? [
-                Divider(height: 1, color: cs.outlineVariant),
-                SizedBox(
-                  key: const Key('client-calendar-widget'),
-                  height: 760,
-                  child: ScheduleWidget(
-                    title: 'Календарь занятий',
-                    clientType: clientType,
-                    clientId: clientId,
-                    clientName: [
-                      _clientFirstName,
-                      _clientLastName,
-                    ].whereType<String>().join(' '),
-                    initialBranchId: _clientBranchId,
-                    canWrite: canWriteSchedule,
-                    active: true,
-                    initialViewState: widget.initialViewState,
-                    onViewStateChanged: widget.onViewStateChanged,
-                  ),
-                ),
-              ]
-            : const [],
+        subtitle: const Text('Открыть на всё рабочее окно'),
+        trailing: const Icon(Icons.open_in_full_rounded, size: 20),
+        onTap: () => _emitState(() => _desktopCalendarExpanded = true),
       ),
     );
   }
@@ -621,7 +637,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         ],
       );
     }
-    return _studentGuard(cs, () {
+    return _studentFinanceGuard(cs, () {
       final focusedId = widget.initialViewState?.filters['subscriptionId']
           ?.toString();
       if (focusedId != null &&

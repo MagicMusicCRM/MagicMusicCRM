@@ -53,6 +53,23 @@ describe("Student contact email (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it.each([null, "created-contact@example.test"])(
+    "creates a student and returns contact email %s from the insert projection",
+    async (email) => {
+      const created = await executor.create({
+        firstName: "Synthetic", lastName: "Create", email,
+        fullName: "Synthetic Create", phone: null, status: "active",
+        leadId: null, branchId: null, sourceId: null,
+        customDataPatch: {}, requestedResponsibleId: undefined,
+      });
+      expect(created.email).toBe(email);
+      const saved = await client.query(
+        "select contact_email from app.students where id=$1", [created.id],
+      );
+      expect(saved.rows[0].contact_email).toBe(email);
+    },
+  );
+
   it("stores a duplicate login email as a client contact without changing identities", async () => {
     const technicalUserId = randomUUID();
     const existingAppUserId = randomUUID();

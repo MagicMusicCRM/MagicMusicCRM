@@ -64,15 +64,21 @@ export class SchedulePlanConstraintPreviewService {
     const normalized = this.definition.normalizeCreate(dto);
     return this.database.transaction(async (client) => {
       const studentIds = this.createStudentIds(normalized);
-      await this.definition.lockAndValidate(client, {
-        planId: schedulePlanStableId(`schedule.plan.preview\0${actor.userId}`),
-        kind: normalized.kind,
-        studentId: normalized.studentId,
-        groupId: normalized.groupId,
-        subscriptionId: normalized.subscriptionId,
-        participants: normalized.participants,
-        rows: normalized.rows,
-      });
+      await this.definition.lockAndValidate(
+        client,
+        {
+          planId: schedulePlanStableId(
+            `schedule.plan.preview\0${actor.userId}`,
+          ),
+          kind: normalized.kind,
+          studentId: normalized.studentId,
+          groupId: normalized.groupId,
+          subscriptionId: normalized.subscriptionId,
+          participants: normalized.participants,
+          rows: normalized.rows,
+        },
+        actor,
+      );
       await this.series.assertPlanExpansionBounds(
         client,
         normalized.rows,
@@ -123,7 +129,12 @@ export class SchedulePlanConstraintPreviewService {
     this.definition.assertRows(dto.rows);
     return this.database.transaction(async (client) => {
       await acquireLessonSettlementCoordinationGate(client);
-      const prepared = await this.definition.prepareUpdate(client, planId, dto);
+      const prepared = await this.definition.prepareUpdate(
+        client,
+        planId,
+        dto,
+        actor,
+      );
       await this.series.assertPlanExpansionBounds(
         client,
         dto.rows,

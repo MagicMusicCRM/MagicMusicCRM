@@ -149,17 +149,7 @@ extension _ClientCardCommentEditor on _ClientCardState {
       type: MagicToastType.success,
     );
     _emitState(() {
-      if (target.$1 == 'student') {
-        _studentComments = mergeByIdSorted([
-          [created],
-          _studentComments,
-        ], dateKey: 'created_at');
-      } else if (target.$1 == 'lead' && _leadCard != null) {
-        _leadCard!['comments'] = mergeByIdSorted([
-          [created],
-          _list(_leadCard!['comments']),
-        ], dateKey: 'created_at');
-      }
+      _readController.recordComment(target.$1,created);
       _commentsRefreshKey++;
       _commentKind = 'admin_comment';
     });

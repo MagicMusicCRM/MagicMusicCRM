@@ -1,6 +1,8 @@
 import { Type } from "class-transformer";
 import {
   IsDateString,
+  IsString,
+  MaxLength,
   IsInt,
   IsOptional,
   IsUUID,
@@ -9,6 +11,11 @@ import {
 } from "class-validator";
 
 export class PaymentQuery {
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  cursor?: string;
+
   @IsOptional()
   @IsUUID()
   studentId?: string;

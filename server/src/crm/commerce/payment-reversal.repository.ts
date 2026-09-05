@@ -239,7 +239,9 @@ export class PaymentReversalRepository {
           id, source_payment_record_id, replacement_payment_record_id,
           reversal_adjustment_id, reason, actor_user_id, audit_event_id
         ) values ($1, $2, $3, $4, $5, $6, $7)
-        returning *
+        returning id as correction_id, source_payment_record_id,
+          replacement_payment_record_id, reversal_adjustment_id,
+          reason, actor_user_id, audit_event_id, occurred_at
       `,
       [
         input.id,
@@ -259,7 +261,9 @@ export class PaymentReversalRepository {
   ): Promise<PaymentCorrectionResultRow | null> {
     const result = await this.database.query<PaymentCorrectionResultRow>(
       `
-        select *
+        select id as correction_id, source_payment_record_id,
+          replacement_payment_record_id, reversal_adjustment_id,
+          reason, actor_user_id, audit_event_id, occurred_at
         from app.payment_record_corrections
         where source_payment_record_id = $1
       `,

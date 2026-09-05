@@ -48,7 +48,8 @@ async function bootstrap() {
 
   app.enableCors({
     origin: origin.length > 0 ? origin : false,
-    credentials: true
+    credentials: true,
+    exposedHeaders: ['X-Request-Id', 'Server-Timing']
   });
 
   const port = config.get<number>('PORT', 3000);

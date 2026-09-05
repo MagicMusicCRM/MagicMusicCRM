@@ -218,7 +218,9 @@ void main() {
     expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
     expectCoverage();
 
-    await tester.tap(find.text('По преподавателям'));
+    await tester.tap(find.byKey(const ValueKey('schedule-day-mode-switcher')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('По преподавателям').last);
     await tester.pumpAndSettle();
     expect(_timelineLessonBorder(tester, 'lesson-selected'), AppColor.text2);
     expect(_timelineLessonBorder(tester, 'lesson-other'), AppColor.success);
@@ -310,7 +312,10 @@ void main() {
       await tester.pumpWidget(_calendarApp(api, initial: _dayState()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Календарь занятий'), findsOneWidget);
+      expect(
+        find.text('Календарь занятий'),
+        findsNothing,
+      ); // No duplicate desktop heading.
       expect(find.text('Анна Смирнова'), findsWidgets);
       final hideOthers = tester.widget<FilterChip>(
         find.byKey(const ValueKey('client-calendar-hide-others')),
@@ -359,7 +364,11 @@ void main() {
       expect(_lessonBorder(tester, 'lesson-selected'), AppColor.danger);
       expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
 
-      await tester.tap(find.text('По преподавателям'));
+      await tester.tap(
+        find.byKey(const ValueKey('schedule-day-mode-switcher')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('По преподавателям').last);
       await tester.pumpAndSettle();
       expect(find.byType(ScheduleTeacherTimeline), findsOneWidget);
       expect(
@@ -489,10 +498,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Найти занятие'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Анна Смирнова');
-    await tester.tap(find.widgetWithText(FilledButton, 'Найти'));
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pump();
 
     expect(find.text('Поиск: анна смирнова'), findsOneWidget);
@@ -524,16 +531,12 @@ void main() {
     expect(_monthDayBorder(tester, '2026-08-04'), AppColor.success);
     expect(_monthDayBorder(tester, '2026-08-05'), isNot(AppColor.success));
 
-    await tester.tap(find.byTooltip('Поиск: анна смирнова'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, 'Очистить'));
+    await tester.tap(find.byTooltip('Очистить поиск'));
     await tester.pump();
     expect(find.text('Поиск: анна смирнова'), findsNothing);
 
-    await tester.tap(find.byTooltip('Найти занятие'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'НетСовпадений');
-    await tester.tap(find.widgetWithText(FilledButton, 'Найти'));
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
     expect(find.text('Совпадений: 0'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -566,16 +569,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       final preservedScroll = states.last.scrollOffset;
-      expect(preservedScroll, greaterThan(0));
+      expect(preservedScroll, 180); // Retain the saved detailed-view offset.
 
-      String? activeQuery;
       Future<void> search(String value) async {
-        await tester.tap(
-          find.byTooltip(
-            activeQuery == null ? 'Найти занятие' : 'Поиск: $activeQuery',
-          ),
-        );
-        await tester.pumpAndSettle();
         final field = find.byType(EditableText).last;
         for (var index = 1; index <= value.length; index++) {
           await tester.enterText(field, value.substring(0, index));
@@ -584,10 +580,9 @@ void main() {
           expect(editable.focusNode.hasFocus, isTrue);
           expect(editable.controller.text, value.substring(0, index));
         }
-        await tester.tap(find.widgetWithText(FilledButton, 'Найти'));
+        await tester.testTextInput.receiveAction(TextInputAction.search);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 250));
-        activeQuery = value.toLowerCase();
         expect(states.last.scrollOffset, closeTo(preservedScroll, 0.1));
       }
 
@@ -633,7 +628,6 @@ void main() {
 
       await search('05.08.2026');
       await tester.pumpAndSettle();
-      activeQuery = null;
       expect(states.last.date, DateTime(2026, 8, 5));
       expect(states.last.scrollOffset, closeTo(preservedScroll, 0.1));
       expect(find.textContaining('Поиск:'), findsNothing);

@@ -6,9 +6,9 @@ import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 part 'schedule_day_canvas_logic.dart';
 part 'schedule_day_canvas_widgets.dart';
 
-// ── Day-canvas geometry (08:00 → 00:00) ──────────────────────────────────────
+// Default working day; existing lessons can extend either edge.
 const int kDayStartHour = 8;
-const int kDayEndHour = 24; // exclusive bottom edge = 00:00
+const int kDayEndHour = 22;
 const double kHourHeight = 64;
 const double kTimeColWidth = 64;
 const double kMinRoomColWidth = 150; // floor before horizontal scroll engages
@@ -75,9 +75,26 @@ class _EntryLane {
   final int count;
 }
 
+/// Keep out-of-hours lessons discoverable instead of clipping them at 22:00.
+(int, int) scheduleVisibleHours(List<ScheduleEntry> entries) {
+  var start = kDayStartHour;
+  var end = kDayEndHour;
+  for (final entry in entries) {
+    if (entry.startLocal.hour < start) start = entry.startLocal.hour;
+    final endMinute =
+        entry.startLocal.hour * 60 +
+        entry.startLocal.minute +
+        entry.durationMinutes;
+    final endHour = ((endMinute + 59) ~/ 60).clamp(0, 24);
+    if (endHour > end) end = endHour;
+  }
+  return (start, end);
+}
+
 Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
-  List<ScheduleEntry> entries,
-) {
+  List<ScheduleEntry> entries, {
+  double minimumMinutes = 0,
+}) {
   final sorted = [...entries]
     ..sort((left, right) {
       final byStart = left.startLocal.compareTo(right.startLocal);
@@ -103,7 +120,10 @@ Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
   for (final entry in sorted) {
     if (clusterEnd != null && !entry.startLocal.isBefore(clusterEnd!)) flush();
     var lane = laneEnds.indexWhere((end) => !entry.startLocal.isBefore(end));
-    final end = entry.startLocal.add(Duration(minutes: entry.durationMinutes));
+    final duration = entry.durationMinutes < minimumMinutes
+        ? minimumMinutes.ceil()
+        : entry.durationMinutes;
+    final end = entry.startLocal.add(Duration(minutes: duration));
     if (lane < 0) {
       lane = laneEnds.length;
       laneEnds.add(end);
@@ -121,6 +141,7 @@ Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
 /// lesson; existing cards open the explicit edit/transfer actions. Direct
 /// drag/drop mutations are intentionally absent.
 class ScheduleDayCanvas extends StatefulWidget {
+  final bool fitToViewport;
   final DateTime date; // branch-local selected day (date only)
   final List<ScheduleColumn> columns;
   final List<ScheduleEntry> entries;
@@ -143,6 +164,7 @@ class ScheduleDayCanvas extends StatefulWidget {
     required this.onCreateSlot,
     required this.onOpenLesson,
     this.initialVerticalOffset = 0,
+    this.fitToViewport = true,
     this.onVerticalOffsetChanged,
   });
 
@@ -157,7 +179,12 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
   final ScrollController _headerH = ScrollController();
   final ScrollController _gutterV = ScrollController();
 
-  double get _gridHeight => (kDayEndHour - kDayStartHour) * kHourHeight;
+  double _hourHeight = kHourHeight;
+  int _startHour = kDayStartHour;
+  int _endHour = kDayEndHour;
+  static const _edgeInset = 10.0;
+  double get _gridHeight =>
+      (_endHour - _startHour) * _hourHeight + 2 * _edgeInset;
 
   @override
   void initState() {
@@ -197,6 +224,10 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
     final cols = widget.columns;
     return LayoutBuilder(
       builder: (context, constraints) {
+        final range = scheduleVisibleHours(widget.entries);
+        _startHour = range.$1;
+        _endHour = range.$2;
+        final desktop = MediaQuery.sizeOf(context).width >= 720;
         // Fill the available width when there are few rooms; fall back to a
         // minimum width (→ horizontal scroll) only when many rooms can't fit.
         final avail = (constraints.maxWidth - kTimeColWidth).clamp(
@@ -206,11 +237,29 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
         final fit = cols.isEmpty ? kMinRoomColWidth : avail / cols.length;
         final colWidth = fit >= kMinRoomColWidth ? fit : kMinRoomColWidth;
         final contentWidth = cols.length * colWidth;
+        final measuredHeaderHeight = _RoomHeader.heightFor(
+          context,
+          cols,
+          colWidth,
+        );
+        final headerHeight = !desktop && measuredHeaderHeight < kHeaderHeight
+            ? kHeaderHeight
+            : measuredHeaderHeight;
+        final availableHeight =
+            constraints.maxHeight - headerHeight - 1 - 2 * _edgeInset;
+        _hourHeight =
+            desktop && widget.fitToViewport && availableHeight.isFinite
+            ? (availableHeight / (_endHour - _startHour)).clamp(
+                MediaQuery.textScalerOf(context).scale(22).clamp(24.0, 120.0),
+                120.0,
+              )
+            : kHourHeight;
+
         return Column(
           children: [
             // ── Sticky header: corner + horizontally-slaved room headers ──────────
             SizedBox(
-              height: kHeaderHeight,
+              height: headerHeight,
               child: Row(
                 children: [
                   _GutterCell(
@@ -259,19 +308,20 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
                         height: _gridHeight,
                         child: Stack(
                           children: [
-                            for (
-                              int i = 0;
-                              i <= kDayEndHour - kDayStartHour;
-                              i++
-                            )
+                            for (int i = 0; i <= _endHour - _startHour; i++)
                               Positioned(
-                                top: i * kHourHeight - 7,
+                                top:
+                                    _edgeInset +
+                                    i * _hourHeight -
+                                    MediaQuery.textScalerOf(context).scale(11) /
+                                        2,
                                 right: 8,
                                 child: Text(
-                                  '${(kDayStartHour + i) % 24 == 0 ? '00' : (kDayStartHour + i).toString().padLeft(2, '0')}:00',
+                                  '${((_startHour + i) % 24).toString().padLeft(2, '0')}:00',
                                   style: TextStyle(
                                     color: cs.onSurfaceVariant.withAlpha(160),
                                     fontSize: 11,
+                                    height: 1,
                                   ),
                                 ),
                               ),
@@ -302,11 +352,11 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
                                         children: [
                                           for (
                                             int i = 0;
-                                            i <= kDayEndHour - kDayStartHour;
+                                            i <= _endHour - _startHour;
                                             i++
                                           )
                                             Positioned(
-                                              top: i * kHourHeight,
+                                              top: _edgeInset + i * _hourHeight,
                                               left: 0,
                                               width: contentWidth,
                                               child: Container(

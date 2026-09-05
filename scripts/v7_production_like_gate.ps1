@@ -2,7 +2,8 @@
 param(
   [string]$DatabaseName = "magiccrm_v7_prodlike_gate",
   [int]$Port = 3107,
-  [string]$ExpectedMigrationId = "0137_lesson_resource_bookings"
+  [string]$ExpectedMigrationId,
+  [switch]$ServerOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +15,10 @@ if ($DatabaseName -notmatch '^magiccrm_v7_prodlike_[a-z0-9_]+$') {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $serverRoot = Join-Path $repoRoot "server"
+if (-not $ExpectedMigrationId) {
+  $ExpectedMigrationId = (Get-ChildItem -LiteralPath (Join-Path $serverRoot 'db/migrations') -Filter '*.up.sql' |
+    Sort-Object Name | Select-Object -Last 1).Name -replace '\.up\.sql$', ''
+}
 $postgresBin = Join-Path $env:LOCALAPPDATA "MagicMusicCRMToolchain/postgresql-17/bin"
 $psql = Join-Path $postgresBin "psql.exe"
 $createDb = Join-Path $postgresBin "createdb.exe"
@@ -165,6 +170,13 @@ try {
     "rollout=$($rollout -join ',')"
   )
   Write-Output "V7 reconciliation: PASS (0 issues)"
+  if ($ServerOnly) {
+    Write-Output 'SERVER-ONLY: employee UI and backup restore gates were explicitly skipped; this is not a complete release check.'
+  } else {
+    & node (Join-Path $repoRoot 'scripts/http-journey-check.cjs') --release-journeys
+    if ($LASTEXITCODE -ne 0) { throw 'Employee UI / HTTP / PostgreSQL / restore release gate failed.' }
+    Write-Output 'Employee journeys and isolated synthetic backup restore: PASS'
+  }
 } finally {
   if ($apiProcess -and -not $apiProcess.HasExited) {
     Stop-Process -Id $apiProcess.Id -Force

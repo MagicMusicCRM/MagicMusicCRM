@@ -141,7 +141,7 @@ export function buildCrmConfigurationBaseline(
         teacherDurationMode: "manual",
         defaultTeacherCompensationRuleKey: "percent",
         allowedContexts: ["cancel", "reschedule", "settle"],
-        active: true,
+        active: false,
         order: 4,
       },
       {

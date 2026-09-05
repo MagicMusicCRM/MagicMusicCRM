@@ -25,6 +25,7 @@ rollback_image=""
 rollback_revision=""
 rollback_version=""
 expected_migration=""
+migration_baseline=""
 
 usage() {
   cat <<'EOF'
@@ -39,6 +40,9 @@ Required options:
   --rollback-revision FULL_40_CHAR_SHA
   --rollback-version VERSION
   --expected-migration ID
+
+Optional:
+  --migration-baseline PATH_TO_REVIEWED_JSON
 
 This drill restores only into a random, internal Docker network and a new
 temporary PostgreSQL volume. It never invokes production Compose, mounts a
@@ -75,6 +79,8 @@ while [[ $# -gt 0 ]]; do
       require_option_value "$@"; rollback_version="$2"; shift 2 ;;
     --expected-migration)
       require_option_value "$@"; expected_migration="$2"; shift 2 ;;
+    --migration-baseline)
+      require_option_value "$@"; migration_baseline="$2"; shift 2 ;;
     -h|--help)
       usage; exit 0 ;;
     *)
@@ -115,6 +121,11 @@ done
   die "candidate and rollback version labels must be different"
 [[ "${expected_migration}" =~ ^[0-9]{4}_[a-z0-9_]+$ ]] ||
   die "expected migration ID is invalid"
+if [[ -n "${migration_baseline}" ]]; then
+  migration_baseline="$(realpath -e -- "${migration_baseline}")" || die "baseline file is missing"
+  [[ -f "${migration_baseline}" && "${migration_baseline}" == *.json ]] || die "baseline must be a JSON file"
+  [[ "$(wc -c < "${migration_baseline}")" -le 1048576 ]] || die "baseline file is too large"
+fi
 [[ "${WAIT_SECONDS}" =~ ^[1-9][0-9]*$ ]] ||
   die "WAIT_SECONDS must be a positive integer"
 for timeout_name in \
@@ -602,6 +613,19 @@ get_restore_migration() {
       -U "${database_owner}" -d "${database_name}" \
       -c 'select id from app_schema_migrations order by applied_at desc, id desc limit 1'
 }
+
+if [[ -n "${migration_baseline}" ]]; then
+  # The operator supplies SQL hashes reviewed against the installed release.
+  # This records only the legacy baseline on the isolated restored database;
+  # the candidate runner still rejects mismatching or already changed hashes.
+  baseline_command='const {Pool}=require("pg"); const {MigrationRunner}=require("./dist/db/migration-runner"); const pool=new Pool({connectionString:process.env.MIGRATION_DATABASE_URL}); (async()=>{try{const ids=await new MigrationRunner(pool).baselineLegacy(JSON.parse(process.argv[1]));console.log("Reviewed legacy baseline rows: "+ids.length);}finally{await pool.end();}})().catch(()=>{console.error("Reviewed migration baseline rejected");process.exitCode=1;});'
+  run_release_command \
+    "${MIGRATION_TIMEOUT_SECONDS}" "reviewed legacy migration baseline" \
+    "${candidate_migrate_container}" "${candidate_image_id}" \
+    node -e "${baseline_command}" "$(< "${migration_baseline}")" \
+    >"${tmp_dir}/candidate-baseline.log" 2>&1 ||
+    die "reviewed migration baseline failed against the isolated restore"
+fi
 
 run_release_command \
   "${MIGRATION_TIMEOUT_SECONDS}" "candidate migrations" \

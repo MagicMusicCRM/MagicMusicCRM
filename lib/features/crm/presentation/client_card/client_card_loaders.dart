@@ -8,128 +8,44 @@ extension _ClientCardLoaders on _ClientCardState {
   Future<void> _fetchStudentData({
     String? studentId,
     bool preserveVisibleContent = false,
+  }) => AppPerformance.measureScreen(
+    AppOperation.studentCard,
+    () => _fetchStudentSnapshot(
+      studentId: studentId,
+      preserveVisibleContent: preserveVisibleContent,
+    ),
+    isVisible: () => mounted && _realtimeVisible,
+  );
+
+  Future<void> _fetchStudentSnapshot({
+    String? studentId,
+    bool preserveVisibleContent = false,
   }) async {
     final id = studentId ?? _studentId;
-    if (id.isEmpty) return;
-    final requestEditRevision = _editRevision;
-    if (mounted && !preserveVisibleContent) {
+    final requestEditRevision = _draft.revision;
+    final snapshot = await _readController.loadStudent(
+      id,
+      preserveContent: preserveVisibleContent,
+    );
+    if (!mounted || snapshot == null) return;
+    final applyIdentity =
+        !preserveVisibleContent &&
+        !_edited &&
+        requestEditRevision == _draft.revision;
+    if (applyIdentity) {
       _emitState(() {
-        _loadingStudent = true;
-        _studentError = null;
-      });
-    }
-    try {
-      final crm = ref.read(magicCrmServiceProvider);
-      final cardFuture = crm.getStudentCard(id);
-      StudentCommerceProjection? commerce;
-      try {
-        final role = await _resolveActorRole();
-        if (crmHasClientCardFinanceAccess(role)) {
-          commerce = await crm.getStudentCommerceProjection(id);
-        }
-      } catch (error) {
-        // Finance is an independently scoped section. Fail closed (and keep the
-        // base card usable) when identity or commerce projection loading fails.
-        debugPrint('Student commerce projection load failed: $error');
-      }
-      final card = await cardFuture;
-      if (!mounted) return;
-      final student = card['student'] is Map<String, dynamic>
-          ? card['student'] as Map<String, dynamic>
-          : <String, dynamic>{};
-      student['custom_data'] = {
-        ...Map<String, dynamic>.from(student['custom_data'] as Map? ?? {}),
-        for (final entry in Map<String, dynamic>.from(
-          card['custom_field_values'] as Map? ?? {},
-        ).entries)
-          if (entry.key != 'discipline' && entry.key != 'disciplines')
-            entry.key: entry.value,
-      };
-      StudentFunnelConfiguration? funnel;
-      String? funnelError;
-      try {
-        funnel = await crm.getClientPipeline(
-          clientType: 'student',
-          branchId: student['branch_id']?.toString(),
-        );
-      } catch (error) {
-        funnelError = userErrorMessage(
-          error,
-          fallback: 'Не удалось загрузить воронку.',
-        );
-      }
-      final applyIdentity =
-          !preserveVisibleContent &&
-          !_edited &&
-          requestEditRevision == _editRevision;
-      _emitState(() {
-        if (applyIdentity) {
-          _student = student;
-        } else if (_student != null) {
-          final incomingVersion = _clientVersion(student['version']);
-          final currentVersion = _clientVersion(_student?['version']);
-          if (incomingVersion != null &&
-              (currentVersion == null || incomingVersion > currentVersion)) {
-            _student!['version'] = incomingVersion;
-          }
-        }
-        _studentFunnel = funnel;
-        _studentFunnelError = funnelError;
-        if (applyIdentity) _editorEpoch++;
-        // Never merge finance keys from the broad base-card response. Teacher
-        // therefore performs zero commerce requests and still cannot surface
-        // stale/accidental balance, payment or subscription fields.
-        _balance = commerce?.student.primaryBalance;
-        _commerceStudent = commerce?.student;
-        _subscriptions =
-            commerce?.student.subscriptionModels
-                .where((subscription) => subscription.isActive)
-                .toList(growable: false) ??
-            const <Subscription>[];
-        _payments = commerce?.student.paymentModels ?? const <Payment>[];
-        _lessons = _list(card['lessons']).map(Lesson.fromMap).toList();
-        final indicators = Map<String, dynamic>.from(
-          card['indicators'] as Map? ?? const <String, dynamic>{},
-        );
-        _studentIndicators = {
-          for (final key in const [
-            'paidMisses',
-            'partiallyPaidMisses',
-            'unpaidMisses',
-          ])
-            key: (indicators[key] as num?)?.toInt() ?? 0,
+        _student = {
+          ...snapshot.student,
+          'custom_data': Map<String, dynamic>.from(
+            snapshot.student['custom_data'] as Map? ?? {},
+          ),
         };
-        _studentTasks = _list(card['tasks']);
-        _studentComments = _list(card['comments']);
-        _groups = _list(card['groups']);
-        _studentTasks.sort(
-          (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
-        );
-        _studentComments.sort(
-          (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
-        );
-        _studentError = null;
-        _loadingStudent = false;
+        _editorEpoch++;
       });
-      if (applyIdentity) {
-        _syncWorkspaceTitle();
-        _resolveLeadCounterpart();
-      }
-      _tryApplyRestoredWorkspaceDraft();
-    } catch (e) {
-      debugPrint('Error loading student card: $e');
-      if (mounted) {
-        _emitState(() {
-          if (!preserveVisibleContent) {
-            _studentError = userErrorMessage(
-              e,
-              fallback: 'Не удалось загрузить карточку ученика.',
-            );
-          }
-          _loadingStudent = false;
-        });
-      }
+      _syncWorkspaceTitle();
+      _resolveLeadCounterpart();
     }
+    _tryApplyRestoredWorkspaceDraft();
   }
 
   Future<void> _fetchStatuses() async {
@@ -159,18 +75,16 @@ extension _ClientCardLoaders on _ClientCardState {
     bool preserveVisibleContent = false,
   }) async {
     final id = leadId ?? _leadId;
-    if (id.isEmpty) {
-      if (mounted) _emitState(() => _loadingCard = false);
-      return;
-    }
-    final requestEditRevision = _editRevision;
+    final requestEditRevision = _draft.revision;
     try {
-      final card = await ref.read(magicCrmServiceProvider).getLeadCard(id);
-      if (!mounted) return;
+      final card = await _readController.loadLead(id, applySnapshot: false);
+      if (!mounted || card == null) {
+        return;
+      }
       final applyIdentity =
           !preserveVisibleContent &&
           !_edited &&
-          requestEditRevision == _editRevision;
+          requestEditRevision == _draft.revision;
       _emitState(() {
         if (applyIdentity) _leadCard = card;
         if (applyIdentity && card['lead'] is Map<String, dynamic>) {
@@ -187,16 +101,7 @@ extension _ClientCardLoaders on _ClientCardState {
           // After merging the lead record, `_leadData['id']` is the lead id —
           // keep `_resolvedLeadId` in sync so lead-side ops target it.
           _resolvedLeadId = _leadData['id']?.toString() ?? id;
-        } else if (card['lead'] is Map<String, dynamic>) {
-          final lead = card['lead'] as Map<String, dynamic>;
-          final incomingVersion = _clientVersion(lead['version']);
-          final currentVersion = _clientVersion(_leadData['version']);
-          if (incomingVersion != null &&
-              (currentVersion == null || incomingVersion > currentVersion)) {
-            _leadData['version'] = incomingVersion;
-          }
         }
-        _loadingCard = false;
       });
       if (applyIdentity) {
         _syncWorkspaceTitle();
@@ -205,7 +110,6 @@ extension _ClientCardLoaders on _ClientCardState {
       _tryApplyRestoredWorkspaceDraft();
     } catch (e) {
       debugPrint('Lead card load failed: $e');
-      if (mounted) _emitState(() => _loadingCard = false);
     }
   }
 

@@ -5,7 +5,7 @@ import {
 } from "@nestjs/common";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
-import { branchIdExpr } from "../branch-scope";
+import { branchIdExpr, currentActorRoleSql } from "../branch-scope";
 import {
   CommerceAccountDto,
   CommerceMovementDto,
@@ -55,6 +55,7 @@ export class CommerceProjectionRepository {
         left join app.branches branch
           on branch.id::text = ${branchIdExpr("student")}
         where student.deleted_at is null
+          and ${currentActorRoleSql("$1")} = $2::text
           and (
             student_profile.user_id = $1
             or exists (
@@ -87,7 +88,7 @@ export class CommerceProjectionRepository {
           )
         order by student.created_at desc, student_id
       `,
-      [actor.userId],
+      [actor.userId, actor.role],
     );
     return result.rows.map((row) => this.toScope(row, "self"));
   }
@@ -115,6 +116,7 @@ export class CommerceProjectionRepository {
             on branch.id::text = ${branchIdExpr("student")}
           where student.id = $2
             and student.deleted_at is null
+            and ${currentActorRoleSql("$1")} = $3::text
             and (
               student_profile.user_id = $1
               or exists (
@@ -146,7 +148,7 @@ export class CommerceProjectionRepository {
               )
             )
         `,
-        [actor.userId, studentId],
+        [actor.userId, studentId, actor.role],
       );
       const row = result.rows[0];
       if (!row) this.throwClientNotFound();
@@ -168,8 +170,9 @@ export class CommerceProjectionRepository {
             on branch.id::text = ${branchIdExpr("student")}
           where student.id = $2
             and student.deleted_at is null
+            and ${currentActorRoleSql("$1")} = $3::text
         `,
-        [actor.userId, studentId],
+        [actor.userId, studentId, actor.role],
       );
       const row = result.rows[0];
       if (!row) this.throwClientNotFound();
@@ -193,6 +196,7 @@ export class CommerceProjectionRepository {
           on branch.id::text = ${branchIdExpr("student")}
         where student.id = $2
           and student.deleted_at is null
+          and ${currentActorRoleSql("$1")} = $3::text
           and ${branchIdExpr("student")} is not null
           and exists (
             select 1
@@ -209,7 +213,7 @@ export class CommerceProjectionRepository {
                 ${branchIdExpr("student")}
           )
       `,
-      [actor.userId, studentId],
+      [actor.userId, studentId, actor.role],
     );
     const row = result.rows[0];
     if (!row) {

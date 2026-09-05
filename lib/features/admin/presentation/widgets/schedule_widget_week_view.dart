@@ -72,6 +72,7 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
     }
 
     return ScheduleDayCanvas(
+      fitToViewport: _fitDayToViewport,
       key: const ValueKey('schedule-week-view'),
       date: monday,
       columns: columns,

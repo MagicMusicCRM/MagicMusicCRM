@@ -803,21 +803,20 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Частично оплачиваемый пропуск').last);
+      expect(find.text('Частично оплачиваемый пропуск'), findsNothing);
+      await tester.tap(find.text('Оплачиваемый пропуск').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Процент ставки').last);
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.byKey(
-          const Key('lesson-decision-client-duration-$_firstGroupStudentId'),
-        ),
-        '30',
-      );
-      await tester.enterText(
-        find.byKey(const Key('teacher-credited-duration-minutes')),
-        '45',
+        find.byKey(const Key('lesson-decision-compensation-value')),
+        '62,50',
       );
       await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Оплачиваемый пропуск').last);
+      await tester.tap(find.text('Бесплатное занятие').last);
       await tester.pump();
 
       expect(
@@ -838,11 +837,10 @@ void main() {
 
       expect(api.previews, hasLength(1));
       expect(api.previews.single['financialDecision'], {
-        'settlementTypeKey': 'paid_miss',
+        'settlementTypeKey': 'free_lesson',
         'clientDecisions': [
           {
             'clientId': _firstGroupStudentId,
-            'chargeDurationMinutes': 30,
             'chargeType': 'subscription',
             'payerStudentId': _firstGroupStudentId,
             'subscriptionId': _crossPayerSubscriptionId,
@@ -850,15 +848,14 @@ void main() {
         ],
         'teacherCompensationRuleKey': 'percent',
         'teacherCompensationValueMinor': '6250',
-        'teacherCreditedDurationMinutes': 45,
+        'teacherCreditedDurationMinutes': 60,
         'teacherCompensationSource': 'manual',
       });
       expect(api.normalizedDecisions.single, {
-        'settlementTypeKey': 'paid_miss',
+        'settlementTypeKey': 'free_lesson',
         'clientDecisions': [
           {
             'clientId': _firstGroupStudentId,
-            'chargeDurationMinutes': 30,
             'chargeType': 'subscription',
             'payerStudentId': _firstGroupStudentId,
             'subscriptionId': _crossPayerSubscriptionId,
@@ -866,7 +863,7 @@ void main() {
         ],
         'teacherCompensationRuleKey': 'percent',
         'teacherCompensationValueMinor': '6250',
-        'teacherCreditedDurationMinutes': 45,
+        'teacherCreditedDurationMinutes': 60,
         'teacherCompensationSource': 'manual',
       });
     },

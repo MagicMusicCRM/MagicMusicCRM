@@ -120,6 +120,7 @@ extension _ScheduleRoomDayView on _ScheduleWidgetState {
     }
 
     return ScheduleDayCanvas(
+      fitToViewport: _fitDayToViewport,
       key: ValueKey(
         'day-${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}'
         '-${_selectedBranchId ?? ''}-${columns.length}',

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
-import { branchIdExpr } from "../branch-scope";
+import { branchIdExpr, currentActorRoleSql } from "../branch-scope";
 import { IssuedCommercialSnapshot } from "./commerce-schema.types";
 import {
   IssueDiscountColumns,
@@ -175,8 +175,6 @@ export class SubscriptionIssueRepository {
     studentIds: readonly string[],
   ): Promise<PurchaseStudentRow[]> {
     const ids = [...new Set(studentIds)].sort();
-    const unrestricted =
-      actor.role === "director" || actor.role === "system_admin";
     const result = await client.query<PurchaseStudentRow>(
       `
         select
@@ -186,29 +184,21 @@ export class SubscriptionIssueRepository {
         from app.students student
         where student.id = any($1::uuid[])
           and student.deleted_at is null
-          ${
-            unrestricted
-              ? ""
-              : `and ${branchIdExpr("student")} is not null
-                 and exists (
-                   select 1
-                   from app.staff_members staff
-                   join app.profiles staff_profile
-                     on staff_profile.id = staff.profile_id
-                    and staff_profile.deleted_at is null
-                   join app.staff_branch_assignments assignment
-                     on assignment.staff_member_id = staff.id
-                    and assignment.deleted_at is null
-                   where staff.deleted_at is null
-                     and staff_profile.user_id = $2
-                     and assignment.branch_id::text =
-                       ${branchIdExpr("student")}
-                 )`
-          }
+          and ${currentActorRoleSql("$2")} = any(array['admin','manager','director','system_admin'])
+          and (
+            ${currentActorRoleSql("$2")} = any(array['director','system_admin'])
+            or (${branchIdExpr("student")} is not null and exists (
+              select 1 from app.staff_members staff
+              join app.profiles staff_profile on staff_profile.id=staff.profile_id and staff_profile.deleted_at is null
+              join app.staff_branch_assignments assignment on assignment.staff_member_id=staff.id and assignment.deleted_at is null
+              where staff.deleted_at is null and staff_profile.user_id=$2
+                and assignment.branch_id::text=${branchIdExpr("student")}
+            ))
+          )
         order by student.id
         for update of student
       `,
-      unrestricted ? [ids] : [ids, actor.userId],
+      [ids, actor.userId],
     );
     return result.rows;
   }
@@ -704,6 +694,7 @@ export class SubscriptionIssueRepository {
     input: {
       id: string;
       studentId: string;
+      lessonId?: string;
       issuedSubscriptionId: string | null;
       amountMinor: string;
       currencyCode: string;
@@ -732,7 +723,8 @@ export class SubscriptionIssueRepository {
           created_by,
           issued_subscription_id,
           idempotency_ref,
-          request_fingerprint
+          request_fingerprint,
+          lesson_id
         )
         values (
           $1,
@@ -747,7 +739,8 @@ export class SubscriptionIssueRepository {
           $10,
           $11,
           $12,
-          $13
+          $13,
+          $14
         )
         returning
           id,
@@ -779,6 +772,7 @@ export class SubscriptionIssueRepository {
         input.issuedSubscriptionId,
         input.idempotencyRef,
         input.requestFingerprint,
+        input.lessonId ?? null,
       ],
     );
     return result.rows[0]!;

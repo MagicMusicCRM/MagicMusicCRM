@@ -340,7 +340,14 @@ void main() {
 
     expect(find.text('Лента занятий'), findsOneWidget);
     expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
-    expect(find.text('Абонемент'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message?.contains('Абонемент') ?? false),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('schedule-plan-tray-plan-active')),
       findsNothing,
@@ -359,12 +366,7 @@ void main() {
       expect(find.text('Вокальная группа'), findsOneWidget);
       expect(find.text('Лента занятий'), findsOneWidget);
       expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
-      expect(find.text('Завершённые (1)'), findsOneWidget);
-      expect(find.text('Завершённое фортепиано'), findsNothing);
-
-      await tester.ensureVisible(find.text('Завершённые (1)'));
-      await tester.tap(find.text('Завершённые (1)'));
-      await tester.pumpAndSettle();
+      expect(find.text('Завершено'), findsOneWidget);
       expect(find.text('Завершённое фортепиано'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -431,7 +433,14 @@ void main() {
     await _pump(tester, api);
 
     expect(find.text('Постоянных расписаний пока нет'), findsOneWidget);
-    expect(find.text('Разовое занятие'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message?.contains('Разовое занятие') ?? false),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('student-timeline-lesson-manual')),
       findsOneWidget,
@@ -615,6 +624,7 @@ void main() {
         find.byKey(const ValueKey('schedule-plan-created-plan-1')),
         findsOneWidget,
       );
+      await _expandPlan(tester, 'created-plan-1');
       for (var index = 1; index <= 3; index++) {
         expect(
           find.byKey(ValueKey('schedule-plan-row-edit-created-series-$index')),
@@ -1060,7 +1070,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Изменить набор дней'), findsOneWidget);
-      expect(find.text('16:00'), findsOneWidget);
+      expect(find.text('16:00').hitTestable(), findsOneWidget);
       await tester.ensureVisible(
         find.byKey(const ValueKey('preferred-schedule-save')),
       );
@@ -1118,13 +1128,8 @@ void main() {
       find.byKey(const ValueKey('schedule-plan-end-plan-active')),
       findsNothing,
     );
-    expect(find.text('Завершённые (1)'), findsOneWidget);
-    await tester.tap(find.text('Завершённые (1)'));
-    await tester.pumpAndSettle();
+    expect(find.text('Завершено'), findsOneWidget);
     expect(find.text('Индивидуальный вокал'), findsOneWidget);
-    await tester.ensureVisible(find.text('Индивидуальный вокал'));
-    await tester.tap(find.text('Индивидуальный вокал'));
-    await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('schedule-plan-end-history-plan-active')),
       findsOneWidget,
@@ -1233,6 +1238,22 @@ Future<void> _pump(
         ),
       ),
     ),
+  );
+  await tester.pumpAndSettle();
+  if (groupId == null &&
+      find
+          .byKey(const PageStorageKey('schedule-plan-expansion-plan-active'))
+          .evaluate()
+          .isNotEmpty) {
+    await _expandPlan(tester, 'plan-active');
+  }
+}
+
+Future<void> _expandPlan(WidgetTester tester, String id) async {
+  final tile = find.byKey(PageStorageKey('schedule-plan-expansion-$id'));
+  await tester.ensureVisible(tile);
+  await tester.tap(
+    find.descendant(of: tile, matching: find.byType(ListTile)).first,
   );
   await tester.pumpAndSettle();
 }

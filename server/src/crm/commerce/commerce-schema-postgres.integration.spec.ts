@@ -458,6 +458,9 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
   it("moves legacy negative payment refunds into the adjustment ledger losslessly", async () => {
     const client = await pool.connect();
     await client.query("begin");
+    // Exercise the legacy DDL with current constraints checked immediately.
+    // Deferred transfer events must not remain queued before ALTER TABLE.
+    await client.query("set constraints all immediate");
     try {
       await client.query(
         readFileSync(

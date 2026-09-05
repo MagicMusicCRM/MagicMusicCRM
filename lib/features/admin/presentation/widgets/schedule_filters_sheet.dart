@@ -265,20 +265,14 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
                     color: AppColor.gold,
                   ),
                   const SizedBox(width: AppSpace.sm),
-                  Text(
-                    'Параметры отображения',
-                    style: TextStyle(
-                      color: cs.onSurface,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Изменения применяются вместе',
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 11.5,
+                  Expanded(
+                    child: Text(
+                      'Параметры отображения',
+                      style: TextStyle(
+                        color: cs.onSurface,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],

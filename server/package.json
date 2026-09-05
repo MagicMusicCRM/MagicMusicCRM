@@ -34,7 +34,12 @@
     "test:tasks-v4": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/crm/tasks/shared-task-migration-postgres.integration.spec.ts src/crm/tasks/shared-task-postgres.integration.spec.ts src/crm/tasks/task-reminders.integration.spec.ts",
     "test:export-v4": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/analytics/ooxml-export.integration.spec.ts",
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "contract:export": "ts-node scripts/export-expense-openapi.ts",
+    "contract:check": "ts-node scripts/export-expense-openapi.ts --check",
+    "test:contracts": "npm run contract:check && npm test -- --runTestsByPath src/contracts/expense-contract.spec.ts",
+    "contract:payments:export": "ts-node scripts/export-payment-openapi.ts",
+    "contract:payments:check": "ts-node scripts/export-payment-openapi.ts --check"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",
@@ -43,6 +48,7 @@
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/platform-express": "^11.1.28",
     "@nestjs/platform-socket.io": "^11.1.26",
+    "@nestjs/swagger": "11.4.7",
     "@nestjs/websockets": "^11.1.26",
     "@sentry/node": "^10.60.0",
     "class-transformer": "^0.5.1",
@@ -63,6 +69,8 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.5",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "jest": "^30.0.5",
     "socket.io-client": "^4.8.3",
     "ts-jest": "^29.4.0",

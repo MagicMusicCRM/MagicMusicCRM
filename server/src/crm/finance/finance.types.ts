@@ -1,4 +1,6 @@
 export interface ExpenseRow {
+  version: number | string;
+  occurred_at: Date | string | null;
   id: string;
   amount: string | number;
   category: string;
