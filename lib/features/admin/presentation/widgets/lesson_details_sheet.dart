@@ -104,7 +104,9 @@ Widget _referenceRow(
       key: ValueKey('lesson-reference-${reference.label}'),
       text: reference.value,
       onPressed: () => onOpen(EntityOpenTarget.current),
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      style: Theme.of(
+        context,
+      ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
     ),
   );
 }
@@ -163,7 +165,7 @@ Future<void> showLessonDetailsSheet(
             Navigator.pop(surfaceContext);
             onOpenReference?.call(reference.link!, target);
           }),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
         ],
         detailRow(
           surfaceContext,
@@ -171,7 +173,7 @@ Future<void> showLessonDetailsSheet(
           'Время',
           timeRange,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
         detailRow(
           surfaceContext,
           Icons.info_outline_rounded,

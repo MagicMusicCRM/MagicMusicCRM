@@ -38,66 +38,118 @@ Map<String, dynamic> lesson(
   'lifecycleState': 'scheduled',
 };
 
-Widget host({bool client = false, double scale = 1}) => ProviderScope(
-  overrides: [
-    magicApiClientProvider.overrideWithValue(
-      FakeCardApiClient(
-        branches: const [
-          {'id': 'branch-1', 'name': 'Сокол', 'utcOffsetMinutes': 0},
-        ],
-        rooms: [
-          for (var i = 1; i <= 6; i++)
-            {'id': 'room-$i', 'name': 'Аудитория $i', 'branchId': 'branch-1'},
-        ],
-        scheduleMatrix: [
-          lesson('утро', 8),
-          lesson('вечер', 21),
-          lesson('короткое', 12, duration: 15),
-          lesson('следующее', 12, minute: 15, duration: 15),
-          lesson('вокал', 14, room: 2),
-          lesson('фортепиано', 16, duration: 90, room: 3),
-          lesson('первое', 18, duration: 90, room: 4),
-          lesson('второе', 18, minute: 30, room: 4),
-        ],
-      ),
-    ),
-    crmRealtimeProvider.overrideWith(
-      (ref) => const Stream<CrmChangedEvent>.empty(),
-    ),
-  ],
-  child: MaterialApp(
-    theme: AppTheme.production.copyWith(platform: TargetPlatform.windows),
-    home: Builder(
-      builder: (context) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(scale)),
-        child: RepaintBoundary(
-          key: const Key('capture'),
-          child: Scaffold(
-            body: Padding(
-              padding: const EdgeInsets.only(top: 48, left: 64),
-              child: ScheduleWidget(
-                clientId: client ? 'student-утро' : null,
-                clientType: client ? 'student' : null,
-                clientName: client ? 'Анна Смирнова' : null,
-                initialViewState: ContextViewState(
-                  date: DateTime(2026, 9, 4),
-                  filters: const {
-                    'clientCalendarMode': 'day',
-                    'branchId': 'branch-1',
-                  },
+Widget host({bool client = false, double scale = 1, bool late = false}) =>
+    ProviderScope(
+      overrides: [
+        magicApiClientProvider.overrideWithValue(
+          FakeCardApiClient(
+            branches: const [
+              {'id': 'branch-1', 'name': 'Сокол', 'utcOffsetMinutes': 0},
+            ],
+            rooms: [
+              for (var i = 1; i <= 6; i++)
+                {
+                  'id': 'room-$i',
+                  'name': 'Аудитория $i',
+                  'branchId': 'branch-1',
+                },
+            ],
+            scheduleMatrix: [
+              lesson('утро', 8),
+              lesson('вечер', 21),
+              if (late) ...[
+                lesson('поздно', 23),
+                {
+                  ...lesson('после-полуночи', 0),
+                  'scheduledAt': '2026-09-05T00:00:00.000Z',
+                },
+              ],
+              lesson('короткое', 12, duration: 15),
+              lesson('следующее', 12, minute: 15, duration: 15),
+              lesson('вокал', 14, room: 2),
+              lesson('фортепиано', 16, duration: 90, room: 3),
+              lesson('первое', 18, duration: 90, room: 4),
+              lesson('второе', 18, minute: 30, room: 4),
+            ],
+          ),
+        ),
+        crmRealtimeProvider.overrideWith(
+          (ref) => const Stream<CrmChangedEvent>.empty(),
+        ),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.production.copyWith(platform: TargetPlatform.windows),
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: RepaintBoundary(
+              key: const Key('capture'),
+              child: Scaffold(
+                body: Padding(
+                  padding: const EdgeInsets.only(top: 48, left: 64),
+                  child: ScheduleWidget(
+                    clientId: client ? 'student-утро' : null,
+                    clientType: client ? 'student' : null,
+                    clientName: client ? 'Анна Смирнова' : null,
+                    initialViewState: ContextViewState(
+                      date: DateTime(2026, 9, 4),
+                      filters: const {
+                        'clientCalendarMode': 'day',
+                        'branchId': 'branch-1',
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  ),
-);
+    );
 
 void main() {
+  testWidgets('evening extends to next-day 01:00 with correct lesson dates', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(host(late: true));
+    await tester.pumpAndSettle();
+    final canvas = tester.widget<ScheduleDayCanvas>(
+      find.byType(ScheduleDayCanvas),
+    );
+    final midnight = canvas.entries.singleWhere(
+      (e) => e.id == 'после-полуночи',
+    );
+    expect(midnight.startLocal, DateTime.utc(2026, 9, 5));
+    expect(midnight.startMinute, 24 * 60);
+    expect(midnight.displayDate, DateTime(2026, 9, 4));
+    expect(tester.getRect(find.text('22:00')).bottom, lessThanOrEqualTo(720));
+    expect(tester.getRect(find.text('01:00')).bottom, greaterThan(720));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('schedule-lesson-после-полуночи')),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.text('01:00')).bottom, lessThanOrEqualTo(720));
+    final rect = tester.getRect(
+      find.byKey(const ValueKey('schedule-lesson-после-полуночи')),
+    );
+    expect(rect.top, greaterThan(0));
+    expect(rect.bottom, lessThanOrEqualTo(720));
+    expect(tester.takeException(), isNull);
+  });
+
+  test('evening date crosses month and year without rewriting actual time', () {
+    expect(
+      scheduleDisplayDate(DateTime(2027, 1, 1, 0, 45)),
+      DateTime(2026, 12, 31),
+    );
+    expect(scheduleDisplayDate(DateTime(2027, 1, 1, 1)), DateTime(2027, 1, 1));
+  });
+
   setUpAll(() async {
     await initializeDateFormatting('ru');
     final font = FontLoader('Inter')
@@ -133,7 +185,7 @@ void main() {
           ),
         )) {
           if (state.position.axis == Axis.vertical) {
-            expect(state.position.maxScrollExtent, closeTo(0, 0.01));
+            expect(state.position.maxScrollExtent, greaterThan(0));
           }
         }
         if (!client) {
@@ -323,10 +375,11 @@ void main() {
       find.byKey(const ValueKey('schedule-lesson-15')),
     );
     expect(first.overlaps(next), isFalse);
-    expect(
-      tester.getRect(find.text('22:00-00:00')).right,
-      lessThanOrEqualTo(1024),
+    expect(tester.getRect(find.text('22:00-00:00')).right, greaterThan(1024));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('schedule-lesson-55')),
     );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('schedule-lesson-55')));
     expect(opened, '55');
     expect(tester.takeException(), isNull);
@@ -374,13 +427,22 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(tester.getRect(find.text('00:00')).bottom, lessThanOrEqualTo(720));
+      expect(tester.getRect(find.text('00:00')).bottom, greaterThan(720));
       final y8 = tester.getCenter(find.text('08:00')).dy;
       final y9 = tester.getCenter(find.text('09:00')).dy;
       await tester.tapAt(Offset(200, y8 + (y9 - y8) * 4.4));
       expect(created, DateTime(2026, 9, 4, 12, 15));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('schedule-lesson-late')),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.text('01:00')).bottom, lessThanOrEqualTo(720));
       await tester.tap(find.byKey(const ValueKey('schedule-lesson-late')));
       expect(opened, 'late');
+      final midnightY = tester.getCenter(find.text('00:00')).dy;
+      final endY = tester.getCenter(find.text('01:00')).dy;
+      await tester.tapAt(Offset(200, midnightY + (endY - midnightY) * 0.5));
+      expect(created, DateTime(2026, 9, 5));
       expect(tester.takeException(), isNull);
     },
   );

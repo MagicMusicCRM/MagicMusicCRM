@@ -149,31 +149,6 @@ extension _ScheduleActions on _ScheduleWidgetState {
       start.day,
     ).toIso8601String();
     final references = [
-      if (lessonId?.isNotEmpty == true)
-        reference(
-          icon: Icons.event_note_rounded,
-          label: 'Занятие',
-          value: studentName,
-          link: EntityLink.typed(
-            entityType: EntityLinkType.lesson,
-            entityId: lessonId!,
-            presentation: EntityPresentationReference(
-              primary: studentName,
-              context: branchName,
-            ),
-            optionalFocus: EntityLinkFocus(
-              focus: 'lesson',
-              filter: {
-                'date': dateFilter,
-                if (branchId?.isNotEmpty == true) 'branchId': branchId,
-                if (studentId?.isNotEmpty == true) 'clientType': 'student',
-                if (leadId?.isNotEmpty == true) 'clientType': 'lead',
-                if (studentId?.isNotEmpty == true) 'clientId': studentId,
-                if (leadId?.isNotEmpty == true) 'clientId': leadId,
-              },
-            ),
-          ),
-        ),
       reference(
         icon: Icons.person_rounded,
         label: leadId?.isNotEmpty == true ? 'Лид' : 'Ученик',
@@ -686,18 +661,41 @@ extension _ScheduleActions on _ScheduleWidgetState {
     final branchId = _selectedBranchId;
     if ((branchId == null || branchId.isEmpty) && !_allBranchesSelected) return;
     try {
-      final result = await ref
-          .read(magicCrmServiceProvider)
-          .getScheduleMatrix(
-            localDate: dateOnly(date),
+      final service = ref.read(magicCrmServiceProvider);
+      final results = await Future.wait([
+        for (final day in [date, DateTime(date.year, date.month, date.day + 1)])
+          service.getScheduleMatrix(
+            localDate: dateOnly(day),
             branchId: branchId,
             groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
             teacherId: widget.fixedTeacherId ?? _filterTeacherId,
             limit: 500,
-          );
-      final items = result['items'];
-      if (items is! List || !mounted) return;
-      final dayLessons = items.whereType<Map<String, dynamic>>().toList();
+          ),
+      ]);
+      if (!mounted) return;
+      final dayLessons = [
+        for (final result in results)
+          ...(result['items'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>(),
+      ];
+      final focused = dayLessons
+          .where(
+            (lesson) =>
+                _highlightLessonId != null &&
+                lesson['id']?.toString() == _highlightLessonId,
+          )
+          .firstOrNull;
+      final focusedAt = focused == null ? null : _parseLessonTime(focused);
+      if (focusedAt != null &&
+          focusedAt.hour < 1 &&
+          DateUtils.isSameDay(_selectedDate, focusedAt)) {
+        final evening = scheduleDisplayDate(focusedAt);
+        _emitState(() {
+          _selectedDate = evening;
+          _displayedMonth = DateTime(evening.year, evening.month);
+        });
+        return _fetchDayLessons(evening);
+      }
 
       // Upsert by id so the rest of the loaded window is preserved while the
       // selected day becomes complete.
@@ -810,9 +808,17 @@ extension _ScheduleActions on _ScheduleWidgetState {
       (_onlyConflicts ? 1 : 0) +
       (_filterTeacherId != null ? 1 : 0);
 
-  List<Map<String, dynamic>> _lessonsForDate(DateTime date) {
+  List<Map<String, dynamic>> _lessonsForDate(
+    DateTime date, {
+    bool extendedEvening = false,
+  }) {
     return _filteredLessons.where((l) {
-      final dt = _parseLessonTime(l);
+      final parsed = _parseLessonTime(l);
+      final dt = parsed == null
+          ? null
+          : extendedEvening
+          ? scheduleDisplayDate(parsed)
+          : parsed;
       return dt != null &&
           dt.year == date.year &&
           dt.month == date.month &&
@@ -1145,7 +1151,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
 
   Iterable<Map<String, dynamic>> _lessonsInCurrentView() {
     if (_currentView == ScheduleView.day) {
-      return _lessonsForDate(_selectedDate);
+      return _lessonsForDate(_selectedDate, extendedEvening: true);
     }
     if (_currentView == ScheduleView.week) {
       final monday = DateTime(
@@ -1155,7 +1161,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
       ).subtract(Duration(days: _selectedDate.weekday - 1));
       final end = monday.add(const Duration(days: 7));
       return _filteredLessons.where((lesson) {
-        final at = _parseLessonTime(lesson);
+        final parsed = _parseLessonTime(lesson);
+        final at = parsed == null ? null : scheduleDisplayDate(parsed);
         return at != null && !at.isBefore(monday) && at.isBefore(end);
       });
     }

@@ -638,6 +638,29 @@ Map<String, dynamic> _normalizeCancelDecision(Map<String, dynamic> decision) {
 }
 
 void main() {
+  testWidgets('empty reason blocks preview and scrolls back to its error', (
+    tester,
+  ) async {
+    final api = _LessonDecisionApi();
+    await _openAndFill(tester, api);
+    tester.view.physicalSize = const Size(960, 640);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('lesson-decision-reason')), '');
+    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+    await tester.pumpAndSettle();
+    expect(api.previews, isEmpty);
+    expect(api.commits, isEmpty);
+    expect(find.text('Укажите причину'), findsOneWidget);
+    final reason = tester.getRect(
+      find.byKey(const Key('lesson-decision-reason')),
+    );
+    expect(reason.top, greaterThanOrEqualTo(0));
+    expect(reason.bottom, lessThanOrEqualTo(640));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'cancel opens unpaid and paid miss autofills full duration once',
     (tester) async {
@@ -1824,6 +1847,10 @@ void main() {
         findsOneWidget,
       );
 
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('lesson-decision-submit')));
       await tester.pumpAndSettle();
       expect(api.commits, hasLength(1));

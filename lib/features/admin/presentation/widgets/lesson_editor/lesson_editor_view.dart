@@ -90,6 +90,7 @@ class LessonEditorView extends StatelessWidget {
   const LessonEditorView({
     required this.model,
     required this.actions,
+    this.formKey,
     this.pageMode = false,
     this.embeddedSurface = false,
     this.focusDateTime = false,
@@ -111,6 +112,7 @@ class LessonEditorView extends StatelessWidget {
     LessonEditorFeedbackViewState feedback, {
     required LessonEditorActions actions,
     required bool canManageTeacherCompensation,
+    GlobalKey<FormState>? formKey,
     bool pageMode = false,
     bool embeddedSurface = false,
     bool focusDateTime = false,
@@ -134,6 +136,7 @@ class LessonEditorView extends StatelessWidget {
       canSave: canSave,
     ),
     actions: actions,
+    formKey: formKey,
     pageMode: pageMode,
     embeddedSurface: embeddedSurface,
     focusDateTime: focusDateTime,
@@ -151,6 +154,7 @@ class LessonEditorView extends StatelessWidget {
 
   final LessonEditorViewModel model;
   final LessonEditorActions actions;
+  final GlobalKey<FormState>? formKey;
   final bool pageMode;
   final bool embeddedSurface;
   final bool focusDateTime;
@@ -173,7 +177,15 @@ class LessonEditorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stateSurface = _stateSurface();
-    return stateSurface ?? _loadedSurface(context);
+    if (stateSurface != null) return stateSurface;
+    final content = _loadedSurface(context);
+    return formKey == null
+        ? content
+        : Form(
+            key: formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: content,
+          );
   }
 
   Widget? _stateSurface() {
@@ -342,6 +354,18 @@ class LessonEditorView extends StatelessWidget {
             ),
             canManageTeacherCompensation: model.canManageTeacherCompensation,
             allowsNoFunding: policy.isNoCharge(selectedSettlement),
+            requiresChangeReason:
+                model.session.isEdit &&
+                (policy.hasScheduleChanges(
+                      session: model.session,
+                      draft: model.draft,
+                    ) ||
+                    policy.hasFinancialChanges(
+                      session: model.session,
+                      draft: model.draft,
+                    ) ||
+                    model.session.snapshot?.rawLesson['lifecycle_state'] ==
+                        'settlement_pending'),
           ),
           actions: actions,
         ),

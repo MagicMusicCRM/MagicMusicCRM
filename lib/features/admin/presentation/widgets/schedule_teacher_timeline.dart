@@ -198,164 +198,179 @@ class _ScheduleTeacherTimelineState extends State<ScheduleTeacherTimeline> {
     for (final entry in widget.entries) {
       entriesByTeacher[entry.columnId]?.add(entry);
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final availableTimelineWidth = math.max(
-          0.0,
-          constraints.maxWidth - _teacherColumnWidth,
-        );
-        final hourWidth = math.max(
-          constraints.maxWidth >= 720 ? 40.0 : _minimumHourWidth,
-          availableTimelineWidth / (endHour - startHour),
-        );
-        final timelineWidth = (endHour - startHour) * hourWidth;
+    // Only the body exposes controls; the header and labels follow it.
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableTimelineWidth = math.max(
+            0.0,
+            constraints.maxWidth - _teacherColumnWidth,
+          );
+          final hourWidth = math.max(
+            constraints.maxWidth >= 720 ? 40.0 : _minimumHourWidth,
+            availableTimelineWidth / (kDayViewportEndHour - kDayStartHour),
+          );
+          final timelineWidth = (endHour - startHour) * hourWidth;
 
-        final rowHeights = <String, double>{
-          for (final row in widget.rows)
-            row.id: _rowHeight(entriesByTeacher[row.id] ?? const [], hourWidth),
-        };
-        final totalHeight = rowHeights.values.fold<double>(0, (a, b) => a + b);
-
-        return Column(
-          key: const ValueKey('schedule-teacher-timeline'),
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: cs.surface,
-                border: Border(
-                  top: BorderSide(color: cs.onSurfaceVariant.withAlpha(28)),
-                  bottom: BorderSide(color: cs.onSurfaceVariant.withAlpha(40)),
-                ),
+          final rowHeights = <String, double>{
+            for (final row in widget.rows)
+              row.id: _rowHeight(
+                entriesByTeacher[row.id] ?? const [],
+                hourWidth,
               ),
-              height: _timeHeaderHeight,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: _teacherColumnWidth,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpace.md,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.school_outlined,
-                            size: 17,
-                            color: cs.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: AppSpace.sm),
-                          Expanded(
-                            child: Text(
-                              'Преподаватель',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: cs.onSurfaceVariant,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+          };
+          final totalHeight = rowHeights.values.fold<double>(
+            0,
+            (a, b) => a + b,
+          );
+
+          return Column(
+            key: const ValueKey('schedule-teacher-timeline'),
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  border: Border(
+                    top: BorderSide(color: cs.onSurfaceVariant.withAlpha(28)),
+                    bottom: BorderSide(
+                      color: cs.onSurfaceVariant.withAlpha(40),
                     ),
                   ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      controller: _headerH,
-                      physics: const NeverScrollableScrollPhysics(),
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: timelineWidth,
+                ),
+                height: _timeHeaderHeight,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: _teacherColumnWidth,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpace.md,
+                        ),
                         child: Row(
                           children: [
-                            for (
-                              var hour = startHour;
-                              hour < endHour;
-                              hour += 2
-                            )
-                              _TimeBandHeader(
-                                startHour: hour,
-                                width: hourWidth * math.min(2, endHour - hour),
-                                endHour: math.min(hour + 2, endHour),
+                            Icon(
+                              Icons.school_outlined,
+                              size: 17,
+                              color: cs.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: AppSpace.sm),
+                            Expanded(
+                              child: Text(
+                                'Преподаватель',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: cs.onSurfaceVariant,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _headerH,
+                        physics: const NeverScrollableScrollPhysics(),
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: timelineWidth,
+                          child: Row(
+                            children: [
+                              for (
+                                var hour = startHour;
+                                hour < endHour;
+                                hour += 2
+                              )
+                                _TimeBandHeader(
+                                  startHour: hour,
+                                  width:
+                                      hourWidth * math.min(2, endHour - hour),
+                                  endHour: math.min(hour + 2, endHour),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: _teacherColumnWidth,
+                      child: SingleChildScrollView(
+                        controller: _labelsV,
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: Column(
+                          children: [
+                            for (final row in widget.rows)
+                              _TeacherLabelCell(
+                                row: row,
+                                height: rowHeights[row.id]!,
                               ),
                           ],
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: _teacherColumnWidth,
-                    child: SingleChildScrollView(
-                      controller: _labelsV,
-                      physics: const NeverScrollableScrollPhysics(),
-                      child: Column(
-                        children: [
-                          for (final row in widget.rows)
-                            _TeacherLabelCell(
-                              row: row,
-                              height: rowHeights[row.id]!,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: MagicDesktopScrollbar(
-                      axis: Axis.vertical,
-                      controller: _bodyV,
-                      builder: (context, verticalController) =>
-                          SingleChildScrollView(
-                            controller: verticalController,
-                            child: MagicDesktopScrollbar(
-                              axis: Axis.horizontal,
-                              controller: _bodyH,
-                              builder: (context, horizontalController) =>
-                                  SingleChildScrollView(
-                                    controller: horizontalController,
-                                    scrollDirection: Axis.horizontal,
-                                    child: SizedBox(
-                                      width: timelineWidth,
-                                      height: totalHeight,
-                                      child: Column(
-                                        children: [
-                                          for (final row in widget.rows)
-                                            _TeacherTimelineRow(
-                                              date: widget.date,
-                                              startHour: startHour,
-                                              endHour: endHour,
-                                              row: row,
-                                              height: rowHeights[row.id]!,
-                                              width: timelineWidth,
-                                              hourWidth: hourWidth,
-                                              entries:
-                                                  entriesByTeacher[row.id] ??
-                                                  const [],
-                                              allowCreate: widget.allowCreate,
-                                              onCreateSlot: widget.onCreateSlot,
-                                              onOpenLesson: widget.onOpenLesson,
-                                            ),
-                                        ],
+                    Expanded(
+                      child: MagicDesktopScrollbar(
+                        axis: Axis.vertical,
+                        controller: _bodyV,
+                        builder: (context, verticalController) =>
+                            SingleChildScrollView(
+                              controller: verticalController,
+                              child: MagicDesktopScrollbar(
+                                axis: Axis.horizontal,
+                                controller: _bodyH,
+                                builder: (context, horizontalController) =>
+                                    SingleChildScrollView(
+                                      controller: horizontalController,
+                                      scrollDirection: Axis.horizontal,
+                                      child: SizedBox(
+                                        width: timelineWidth,
+                                        height: totalHeight,
+                                        child: Column(
+                                          children: [
+                                            for (final row in widget.rows)
+                                              _TeacherTimelineRow(
+                                                date: widget.date,
+                                                startHour: startHour,
+                                                endHour: endHour,
+                                                row: row,
+                                                height: rowHeights[row.id]!,
+                                                width: timelineWidth,
+                                                hourWidth: hourWidth,
+                                                entries:
+                                                    entriesByTeacher[row.id] ??
+                                                    const [],
+                                                allowCreate: widget.allowCreate,
+                                                onCreateSlot:
+                                                    widget.onCreateSlot,
+                                                onOpenLesson:
+                                                    widget.onOpenLesson,
+                                              ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
+                              ),
                             ),
-                          ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -385,7 +400,7 @@ class _TimeBandHeader extends StatelessWidget {
         ),
       ),
       child: Text(
-        '${hh(startHour)}:00-${hh(endHour)}:00',
+        '${hh(startHour % 24)}:00-${hh(endHour)}:00',
         style: TextStyle(
           color: cs.onSurfaceVariant,
           fontSize: 12,
@@ -509,8 +524,8 @@ class _TeacherTimelineRow extends StatelessWidget {
   final void Function(String, DateTime, int) onCreateSlot;
   final void Function(Map<String, dynamic>) onOpenLesson;
 
-  double _xForTime(DateTime time) =>
-      ((time.hour - startHour) + time.minute / 60) * hourWidth;
+  double _xForTime(ScheduleEntry entry) =>
+      (entry.startMinute / 60 - startHour) * hourWidth;
 
   void _createAt(double x) {
     if (!allowCreate) return;
@@ -585,7 +600,7 @@ class _TeacherTimelineRow extends StatelessWidget {
     ScheduleEntry entry,
     _TimelineLane? lane,
   ) {
-    final naturalLeft = _xForTime(entry.startLocal);
+    final naturalLeft = _xForTime(entry);
     final naturalRight = naturalLeft + entry.durationMinutes / 60 * hourWidth;
     final left = naturalLeft.clamp(0.0, math.max(0.0, width - 45)).toDouble();
     final right = naturalRight.clamp(0.0, width).toDouble();

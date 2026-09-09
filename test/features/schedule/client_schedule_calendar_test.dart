@@ -561,7 +561,7 @@ void main() {
           initial: ContextViewState(
             filters: _dayState().filters,
             date: _dayState().date,
-            scrollOffset: 180,
+            scrollOffset: 80,
           ),
           clientContext: false,
           onChanged: states.add,
@@ -569,7 +569,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final preservedScroll = states.last.scrollOffset;
-      expect(preservedScroll, 180); // Retain the saved detailed-view offset.
+      expect(preservedScroll, 80); // Retain an offset within the evening tail.
 
       Future<void> search(String value) async {
         final field = find.byType(EditableText).last;
@@ -670,7 +670,7 @@ void main() {
     expect(states.last.filters['clientCalendarBranchId'], 'branch-b');
   });
 
-  testWidgets('linked lesson keeps client schedule state for workspace Back', (
+  testWidgets('linked teacher keeps client schedule state for workspace Back', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -738,14 +738,18 @@ void main() {
       find.byKey(const ValueKey('schedule-lesson-lesson-selected')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('lesson-reference-Занятие')));
+    expect(
+      find.byKey(const ValueKey('lesson-reference-Занятие')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const ValueKey('lesson-reference-Педагог')));
     await tester.pumpAndSettle();
 
     expect(controller.state.tabs, hasLength(2));
     final sourceTab = controller.state.tabs.first;
     final targetTab = controller.state.activeTab;
     expect(sourceTab.routeStack, hasLength(1));
-    expect(targetTab.currentRoute.link.entityType, EntityLinkType.lesson);
+    expect(targetTab.currentRoute.link.entityType, EntityLinkType.teacher);
     final source = sourceTab.currentRoute.viewState;
     expect(source.filters['section'], 'lessons');
     expect(source.filters['view'], 'day');

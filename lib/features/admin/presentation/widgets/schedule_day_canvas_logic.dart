@@ -17,9 +17,9 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     }
   }
 
-  double _yForTime(DateTime time) =>
+  double _yForTime(ScheduleEntry entry) =>
       _ScheduleDayCanvasState._edgeInset +
-      ((time.hour - _startHour) + time.minute / 60.0) * _hourHeight;
+      (entry.startMinute / 60 - _startHour) * _hourHeight;
 
   DateTime _timeForY(double y, {DateTime? date}) {
     final minutes =
@@ -79,7 +79,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
   }
 
   Widget _entryBlock(ScheduleEntry entry, double colWidth, {_EntryLane? lane}) {
-    final top = _yForTime(entry.startLocal);
+    final top = _yForTime(entry);
     final height = ((entry.durationMinutes / 60) * _hourHeight)
         .clamp(18 * MediaQuery.textScalerOf(context).scale(1), _gridHeight)
         .clamp(0.0, _gridHeight - top);

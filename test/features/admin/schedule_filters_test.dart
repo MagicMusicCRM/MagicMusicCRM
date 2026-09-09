@@ -304,9 +304,21 @@ void main() {
       ),
       isTrue,
     );
+    final selectedDate = availabilityByBranch[_branchId]!['date'];
+    final nextDate = DateTime.parse(
+      selectedDate.toString(),
+    ).add(const Duration(days: 1));
+    final nextDateKey = nextDate.toIso8601String().substring(0, 10);
+    final eveningQueries = api.matrixQueries.where(
+      (query) => [selectedDate, nextDateKey].contains(query['localDate']),
+    );
     expect(
-      api.matrixQueries.last['localDate'],
-      availabilityByBranch[_branchId]!['date'],
+      eveningQueries.map((query) => query['localDate']),
+      containsAll([selectedDate, nextDateKey]),
+    );
+    expect(
+      eveningQueries.every((query) => !query.containsKey('branchId')),
+      isTrue,
     );
 
     final restoredApi = _FakeScheduleApiClient(multipleBranches: true);

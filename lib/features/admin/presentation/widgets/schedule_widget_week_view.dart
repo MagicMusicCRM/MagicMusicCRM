@@ -24,7 +24,8 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
               conflict['scheduled_at'],
               conflict['scheduled_utc_offset_minutes'],
             );
-            return at != null && DateUtils.isSameDay(at, date);
+            return at != null &&
+                DateUtils.isSameDay(scheduleDisplayDate(at), date);
           }),
         ),
       );
@@ -33,7 +34,11 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
     final entries = <ScheduleEntry>[];
     for (final lesson in _filteredLessons) {
       final start = _parseLessonTime(lesson);
-      if (start == null || start.isBefore(monday) || !start.isBefore(weekEnd)) {
+      final displayDate = start == null ? null : scheduleDisplayDate(start);
+      if (start == null ||
+          displayDate == null ||
+          displayDate.isBefore(monday) ||
+          !displayDate.isBefore(weekEnd)) {
         continue;
       }
       final leadName = lesson['lead_name']?.toString().trim() ?? '';
@@ -48,8 +53,9 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
         ScheduleEntry(
           lesson: lesson,
           id: lesson['id']?.toString() ?? '',
-          columnId: dateOnly(start),
+          columnId: dateOnly(displayDate),
           startLocal: start,
+          displayDate: displayDate,
           durationMinutes: _durationMinutes(lesson),
           title: title,
           subtitle: [

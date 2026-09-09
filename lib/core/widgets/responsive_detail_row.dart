@@ -45,7 +45,10 @@ class ResponsiveDetailRow extends StatelessWidget {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: constraints.maxWidth * 0.36, child: labelWidget),
+            SizedBox(
+              width: (180 * textScale).clamp(0, constraints.maxWidth * 0.36),
+              child: labelWidget,
+            ),
             const SizedBox(width: AppSpace.md),
             Expanded(child: displayedValue),
           ],

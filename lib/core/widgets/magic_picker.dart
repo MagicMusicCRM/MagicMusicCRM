@@ -111,6 +111,9 @@ Future<T?> _showMagicPicker<T>({
   Locale? locale,
 }) {
   assert(debugCheckHasMaterialLocalizations(context));
+  // Flutter pickers have fixed internal metrics; keep the caller's theme
+  // instead of applying the roomier action-form controls to their layouts.
+  final pickerTheme = Theme.of(context);
   if (locale != null) {
     picker = Localizations.override(
       context: context,
@@ -120,6 +123,12 @@ Future<T?> _showMagicPicker<T>({
   }
   return showMagicDialog<T>(
     context: context,
-    builder: (context) => builder == null ? picker : builder(context, picker),
+    builder: (context) => Theme(
+      data: pickerTheme,
+      child: Builder(
+        builder: (context) =>
+            builder == null ? picker : builder(context, picker),
+      ),
+    ),
   );
 }
