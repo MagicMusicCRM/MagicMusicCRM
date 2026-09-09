@@ -367,8 +367,8 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     }
     final payload = <String, dynamic>{
       'expectedVersion': expectedVersion,
-      if (operation != LessonDecisionOperation.plannedSettlement &&
-          operation != LessonDecisionOperation.correction)
+      if (operation.apiKey != 'planned-settlement' &&
+          operation.apiKey != 'settlement-correction')
         'reasonCode': 'manual',
       'reasonText': reason.trim(),
       operation == LessonDecisionOperation.reschedule

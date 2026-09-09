@@ -52,6 +52,18 @@ function repositoryMock() {
 }
 
 describe("StudentLessonTimelineService", () => {
+  it("starts a bounded calendar window at midnight rather than splitting around now", async () => {
+    const repository = repositoryMock();
+    repository.listPage.mockResolvedValue([]);
+    const from = "2026-09-05T21:00:00.000Z";
+    const to = "2026-10-05T21:00:00.000Z";
+    await new StudentLessonTimelineService(repository).list(actor, STUDENT_ID,
+      { from, to, limit: 40 } as unknown as StudentLessonTimelineQuery);
+    expect(repository.listPage).toHaveBeenCalledTimes(1);
+    expect(repository.listPage).toHaveBeenCalledWith(actor, STUDENT_ID, "next",
+      { scheduledAt: from, id: "00000000-0000-0000-0000-000000000000" }, 40, true, { from, to });
+  });
+
   afterEach(() => {
     jest.useRealTimers();
   });

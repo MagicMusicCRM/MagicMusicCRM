@@ -166,12 +166,13 @@ Map<String, dynamic> _timelinePage({
   bool hasNext = false,
   String? previousCursor,
   String? nextCursor,
+  DateTime? scheduledAt,
 }) => {
   'items': [
     {
       'id': lessonId,
       'version': 1,
-      'scheduledAt': '2026-08-07T13:00:00.000Z',
+      'scheduledAt': (scheduledAt ?? DateTime.now()).toUtc().toIso8601String(),
       'durationMinutes': 60,
       'lifecycleState': state,
       'student': {'id': 'student-1', 'name': 'Анна Смирнова'},
@@ -206,6 +207,7 @@ class _PagingCardApiClient extends FakeCardApiClient {
     : super(role: 'manager', schedulePlans: const [_activePlan, _endedPlan]);
 
   int remainingNextFailures;
+  String? initialFrom;
 
   @override
   Future<T> get<T>(
@@ -217,8 +219,9 @@ class _PagingCardApiClient extends FakeCardApiClient {
       final query = {...?queryParameters};
       getRequests.add(path);
       getCalls.add((path: path, query: query));
-      final cursor = query['cursor']?.toString();
-      if (cursor == 'cursor-next') {
+      final from = query['from'].toString();
+      initialFrom ??= from;
+      if (from != initialFrom) {
         if (remainingNextFailures > 0) {
           remainingNextFailures--;
           throw const MagicApiException(message: 'Временная ошибка сети');
@@ -226,8 +229,7 @@ class _PagingCardApiClient extends FakeCardApiClient {
         return _timelinePage(
               lessonId: 'lesson-page-2',
               predecessorId: 'lesson-page-1',
-              hasPrevious: true,
-              previousCursor: 'cursor-previous',
+              scheduledAt: DateTime.parse(from).add(const Duration(days: 3)),
             )
             as T;
       }
@@ -236,8 +238,7 @@ class _PagingCardApiClient extends FakeCardApiClient {
             state: 'rescheduled',
             successorId: 'lesson-page-2',
             covered: false,
-            hasNext: true,
-            nextCursor: 'cursor-next',
+            scheduledAt: DateTime.parse(from).add(const Duration(days: 3)),
           )
           as T;
     }
@@ -372,43 +373,66 @@ void main() {
     });
   }
 
-  testWidgets('global timeline pages and retries the failed cursor', (
-    tester,
-  ) async {
-    final api = _PagingCardApiClient(remainingNextFailures: 1);
-    await _pump(tester, api, width: 840);
+  testWidgets(
+    'global timeline preserves its calendar window when loading fails',
+    (tester) async {
+      final api = _PagingCardApiClient(remainingNextFailures: 1);
+      await _pump(tester, api, width: 840);
 
-    expect(
-      find.byKey(const ValueKey('student-timeline-lesson-page-1')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const Key('student-lesson-timeline-next')));
-    await tester.pumpAndSettle();
-    expect(find.text('Временная ошибка сети'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('student-timeline-lesson-page-1')),
-      findsOneWidget,
-    );
-    expect(api.getCalls.last.query, {
-      'cursor': 'cursor-next',
-      'direction': 'next',
-      'limit': 24,
-    });
+      expect(
+        find.byKey(const ValueKey('student-timeline-lesson-page-1')),
+        findsOneWidget,
+      );
+      await tester.drag(
+        find.byKey(const Key('student-lesson-timeline')),
+        const Offset(-4000, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('student-lesson-timeline-next')));
+      await tester.pumpAndSettle();
+      expect(find.text('Временная ошибка сети'), findsOneWidget);
+      await tester.drag(
+        find.byKey(const Key('student-lesson-timeline-grid')),
+        const Offset(4000, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('student-timeline-lesson-page-1')),
+        findsOneWidget,
+      );
+      final failedQuery = api.getCalls.last.query;
+      expect(failedQuery['cursor'], isNull);
+      expect(failedQuery['limit'], 40);
+      expect(
+        DateTime.parse(
+          failedQuery['from'] as String,
+        ).difference(DateTime.parse(api.initialFrom!)).inDays,
+        30,
+      );
 
-    await tester.tap(find.text('Повторить'));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('student-timeline-lesson-page-2')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const Key('student-lesson-timeline-previous')));
-    await tester.pumpAndSettle();
-    expect(api.getCalls.last.query, {
-      'cursor': 'cursor-previous',
-      'direction': 'previous',
-      'limit': 24,
-    });
-  });
+      await tester.tap(find.text('Повторить'));
+      await tester.pumpAndSettle();
+      expect(api.getCalls.last.query, failedQuery);
+      expect(
+        find.byKey(const ValueKey('student-timeline-lesson-page-2')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('student-lesson-timeline-previous')),
+      );
+      await tester.pumpAndSettle();
+      expect(api.getCalls.last.query['from'], api.initialFrom);
+      await tester.drag(
+        find.byKey(const Key('student-lesson-timeline-grid')),
+        const Offset(4000, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('student-timeline-lesson-page-1')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('timeline opens the exact lesson ID', (tester) async {
     final api = _ExactLessonCardApiClient();

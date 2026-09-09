@@ -54,6 +54,7 @@ export class StudentLessonTimelineRepository {
     cursor: StudentLessonTimelineCursor,
     limit: number,
     inclusive = false,
+    range?: { from: string; to: string },
   ): Promise<StudentLessonTimelineRow[]> {
     const comparison = direction === "previous" ? "<" : inclusive ? ">=" : ">";
     const order = direction === "previous" ? "desc" : "asc";
@@ -286,6 +287,8 @@ export class StudentLessonTimelineRepository {
        ) target_funding on true
        where (lesson.scheduled_at, lesson.id) ${comparison}
          ($4::timestamptz, $5::uuid)
+         and ($7::timestamptz is null or lesson.scheduled_at >= $7::timestamptz)
+         and ($8::timestamptz is null or lesson.scheduled_at < $8::timestamptz)
          and (
            ${managerAdminRolesSql(databaseRole)}
            or (${databaseRole} = 'teacher' and teacher_profile.user_id = $2::uuid)
@@ -334,6 +337,8 @@ export class StudentLessonTimelineRepository {
         cursor.scheduledAt,
         cursor.id,
         limit + 1,
+        range?.from ?? null,
+        range?.to ?? null,
       ],
     );
     return result.rows;

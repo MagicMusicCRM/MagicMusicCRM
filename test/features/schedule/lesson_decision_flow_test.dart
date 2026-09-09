@@ -208,6 +208,20 @@ class _LessonDecisionApi extends MagicApiClient {
     expect(path, '/crm/lessons/$expectedLessonId/$operationKey/preview');
     previewAttempts += 1;
     previews.add(Map<String, dynamic>.from(data as Map));
+    if (operationKey == 'planned-settlement') {
+      expect(
+        previews.last.keys,
+        everyElement(
+          isIn([
+            'expectedVersion',
+            'reasonText',
+            'financialDecision',
+            'resources',
+          ]),
+        ),
+        reason: 'Match the strict planned-settlement preview DTO',
+      );
+    }
     if (previewFailureCode != null &&
         previewAttempts == previewFailureAttempt) {
       previewRedirected = true;
@@ -638,6 +652,27 @@ Map<String, dynamic> _normalizeCancelDecision(Map<String, dynamic> decision) {
 }
 
 void main() {
+  test(
+    'editing a lesson uses the planned-settlement wire contract with a reason',
+    () async {
+      final api = _LessonDecisionApi(operationKey: 'planned-settlement');
+      final controller = LessonDecisionController(
+        crm: MagicCrmService(api),
+        operation: LessonDecisionOperation.edit,
+        lesson: _lesson,
+        canManageTeacherCompensation: false,
+      );
+      final preview = await controller.preview(
+        reason: 'Исправление занятия',
+        settlementTypeKey: 'lesson',
+        compensationRuleKey: 'none',
+      );
+      expect(preview.canConfirm, isTrue);
+      expect(api.previews.single['reasonText'], 'Исправление занятия');
+      expect(api.previews.single, isNot(contains('reasonCode')));
+    },
+  );
+
   testWidgets('empty reason blocks preview and scrolls back to its error', (
     tester,
   ) async {

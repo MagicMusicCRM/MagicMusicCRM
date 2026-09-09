@@ -47,41 +47,52 @@ void main() {
     },
   );
 
-  test('paging replaces the visible page without mixing plan trays', () async {
-    final api = _TimelineApi()
-      ..enqueue(
-        Future.value(
-          _pageJson(
-            const ['lesson-1', 'lesson-2'],
-            nextCursor: 'cursor-next',
-            hasNext: true,
+  test(
+    'loads all cursor pages in a calendar window before moving thirty days',
+    () async {
+      final api = _TimelineApi()
+        ..enqueue(
+          Future.value(
+            _pageJson(
+              const ['lesson-1', 'lesson-2'],
+              nextCursor: 'cursor-next',
+              hasNext: true,
+            ),
           ),
-        ),
-      )
-      ..enqueue(Future.value(_pageJson(const ['lesson-25', 'lesson-26'])));
-    final controller = StudentLessonTimelineController(
-      service: MagicCrmService(api),
-      studentId: 'student-1',
-    );
-    addTearDown(controller.dispose);
+        )
+        ..enqueue(Future.value(_pageJson(const ['lesson-25', 'lesson-26'])))
+        ..enqueue(Future.value(_pageJson(const ['next-period'])));
+      final controller = StudentLessonTimelineController(
+        service: MagicCrmService(api),
+        studentId: 'student-1',
+        now: () => DateTime(2026, 9, 9, 17),
+      );
+      addTearDown(controller.dispose);
 
-    await controller.load();
-    await controller.next();
+      await controller.load();
+      expect(controller.page.windowStart, DateTime(2026, 9, 6));
+      expect(controller.page.items.map((item) => item.id), [
+        'lesson-1',
+        'lesson-2',
+        'lesson-25',
+        'lesson-26',
+      ]);
+      expect(api.requests[1].query['cursor'], 'cursor-next');
+      await controller.next();
 
-    expect(controller.page.items.map((item) => item.id), [
-      'lesson-25',
-      'lesson-26',
-    ]);
-    expect(
-      api.requests.map((request) => request.path),
-      everyElement('/crm/students/student-1/lesson-timeline'),
-    );
-    expect(api.requests.last.query, {
-      'cursor': 'cursor-next',
-      'direction': 'next',
-      'limit': 24,
-    });
-  });
+      expect(controller.page.items.map((item) => item.id), ['next-period']);
+      expect(
+        api.requests.map((request) => request.path),
+        everyElement('/crm/students/student-1/lesson-timeline'),
+      );
+      expect(api.requests.last.query, {
+        'direction': 'next',
+        'limit': 40,
+        'from': DateTime(2026, 10, 6).toUtc().toIso8601String(),
+        'to': DateTime(2026, 11, 5).toUtc().toIso8601String(),
+      });
+    },
+  );
 
   test(
     'paging failure preserves the page and retry repeats that page request',

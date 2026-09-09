@@ -5,6 +5,83 @@ import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_view.dart';
 
 void main() {
+  testWidgets(
+    'calendar timeline reads across fifteen days before the second row',
+    (tester) async {
+      final start = DateTime(2026, 9, 6);
+      final timeline = StudentLessonTimelinePage.fromJson({
+        'windowStart': start.toIso8601String(),
+        'items': [
+          for (var i = 0; i < 30; i++)
+            {
+              ..._lesson('day-$i', 'manual'),
+              'scheduledAt': DateTime(2026, 9, 6 + i, 15).toIso8601String(),
+            },
+        ],
+        'hasPrevious': true,
+        'hasNext': true,
+      });
+      await _pumpView(tester, width: 1440, timeline: timeline, plans: []);
+      Rect tile(int day) =>
+          tester.getRect(find.byKey(ValueKey('student-timeline-day-$day')));
+      expect(tile(1).top, tile(0).top);
+      expect(tile(1).left, greaterThan(tile(0).left));
+      expect(tile(14).top, tile(0).top);
+      expect(tile(15).top, greaterThan(tile(0).bottom));
+      expect(tile(15).left, tile(0).left);
+      expect(tile(29).top, tile(15).top);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'calendar keeps empty days and orders several lessons within a day across the year boundary',
+    (tester) async {
+      final start = DateTime(2026, 12, 29);
+      final timeline = StudentLessonTimelinePage.fromJson({
+        'windowStart': start.toIso8601String(),
+        'hasPrevious': true,
+        'hasNext': true,
+        'items': [
+          {
+            ..._lesson('evening', 'manual'),
+            'scheduledAt': DateTime(2027, 1, 1, 19).toIso8601String(),
+          },
+          {
+            ..._lesson('morning', 'manual'),
+            'scheduledAt': DateTime(2027, 1, 1, 9).toIso8601String(),
+          },
+          {
+            ..._lesson('row-two', 'manual'),
+            'scheduledAt': DateTime(2027, 1, 13, 10).toIso8601String(),
+          },
+        ],
+      });
+      await _pumpView(tester, width: 1440, timeline: timeline, plans: []);
+      final empty = find.byKey(
+        const ValueKey('student-timeline-date-2026-12-29'),
+      );
+      expect(
+        find.descendant(of: empty, matching: find.text('—')),
+        findsOneWidget,
+      );
+      final morning = tester.getRect(
+        find.byKey(const ValueKey('student-timeline-morning')),
+      );
+      final evening = tester.getRect(
+        find.byKey(const ValueKey('student-timeline-evening')),
+      );
+      expect(morning.left, evening.left);
+      expect(morning.bottom, lessThan(evening.top));
+      final secondRow = tester.getRect(
+        find.byKey(const ValueKey('student-timeline-row-two')),
+      );
+      expect(secondRow.top, greaterThan(evening.bottom));
+      expect(secondRow.left, tester.getRect(empty).left);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final width in const [390.0, 768.0, 1440.0]) {
     testWidgets('shows one full-width student timeline at ${width.toInt()}', (
       tester,

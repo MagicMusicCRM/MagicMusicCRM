@@ -653,3 +653,34 @@ DECISION: Общий Flutter API-клиент повторяет connectionTimeo
 Проверки: test/core/api/magic_api_retry_test.dart и потеря ответа после commit
 в integration_test/employee_journey_live_test.dart. Это устраняет скрытые сетевые
 повторы, но не объявляет все CRM-команды защищёнными от повторной ручной отправки.
+
+### Calendar lesson feed and chronological coverage — 2026-09-09 (unreleased)
+
+DECISION: Student timeline retains its endpoint and legacy cursor contract. Optional
+`from/to` bound a calendar window; Flutter reads every cursor page before replacing
+the displayed window. Thirty days are arranged horizontally in two rows of fifteen,
+starting three calendar days before today. Empty dates retain their positions.
+
+DECISION: `subscription-coverage.persistence.ts` is the shared reservation allocator
+used by lesson creation, plan materialization, funding changes, cancellation and
+rescheduling. It uses the existing frozen settlement calculator, locks subscriptions
+in stable order and chooses eligible scheduled lessons by date and ID across plans
+and manual bookings. Materialization reconciles once per subscription per batch.
+It never locks other lesson rows while holding a subscription lock. Reservation
+versions protect signed previews; releases and new reservations retain history.
+Coverage changes append audit and transactional outbox events for UI invalidation.
+Consumed facts, pending settlements and legacy reservations without a valid editable
+plan retain their existing authority; replacement mappings are not reinterpreted.
+
+DECISION: Existing coverage can be inspected with
+`npx ts-node scripts/reconcile-subscription-coverage.ts` from `server`, with an explicit
+`DATABASE_URL`. Default mode rolls back all reservation, audit and outbox changes;
+`--apply` uses the same allocator transactionally. Repeating apply is a no-op once
+coverage is aligned. Production use belongs to a separately authorized release with
+fresh backup, rollback and reconciliation; neither startup nor reads repair data.
+The new Flutter feed and range endpoint must be released together.
+
+DECISION: Lesson editing and planned-settlement selection share the same wire
+endpoint. Flutter includes `reasonText` and omits `reasonCode` for both operation
+aliases. The Windows employee journey now checks edit → reason → calculation →
+commit through real HTTP, in addition to booking, completion, cancellation and refund.

@@ -57,6 +57,21 @@ export class StudentLessonTimelineService {
     query: StudentLessonTimelineQuery,
   ): Promise<StudentLessonTimelinePage> {
     const limit = Math.max(1, Math.min(query.limit ?? 24, 40));
+    if (query.from || query.to) {
+      const from = Date.parse(query.from ?? ""), to = Date.parse(query.to ?? "");
+      if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from ||
+          to - from > 31 * 86400000 || query.direction === "previous") {
+        throw new UnprocessableEntityException({ code: "INVALID_TIMELINE_RANGE",
+          message: "Укажите корректный период ленты продолжительностью до 31 дня." });
+      }
+      const range = { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
+      const cursor = query.cursor ? this.decodeCursor(query.cursor) : {
+        scheduledAt: range.from, id: "00000000-0000-0000-0000-000000000000",
+      };
+      const rows = await this.repository.listPage(actor, studentId, "next", cursor,
+        limit, !query.cursor, range);
+      return this.projectPage(rows.slice(0, limit), false, rows.length > limit);
+    }
     if (!query.cursor) return this.aroundNow(actor, studentId, limit);
 
     const cursor = this.decodeCursor(query.cursor);

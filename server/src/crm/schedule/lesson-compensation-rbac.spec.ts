@@ -428,7 +428,7 @@ describe("lesson compensation service RBAC", () => {
         {} as never,
         {} as never,
         new CrmPolicy(),
-        {} as never,
+        { lockSettlementCoverage: jest.fn().mockResolvedValue({ reservations: [], subscriptions: [] }) } as never,
         settlement as never,
         {} as never,
         {

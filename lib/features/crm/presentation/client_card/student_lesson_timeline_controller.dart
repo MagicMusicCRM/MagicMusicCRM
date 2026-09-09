@@ -7,12 +7,15 @@ class StudentLessonTimelineController extends ChangeNotifier {
   StudentLessonTimelineController({
     required MagicCrmService service,
     required String studentId,
-    this.limit = 24,
+    this.limit = 40,
+    DateTime Function()? now,
   }) : _service = service,
-       _studentId = studentId;
+       _studentId = studentId,
+       _now = now ?? DateTime.now;
 
   final MagicCrmService _service;
   final int limit;
+  final DateTime Function() _now;
 
   String _studentId;
   StudentLessonTimelinePage page = const StudentLessonTimelinePage.empty();
@@ -38,18 +41,27 @@ class StudentLessonTimelineController extends ChangeNotifier {
     _notify();
   }
 
-  Future<void> load() => _request(const _TimelineRequest.initial());
+  DateTime get _initialStart {
+    final today = _now();
+    return DateTime(today.year, today.month, today.day - 3);
+  }
+
+  DateTime _shift(DateTime date, int days) =>
+      DateTime(date.year, date.month, date.day + days);
+
+  Future<void> load() =>
+      _request(_TimelineRequest(page.windowStart ?? _initialStart, false));
 
   Future<void> previous() {
-    final cursor = page.previousCursor;
-    if (!page.hasPrevious || cursor == null) return Future.value();
-    return _request(_TimelineRequest.page(cursor, 'previous'));
+    return _request(
+      _TimelineRequest(_shift(page.windowStart ?? _initialStart, -30), true),
+    );
   }
 
   Future<void> next() {
-    final cursor = page.nextCursor;
-    if (!page.hasNext || cursor == null) return Future.value();
-    return _request(_TimelineRequest.page(cursor, 'next'));
+    return _request(
+      _TimelineRequest(_shift(page.windowStart ?? _initialStart, 30), true),
+    );
   }
 
   Future<void> retry() {
@@ -70,14 +82,41 @@ class StudentLessonTimelineController extends ChangeNotifier {
     error = null;
     _notify();
     try {
-      final result = await _service.listStudentLessonTimeline(
-        studentId: requestedStudentId,
-        cursor: request.cursor,
-        direction: request.direction,
-        limit: limit,
-      );
+      final items = <String, StudentLessonTimelineItem>{};
+      final cursors = <String>{};
+      String? cursor;
+      do {
+        final result = await _service.listStudentLessonTimeline(
+          studentId: requestedStudentId,
+          cursor: cursor,
+          limit: limit,
+          from: request.start,
+          to: _shift(request.start, 30),
+        );
+        if (!_isCurrent(generation, requestedStudentId)) return;
+        for (final item in result.items) {
+          items[item.id] = item;
+        }
+        if (!result.hasNext) break;
+        cursor = result.nextCursor;
+        if (cursor == null || !cursors.add(cursor)) {
+          throw const FormatException('Timeline pagination did not advance');
+        }
+      } while (true);
       if (!_isCurrent(generation, requestedStudentId)) return;
-      page = result;
+      final ordered = items.values.toList()
+        ..sort((a, b) {
+          final time = a.scheduledAt.compareTo(b.scheduledAt);
+          return time != 0 ? time : a.id.compareTo(b.id);
+        });
+      page = StudentLessonTimelinePage(
+        items: List.unmodifiable(ordered),
+        windowStart: request.start,
+        previousCursor: null,
+        nextCursor: null,
+        hasPrevious: true,
+        hasNext: true,
+      );
       _retryRequest = null;
     } catch (exception) {
       if (!_isCurrent(generation, requestedStudentId)) return;
@@ -113,20 +152,7 @@ class StudentLessonTimelineController extends ChangeNotifier {
 }
 
 class _TimelineRequest {
-  const _TimelineRequest({
-    required this.cursor,
-    required this.direction,
-    required this.paging,
-  });
-
-  const _TimelineRequest.initial()
-    : cursor = null,
-      direction = 'next',
-      paging = false;
-
-  const _TimelineRequest.page(this.cursor, this.direction) : paging = true;
-
-  final String? cursor;
-  final String direction;
+  const _TimelineRequest(this.start, this.paging);
+  final DateTime start;
   final bool paging;
 }

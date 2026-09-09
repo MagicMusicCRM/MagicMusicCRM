@@ -10,7 +10,7 @@ const { Pool } = dependency('pg');
 const run = promisify(execFile);
 
 const scenarios = ['student-created', 'network-loss-draft-preserved', 'payment-retried-once',
-  'lesson-booked', 'lesson-completed', 'lesson-cancelled', 'refund-balanced',
+  'lesson-booked', 'lesson-completed', 'lesson-edit-calculated', 'lesson-cancelled', 'refund-balanced',
   'concurrent-edit-conflict', 'reopened-saved-state'];
 
 async function verifyEmployeeResult(pool, result) {

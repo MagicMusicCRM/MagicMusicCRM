@@ -8,6 +8,8 @@ extension MagicCrmSchedule on MagicCrmService {
     String? cursor,
     String direction = 'next',
     int limit = 24,
+    DateTime? from,
+    DateTime? to,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/students/${Uri.encodeComponent(studentId)}/lesson-timeline',
@@ -15,6 +17,8 @@ extension MagicCrmSchedule on MagicCrmService {
         'cursor': ?cursor,
         'direction': direction,
         'limit': limit,
+        if (from != null) 'from': from.toUtc().toIso8601String(),
+        if (to != null) 'to': to.toUtc().toIso8601String(),
       },
     );
     return StudentLessonTimelinePage.fromJson(response);

@@ -432,6 +432,17 @@ void main() {
       final cancelledLesson = await createLesson(
         scheduled.add(const Duration(days: 2)),
       );
+      final beforeEditVersion = (await lesson(cancelledLesson))['version'];
+      await decision(cancelledLesson, LessonDecisionOperation.edit);
+      expect((await lesson(cancelledLesson))['version'], beforeEditVersion + 1);
+      final editPreview = responses.lastWhere(
+        (response) => response.requestOptions.uri.path.endsWith(
+          '/$cancelledLesson/planned-settlement/preview',
+        ),
+      );
+      expect(editPreview.requestOptions.data, isNot(contains('reasonCode')));
+      expect(editPreview.requestOptions.data['reasonText'], 'Проверка выпуска');
+      await evidence('lesson-edit-calculated');
       await decision(cancelledLesson, LessonDecisionOperation.cancel);
       expect((await lesson(cancelledLesson))['status'], 'cancelled');
       await balance(id, 350000);

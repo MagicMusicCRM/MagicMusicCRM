@@ -160,6 +160,7 @@ class StudentLessonTimelineItem {
 
 class StudentLessonTimelinePage {
   const StudentLessonTimelinePage({
+    this.windowStart,
     required this.items,
     required this.previousCursor,
     required this.nextCursor,
@@ -168,7 +169,8 @@ class StudentLessonTimelinePage {
   });
 
   const StudentLessonTimelinePage.empty()
-    : items = const [],
+    : windowStart = null,
+      items = const [],
       previousCursor = null,
       nextCursor = null,
       hasPrevious = false,
@@ -182,6 +184,9 @@ class StudentLessonTimelinePage {
       );
     }
     return StudentLessonTimelinePage(
+      windowStart: json['windowStart'] == null
+          ? null
+          : DateTime.parse(json['windowStart'] as String),
       items: List.unmodifiable(
         rawItems.map((raw) {
           if (raw is! Map) {
@@ -202,6 +207,7 @@ class StudentLessonTimelinePage {
   }
 
   final List<StudentLessonTimelineItem> items;
+  final DateTime? windowStart;
   final String? previousCursor;
   final String? nextCursor;
   final bool hasPrevious;

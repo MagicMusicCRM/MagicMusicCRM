@@ -1660,6 +1660,35 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("gives earlier lessons priority across plans created in reverse date order", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      await pool.query("update app.subscriptions set lessons_total = 2 where id = $1", [fixture.subscriptionIds[0]]);
+      const create = (offset: number) => plans.create(actor, {
+        kind: "individual", title: "Приоритет ближайших занятий",
+        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: addDays(fixture.today, offset), activeUntil: addDays(fixture.today, offset + 13),
+        rows: [row(fixture, 1, "10:00")],
+      }, { idempotencyKey: randomUUID(), requestId: randomUUID() });
+      const later = await create(14);
+      const original = await pool.query<{ id: string }>(
+        "select id from app.lesson_reservations where lesson_id = any($1::uuid[]) and state = 'reserved'", [later.lessonIds]);
+      expect(original.rows).toHaveLength(2);
+      const earlier = await create(0);
+      const covered = await pool.query<{ id: string; covered: boolean }>(
+        `select l.id, exists(select 1 from app.lesson_reservations r where r.lesson_id = l.id and r.state = 'reserved') as covered
+         from app.lessons l where l.id = any($1::uuid[]) order by l.scheduled_at, l.id`,
+        [[...earlier.lessonIds, ...later.lessonIds]]);
+      expect(covered.rows.map((item) => item.covered)).toEqual([true, true, false, false]);
+      const history = await pool.query<{ state: string }>(
+        "select state from app.lesson_reservations where id = any($1::uuid[])", [original.rows.map((item) => item.id)]);
+      expect(history.rows.map((item) => item.state)).toEqual(["released", "released"]);
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("reviews and confirms historical occurrences without directly using subscription units", async () => {
     const fixture = await createFixture(pool);
     let additional:
@@ -3172,7 +3201,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       );
       const beforeFailure = await planPersistenceShape(pool, created.id);
       const allocationFailure = jest
-        .spyOn(reservations, "allocate")
+        .spyOn(reservations, "reconcile")
         .mockRejectedValueOnce(new Error("injected reservation failure"));
       await expect(
         plans.update(
@@ -6434,4 +6463,3 @@ async function cleanup(
     client.release();
   }
 }
-

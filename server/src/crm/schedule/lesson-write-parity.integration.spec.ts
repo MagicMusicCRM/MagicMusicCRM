@@ -1948,6 +1948,82 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     }
   });
 
+  it("reserves the nearest manual lessons under concurrent creation and refills after a funding edit", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const lessonIds: string[] = [];
+    const metadata = () => ({ idempotencyKey: randomUUID(), requestId: randomUUID() });
+    try {
+      await pool.query("update app.users set role='director' where id=$1", [actor.userId]);
+      const subscriptionId = (await pool.query<{ id: string }>(
+        "insert into app.subscriptions (student_id, lessons_total, lessons_used, status) values ($1, 2, 0, 'active') returning id",
+        [fixture.studentId])).rows[0]!.id;
+      const start = new Date(nextMondayAtTenMoscow()).getTime();
+      const create = async (days: number) => {
+        const dto = {
+          clientRef: { type: "student" as const, id: fixture.studentId },
+          teacherId: fixture.teacherId, branchId: fixture.branchId, roomId: fixture.roomId,
+          scheduledAt: new Date(start + days * 86400000).toISOString(), durationMinutes: 60, isTrial: false,
+          completionType: "standard.success", clientChargeType: "subscription" as const,
+          clientChargeValue: 1, subscriptionId,
+          teacherCompensationType: "fixed" as const, teacherCompensationValue: 700,
+          financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+            clientDecisions: [{ clientId: fixture.studentId }] },
+        };
+        const key = metadata();
+        const result = await commands.create(actor, dto, key);
+        lessonIds.push(result.id);
+        expect(await commands.create(actor, dto, key)).toMatchObject({ id: result.id, replayed: true });
+        return result;
+      };
+      const far = await create(21);
+      const middle = await create(14);
+      const [near, nearest] = await Promise.all([create(7), create(0)]);
+      const covered = async () => (await pool.query<{ lesson_id: string }>(
+        "select lesson_id from app.lesson_reservations where subscription_id=$1 and state='reserved' order by lesson_id",
+        [subscriptionId])).rows.map((row) => row.lesson_id).sort();
+      expect(await covered()).toEqual([near.id, nearest.id].sort());
+      const dto = {
+        expectedVersion: nearest.version, reasonText: "Оплатить ближайшее занятие с личного счёта",
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+          clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId,
+            chargeType: "personal_account" as const, basePriceMinor: "150000" }] },
+      };
+      const preview = await commands.previewSettlementPlan(actor, nearest.id, dto);
+      // Preview must not move anyone else's persisted reservation.
+      expect(await covered()).toEqual([near.id, nearest.id].sort());
+      await commands.updateSettlementPlan(actor, nearest.id, { ...dto, previewToken: preview.previewToken, confirm: true }, metadata());
+      expect(await covered()).toEqual([near.id, middle.id].sort());
+      expect((await pool.query("select state from app.lesson_reservations where lesson_id=$1", [far.id])).rows)
+        .toEqual([{ state: "released" }]);
+      expect((await pool.query("select count(*)::int as count from app.lesson_client_charge_facts where lesson_id=any($1::uuid[])", [lessonIds])).rows[0].count).toBe(0);
+      const reservations = new SubscriptionReservationService(database, {} as RealtimeBus);
+      await pool.query("update app.subscriptions set lessons_total=1 where id=$1", [subscriptionId]);
+      await database.transaction((client) => reservations.reconcile(client, [subscriptionId]));
+      expect(await covered()).toEqual([near.id]);
+      const cancel = (lessonId: string, settlementTypeKey: string) => database.transaction(async (client) => {
+        await client.query("update app.lessons set lifecycle_state='cancelled' where id=$1", [lessonId]);
+        const result = await settlement.settle(client, lessonId, { context: "cancel",
+          decision: { settlementTypeKey, teacherCompensationRuleKey: "none",
+            clientDecisions: [{ clientId: fixture.studentId }] }, reasonText: "Проверка освобождения лимита" });
+        await reservations.terminalize(client, result);
+        return result;
+      });
+      const unpaid = await cancel(near.id, "unpaid_miss");
+      expect(unpaid.clientFacts[0]!.units).toBe("0.00");
+      expect(await covered()).toEqual([middle.id]);
+      const paid = await cancel(middle.id, "paid_miss");
+      expect(paid.clientFacts[0]!.units).toBe("1.00");
+      expect(await covered()).toEqual([]);
+      const totals = (await pool.query(`select
+        (select sum(units)::text from app.lesson_client_charge_facts_effective where subscription_id=$1) used,
+        (select count(*)::int from app.lesson_reservations where subscription_id=$1 and state='consumed') consumed`, [subscriptionId])).rows[0];
+      expect(totals).toEqual({ used: "1.00", consumed: 1 });
+    } finally {
+      await cleanupFixture(pool, { ...fixture, actorKey: `user:${fixture.managerId}`, lessonIds });
+    }
+  });
+
   it("edits an uncovered lesson without claiming subscription coverage or bypassing settlement capacity", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "director" as const };

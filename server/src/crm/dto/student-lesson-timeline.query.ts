@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsIn,
+  IsDateString,
   IsInt,
   IsOptional,
   IsString,
@@ -10,6 +11,14 @@ import {
 } from "class-validator";
 
 export class StudentLessonTimelineQuery {
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
   @IsOptional()
   @IsString()
   @Matches(/^[A-Za-z0-9_-]+$/)

@@ -740,100 +740,25 @@ export class ScheduleSeriesMaterializerService {
     lessonIds: string[],
   ): Promise<void> {
     if (!lessonIds.length) return;
-    const planCharges = await executor.query<{
-      lesson_id: string;
-      student_id: string;
-      payer_student_id: string;
-      subscription_id: string;
-      units: string;
-    }>(
-      `
-        select snapshot.lesson_id, snapshot.client_id as student_id,
-          coalesce((
-            select nullif(choice->>'payerStudentId', '')::uuid
-            from app.lesson_settlement_plans funding_plan,
-              jsonb_array_elements(coalesce(
-                funding_plan.decision->'clientDecisions', '[]'::jsonb
-              )) choice
-            where funding_plan.lesson_id = snapshot.lesson_id
-              and choice->>'clientId' = snapshot.client_id::text
-            limit 1
-          ), snapshot.client_id) as payer_student_id,
-          lesson.scheduled_at,
-          snapshot.subscription_id, snapshot.client_charge_value::text as units
-        from app.lesson_snapshots snapshot
-        join app.lessons lesson on lesson.id = snapshot.lesson_id
-        join app.schedule_series series on series.id = lesson.series_id
-        where snapshot.lesson_id = any($1::uuid[])
-          and series.plan_id is not null
-          and lesson.deleted_at is null and lesson.lifecycle_state = 'scheduled'
-          and not exists (select 1 from app.lesson_reservations existing
-            where existing.lesson_id = lesson.id and existing.subscription_id = snapshot.subscription_id
-              and existing.state in ('reserved', 'consumed'))
-          and not exists (
-            select 1 from app.lesson_settlement_plans funding_plan,
-              jsonb_array_elements(coalesce(funding_plan.decision->'clientDecisions', '[]'::jsonb)) choice
-            where funding_plan.lesson_id = lesson.id and choice->>'clientId' = snapshot.client_id::text
-              and (choice->>'chargeType' in ('personal_account', 'none')
-                or (choice->>'subscriptionId' is not null and choice->>'subscriptionId' <> snapshot.subscription_id::text))
-          )
-          and snapshot.client_charge_type = 'subscription'
-          and snapshot.client_charge_value > 0
-        union all
-        select participant.lesson_id, participant.student_id,
-          coalesce((
-            select nullif(choice->>'payerStudentId', '')::uuid
-            from app.lesson_settlement_plans funding_plan,
-              jsonb_array_elements(coalesce(
-                funding_plan.decision->'clientDecisions', '[]'::jsonb
-              )) choice
-            where funding_plan.lesson_id = participant.lesson_id
-              and choice->>'clientId' = participant.student_id::text
-            limit 1
-          ), participant.student_id) as payer_student_id,
-          lesson.scheduled_at,
-          participant.subscription_id, participant.charge_value::text
-        from app.lesson_snapshot_participants participant
-        join app.lessons lesson on lesson.id = participant.lesson_id
-        join app.schedule_series series on series.id = lesson.series_id
-        where participant.lesson_id = any($1::uuid[])
-          and series.plan_id is not null
-          and lesson.deleted_at is null and lesson.lifecycle_state = 'scheduled'
-          and not exists (select 1 from app.lesson_reservations existing
-            where existing.lesson_id = lesson.id and existing.subscription_id = participant.subscription_id
-              and existing.state in ('reserved', 'consumed'))
-          and not exists (
-            select 1 from app.lesson_settlement_plans funding_plan,
-              jsonb_array_elements(coalesce(funding_plan.decision->'clientDecisions', '[]'::jsonb)) choice
-            where funding_plan.lesson_id = lesson.id and choice->>'clientId' = participant.student_id::text
-              and (choice->>'chargeType' in ('personal_account', 'none')
-                or (choice->>'subscriptionId' is not null and choice->>'subscriptionId' <> participant.subscription_id::text))
-          )
-          and participant.charge_type = 'subscription'
-          and participant.charge_value > 0
-        order by subscription_id, scheduled_at, lesson_id
-      `,
-      [lessonIds],
-    );
-    if (planCharges.rows.length && !this.reservations) {
-      throw new Error(
-        "SubscriptionReservationService is required for plan generation.",
-      );
+    const subscriptions = await executor.query<{ subscription_id: string }>(`
+      select subscription_id from app.lesson_snapshots
+      where lesson_id = any($1::uuid[]) and subscription_id is not null
+      union
+      select subscription_id from app.lesson_snapshot_participants
+      where lesson_id = any($1::uuid[]) and subscription_id is not null
+      union
+      select (choice->>'subscriptionId')::uuid from app.lesson_settlement_plans plan,
+        jsonb_array_elements(coalesce(plan.decision->'clientDecisions', '[]'::jsonb)) choice
+      where plan.lesson_id = any($1::uuid[]) and nullif(choice->>'subscriptionId', '') is not null
+    `, [lessonIds]);
+    if (subscriptions.rows.length && !this.reservations) {
+      throw new Error("SubscriptionReservationService is required for plan generation.");
     }
-    for (const charge of planCharges.rows) {
-      await this.reservations!.allocate(executor as PoolClient, {
-        lessonId: charge.lesson_id,
-        clientType: "student",
-        clientId: charge.student_id,
-        payerStudentId: charge.payer_student_id,
-        chargeType: "subscription",
-        subscriptionId: charge.subscription_id,
-        units: Number(charge.units),
-        allowUncovered: true,
-      });
+    if (subscriptions.rows.length) {
+      await this.reservations!.reconcile(executor as PoolClient,
+        subscriptions.rows.map((row) => row.subscription_id));
     }
   }
-
   materializePlanSeries(
     client: PoolClient,
     seriesId: string,

@@ -154,6 +154,7 @@ const ACTION_TITLES: Record<string, string> = {
   'crm.subscription_purchased': 'Абонемент приобретён',
   'crm.subscription_issued': 'Абонемент выдан',
   'crm.subscription_replaced': 'Абонемент заменён',
+  'crm.subscription_coverage_reconciled': 'Покрытие занятий абонементом перераспределено',
   'crm.subscription_cancelled': 'Абонемент отменён',
   'crm.payment_created': 'Платёж создан',
   'crm.payment_record_created': 'Платёж создан',

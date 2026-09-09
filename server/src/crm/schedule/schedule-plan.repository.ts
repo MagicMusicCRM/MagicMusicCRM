@@ -1,4 +1,5 @@
 import { unchangedScheduleLessonSql } from "./schedule-lesson-template";
+import { releaseLessonCoverage } from "../commerce/subscription-coverage.persistence";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
@@ -730,11 +731,7 @@ export class SchedulePlanRepository {
       [planId, from, untilExclusive],
     );
     if (removed.rows.length) {
-      await client.query(
-        `update app.lesson_reservations set state = 'released', updated_at = now()
-         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
-        [removed.rows.map((row) => row.id)],
-      );
+      await releaseLessonCoverage(client, removed.rows.map((row) => row.id));
     }
     return removed.rows.map((row) => row.id);
   }
@@ -1086,11 +1083,7 @@ export class SchedulePlanRepository {
       [seriesId, effectiveFrom],
     );
     if (removed.rows.length) {
-      await client.query(
-        `update app.lesson_reservations set state = 'released', updated_at = now()
-         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
-        [removed.rows.map((row) => row.id)],
-      );
+      await releaseLessonCoverage(client, removed.rows.map((row) => row.id));
     }
     return removed.rows.map((row) => row.series_date);
   }

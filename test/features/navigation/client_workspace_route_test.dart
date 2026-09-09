@@ -406,12 +406,12 @@ void main() {
             'hasNext': false,
           },
         },
-        studentLessonTimelinePage: const {
+        studentLessonTimelinePage: {
           'items': [
             {
               'id': 'lesson-1',
               'version': 1,
-              'scheduledAt': '2026-08-08T12:00:00.000Z',
+              'scheduledAt': DateTime.now().toUtc().toIso8601String(),
               'durationMinutes': 60,
               'lifecycleState': 'scheduled',
               'student': {'id': 'student-1', 'name': 'Анна Смирнова'},

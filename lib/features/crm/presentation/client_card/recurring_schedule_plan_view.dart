@@ -621,7 +621,8 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
     super.didUpdateWidget(oldWidget);
     final oldIds = oldWidget.page.items.map((item) => item.id).join('|');
     final newIds = widget.page.items.map((item) => item.id).join('|');
-    if (oldIds != newIds) {
+    if (oldIds != newIds ||
+        oldWidget.page.windowStart != widget.page.windowStart) {
       final showEnd = _previousPageRequested;
       _previousPageRequested = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -659,7 +660,28 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
       final width = math.max(1.0, constraints.maxWidth - AppSpace.md * 2);
       final columns = math.max(1, ((width + 4) / (78 * scale + 4)).floor());
       final tileWidth = (width - (columns - 1) * 4) / columns;
-      final contentColumns = (widget.page.items.length / 2).ceil();
+      final start = widget.page.windowStart;
+      final days = start == null
+          ? null
+          : List.generate(30, (index) {
+              final date = DateTime(start.year, start.month, start.day + index);
+              return widget.page.items.where((item) {
+                  final local = item.scheduledAt.toLocal();
+                  return local.year == date.year &&
+                      local.month == date.month &&
+                      local.day == date.day;
+                }).toList()
+                ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+            });
+      final contentColumns = start == null
+          ? (widget.page.items.length / 2).ceil()
+          : 15;
+      final dailyCount =
+          days?.fold<int>(1, (count, items) => math.max(count, items.length)) ??
+          1;
+      final rowHeight = days == null
+          ? 40 * scale
+          : (24 + 44 * dailyCount) * scale;
       final maxOffset = math.max(
         0.0,
         contentColumns * (tileWidth + 4) - 4 - width,
@@ -709,12 +731,12 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
               const LinearProgressIndicator(color: AppColor.gold)
             else if (widget.error != null && widget.page.items.isEmpty)
               _timelineError(context)
-            else if (widget.page.items.isEmpty)
+            else if (widget.page.items.isEmpty && start == null)
               const Text('Занятий пока нет.')
             else
               SizedBox(
                 key: const Key('student-lesson-timeline-grid'),
-                height: 80 * scale + 4,
+                height: rowHeight * 2 + 4,
                 child: Scrollbar(
                   controller: _scroll,
                   child: GridView.builder(
@@ -728,11 +750,32 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                       mainAxisSpacing: 4,
                       crossAxisSpacing: 4,
                     ),
-                    itemCount: widget.page.items.length,
-                    itemBuilder: (context, index) => _StudentTimelineItem(
-                      item: widget.page.items[index],
-                      onTap: () => widget.onOpen(widget.page.items[index]),
-                    ),
+                    itemCount: contentColumns * 2,
+                    itemBuilder: (context, index) {
+                      final orderedIndex =
+                          (index % 2) * contentColumns + index ~/ 2;
+                      if (days != null) {
+                        final date = DateTime(
+                          start!.year,
+                          start.month,
+                          start.day + orderedIndex,
+                        );
+                        return _StudentTimelineDay(
+                          date: date,
+                          items: days[orderedIndex],
+                          scale: scale,
+                          onOpen: widget.onOpen,
+                        );
+                      }
+                      if (orderedIndex >= widget.page.items.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final item = widget.page.items[orderedIndex];
+                      return _StudentTimelineItem(
+                        item: item,
+                        onTap: () => widget.onOpen(item),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -759,6 +802,62 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
       TextButton(onPressed: widget.onRetry, child: const Text('Повторить')),
     ],
   );
+}
+
+class _StudentTimelineDay extends StatelessWidget {
+  const _StudentTimelineDay({
+    required this.date,
+    required this.items,
+    required this.scale,
+    required this.onOpen,
+  });
+  final DateTime date;
+  final List<StudentLessonTimelineItem> items;
+  final double scale;
+  final ValueChanged<StudentLessonTimelineItem> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    const weekdays = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+    return Column(
+      key: ValueKey(
+        'student-timeline-date-${DateFormat('yyyy-MM-dd').format(date)}',
+      ),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 24 * scale,
+          child: Center(
+            child: Text(
+              '${DateFormat('dd.MM').format(date)} ${weekdays[date.weekday - 1]}',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        if (items.isEmpty)
+          Expanded(
+            child: Center(
+              child: Text(
+                '—',
+                semanticsLabel:
+                    'Нет занятий ${DateFormat('dd.MM').format(date)}',
+              ),
+            ),
+          ),
+        for (final item in items)
+          Padding(
+            padding: EdgeInsets.only(bottom: 4 * scale),
+            child: SizedBox(
+              height: 40 * scale,
+              child: _StudentTimelineItem(
+                item: item,
+                onTap: () => onOpen(item),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _StudentTimelineItem extends StatelessWidget {
