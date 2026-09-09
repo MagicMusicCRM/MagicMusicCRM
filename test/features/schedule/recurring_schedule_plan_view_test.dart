@@ -51,7 +51,7 @@ void main() {
       }),
     );
     final tile = find.byKey(const ValueKey('student-timeline-unpaid'));
-    expect(tester.getSize(tile).width, inInclusiveRange(39, 46));
+    expect(tester.getSize(tile).width, inInclusiveRange(60, 70));
     expect(
       find.descendant(of: tile, matching: find.text('11.09')),
       findsOneWidget,
@@ -102,7 +102,7 @@ void main() {
           for (var i = 0; i < 30; i++)
             {
               ..._lesson('day-$i', 'manual'),
-              'scheduledAt': DateTime(2026, 9, 6 + i, 15).toIso8601String(),
+              'scheduledAt': DateTime(2026, 9, 6 + i * 2, 15).toIso8601String(),
             },
         ],
         'hasPrevious': true,
@@ -120,7 +120,8 @@ void main() {
       final grid = tester.getRect(
         find.byKey(const Key('student-lesson-timeline-grid')),
       );
-      expect(tile(29).right, lessThanOrEqualTo(grid.right));
+      expect(tile(14).right, closeTo(grid.right, 1));
+      expect(tile(29).right, closeTo(grid.right, 1));
       expect(tester.takeException(), isNull);
     },
   );
@@ -165,8 +166,8 @@ void main() {
       final secondRow = tester.getRect(
         find.byKey(const ValueKey('student-timeline-row-two')),
       );
-      expect(secondRow.top, greaterThan(evening.bottom));
-      expect(secondRow.left, morning.left);
+      expect(secondRow.top, morning.top);
+      expect(secondRow.left, greaterThan(morning.right));
       expect(tester.takeException(), isNull);
     },
   );
@@ -230,7 +231,7 @@ void main() {
       expect(grid.height, closeTo(84, 0.1));
       for (final tile in tiles) {
         expect(tile.height, closeTo(40, 0.1));
-        expect(tile.width, inInclusiveRange(39, 46));
+        expect(tile.width, inInclusiveRange(39, 100));
       }
       expect(tester.takeException(), isNull);
     });

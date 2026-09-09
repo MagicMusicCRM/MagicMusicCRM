@@ -11,6 +11,121 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'fills thirty occupied dates across months and never splits the final day',
+    () async {
+      Map<String, dynamic> lesson(int day, int index) => {
+        ..._itemJson('day-$day-$index'),
+        'scheduledAt': DateTime(
+          2026,
+          9,
+          7 + day * 7,
+          10,
+          index,
+        ).toIso8601String(),
+      };
+      final api = _TimelineApi()
+        ..enqueue(
+          Future.value({
+            ..._pageJson([], hasNext: true, nextCursor: 'next-date-page'),
+            'items': [
+              for (var i = 0; i < 29; i++) lesson(i, 0),
+              for (var i = 0; i < 11; i++) lesson(29, i),
+            ],
+          }),
+        )
+        ..enqueue(
+          Future.value({
+            ..._pageJson([], hasNext: true, nextCursor: 'unused'),
+            'items': [lesson(29, 11), lesson(29, 12), lesson(30, 0)],
+          }),
+        )
+        ..enqueue(
+          Future.value({
+            ..._pageJson([]),
+            'items': [lesson(30, 0)],
+          }),
+        );
+      final controller = StudentLessonTimelineController(
+        service: MagicCrmService(api),
+        studentId: 'student-1',
+        now: () => DateTime(2026, 9, 10),
+      );
+      addTearDown(controller.dispose);
+      await controller.load();
+      expect(controller.page.items.length, 42);
+      expect(controller.page.items.last.id, 'day-29-12');
+      expect(
+        controller.page.items.any((item) => item.id == 'day-30-0'),
+        isFalse,
+      );
+      expect(
+        api.requests.first.query['anchor'],
+        DateTime(2026, 9, 7).toUtc().toIso8601String(),
+      );
+      expect(api.requests[1].query.containsKey('anchor'), isFalse);
+      expect(api.requests[1].query['cursor'], 'next-date-page');
+      await controller.next();
+      expect(
+        api.requests.last.query['anchor'],
+        DateTime(2026, 9, 7 + 29 * 7 + 1).toUtc().toIso8601String(),
+      );
+      expect(controller.page.items.single.id, 'day-30-0');
+      expect(controller.page.hasNext, isFalse);
+    },
+  );
+
+  test(
+    'previous page selects the nearest thirty dates in chronological order',
+    () async {
+      final api = _TimelineApi()
+        ..enqueue(Future.value(_pageJson(['current'])))
+        ..enqueue(
+          Future.value({
+            ..._pageJson([], hasPrevious: true, previousCursor: 'older'),
+            'items': [
+              for (var i = 0; i < 31; i++)
+                {
+                  ..._itemJson('past-$i'),
+                  'scheduledAt': DateTime(2026, 8, 1 - i, 15).toIso8601String(),
+                },
+            ],
+          }),
+        );
+      final controller = StudentLessonTimelineController(
+        service: MagicCrmService(api),
+        studentId: 'student-1',
+      );
+      addTearDown(controller.dispose);
+      await controller.load();
+      await controller.previous();
+      expect(controller.page.items.length, 30);
+      expect(controller.page.items.first.id, 'past-29');
+      expect(controller.page.items.last.id, 'past-0');
+      expect(api.requests.last.query['direction'], 'previous');
+      expect(controller.page.hasPrevious, isTrue);
+    },
+  );
+
+  test(
+    'empty previous page keeps existing lessons and disables further backward navigation',
+    () async {
+      final api = _TimelineApi()
+        ..enqueue(Future.value(_pageJson(['current'])))
+        ..enqueue(Future.value(_pageJson([])));
+      final controller = StudentLessonTimelineController(
+        service: MagicCrmService(api),
+        studentId: 'student-1',
+      );
+      addTearDown(controller.dispose);
+      await controller.load();
+      await controller.previous();
+      expect(controller.page.items.single.id, 'current');
+      expect(controller.page.hasPrevious, isFalse);
+      expect(controller.error, isNull);
+    },
+  );
+
+  test(
     'service safely separates the encoded path from paging query values',
     () async {
       final adapter = _CaptureAdapter(_pageJson(const []));
@@ -47,52 +162,48 @@ void main() {
     },
   );
 
-  test(
-    'loads all cursor pages in a calendar window before moving thirty days',
-    () async {
-      final api = _TimelineApi()
-        ..enqueue(
-          Future.value(
-            _pageJson(
-              const ['lesson-1', 'lesson-2'],
-              nextCursor: 'cursor-next',
-              hasNext: true,
-            ),
+  test('loads cursor pages and moves after the final occupied date', () async {
+    final api = _TimelineApi()
+      ..enqueue(
+        Future.value(
+          _pageJson(
+            const ['lesson-1', 'lesson-2'],
+            nextCursor: 'cursor-next',
+            hasNext: true,
           ),
-        )
-        ..enqueue(Future.value(_pageJson(const ['lesson-25', 'lesson-26'])))
-        ..enqueue(Future.value(_pageJson(const ['next-period'])));
-      final controller = StudentLessonTimelineController(
-        service: MagicCrmService(api),
-        studentId: 'student-1',
-        now: () => DateTime(2026, 9, 9, 17),
-      );
-      addTearDown(controller.dispose);
+        ),
+      )
+      ..enqueue(Future.value(_pageJson(const ['lesson-25', 'lesson-26'])))
+      ..enqueue(Future.value(_pageJson(const ['next-period'])));
+    final controller = StudentLessonTimelineController(
+      service: MagicCrmService(api),
+      studentId: 'student-1',
+      now: () => DateTime(2026, 9, 9, 17),
+    );
+    addTearDown(controller.dispose);
 
-      await controller.load();
-      expect(controller.page.windowStart, DateTime(2026, 9, 6));
-      expect(controller.page.items.map((item) => item.id), [
-        'lesson-1',
-        'lesson-2',
-        'lesson-25',
-        'lesson-26',
-      ]);
-      expect(api.requests[1].query['cursor'], 'cursor-next');
-      await controller.next();
+    await controller.load();
+    expect(controller.page.windowStart, DateTime(2026, 9, 6));
+    expect(controller.page.items.map((item) => item.id), [
+      'lesson-1',
+      'lesson-2',
+      'lesson-25',
+      'lesson-26',
+    ]);
+    expect(api.requests[1].query['cursor'], 'cursor-next');
+    await controller.next();
 
-      expect(controller.page.items.map((item) => item.id), ['next-period']);
-      expect(
-        api.requests.map((request) => request.path),
-        everyElement('/crm/students/student-1/lesson-timeline'),
-      );
-      expect(api.requests.last.query, {
-        'direction': 'next',
-        'limit': 40,
-        'from': DateTime(2026, 10, 6).toUtc().toIso8601String(),
-        'to': DateTime(2026, 11, 5).toUtc().toIso8601String(),
-      });
-    },
-  );
+    expect(controller.page.items.map((item) => item.id), ['next-period']);
+    expect(
+      api.requests.map((request) => request.path),
+      everyElement('/crm/students/student-1/lesson-timeline'),
+    );
+    expect(api.requests.last.query, {
+      'direction': 'next',
+      'limit': 40,
+      'anchor': DateTime(2026, 9, 5).toUtc().toIso8601String(),
+    });
+  });
 
   test(
     'paging failure preserves the page and retry repeats that page request',

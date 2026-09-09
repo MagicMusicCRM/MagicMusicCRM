@@ -49,18 +49,34 @@ class StudentLessonTimelineController extends ChangeNotifier {
   DateTime _shift(DateTime date, int days) =>
       DateTime(date.year, date.month, date.day + days);
 
+  DateTime _day(DateTime value) {
+    final local = value.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  }
+
   Future<void> load() =>
       _request(_TimelineRequest(page.windowStart ?? _initialStart, false));
 
   Future<void> previous() {
     return _request(
-      _TimelineRequest(_shift(page.windowStart ?? _initialStart, -30), true),
+      _TimelineRequest(
+        page.items.isEmpty
+            ? page.windowStart ?? _initialStart
+            : _day(page.items.first.scheduledAt),
+        true,
+        backwards: true,
+      ),
     );
   }
 
   Future<void> next() {
     return _request(
-      _TimelineRequest(_shift(page.windowStart ?? _initialStart, 30), true),
+      _TimelineRequest(
+        page.items.isEmpty
+            ? page.windowStart ?? _initialStart
+            : _shift(_day(page.items.last.scheduledAt), 1),
+        true,
+      ),
     );
   }
 
@@ -84,21 +100,27 @@ class StudentLessonTimelineController extends ChangeNotifier {
     try {
       final items = <String, StudentLessonTimelineItem>{};
       final cursors = <String>{};
+      final dates = <DateTime>{};
       String? cursor;
+      var hasMore = false;
       do {
         final result = await _service.listStudentLessonTimeline(
           studentId: requestedStudentId,
           cursor: cursor,
           limit: limit,
-          from: request.start,
-          to: _shift(request.start, 30),
+          direction: request.backwards ? 'previous' : 'next',
+          anchor: cursor == null ? request.start : null,
         );
         if (!_isCurrent(generation, requestedStudentId)) return;
         for (final item in result.items) {
           items[item.id] = item;
+          dates.add(_day(item.scheduledAt));
         }
-        if (!result.hasNext) break;
-        cursor = result.nextCursor;
+        hasMore = request.backwards ? result.hasPrevious : result.hasNext;
+        // Read through the thirtieth date, including all lessons split across
+        // API pages. A thirty-first date proves that the boundary is complete.
+        if (dates.length > 30 || !hasMore) break;
+        cursor = request.backwards ? result.previousCursor : result.nextCursor;
         if (cursor == null || !cursors.add(cursor)) {
           throw const FormatException('Timeline pagination did not advance');
         }
@@ -109,13 +131,36 @@ class StudentLessonTimelineController extends ChangeNotifier {
           final time = a.scheduledAt.compareTo(b.scheduledAt);
           return time != 0 ? time : a.id.compareTo(b.id);
         });
+      final orderedDates = dates.toList()..sort();
+      final selectedDates =
+          (request.backwards ? orderedDates.reversed : orderedDates)
+              .take(30)
+              .toSet();
+      final selected = ordered
+          .where((item) => selectedDates.contains(_day(item.scheduledAt)))
+          .toList();
+      hasMore = hasMore || dates.length > 30;
+      if (selected.isEmpty && request.paging) {
+        page = StudentLessonTimelinePage(
+          items: page.items,
+          windowStart: page.windowStart,
+          previousCursor: null,
+          nextCursor: null,
+          hasPrevious: request.backwards ? false : page.hasPrevious,
+          hasNext: request.backwards ? page.hasNext : false,
+        );
+        _retryRequest = null;
+        return;
+      }
       page = StudentLessonTimelinePage(
-        items: List.unmodifiable(ordered),
-        windowStart: request.start,
+        items: List.unmodifiable(selected),
+        windowStart: request.backwards && selected.isNotEmpty
+            ? _day(selected.first.scheduledAt)
+            : request.start,
         previousCursor: null,
         nextCursor: null,
-        hasPrevious: true,
-        hasNext: true,
+        hasPrevious: request.backwards ? hasMore : true,
+        hasNext: request.backwards ? true : hasMore,
       );
       _retryRequest = null;
     } catch (exception) {
@@ -152,7 +197,8 @@ class StudentLessonTimelineController extends ChangeNotifier {
 }
 
 class _TimelineRequest {
-  const _TimelineRequest(this.start, this.paging);
+  const _TimelineRequest(this.start, this.paging, {this.backwards = false});
   final DateTime start;
   final bool paging;
+  final bool backwards;
 }

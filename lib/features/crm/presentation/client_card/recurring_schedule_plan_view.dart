@@ -657,34 +657,34 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
-      final width = math.max(1.0, constraints.maxWidth - AppSpace.md * 2);
-      final columns = math.max(1, ((width + 4) / (39 * scale + 4)).floor());
+      final width = math.max(1.0, constraints.maxWidth - AppSpace.md * 2 - 2);
+      final columns = math.min(
+        15,
+        math.max(1, ((width + 4) / (39 * scale + 4)).floor()),
+      );
       final tileWidth = (width - (columns - 1) * 4) / columns;
       final start = widget.page.windowStart;
+      final byDate = <DateTime, List<StudentLessonTimelineItem>>{};
+      for (final item in widget.page.items) {
+        final local = item.scheduledAt.toLocal();
+        final date = DateTime(local.year, local.month, local.day);
+        (byDate[date] ??= []).add(item);
+      }
+      final dates = byDate.keys.toList()..sort();
       final days = start == null
           ? null
-          : List.generate(30, (index) {
-              final date = DateTime(start.year, start.month, start.day + index);
-              return widget.page.items.where((item) {
-                  final local = item.scheduledAt.toLocal();
-                  return local.year == date.year &&
-                      local.month == date.month &&
-                      local.day == date.day;
-                }).toList()
-                ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-            });
-      final visibleDays = days == null
-          ? null
           : [
-              for (var row = 0; row < 2; row++)
-                [
-                  for (var day = row * 15; day < (row + 1) * 15; day++)
-                    if (days[day].isNotEmpty) day,
-                ],
+              for (final date in dates)
+                byDate[date]!..sort((a, b) {
+                  final time = a.scheduledAt.compareTo(b.scheduledAt);
+                  return time != 0 ? time : a.id.compareTo(b.id);
+                }),
             ];
-      final contentColumns = visibleDays == null
+      final contentColumns = days == null
           ? (widget.page.items.length / 2).ceil()
-          : math.max(visibleDays[0].length, visibleDays[1].length);
+          : days.isEmpty
+          ? 0
+          : math.max(15, (days.length / 2).ceil());
       final dailyCount =
           days?.fold<int>(1, (count, items) => math.max(count, items.length)) ??
           1;
@@ -767,21 +767,13 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                     itemBuilder: (context, index) {
                       final orderedIndex =
                           (index % 2) * contentColumns + index ~/ 2;
-                      if (days != null && visibleDays != null) {
-                        final row = visibleDays[index % 2];
-                        final column = index ~/ 2;
-                        if (column >= row.length) {
+                      if (days != null) {
+                        if (orderedIndex >= days.length) {
                           return const SizedBox.shrink();
                         }
-                        final day = row[column];
-                        final date = DateTime(
-                          start!.year,
-                          start.month,
-                          start.day + day,
-                        );
                         return _StudentTimelineDay(
-                          date: date,
-                          items: days[day],
+                          date: dates[orderedIndex],
+                          items: days[orderedIndex],
                           scale: scale,
                           onOpen: widget.onOpen,
                         );

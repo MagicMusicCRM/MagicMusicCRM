@@ -52,6 +52,23 @@ function repositoryMock() {
 }
 
 describe("StudentLessonTimelineService", () => {
+  it.each(["next", "previous"] as const)("starts %s pagination at an explicit date without a calendar cutoff", async (direction) => {
+    const repository = repositoryMock();
+    repository.listPage.mockResolvedValue([]);
+    const anchor = "2026-09-06T21:00:00.000Z";
+    await new StudentLessonTimelineService(repository).list(actor, STUDENT_ID,
+      { anchor, direction, limit: 40 } as unknown as StudentLessonTimelineQuery);
+    expect(repository.listPage).toHaveBeenCalledTimes(1);
+    expect(repository.listPage).toHaveBeenCalledWith(actor, STUDENT_ID, direction,
+      { scheduledAt: anchor, id: "00000000-0000-0000-0000-000000000000" }, 40, direction === "next");
+  });
+
+  it.each([{cursor: "invalid"}, {from: "2026-09-01", to: "2026-09-20"}, {anchor: "invalid"}])("rejects ambiguous or invalid anchors %j", async (extra) => {
+    const repository = repositoryMock();
+    await expect(new StudentLessonTimelineService(repository).list(actor, STUDENT_ID,
+      { anchor: "2026-09-06T21:00:00.000Z", limit: 40, ...extra } as unknown as StudentLessonTimelineQuery)).rejects.toThrow();
+    expect(repository.listPage).not.toHaveBeenCalled();
+  });
   it("starts a bounded calendar window at midnight rather than splitting around now", async () => {
     const repository = repositoryMock();
     repository.listPage.mockResolvedValue([]);

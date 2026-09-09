@@ -57,6 +57,24 @@ export class StudentLessonTimelineService {
     query: StudentLessonTimelineQuery,
   ): Promise<StudentLessonTimelinePage> {
     const limit = Math.max(1, Math.min(query.limit ?? 24, 40));
+    if (query.anchor !== undefined) {
+      const time = Date.parse(query.anchor);
+      if (!Number.isFinite(time) || query.cursor || query.from || query.to) {
+        throw new UnprocessableEntityException({
+          code: "INVALID_TIMELINE_ANCHOR",
+          message: "Укажите одну начальную дату ленты без курсора и периода.",
+        });
+      }
+      const direction = query.direction ?? "next";
+      const rows = await this.repository.listPage(actor, studentId, direction,
+        { scheduledAt: new Date(time).toISOString(), id: "00000000-0000-0000-0000-000000000000" },
+        limit, direction === "next");
+      const items = rows.slice(0, limit);
+      if (direction === "previous") items.reverse();
+      return this.projectPage(items,
+        direction === "previous" ? rows.length > limit : items.length > 0,
+        direction === "next" ? rows.length > limit : items.length > 0);
+    }
     if (query.from || query.to) {
       const from = Date.parse(query.from ?? ""), to = Date.parse(query.to ?? "");
       if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from ||

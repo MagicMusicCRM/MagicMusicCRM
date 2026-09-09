@@ -219,9 +219,10 @@ class _PagingCardApiClient extends FakeCardApiClient {
       final query = {...?queryParameters};
       getRequests.add(path);
       getCalls.add((path: path, query: query));
-      final from = query['from'].toString();
+      final from = query['anchor'].toString();
       initialFrom ??= from;
-      if (from != initialFrom) {
+      final backwards = query['direction'] == 'previous';
+      if (from != initialFrom && !backwards) {
         if (remainingNextFailures > 0) {
           remainingNextFailures--;
           throw const MagicApiException(message: 'Временная ошибка сети');
@@ -233,14 +234,26 @@ class _PagingCardApiClient extends FakeCardApiClient {
             )
             as T;
       }
-      return _timelinePage(
-            lessonId: 'lesson-page-1',
-            state: 'rescheduled',
-            successorId: 'lesson-page-2',
-            covered: false,
-            scheduledAt: DateTime.parse(from).add(const Duration(days: 3)),
-          )
-          as T;
+      final firstPage = _timelinePage(
+        lessonId: 'lesson-page-1',
+        state: 'rescheduled',
+        successorId: 'lesson-page-2',
+        covered: false,
+        scheduledAt: DateTime.parse(initialFrom!).add(const Duration(days: 3)),
+      );
+      firstPage['items'] = [
+        ...firstPage['items'] as List,
+        for (var i = 1; i <= (backwards ? 29 : 30); i++)
+          (_timelinePage(
+                    lessonId: 'page-one-date-$i',
+                    scheduledAt: DateTime.parse(
+                      initialFrom!,
+                    ).add(Duration(days: 3 + i)),
+                  )['items']
+                  as List)
+              .single,
+      ];
+      return firstPage as T;
     }
     return super.get<T>(
       path,
@@ -374,7 +387,7 @@ void main() {
   }
 
   testWidgets(
-    'global timeline preserves its calendar window when loading fails',
+    'global timeline preserves its occupied-date page when loading fails',
     (tester) async {
       final api = _PagingCardApiClient(remainingNextFailures: 1);
       await _pump(tester, api, width: 840);
@@ -405,9 +418,9 @@ void main() {
       expect(failedQuery['limit'], 40);
       expect(
         DateTime.parse(
-          failedQuery['from'] as String,
+          failedQuery['anchor'] as String,
         ).difference(DateTime.parse(api.initialFrom!)).inDays,
-        30,
+        33,
       );
 
       await tester.tap(find.text('Повторить'));
@@ -421,7 +434,13 @@ void main() {
         find.byKey(const Key('student-lesson-timeline-previous')),
       );
       await tester.pumpAndSettle();
-      expect(api.getCalls.last.query['from'], api.initialFrom);
+      expect(api.getCalls.last.query['direction'], 'previous');
+      expect(
+        DateTime.parse(api.getCalls.last.query['anchor'] as String),
+        DateTime.parse(
+          failedQuery['anchor'] as String,
+        ).add(const Duration(days: 3)),
+      );
       await tester.drag(
         find.byKey(const Key('student-lesson-timeline-grid')),
         const Offset(4000, 0),

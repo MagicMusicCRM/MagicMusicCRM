@@ -13,6 +13,10 @@ import {
 export class StudentLessonTimelineQuery {
   @IsOptional()
   @IsDateString()
+  anchor?: string;
+
+  @IsOptional()
+  @IsDateString()
   from?: string;
 
   @IsOptional()
