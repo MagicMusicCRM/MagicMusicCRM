@@ -1,12 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
+import { lessonCompletionFailureCode as safeFailureName, isLessonFundingReview } from "./completion-failure";
 import {
   LessonCompletionClaim,
   LessonCompletionWorkerMetrics,
 } from "./completion-worker.types";
 
 interface ClaimRow {
+  failure_code?: string;
   lesson_id: string;
   lesson_version: number | string;
   scheduled_end_at: Date | string;
@@ -173,7 +175,7 @@ export class LessonCompletionWorkerRepository {
       `select work.lesson_id, lesson.version as lesson_version,
          work.scheduled_end_at, work.attempts,
          coalesce(work.updated_at, now()) as claimed_at,
-         'poison-recovery'::text as claimed_by
+         'poison-recovery'::text as claimed_by, work.last_error as failure_code
        from app.lesson_completion_work work
        join app.lessons lesson on lesson.id = work.lesson_id
        where work.state = 'poison'
@@ -292,12 +294,15 @@ export class LessonCompletionWorkerRepository {
   async markReviewRequired(
     client: PoolClient,
     claim: LessonCompletionClaim,
+    failureCode: string,
   ): Promise<void> {
     await client.query(
       `update app.lesson_completion_work
-       set terminal_state = 'settlement_pending', updated_at = now()
+       set terminal_state = 'settlement_pending', updated_at = now(),
+         state = case when $3 then 'completed' else state end,
+         completed_at = case when $3 then now() else completed_at end
        where lesson_id = $1 and state = 'poison' and attempts = $2`,
-      [claim.lessonId, claim.attempts],
+      [claim.lessonId, claim.attempts, isLessonFundingReview(failureCode)],
     );
   }
 
@@ -445,12 +450,6 @@ function positiveInteger(value: number, fallback: number): number {
   return Math.max(1, Math.floor(value));
 }
 
-function safeFailureName(error: unknown): string {
-  if (error instanceof Error && error.name) {
-    return error.name.slice(0, 120);
-  }
-  return "LessonCompletionFailure";
-}
 
 function workerError(code: string): Error {
   const error = new Error(code);
@@ -460,6 +459,7 @@ function workerError(code: string): Error {
 
 function mapClaim(row: ClaimRow): LessonCompletionClaim {
   return {
+    ...(row.failure_code ? { failureCode: row.failure_code } : {}),
     lessonId: row.lesson_id,
     lessonVersion: Number(row.lesson_version),
     scheduledEndAt: new Date(row.scheduled_end_at),

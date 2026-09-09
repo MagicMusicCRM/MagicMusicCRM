@@ -45,6 +45,8 @@ import {
   reserveLessonSettlementSubscriptions,
 } from "./lesson-settlement-subscription-capacity";
 import { acquireLessonSettlementLocks } from "./lesson-settlement-locks";
+import { assertAutomaticLessonAccountCapacity } from "./lesson-account-capacity";
+import { assertAutomaticLessonSubscriptionPayment } from "./lesson-subscription-payment-capacity";
 
 export async function settleLesson(
   client: PoolClient,
@@ -146,6 +148,10 @@ async function insertConfiguredLessonSettlementFacts(
     source.lesson_id,
     Boolean(input.correction),
   );
+  if (input.requireAvailableFunding) {
+    await assertAutomaticLessonAccountCapacity(client, clientFacts);
+    await assertAutomaticLessonSubscriptionPayment(client, clientFacts);
+  }
   await assertAndReserveSubscriptionCapacity(
     client,
     source.lesson_id,

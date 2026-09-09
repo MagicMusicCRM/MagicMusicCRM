@@ -12,6 +12,7 @@ import {
 } from "./completion-worker.types";
 import { LessonCompletionWorkerRepository } from "./completion-worker.repository";
 import { LessonCompletionService } from "./lesson-completion.service";
+import { lessonCompletionFailureCode as failureName, isLessonFundingReview } from "./completion-failure";
 
 const DEFAULT_POLL_MS = 15_000;
 const DEFAULT_BATCH_SIZE = 25;
@@ -90,7 +91,7 @@ export class LessonCompletionWorker
       try {
         await this.completion.markReviewRequired(
           stranded,
-          "LessonCompletionLeaseExhausted",
+          stranded.failureCode ?? "LessonCompletionLeaseExhausted",
         );
       } catch (error) {
         this.logger.error(
@@ -99,6 +100,7 @@ export class LessonCompletionWorker
       }
     }
     const result: LessonCompletionRunResult = {
+      reviewRequired: 0,
       claimed: claims.length,
       completed: 0,
       terminalObserved: 0,
@@ -121,24 +123,28 @@ export class LessonCompletionWorker
           capSeconds:
             options.backoffCapSeconds ??
             DEFAULT_BACKOFF_CAP_SECONDS,
-          maxAttempts,
+          maxAttempts: isLessonFundingReview(failureName(error)) ? 1 : maxAttempts,
         });
         if (failed === "retry") result.retry += 1;
         if (failed === "poison") {
-          result.poison += 1;
+          const fundingReview = isLessonFundingReview(failureName(error));
+          if (!fundingReview) result.poison += 1;
           try {
             await this.completion.markReviewRequired(
               claim,
               failureName(error),
             );
+            if (fundingReview) result.reviewRequired += 1;
           } catch (reviewError) {
             this.logger.error(
               `Poison Lesson ${claim.lessonId} review transition failed: ${failureName(reviewError)}`,
             );
           }
-          this.logger.error(
-            `Poison Lesson completion work: lesson=${claim.lessonId} attempts=${claim.attempts} error=${failureName(error)}`,
-          );
+          if (!fundingReview) {
+            this.logger.error(
+              `Poison Lesson completion work: lesson=${claim.lessonId} attempts=${claim.attempts} error=${failureName(error)}`,
+            );
+          }
         }
       }
     }
@@ -170,9 +176,9 @@ export class LessonCompletionWorker
     this.running = true;
     try {
       const result = await this.runOnce();
-      if (result.completed > 0 || result.poison > 0) {
+      if (result.completed > 0 || result.poison > 0 || result.reviewRequired > 0) {
         this.logger.log(
-          `Lesson completion run: claimed=${result.claimed} completed=${result.completed} retry=${result.retry} poison=${result.poison}`,
+          `Lesson completion run: claimed=${result.claimed} completed=${result.completed} review=${result.reviewRequired} retry=${result.retry} poison=${result.poison}`,
         );
       }
     } finally {
@@ -190,10 +196,4 @@ function envInteger(
   const parsed = Number(process.env[key]);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, Math.floor(parsed)));
-}
-
-function failureName(error: unknown): string {
-  return error instanceof Error && error.name
-    ? error.name.slice(0, 120)
-    : "LessonCompletionFailure";
 }

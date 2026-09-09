@@ -3,8 +3,95 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_view.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
 
 void main() {
+  test(
+    'settlement review explains missing funds without exposing error codes',
+    () {
+      expect(
+        lessonSettlementIssueLabel('LESSON_ACCOUNT_INSUFFICIENT_BALANCE'),
+        contains('На личном счёте недостаточно средств'),
+      );
+      expect(
+        lessonSettlementIssueLabel('SUBSCRIPTION_CAPACITY'),
+        contains('Выбранный абонемент не может покрыть занятие'),
+      );
+      expect(
+        lessonSettlementIssueLabel('SUBSCRIPTION_CAPACITY'),
+        contains('оплата преподавателю пока не выполнены'),
+      );
+      expect(
+        lessonSettlementIssueLabel('LESSON_SUBSCRIPTION_PAYMENT_REQUIRED'),
+        contains('Оплаченных занятий в абонементе недостаточно'),
+      );
+    },
+  );
+  testWidgets('compact cells keep time and no-charge explanation in tooltip', (
+    tester,
+  ) async {
+    await _pumpView(
+      tester,
+      width: 1050,
+      plans: [],
+      timeline: StudentLessonTimelinePage.fromJson({
+        'windowStart': '2026-09-08',
+        'hasPrevious': true,
+        'hasNext': true,
+        'items': [
+          {
+            ..._lesson('unpaid', 'manual'),
+            'scheduledAt': DateTime(2026, 9, 11, 15).toIso8601String(),
+            'settlement': {
+              'coveredBySubscription': false,
+              'settlementTypeKey': 'unpaid_miss',
+            },
+          },
+        ],
+      }),
+    );
+    final tile = find.byKey(const ValueKey('student-timeline-unpaid'));
+    expect(tester.getSize(tile).width, inInclusiveRange(39, 46));
+    expect(
+      find.descendant(of: tile, matching: find.text('11.09')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('15:00'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('student-timeline-no-charge-unpaid')),
+      findsOneWidget,
+    );
+    final tooltip = tester.widget<Tooltip>(
+      find.ancestor(of: tile, matching: find.byType(Tooltip)).first,
+    );
+    expect(tooltip.message, contains('11.09.2026 15:00'));
+    expect(tooltip.message, contains('Неоплачиваемый пропуск'));
+    expect(tooltip.message, contains('Абонемент не расходуется'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty calendar period has a message and working navigation', (
+    tester,
+  ) async {
+    var next = 0;
+    await _pumpView(
+      tester,
+      width: 1050,
+      plans: [],
+      timeline: StudentLessonTimelinePage.fromJson({
+        'windowStart': '2026-09-08',
+        'hasPrevious': true,
+        'items': [],
+        'hasNext': true,
+      }),
+      onNextTimeline: () => next++,
+    );
+    expect(find.text('В этом периоде занятий нет.'), findsOneWidget);
+    expect(find.text('—'), findsNothing);
+    await tester.tap(find.byKey(const Key('student-lesson-timeline-next')));
+    expect(next, 1);
+  });
+
   testWidgets(
     'calendar timeline reads across fifteen days before the second row',
     (tester) async {
@@ -21,7 +108,7 @@ void main() {
         'hasPrevious': true,
         'hasNext': true,
       });
-      await _pumpView(tester, width: 1440, timeline: timeline, plans: []);
+      await _pumpView(tester, width: 1050, timeline: timeline, plans: []);
       Rect tile(int day) =>
           tester.getRect(find.byKey(ValueKey('student-timeline-day-$day')));
       expect(tile(1).top, tile(0).top);
@@ -30,12 +117,16 @@ void main() {
       expect(tile(15).top, greaterThan(tile(0).bottom));
       expect(tile(15).left, tile(0).left);
       expect(tile(29).top, tile(15).top);
+      final grid = tester.getRect(
+        find.byKey(const Key('student-lesson-timeline-grid')),
+      );
+      expect(tile(29).right, lessThanOrEqualTo(grid.right));
       expect(tester.takeException(), isNull);
     },
   );
 
   testWidgets(
-    'calendar keeps empty days and orders several lessons within a day across the year boundary',
+    'calendar omits empty days and orders several lessons within a day across the year boundary',
     (tester) async {
       final start = DateTime(2026, 12, 29);
       final timeline = StudentLessonTimelinePage.fromJson({
@@ -61,10 +152,8 @@ void main() {
       final empty = find.byKey(
         const ValueKey('student-timeline-date-2026-12-29'),
       );
-      expect(
-        find.descendant(of: empty, matching: find.text('—')),
-        findsOneWidget,
-      );
+      expect(empty, findsNothing);
+      expect(find.text('—'), findsNothing);
       final morning = tester.getRect(
         find.byKey(const ValueKey('student-timeline-morning')),
       );
@@ -77,7 +166,7 @@ void main() {
         find.byKey(const ValueKey('student-timeline-row-two')),
       );
       expect(secondRow.top, greaterThan(evening.bottom));
-      expect(secondRow.left, tester.getRect(empty).left);
+      expect(secondRow.left, morning.left);
       expect(tester.takeException(), isNull);
     },
   );
@@ -141,7 +230,7 @@ void main() {
       expect(grid.height, closeTo(84, 0.1));
       for (final tile in tiles) {
         expect(tile.height, closeTo(40, 0.1));
-        expect(tile.width, inInclusiveRange(78, 90));
+        expect(tile.width, inInclusiveRange(39, 46));
       }
       expect(tester.takeException(), isNull);
     });

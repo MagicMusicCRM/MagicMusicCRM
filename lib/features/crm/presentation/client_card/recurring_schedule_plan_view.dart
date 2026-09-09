@@ -658,7 +658,7 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
     builder: (context, constraints) {
       final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
       final width = math.max(1.0, constraints.maxWidth - AppSpace.md * 2);
-      final columns = math.max(1, ((width + 4) / (78 * scale + 4)).floor());
+      final columns = math.max(1, ((width + 4) / (39 * scale + 4)).floor());
       final tileWidth = (width - (columns - 1) * 4) / columns;
       final start = widget.page.windowStart;
       final days = start == null
@@ -673,9 +673,18 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                 }).toList()
                 ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
             });
-      final contentColumns = start == null
+      final visibleDays = days == null
+          ? null
+          : [
+              for (var row = 0; row < 2; row++)
+                [
+                  for (var day = row * 15; day < (row + 1) * 15; day++)
+                    if (days[day].isNotEmpty) day,
+                ],
+            ];
+      final contentColumns = visibleDays == null
           ? (widget.page.items.length / 2).ceil()
-          : 15;
+          : math.max(visibleDays[0].length, visibleDays[1].length);
       final dailyCount =
           days?.fold<int>(1, (count, items) => math.max(count, items.length)) ??
           1;
@@ -731,8 +740,12 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
               const LinearProgressIndicator(color: AppColor.gold)
             else if (widget.error != null && widget.page.items.isEmpty)
               _timelineError(context)
-            else if (widget.page.items.isEmpty && start == null)
-              const Text('Занятий пока нет.')
+            else if (contentColumns == 0)
+              Text(
+                start == null
+                    ? 'Занятий пока нет.'
+                    : 'В этом периоде занятий нет.',
+              )
             else
               SizedBox(
                 key: const Key('student-lesson-timeline-grid'),
@@ -754,15 +767,21 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                     itemBuilder: (context, index) {
                       final orderedIndex =
                           (index % 2) * contentColumns + index ~/ 2;
-                      if (days != null) {
+                      if (days != null && visibleDays != null) {
+                        final row = visibleDays[index % 2];
+                        final column = index ~/ 2;
+                        if (column >= row.length) {
+                          return const SizedBox.shrink();
+                        }
+                        final day = row[column];
                         final date = DateTime(
                           start!.year,
                           start.month,
-                          start.day + orderedIndex,
+                          start.day + day,
                         );
                         return _StudentTimelineDay(
                           date: date,
-                          items: days[orderedIndex],
+                          items: days[day],
                           scale: scale,
                           onOpen: widget.onOpen,
                         );
@@ -829,21 +848,11 @@ class _StudentTimelineDay extends StatelessWidget {
           height: 24 * scale,
           child: Center(
             child: Text(
-              '${DateFormat('dd.MM').format(date)} ${weekdays[date.weekday - 1]}',
+              weekdays[date.weekday - 1],
               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ),
         ),
-        if (items.isEmpty)
-          Expanded(
-            child: Center(
-              child: Text(
-                '—',
-                semanticsLabel:
-                    'Нет занятий ${DateFormat('dd.MM').format(date)}',
-              ),
-            ),
-          ),
         for (final item in items)
           Padding(
             padding: EdgeInsets.only(bottom: 4 * scale),
@@ -877,11 +886,18 @@ class _StudentTimelineItem extends StatelessWidget {
     final successor =
         item.lifecycleState == StudentLessonLifecycleState.rescheduled &&
         item.reschedule.successorId != null;
+    final noChargeReason = switch (item.settlement.settlementTypeKey) {
+      'unpaid_miss' => 'Неоплачиваемый пропуск. Абонемент не расходуется.',
+      'free_lesson' => 'Бесплатное занятие. Абонемент не расходуется.',
+      _ => null,
+    };
     final description = [
       _originLabel(item.origin.kind),
       '${DateFormat('dd.MM.yyyy HH:mm').format(local)} · ${item.durationMinutes} мин',
       state.label,
       if (state.coveredBySubscription) 'Абонемент',
+      if (!state.coveredBySubscription && noChargeReason != null)
+        noChargeReason,
       item.teacher?.name ?? 'Педагог не указан',
       item.room?.name ?? 'Аудитория не указана',
       if (item.reschedule.predecessorId != null) 'Новое занятие после переноса',
@@ -909,7 +925,7 @@ class _StudentTimelineItem extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  DateFormat('d.MM · HH:mm').format(local),
+                  DateFormat('dd.MM').format(local),
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.ellipsis,
@@ -919,27 +935,48 @@ class _StudentTimelineItem extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(state.token.icon, size: 10, color: state.token.accent),
-                    if (state.coveredBySubscription) ...[
-                      const SizedBox(width: 4),
-                      const LessonSubscriptionBadge(
-                        compact: true,
-                        iconOnly: true,
-                      ),
-                    ],
-                    if (successor) ...[
-                      const SizedBox(width: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                       Icon(
-                        Icons.redo_rounded,
-                        key: ValueKey('student-timeline-successor-${item.id}'),
+                        state.token.icon,
                         size: 10,
                         color: state.token.accent,
                       ),
+                      if (state.coveredBySubscription) ...[
+                        const SizedBox(width: 4),
+                        const LessonSubscriptionBadge(
+                          compact: true,
+                          iconOnly: true,
+                        ),
+                      ],
+                      if (!state.coveredBySubscription &&
+                          noChargeReason != null) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.money_off_rounded,
+                          key: ValueKey(
+                            'student-timeline-no-charge-${item.id}',
+                          ),
+                          size: 10,
+                          color: state.token.accent,
+                        ),
+                      ],
+                      if (successor) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.redo_rounded,
+                          key: ValueKey(
+                            'student-timeline-successor-${item.id}',
+                          ),
+                          size: 10,
+                          color: state.token.accent,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ],
             ),

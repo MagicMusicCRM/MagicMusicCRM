@@ -1,4 +1,36 @@
-# MagicMusicCRM — актуальная передача
+# MagicMusicCRM — актуальная передача 214
+
+> Обновлено: 2026-09-10, production client/server 1.5.34+214
+> Source/tag: 48647ccd1bf09ff760ecb7f318ed33b8dd51af85, v1.5.34
+> Image: magicmusiccrm-server:1.5.34-214-final
+> Image ID: sha256:494923258ba0e9857c304b8f09515be7523626db0cf412ee551b655ec9cf0fed
+> Migration: 0154_retire_partial_miss (без новой миграции)
+> Статус: сервер, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Лента: первая строка — три прошедших дня плюс двенадцать дней с сегодняшнего;
+вторая — следующие пятнадцать дней, порядок слева направо. Абонемент покрывает
+ближайшие подходящие незавершённые занятия. Исправлена ошибка «Рассчитать» с причиной.
+Все исправления 213 сохранены. На production общая утилита перераспределила покрытие
+двух занятий; повторный запуск не изменил данные. Финансовая история сохранена.
+
+Свежие проверки: Flutter 1740, backend 313 suites/4082 tests, Windows/HTTP/DB 26 — PASS.
+Exact-image, strict security, контракты, публичные файлы/хеши и readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260909T205845Z.tgz.enc и magicmusiccrm-staging-20260909T210432Z.tgz.enc находятся вне сервера, сверены
+и восстановлены в изоляции с candidate и rollback. Issues=[] до/после и в финальной сверке.
+Настройка OTP и production .env не изменены.
+
+**Rollback:** image magicmusiccrm-server:1.5.33-213-final, revision
+0cf7212052f5caea9fbad7c010fc096dc6f5bb86. Схему 0154 и новую историю сохранять.
+Не откатывать БД поверх новых операций. Операционные файлы:
+/opt/magicmusiccrm/releases/1.5.34-214-48647ccd/.
+
+Evidence: docs/audits/release-214-production.md; логи dist/release214/.
+Актуальная Windows-сборка открыта из dist/release214/windows-package/ (PID 15176).
+Setup: dist/release214/MagicMusicCRM-1.5.34-214-Setup.exe.
+Release закреплён отдельным tag/commit; рабочая ветка и индекс пользователя сохранены.
+
+## Историческая передача 213 (не текущий статус)
+
 
 > Обновлено: 2026-09-09, выпуск 1.5.33+213
 > Production client/server: `1.5.33+213`

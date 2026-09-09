@@ -654,7 +654,7 @@ DECISION: Общий Flutter API-клиент повторяет connectionTimeo
 в integration_test/employee_journey_live_test.dart. Это устраняет скрытые сетевые
 повторы, но не объявляет все CRM-команды защищёнными от повторной ручной отправки.
 
-### Calendar lesson feed and chronological coverage — 2026-09-09 (unreleased)
+### Calendar lesson feed and chronological coverage — released in 1.5.34+214 (2026-09-10)
 
 DECISION: Student timeline retains its endpoint and legacy cursor contract. Optional
 `from/to` bound a calendar window; Flutter reads every cursor page before replacing

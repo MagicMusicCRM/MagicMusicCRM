@@ -90,6 +90,8 @@ export interface StoredLessonSettlementPlan
 }
 
 export interface LessonSettlementInput {
+  /** Internal worker policy; never accepted from a client command DTO. */
+  requireAvailableFunding?: boolean;
   context: LessonSettlementContext;
   decision: LessonFinancialDecision;
   reasonText?: string;
