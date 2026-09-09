@@ -1,4 +1,31 @@
-# MagicMusicCRM — актуальная передача 214
+# MagicMusicCRM — актуальная передача 215
+
+> Обновлено: 2026-09-10. Production client/server 1.5.35+215; tag v1.5.35.
+> Source: 4c34f743e3884d1a9636c7214d8736d64a7effac; image magicmusiccrm-server:1.5.35-215-final.
+> Image ID: sha256:6e0bee44451f474c036007568b12281edafe1794e6a1351c3f22ec73a4d5919d; schema 0154_retire_partial_miss, без новой миграции.
+> Статус: API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Лента скрывает пустые дни, карточки вдвое уже (дата и значки; подробности при наведении).
+Автоматический расчёт при нехватке денег/оплаченных единиц сразу остаётся на проверке
+сотрудника без списания и начисления преподавателю. Применяется общая формула оплаты
+абонемента. Архивирование серий и отдельная очередь продления ещё не реализованы.
+
+Проверки: Flutter 1743, backend 313 suites/4090 tests, Windows/HTTP/DB 26 — PASS.
+Exact-image, strict security, контракты, подписи, публичные хеши и readiness — PASS.
+Ограничение Semgrep Bash heredoc и существующие предупреждения сборки записаны в аудите.
+Pre/post backups magicmusiccrm-staging-20260909T222020Z.tgz.enc и magicmusiccrm-staging-20260909T222659Z.tgz.enc сверены вне сервера
+и восстановлены в изоляции с candidate и rollback. Финальная сверка issues=[].
+Production .env и OTP-настройка не изменены. Ручной repair данных не выполнялся.
+
+Rollback: magicmusiccrm-server:1.5.34-214-final, revision 48647ccd1bf09ff760ecb7f318ed33b8dd51af85.
+Сохранить схему 0154 и новую историю; БД поверх новых операций не откатывать.
+Операции: /opt/magicmusiccrm/releases/1.5.35-215-4c34f743/; evidence dist/release215/.
+Аудит: docs/audits/release-215-production.md.
+Setup: dist/release215/MagicMusicCRM-1.5.35-215-Setup.exe.
+Рабочая ветка и индекс сохранены; этот выпуск не запускал новую пользовательскую сессию Windows.
+
+## Историческая передача 214 (не текущий статус)
+
 
 > Обновлено: 2026-09-10, production client/server 1.5.34+214
 > Source/tag: 48647ccd1bf09ff760ecb7f318ed33b8dd51af85, v1.5.34
