@@ -1,4 +1,34 @@
-# MagicMusicCRM — актуальная передача 217
+# MagicMusicCRM — актуальная передача 218
+
+> Обновлено: 2026-09-10. Production client/server 1.5.38+218; tag v1.5.38.
+> Source: 078b32e6f48b0396633188df355716a5427c3f5e; image magicmusiccrm-server:1.5.38-218-final.
+> Image ID: sha256:b7147997a79354aeec526a6ab8d11a4de2a4659c2ae01204864dba081ff79be8; schema 0155_schedule_plan_archive.
+> API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Замена выдаёт полный новый объём с зачётом стоимости неиспользованного остатка.
+Исторически потраченные деньги не финансируют новые занятия и не возвращаются.
+Доплата/переплата учитывает реальные оплаты; неоплаченный расчёт остаётся на проверке.
+Будущие занятия и редактор разрешают актуальный абонемент; ближайшие подходящие
+занятия получают резервы. История, лента и архивирование планов217 сохранены.
+Правило: subscription-full-volume-replacement.md; audit: ../audits/release-218-production.md.
+
+Проверки: Flutter1749, backend315/4115, Windows/HTTP/DB26 — PASS.
+Security, exact image, contracts, signatures, public hashes/readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260910T130931Z.tgz.enc и magicmusiccrm-staging-20260910T132434Z.tgz.enc
+сверены вне сервера и восстановлены в изоляции с candidate и recovery.
+Reconciliation issues=[]; coverage preview 1 / 0 изменений / 0 на проверке.
+Финансовые fingerprints и production .env/OTP сохранены; ручного repair нет.
+
+Stock217 несовместим после full_volume. Recovery: magicmusiccrm-server:1.5.37-217-recovery218,
+revision e018f8321d17f98a7a9107a83ce6c608086c68cd; сохраняет новую финансовую семантику и архив,
+временно запрещает замены. Проверены идентичность финансовых модулей и restore.
+Предпочтителен forward fix; БД поверх новых операций не откатывать.
+
+Операции /opt/magicmusiccrm/releases/1.5.38-218-078b32e6/; evidence dist/release218/.
+Setup: dist/release218/MagicMusicCRM-1.5.38-218-Setup.exe.
+Отдельная очередь продления абонементов не добавлялась.
+
+## Историческая передача 217 (не текущий статус)
 
 > Обновлено: 2026-09-10. Production client/server 1.5.37+217; tag v1.5.37.
 > Source: 694d6428a9b308425fa1a1df8805a9aa04ee87a0; image magicmusiccrm-server:1.5.37-217-final.
@@ -29,15 +59,6 @@ recovery записывает revision recovery. Подробности — в r
 Операции /opt/magicmusiccrm/releases/1.5.37-217-694d6428/; evidence dist/release217/.
 Setup: dist/release217/MagicMusicCRM-1.5.37-217-Setup.exe.
 Архивирование теперь доступно; отдельная очередь продления ещё не реализована.
-
-## Локальное продолжение после 217 — не опубликовано
-
-По последнему решению владельца локально реализован полный новый объём при замене
-абонемента с зачётом стоимости неиспользованного остатка и сохранением истории.
-Также исправлено разрешение актуального абонемента в редакторе и матрице
-будущих занятий. Правило и ограничения выпуска/rollback:
-`subscription-full-volume-replacement.md`. Локальные проверки:
-`dist/subscription-followup218/`. Номер нового выпуска пока не назначен.
 
 ## Историческая передача 216 (не текущий статус)
 
