@@ -6,6 +6,38 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
 
 void main() {
+  testWidgets(
+    'paging unequal plan pages keeps the timeline and controls in place',
+    (tester) async {
+      await _pumpView(
+        tester,
+        plans: [
+          for (final id in ['plan-a', 'plan-b', 'plan-c', 'plan-d']) _plan(id),
+        ],
+      );
+      final next = find.byTooltip('Следующие записи');
+      final timeline = find.byType(StudentLessonTimelineView);
+      final controlsTop = tester.getTopLeft(next).dy;
+      final timelineTop = tester.getTopLeft(timeline).dy;
+      await tester.tap(next);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(next).dy, controlsTop);
+      expect(tester.getTopLeft(timeline).dy, timelineTop);
+      await tester.tap(find.byTooltip('Предыдущие записи'));
+      await tester.pumpAndSettle();
+      final expansion = find.byKey(
+        const PageStorageKey('schedule-plan-expansion-plan-a'),
+      );
+      await tester.tap(
+        find.descendant(of: expansion, matching: find.byType(ListTile)).first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(next).dy, controlsTop);
+      expect(tester.getTopLeft(timeline).dy, timelineTop);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test(
     'settlement review explains missing funds without exposing error codes',
     () {

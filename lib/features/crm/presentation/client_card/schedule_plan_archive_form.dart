@@ -11,9 +11,11 @@ class SchedulePlanArchiveForm extends StatefulWidget {
     super.key,
     required this.service,
     required this.plan,
+    this.restore = false,
   });
   final MagicCrmService service;
   final SchedulePlan plan;
+  final bool restore;
   @override
   State<SchedulePlanArchiveForm> createState() =>
       _SchedulePlanArchiveFormState();
@@ -26,6 +28,7 @@ class _SchedulePlanArchiveFormState extends State<SchedulePlanArchiveForm> {
   MagicMutationIdentity? _identity;
   String? _error;
   bool _busy = false;
+  String get _action => widget.restore ? 'restore' : 'archive';
 
   @override
   void initState() {
@@ -48,9 +51,9 @@ class _SchedulePlanArchiveFormState extends State<SchedulePlanArchiveForm> {
       _preview = null;
     });
     try {
-      final response = await widget.service.previewSchedulePlanArchive(
-        widget.plan.id,
-      );
+      final response = await (widget.restore
+          ? widget.service.previewSchedulePlanRestore(widget.plan.id)
+          : widget.service.previewSchedulePlanArchive(widget.plan.id));
       if (mounted) setState(() => _preview = response);
     } catch (error) {
       if (mounted) {
@@ -66,19 +69,22 @@ class _SchedulePlanArchiveFormState extends State<SchedulePlanArchiveForm> {
     }
   }
 
-  Future<void> _archive() async {
+  Future<void> _submit() async {
     if (_busy ||
         _preview?['canConfirm'] != true ||
         !validateAndRevealForm(_form)) {
       return;
     }
-    _identity ??= MagicMutationIdentity.create('schedule-plan-archive');
+    _identity ??= MagicMutationIdentity.create('schedule-plan-$_action');
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await widget.service.archiveSchedulePlan(
+      final command = widget.restore
+          ? widget.service.restoreSchedulePlan
+          : widget.service.archiveSchedulePlan;
+      await command(
         widget.plan.id,
         identity: _identity!,
         expectedVersion: (_preview!['version'] as num).toInt(),
@@ -91,7 +97,9 @@ class _SchedulePlanArchiveFormState extends State<SchedulePlanArchiveForm> {
       setState(() {
         _error = userErrorMessage(
           error,
-          fallback: 'Не удалось архивировать расписание. Повторите попытку.',
+          fallback: widget.restore
+              ? 'Не удалось восстановить расписание. Повторите попытку.'
+              : 'Не удалось архивировать расписание. Повторите попытку.',
         );
         if (error is MagicApiException &&
             (error.statusCode == 409 || error.statusCode == 422)) {
@@ -99,7 +107,7 @@ class _SchedulePlanArchiveFormState extends State<SchedulePlanArchiveForm> {
           _identity = null;
         }
       });
-      revealFormFeedback(context, const Key('schedule-archive-error'));
+      revealFormFeedback(context, Key('schedule-$_action-error'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -120,8 +128,10 @@ class _SchedulePlanArchiveFormState extends State<SchedulePlanArchiveForm> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: AppSpace.md),
-          const Text(
-            'Архивирование скроет отменённые занятия из ленты и уберёт серию из основного списка. История сохранится в разделе «Архив».',
+          Text(
+            widget.restore
+                ? 'Расписание вернётся в завершённые, а его отменённые занятия — в ленту. Занятия не возобновятся; оплаты и история останутся без изменений.'
+                : 'Архивирование скроет отменённые занятия из ленты и уберёт серию из основного списка. История сохранится в разделе «Архив».',
           ),
           if (_busy) const LinearProgressIndicator(),
           if (_preview != null) ...[
@@ -138,31 +148,43 @@ class _SchedulePlanArchiveFormState extends State<SchedulePlanArchiveForm> {
             if (_preview!['canConfirm'] == true) ...[
               const SizedBox(height: AppSpace.md),
               TextFormField(
-                key: const Key('schedule-archive-reason'),
+                key: Key('schedule-$_action-reason'),
                 controller: _reason,
                 readOnly: _busy || _identity != null,
                 maxLength: 500,
                 minLines: 2,
                 maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Причина архивирования',
+                decoration: InputDecoration(
+                  labelText: widget.restore
+                      ? 'Причина восстановления'
+                      : 'Причина архивирования',
                 ),
                 validator: (value) => value?.trim().isNotEmpty == true
                     ? null
+                    : widget.restore
+                    ? 'Укажите причину восстановления'
                     : 'Укажите причину архивирования',
               ),
               const SizedBox(height: AppSpace.md),
               FilledButton.icon(
-                key: const Key('schedule-archive-confirm'),
-                onPressed: _busy ? null : _archive,
-                icon: const Icon(Icons.archive_outlined),
-                label: const Text('Подтвердить архивирование'),
+                key: Key('schedule-$_action-confirm'),
+                onPressed: _busy ? null : _submit,
+                icon: Icon(
+                  widget.restore
+                      ? Icons.unarchive_outlined
+                      : Icons.archive_outlined,
+                ),
+                label: Text(
+                  widget.restore
+                      ? 'Подтвердить восстановление'
+                      : 'Подтвердить архивирование',
+                ),
               ),
             ],
           ],
           if (_error != null)
             Padding(
-              key: const Key('schedule-archive-error'),
+              key: Key('schedule-$_action-error'),
               padding: const EdgeInsets.only(top: AppSpace.md),
               child: Text(
                 _error!,

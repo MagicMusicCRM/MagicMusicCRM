@@ -38,6 +38,7 @@ class RecurringSchedulePlanView extends StatefulWidget {
     required this.onEditParticipants,
     required this.onEndPlan,
     this.onArchivePlan,
+    this.onRestorePlan,
     required this.onOpenTimelineItem,
     this.emptyState,
     this.onOpenFallbackLesson,
@@ -65,6 +66,7 @@ class RecurringSchedulePlanView extends StatefulWidget {
   final ValueChanged<SchedulePlan> onEditParticipants;
   final ValueChanged<SchedulePlan> onEndPlan;
   final ValueChanged<SchedulePlan>? onArchivePlan;
+  final ValueChanged<SchedulePlan>? onRestorePlan;
   final Future<void> Function(String lessonId) onOpenTimelineItem;
   final Widget? emptyState;
   final ValueChanged<Map<String, dynamic>>? onOpenFallbackLesson;
@@ -282,6 +284,18 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
         children: [
           if (plan.isArchived)
             Text('В архиве: ${plan.archiveReason ?? "Без причины"}'),
+          if (plan.isArchived &&
+              widget.canWrite &&
+              widget.onRestorePlan != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('schedule-plan-restore-${plan.id}'),
+                onPressed: () => widget.onRestorePlan!(plan),
+                icon: const Icon(Icons.unarchive_outlined),
+                label: const Text('Восстановить из архива'),
+              ),
+            ),
           if (!plan.isActive && plan.endReason?.trim().isNotEmpty == true) ...[
             Align(
               alignment: Alignment.centerLeft,
@@ -575,19 +589,52 @@ class _ThreeRecordPager extends StatefulWidget {
 
 class _ThreeRecordPagerState extends State<_ThreeRecordPager> {
   int _page = 0;
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _changePage(int page) {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    setState(() => _page = page);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = math.max(1, (widget.count / 3).ceil());
     _page = _page.clamp(0, pages - 1);
     final start = _page * 3;
     final end = math.min(start + 3, widget.count);
-    return Column(
+    final records = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = start; i < end; i++) ...[
           widget.itemBuilder(i),
           if (i < end - 1) const SizedBox(height: AppSpace.sm),
         ],
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (pages > 1)
+          SizedBox(
+            // Paging and expanding records must not resize the client card.
+            height: 320 * MediaQuery.textScalerOf(context).scale(16) / 16,
+            child: Scrollbar(
+              controller: _scroll,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                primary: false,
+                child: records,
+              ),
+            ),
+          )
+        else
+          records,
         if (pages > 1)
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -598,13 +645,13 @@ class _ThreeRecordPagerState extends State<_ThreeRecordPager> {
               ),
               IconButton(
                 tooltip: 'Предыдущие записи',
-                onPressed: _page > 0 ? () => setState(() => _page--) : null,
+                onPressed: _page > 0 ? () => _changePage(_page - 1) : null,
                 icon: const Icon(Icons.chevron_left_rounded),
               ),
               IconButton(
                 tooltip: 'Следующие записи',
                 onPressed: _page < pages - 1
-                    ? () => setState(() => _page++)
+                    ? () => _changePage(_page + 1)
                     : null,
                 icon: const Icon(Icons.chevron_right_rounded),
               ),

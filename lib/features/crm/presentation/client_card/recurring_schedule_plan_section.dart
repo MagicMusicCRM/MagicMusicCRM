@@ -137,6 +137,7 @@ class _RecurringSchedulePlanSectionState
         onEditParticipants: _editParticipants,
         onEndPlan: _endPlan,
         onArchivePlan: _archivePlan,
+        onRestorePlan: _restorePlan,
         onOpenTimelineItem: _openTimelineItem,
         emptyState: const MagicPageState(
           kind: MagicPageStateKind.empty,
@@ -220,6 +221,22 @@ class _RecurringSchedulePlanSectionState
     );
     if (archived == true && mounted) {
       await _reload('Расписание перенесено в архив');
+    }
+  }
+
+  Future<void> _restorePlan(SchedulePlan plan) async {
+    if (!widget.canWrite || !plan.isArchived || plan.isGroup) return;
+    final restored = await showMagicSheet<bool>(
+      context,
+      title: 'Восстановить расписание из архива',
+      icon: Icons.unarchive_outlined,
+      builder: (_) =>
+          SchedulePlanArchiveForm(service: _crm, plan: plan, restore: true),
+    );
+    if (restored == true && mounted) {
+      await _reload(
+        'Расписание восстановлено из архива. Занятия остаются отменёнными.',
+      );
     }
   }
 

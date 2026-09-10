@@ -204,13 +204,23 @@ Map<String, dynamic> _timelinePage({
 };
 
 class _ArchiveCardApiClient extends FakeCardApiClient {
-  _ArchiveCardApiClient({this.blocked = false, this.failOnce = false})
-    : super(
-        role: 'manager',
-        schedulePlans: [
-          {..._activePlan, 'status': 'ended'},
-        ],
-      );
+  _ArchiveCardApiClient({
+    this.blocked = false,
+    this.failOnce = false,
+    bool archived = false,
+  }) : super(
+         role: 'manager',
+         schedulePlans: [
+           {
+             ..._activePlan,
+             'status': 'ended',
+             if (archived) ...{
+               'archivedAt': '2026-09-10T00:00:00Z',
+               'archiveReason': 'Ошибочная серия',
+             },
+           },
+         ],
+       );
   final bool blocked;
   bool failOnce;
   int previewRequests = 0;
@@ -222,7 +232,8 @@ class _ArchiveCardApiClient extends FakeCardApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (path.endsWith('/archive/preview')) {
+    if (path.endsWith('/archive/preview') ||
+        path.endsWith('/restore/preview')) {
       previewRequests++;
       return <String, dynamic>{
             'version': 1,
@@ -249,7 +260,7 @@ class _ArchiveCardApiClient extends FakeCardApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (!path.endsWith('/archive')) {
+    if (!path.endsWith('/archive') && !path.endsWith('/restore')) {
       return super.postIdempotent(
         path,
         identity: identity,
@@ -267,8 +278,13 @@ class _ArchiveCardApiClient extends FakeCardApiClient {
       failOnce = false;
       throw const MagicApiException(message: 'Временная ошибка сети');
     }
-    schedulePlans.single['archivedAt'] = '2026-09-10T00:00:00Z';
-    schedulePlans.single['archiveReason'] = (data)['reasonText'];
+    final restore = path.endsWith('/restore');
+    schedulePlans.single['archivedAt'] = restore
+        ? null
+        : '2026-09-10T00:00:00Z';
+    schedulePlans.single['archiveReason'] = restore
+        ? null
+        : (data)['reasonText'];
     return <String, dynamic>{'version': 2, 'hiddenLessons': 7} as T;
   }
 }
@@ -416,6 +432,91 @@ class _ExactLessonCardApiClient extends FakeCardApiClient {
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  testWidgets(
+    'restore from archive validates reason and retries without reactivating the plan',
+    (tester) async {
+      final api = _ArchiveCardApiClient(archived: true, failOnce: true);
+      await _pump(tester, api);
+      await tester.tap(find.text('Архив (1)'));
+      await tester.pumpAndSettle();
+      final expansion = find.byKey(
+        const PageStorageKey('schedule-plan-expansion-plan-active'),
+      );
+      await tester.tap(
+        find.descendant(of: expansion, matching: find.byType(ListTile)).first,
+      );
+      await tester.pumpAndSettle();
+      final restore = find.byKey(
+        const ValueKey('schedule-plan-restore-plan-active'),
+      );
+      await tester.ensureVisible(restore);
+      await tester.tap(restore);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Занятия не возобновятся'), findsOneWidget);
+      final submit = find.byKey(const Key('schedule-restore-confirm'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.text('Укажите причину восстановления'), findsOneWidget);
+      expect(api.idempotentRequests, isEmpty);
+      await tester.enterText(
+        find.byKey(const Key('schedule-restore-reason')),
+        'Архивировано по ошибке',
+      );
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('schedule-restore-error')), findsOneWidget);
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(api.idempotentRequests, hasLength(2));
+      expect(
+        api.idempotentRequests.first.path,
+        '/crm/schedule-plans/plan-active/restore',
+      );
+      expect(
+        api.idempotentRequests.first.identity,
+        same(api.idempotentRequests.last.identity),
+      );
+      expect(
+        api.idempotentRequests.first.data,
+        api.idempotentRequests.last.data,
+      );
+      expect(api.schedulePlans.single['status'], 'ended');
+      expect(find.text('Архив (1)'), findsNothing);
+      expect(find.text('Завершено'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('schedule-plan-plan-active')),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('read-only archive exposes neither restore nor its requests', (
+    tester,
+  ) async {
+    final api = _ArchiveCardApiClient(archived: true);
+    await _pump(tester, api, canWrite: false);
+    await tester.tap(find.text('Архив (1)'));
+    await tester.pumpAndSettle();
+    final expansion = find.byKey(
+      const PageStorageKey('schedule-plan-expansion-plan-active'),
+    );
+    await tester.tap(
+      find.descendant(of: expansion, matching: find.byType(ListTile)).first,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('schedule-plan-restore-plan-active')),
+      findsNothing,
+    );
+    expect(api.previewRequests, 0);
+    expect(api.idempotentRequests, isEmpty);
+  });
 
   testWidgets('read-only schedule never offers or requests archiving', (
     tester,

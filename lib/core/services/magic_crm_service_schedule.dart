@@ -946,6 +946,29 @@ extension MagicCrmSchedule on MagicCrmService {
         data: const {},
       );
 
+  Future<Map<String, dynamic>> previewSchedulePlanRestore(String planId) =>
+      _api.post<Map<String, dynamic>>(
+        '/crm/schedule-plans/$planId/restore/preview',
+        data: const {},
+      );
+
+  Future<Map<String, dynamic>> restoreSchedulePlan(
+    String planId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String impactFingerprint,
+    required String reasonText,
+  }) => _api.postIdempotent<Map<String, dynamic>>(
+    '/crm/schedule-plans/$planId/restore',
+    identity: identity,
+    data: {
+      'expectedVersion': expectedVersion,
+      'impactFingerprint': impactFingerprint,
+      'reasonText': reasonText.trim(),
+      'confirm': true,
+    },
+  );
+
   Future<Map<String, dynamic>> archiveSchedulePlan(
     String planId, {
     required MagicMutationIdentity identity,

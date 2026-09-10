@@ -185,6 +185,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         rows: [row(fixture, isoWeekday(addDays(fixture.effectiveFrom, 1)), "10:00")],
       }, metadata());
       expect((await planArchives.preview(actor, created.id)).canConfirm).toBe(false);
+      expect((await planArchives.previewRestore(actor, created.id)).canConfirm).toBe(false);
       const end = { expectedVersion: created.version, lastDate: fixture.effectiveFrom, reasonText: "Incorrect schedule" };
       const endPreview = await plans.previewEnd(actor, created.id, end);
       await plans.end(actor, created.id, { ...end, confirm: true, previewToken: endPreview.previewToken }, metadata());
@@ -213,6 +214,48 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         expect(timeline).toHaveLength(0);
         await expect(pool.query(`insert into app.payments(student_id, amount, currency, payment_date, lesson_id)
           values($1, 100, 'RUB', current_date, $2)`, [fixture.studentIds[0], before.rows[0].id])).rejects.toMatchObject({ code: "23514" });
+        const restorePreview = await planArchives.previewRestore(actor, created.id);
+        expect(restorePreview.canConfirm).toBe(true);
+        expect(restorePreview.lessonCount).toBe(before.rows.length);
+        const restore = { ...command, expectedVersion: restorePreview.version,
+          impactFingerprint: restorePreview.impactFingerprint, reasonText: "Archived by mistake" };
+        await expect(planArchives.restore(actor, created.id, { ...restore, reasonText: " " }, metadata()))
+          .rejects.toMatchObject({ status: 422 });
+        await expect(planArchives.restore(actor, created.id, { ...restore, impactFingerprint: "0".repeat(64) }, metadata()))
+          .rejects.toMatchObject({ status: 409 });
+        const factsBefore = await pool.query(`select to_jsonb(f) as fact from app.lesson_client_charge_facts f
+          where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)]);
+        const teachersBefore = await pool.query(`select to_jsonb(f) as fact from app.lesson_teacher_compensation_facts f
+          where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)]);
+        const restoreKey = metadata();
+        const results = await Promise.all([
+          planArchives.restore(actor, created.id, restore, restoreKey),
+          planArchives.restore(actor, created.id, restore, restoreKey),
+        ]);
+        expect(results.filter(result => result.replayed)).toHaveLength(1);
+        const restored = results[0]!;
+        expect(restored.restoredLessons).toBe(before.rows.length);
+        expect((await planArchives.restore(actor, created.id, restore, restoreKey)).replayed).toBe(true);
+        await expect(planArchives.restore(actor, created.id, restore, metadata())).rejects.toMatchObject({ status: 409 });
+        expect((await plans.list(actor, { studentId: fixture.studentIds[0], includeEnded: true })).items)
+          .toEqual([expect.objectContaining({ id: created.id, status: "ended", archivedAt: null })]);
+        const visible = await new StudentLessonTimelineRepository(database).listPage(actor, fixture.studentIds[0]!, "next", {
+          scheduledAt: "2000-01-01T00:00:00Z", id: "00000000-0000-0000-0000-000000000000",
+        }, 100);
+        expect(visible).toHaveLength(before.rows.length);
+        expect(visible.every(lesson => lesson.lifecycle_state === "cancelled")).toBe(true);
+        expect((await pool.query(`select to_jsonb(f) as fact from app.lesson_client_charge_facts f
+          where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)])).rows).toEqual(factsBefore.rows);
+        expect((await pool.query(`select to_jsonb(f) as fact from app.lesson_teacher_compensation_facts f
+          where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)])).rows).toEqual(teachersBefore.rows);
+        const audit = await pool.query(`select action, reason_text from app.audit_events
+          where entity_id=$1 and action in ('crm.schedule_plan_archived','crm.schedule_plan_restored') order by action`, [created.id]);
+        expect(audit.rows).toEqual([
+          { action: "crm.schedule_plan_archived", reason_text: "Test series" },
+          { action: "crm.schedule_plan_restored", reason_text: "Archived by mistake" },
+        ]);
+        const state = await pool.query("select status, end_reason, archived_at, archived_by, archive_reason from app.schedule_plans where id=$1", [created.id]);
+        expect(state.rows[0]).toEqual({ status: "ended", end_reason: "Incorrect schedule", archived_at: null, archived_by: null, archive_reason: null });
       }
       const after = await pool.query("select id, lifecycle_state from app.lessons where series_id = $1 order by id", [created.seriesIds[0]]);
       expect(after.rows).toEqual(before.rows);
@@ -274,6 +317,10 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         await expect(
           plans.previewUpdateConstraints(outsider, created.id, edit),
         ).rejects.toMatchObject({ status: 404 });
+        await expect(planArchives.previewRestore(outsider, created.id)).rejects.toMatchObject({ status: 404 });
+        await expect(planArchives.restore(outsider, created.id, {
+          expectedVersion: 1, impactFingerprint: "0".repeat(64), reasonText: "Foreign branch", confirm: true,
+        }, { idempotencyKey: randomUUID(), requestId: randomUUID() })).rejects.toMatchObject({ status: 404 });
         await expect(
           plans.previewConstraints(outsider, draft),
         ).rejects.toMatchObject({ status: 404 });
