@@ -1,4 +1,32 @@
-# MagicMusicCRM — актуальная передача 218
+# MagicMusicCRM — актуальная передача 219
+
+> Обновлено: 2026-09-10. Production client/server1.5.39+219; tag v1.5.39.
+> Source: 2f37c7aee4633a463ba8fad3e322e0d945e50a23; image magicmusiccrm-server:1.5.39-219-final.
+> Image ID: sha256:f9d80b7831895395376777d83a0b7b1d609140bb0dff0d9614d7673b3bba6bf0; schema0155_schedule_plan_archive.
+> API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Постраничный блок серий сохраняет высоту; внешняя карточка не скачет.
+В архивной серии есть «Восстановить из архива»: preview, причина, подтверждение,
+version/fingerprint, RBAC и идемпотентность. План остаётся завершённым, занятия —
+отменёнными; возвращается видимость, история и финансы сохраняются. Генерация
+не возобновляется. Изменения финансовых правил218 и остальные исправления сохранены.
+
+Проверки: Flutter 1752, backend 315/4115, Windows/HTTP/DB 26 — PASS.
+Security, contracts, exact image, signatures, public hashes/readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260910T172754Z.tgz.enc и magicmusiccrm-staging-20260910T174509Z.tgz.enc
+проверены вне сервера и восстановлены с candidate и stock218.
+Reconciliation issues=[]; coverage preview 1/0/0; история и .env/OTP сохранены.
+
+Rollback: magicmusiccrm-server:1.5.38-218-final,
+revision078b32e6f48b0396633188df355716a5427c3f5e; restore endpoints временно недоступны,
+но состояние завершённых планов/отменённых занятий и финансовая модель совместимы.
+Предпочтителен forward fix; БД поверх новых операций не откатывать.
+
+Операции /opt/magicmusiccrm/releases/1.5.39-219-2f37c7ae/; evidence dist/release219/.
+Аудит ../audits/release-219-production.md; Setup dist/release219/MagicMusicCRM-1.5.39-219-Setup.exe.
+Посторонние изменения рабочего дерева не включены; источник зафиксирован отдельно.
+
+## Историческая передача 218 (не текущий статус)
 
 > Обновлено: 2026-09-10. Production client/server 1.5.38+218; tag v1.5.38.
 > Source: 078b32e6f48b0396633188df355716a5427c3f5e; image magicmusiccrm-server:1.5.38-218-final.
