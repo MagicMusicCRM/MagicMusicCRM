@@ -1,4 +1,31 @@
-# MagicMusicCRM — актуальная передача 215
+# MagicMusicCRM — актуальная передача 216
+
+> Обновлено: 2026-09-10. Production client/server 1.5.36+216; tag v1.5.36.
+> Source: bd5eb5e437bef632a8a690dd3b78940a5c8cd601; image magicmusiccrm-server:1.5.36-216-final.
+> Image ID: sha256:02331cdcd3c4f4e41d39c02c89f818277e765c06d56049089844b5422cc14109; schema 0154_retire_partial_miss, без новой миграции.
+> API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Лента: 30 дат с занятиями, по 15 в каждой строке, на всю доступную ширину.
+Пустые дни пропускаются; все занятия одной даты остаются вместе. Начальная
+граница — полночь за три календарных дня до сегодня. Это заменяет календарные
+окна 215. На узком экране сохраняется прокрутка. Финансовые правила 215 сохранены.
+API добавил необязательный anchor; старые запросы с from/to продолжают работать.
+
+Проверки: Flutter 1746, backend 313/4095, Windows/HTTP/DB 26 — PASS.
+Strict security, exact image, контракты, подписи, публичные хеши/readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260910T000002Z.tgz.enc и magicmusiccrm-staging-20260910T001214Z.tgz.enc сверены вне сервера
+и восстановлены в изоляции с candidate и rollback. Финальная сверка issues=[].
+Настройки production и OTP не изменены, ручного repair данных нет.
+
+Rollback: magicmusiccrm-server:1.5.35-215-final, revision 4c34f743e3884d1a9636c7214d8736d64a7effac.
+До публикации клиента возможен откат на 215. После обновления клиентов нужен
+forward fix с сохранением anchor API. БД поверх новых операций не откатывать.
+Операции /opt/magicmusiccrm/releases/1.5.36-216-bd5eb5e4/; evidence dist/release216/.
+Аудит docs/audits/release-216-production.md; Setup dist/release216/MagicMusicCRM-1.5.36-216-Setup.exe.
+Архивирование серий и отдельная очередь продления по-прежнему не реализованы.
+
+## Историческая передача 215 (не текущий статус)
+
 
 > Обновлено: 2026-09-10. Production client/server 1.5.35+215; tag v1.5.35.
 > Source: 4c34f743e3884d1a9636c7214d8736d64a7effac; image magicmusiccrm-server:1.5.35-215-final.
