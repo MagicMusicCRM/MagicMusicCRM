@@ -41,6 +41,9 @@ interface ReplacementContextDatabaseRow {
   old_status: string;
   old_version: number | string;
   old_final_price_minor: string;
+  old_unit_count: string;
+  prior_consumed_value_minor: string;
+  old_obligation_minor: string;
   old_currency_code: string;
   legacy_lessons_used: string;
   new_package_id: string | null;
@@ -78,6 +81,9 @@ export interface ReplacementContext {
   oldStatus: string;
   oldVersion: number;
   oldFinalPriceMinor: string;
+  oldUnitCount: string;
+  priorConsumedValueMinor: string;
+  oldObligationMinor: string;
   oldCurrencyCode: string;
   legacyLessonsUsed: string;
   newPackage: {
@@ -114,6 +120,8 @@ export interface CancellationCreditRow {
 }
 
 interface CancellationContextDatabaseRow {
+  prior_consumed_value_minor: string;
+  full_volume_replacement: boolean;
   issued_id: string;
   student_id: string;
   payer_student_id: string;
@@ -186,6 +194,8 @@ export interface CancellationFutureLesson {
 }
 
 export interface CancellationContext {
+  priorConsumedValueMinor?: string;
+  fullVolumeReplacement?: boolean;
   issuedSubscriptionId: string;
   studentId: string;
   payerStudentId: string;
@@ -316,6 +326,10 @@ const replacementContextSql = `
     issued.status as old_status,
     issued.version as old_version,
     issued.final_price_minor as old_final_price_minor,
+    issued.lessons_total::text as old_unit_count,
+    coalesce(issued.commercial_snapshot #>> '{commercialRules,priorConsumedValueMinor}', '0') as prior_consumed_value_minor,
+    coalesce((select sum(case when obligation.direction = 'debit' then obligation.amount_minor else -obligation.amount_minor end)
+      from app.subscription_obligation_facts obligation where obligation.issued_subscription_id in (select id from lifecycle_chain)), 0)::text as old_obligation_minor,
     issued.currency_code as old_currency_code,
     issued.lessons_used as legacy_lessons_used,
     package.id as new_package_id,
@@ -336,7 +350,13 @@ const replacementContextSql = `
       issued.lessons_used,
       0
     )::numeric as used_units,
-    (select amount_minor from payment_total) as actual_paid_minor,
+    ((select amount_minor from payment_total) + coalesce((
+      select sum(adjustment.amount_minor)
+      from app.commerce_ordinary_account_adjustments adjustment
+      join app.commerce_ordinary_payments payment on payment.id = adjustment.source_payment_id
+      where payment.issued_subscription_id in (select id from lifecycle_chain)
+        and adjustment.deleted_at is null and adjustment.status = 'paid'
+    ), 0))::text as actual_paid_minor,
     (select count(*) from reserved_rows) as reserved_lesson_count,
     coalesce((select sum(units) from reserved_rows), 0)::numeric
       as reserved_units,
@@ -546,6 +566,8 @@ const cancellationContextSql = `
     issued.version,
     issued.currency_code,
     issued.final_price_minor as final_minor,
+    coalesce(issued.commercial_snapshot #>> '{commercialRules,priorConsumedValueMinor}', '0') as prior_consumed_value_minor,
+    coalesce(issued.commercial_snapshot #>> '{commercialRules,replacementMode}' = 'full_volume', false) as full_volume_replacement,
     coalesce(
       (
         issued.commercial_snapshot
@@ -1337,6 +1359,9 @@ export class SubscriptionLifecycleRepository {
       oldStatus: row.old_status,
       oldVersion: Number(row.old_version),
       oldFinalPriceMinor: row.old_final_price_minor,
+      oldUnitCount: normalizeNumeric(row.old_unit_count),
+      priorConsumedValueMinor: row.prior_consumed_value_minor,
+      oldObligationMinor: row.old_obligation_minor,
       oldCurrencyCode: row.old_currency_code,
       legacyLessonsUsed: row.legacy_lessons_used,
       newPackage,
@@ -1408,6 +1433,8 @@ export class SubscriptionLifecycleRepository {
       version: Number(row.version),
       currencyCode: row.currency_code,
       finalMinor: row.final_minor,
+      priorConsumedValueMinor: row.prior_consumed_value_minor,
+      fullVolumeReplacement: row.full_volume_replacement,
       usedUnits: normalizeNumeric(row.used_units),
       actualPaidMinor: row.actual_paid_minor,
       previousRefundMinor: row.previous_refund_minor,

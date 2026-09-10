@@ -33,9 +33,13 @@ export interface ReplacementReservationPlan {
 
 @Injectable()
 export class SubscriptionReplacementPolicy {
+  private assertRecoveryReplacementDisabled(): void {
+    throw new UnprocessableEntityException({ code: "SUBSCRIPTION_REPLACEMENT_RECOVERY_DISABLED", message: "Замена абонемента временно недоступна: сервер работает в режиме восстановления." });
+  }
   assertContext(
     context: ReplacementContext | null,
   ): asserts context is ReplacementReadyContext {
+    this.assertRecoveryReplacementDisabled();
     if (!context) {
       throw new NotFoundException("Выданный абонемент не найден.");
     }

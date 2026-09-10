@@ -9,7 +9,7 @@ export const subscriptionFundingSql = `
               join lifecycle_chain current
                 on current.id = event.after_issued_subscription_id
               where event.event_type = 'replace'
-            ), totals as (
+            ), raw_totals as (
               select
                 coalesce((
                   select sum(payment.amount_minor)
@@ -60,6 +60,18 @@ export const subscriptionFundingSql = `
                   )
                     and record.status = 'unpaid'
                 ), 0)::numeric as debt_minor
+            ), funding_credit as (
+              select greatest(raw_totals.actual_paid_minor - coalesce(
+                (issued.commercial_snapshot #>> '{commercialRules,priorConsumedValueMinor}')::numeric, 0
+              ), 0) as available_paid_minor
+              from raw_totals
+            ), totals as (
+              select
+                funding_credit.available_paid_minor as actual_paid_minor,
+                raw_totals.obligation_minor - raw_totals.actual_paid_minor
+                  + funding_credit.available_paid_minor as obligation_minor,
+                raw_totals.pending_minor, raw_totals.debt_minor
+              from raw_totals cross join funding_credit
             )
             select
               totals.actual_paid_minor,

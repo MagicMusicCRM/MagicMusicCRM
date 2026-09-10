@@ -51,9 +51,9 @@ export class SubscriptionCancellationPolicy {
     );
     const unusedUnits = totalUnits - protectedUnits;
     const finalMinor = BigInt(context.finalMinor);
-    const actualPaidMinor = BigInt(context.actualPaidMinor);
+    const actualPaidMinor = BigInt(context.actualPaidMinor) - BigInt(context.priorConsumedValueMinor ?? "0");
     const confirmedFundedMinor =
-      context.fundingMode === "personal_account"
+      context.fundingMode === "personal_account" && !context.fullVolumeReplacement
         ? finalMinor
         : minBigInt(finalMinor, maxBigInt(0n, actualPaidMinor));
     const previousRefundMinor = BigInt(context.previousRefundMinor);
@@ -123,6 +123,8 @@ export class SubscriptionCancellationPolicy {
       reservedLessonCount: context.reservedLessonCount,
       reservedUnits: context.reservedUnits,
       impactFingerprint: fingerprintPayload({
+        priorConsumedValueMinor: context.priorConsumedValueMinor ?? "0",
+        fullVolumeReplacement: context.fullVolumeReplacement ?? false,
         payments: context.paymentRefs,
         refunds: context.previousRefundRefs,
         openPaymentRecords: context.openPaymentRecordRefs,
