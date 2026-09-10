@@ -358,6 +358,7 @@ class SubscriptionReplacementPackage {
 
 class SubscriptionReplacementUsage {
   const SubscriptionReplacementUsage({
+    this.newAvailableUnits,
     required this.usedUnits,
     required this.reservedLessonCount,
     required this.reservedUnits,
@@ -370,6 +371,7 @@ class SubscriptionReplacementUsage {
   });
 
   final String usedUnits;
+  final String? newAvailableUnits;
   final int reservedLessonCount;
   final String reservedUnits;
   final int transferableReservationCount;
@@ -381,6 +383,7 @@ class SubscriptionReplacementUsage {
 
   factory SubscriptionReplacementUsage.fromJson(Map<String, dynamic> json) {
     return SubscriptionReplacementUsage(
+      newAvailableUnits: json['newAvailableUnits']?.toString(),
       usedUnits: json['usedUnits'].toString(),
       reservedLessonCount: _replacementInt(json['reservedLessonCount']),
       reservedUnits: json['reservedUnits'].toString(),
@@ -423,6 +426,9 @@ class SubscriptionReplacementPosition {
 
 class SubscriptionReplacementFinancial {
   const SubscriptionReplacementFinancial({
+    this.usedValueMinor,
+    this.remainingValueMinor,
+    this.priorConsumedValueMinor,
     required this.currencyCode,
     required this.oldFinalMinor,
     required this.newFinalMinor,
@@ -432,6 +438,9 @@ class SubscriptionReplacementFinancial {
   });
 
   final String currencyCode;
+  final BigInt? usedValueMinor;
+  final BigInt? remainingValueMinor;
+  final BigInt? priorConsumedValueMinor;
   final BigInt oldFinalMinor;
   final BigInt newFinalMinor;
   final BigInt actualPaidMinor;
@@ -440,6 +449,15 @@ class SubscriptionReplacementFinancial {
 
   factory SubscriptionReplacementFinancial.fromJson(Map<String, dynamic> json) {
     return SubscriptionReplacementFinancial(
+      usedValueMinor: json['usedValueMinor'] == null
+          ? null
+          : _replacementMinor(json['usedValueMinor']),
+      remainingValueMinor: json['remainingValueMinor'] == null
+          ? null
+          : _replacementMinor(json['remainingValueMinor']),
+      priorConsumedValueMinor: json['priorConsumedValueMinor'] == null
+          ? null
+          : _replacementMinor(json['priorConsumedValueMinor']),
       currencyCode: json['currencyCode'].toString(),
       oldFinalMinor: _replacementMinor(json['oldFinalMinor']),
       newFinalMinor: _replacementMinor(json['newFinalMinor']),

@@ -23,6 +23,7 @@ describe("SubscriptionReplacementService", () => {
       oldStatus: "active",
       oldVersion: 3,
       oldFinalPriceMinor: "800000",
+      oldUnitCount: "8", priorConsumedValueMinor: "0", oldObligationMinor: "800000",
       oldCurrencyCode: "RUB",
       legacyLessonsUsed: "2",
       newPackage: {
@@ -98,13 +99,13 @@ describe("SubscriptionReplacementService", () => {
         unitCount: "7",
       },
       usage: {
-        usedUnits: "2",
+        usedUnits: "2", newAvailableUnits: "7",
         reservedLessonCount: 3,
         reservedUnits: "6",
-        transferableReservationCount: 2,
-        transferableReservationUnits: "5",
-        releasedReservationCount: 1,
-        releasedReservationUnits: "1",
+        transferableReservationCount: 3,
+        transferableReservationUnits: "6",
+        releasedReservationCount: 0,
+        releasedReservationUnits: "0",
         futureLessonCount: 1,
         futureUnits: "1",
       },
@@ -113,29 +114,23 @@ describe("SubscriptionReplacementService", () => {
         oldFinalMinor: "800000",
         newFinalMinor: "1000000",
         actualPaidMinor: "600000",
-        obligationDeltaMinor: "200000",
+        obligationDeltaMinor: "400000",
+        usedValueMinor: "200000", remainingValueMinor: "600000", priorConsumedValueMinor: "200000",
         resultingPosition: {
           kind: "debt",
-          amountMinor: "400000",
+          amountMinor: "600000",
         },
       },
       warnings: [
         {
-          code: "USED_UNITS_TRANSFERRED",
-          message: "Использованные единицы будут перенесены в новый абонемент.",
+          code: "USED_UNITS_RETAINED_IN_HISTORY",
+          message: "Использованные занятия останутся в истории старого абонемента. Новый пакет получит полный объём.",
           units: "2",
         },
         {
           code: "FUTURE_LESSONS_PRESERVED",
           message:
             "Будущие занятия сохранятся; существующие резервы будут перенесены.",
-          count: 1,
-          units: "1",
-        },
-        {
-          code: "RESERVATIONS_RELEASED_FOR_CAPACITY",
-          message:
-            "Не помещающиеся в новый объём резервы будут сняты; занятия сохранятся.",
           count: 1,
           units: "1",
         },

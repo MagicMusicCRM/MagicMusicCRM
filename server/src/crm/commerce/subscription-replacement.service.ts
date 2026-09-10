@@ -83,6 +83,7 @@ export class SubscriptionReplacementService {
       },
       usage: {
         usedUnits: context.usedUnits,
+        newAvailableUnits: context.newPackage.unitCount,
         reservedLessonCount: context.reservedLessonCount,
         reservedUnits: context.reservedUnits,
         transferableReservationCount:
@@ -98,6 +99,9 @@ export class SubscriptionReplacementService {
         oldFinalMinor: context.oldFinalPriceMinor,
         newFinalMinor: context.newPackage.basePriceMinor,
         actualPaidMinor: context.actualPaidMinor,
+        usedValueMinor: calculation.usedValueMinor.toString(),
+        remainingValueMinor: calculation.remainingValueMinor.toString(),
+        priorConsumedValueMinor: calculation.priorConsumedValueMinor.toString(),
         obligationDeltaMinor: calculation.deltaMinor.toString(),
         resultingPosition: {
           kind: calculation.positionKind,
@@ -229,7 +233,7 @@ export class SubscriptionReplacementService {
               id: newSubscriptionId,
               studentId: context.studentId,
               package: lockedPackage,
-              usedUnits: context.usedUnits,
+              usedUnits: "0",
               snapshot,
               payerStudentId: context.payerStudentId,
               fundingMode: context.fundingMode,
@@ -386,7 +390,7 @@ function createReplacementResultRef(input: {
     payerStudentId: input.context.payerStudentId,
     newPackageId: input.context.newPackage.id,
     newPackageVersion: input.context.newPackage.version,
-    usedUnits: input.context.usedUnits,
+    usedUnits: "0",
     transferredReservationCount: input.reservationResult.transferred,
     transferredReservationUnits: input.reservationPlan.transferredUnits,
     releasedReservationCount: input.reservationResult.released,
@@ -418,6 +422,11 @@ function createReplacementAuditResult(input: {
     metadata: {
       lifecycle: "replaced",
       newPackageId: input.context.newPackage.id,
+      replacementMode: "full_volume",
+      newAvailableUnits: input.context.newPackage.unitCount,
+      consumedValueMinor: input.calculation.usedValueMinor.toString(),
+      remainingValueMinor: input.calculation.remainingValueMinor.toString(),
+      priorConsumedValueMinor: input.calculation.priorConsumedValueMinor.toString(),
       newPackageVersion: input.context.newPackage.version,
       usedUnits: input.context.usedUnits,
       transferredReservationCount: input.reservationResult.transferred,

@@ -37,6 +37,9 @@ import { SubscriptionPurchaseCommandService } from "./subscription-purchase-comm
 import { SubscriptionPurchasePreviewService } from "./subscription-purchase-preview.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 import { StudentLessonTimelineRepository } from "../schedule/student-lesson-timeline.repository";
+import { ScheduleReadService } from "../schedule/schedule-read.service";
+import { subscriptionFundingSql } from "./subscription-funding.sql";
+import { assertAutomaticLessonSubscriptionPayment } from "./lesson-subscription-payment-capacity";
 import { assignLessonSettlementPlan } from "./lesson-settlement-plan.persistence";
 import { previewLessonSettlement, settleLesson } from "./lesson-settlement-execution";
 
@@ -187,7 +190,99 @@ describe("Subscription replacement preview/confirm", () => {
     if (pool) await pool.end();
   });
 
-  it("replaces with a dearer snapshot, preserves payment and deterministically releases overflow reservations", async () => {
+  it("replenishes full capacity, preserves spent money, and settles only newly funded units across a replacement chain", async () => {
+    const issued = await issue("full-volume");
+    await paymentService.record(actor, studentId, { issuedSubscriptionId: issued.subscription.id,
+      amountMinor: "800000", method: "cashless", occurredAt: new Date().toISOString() }, metadata("full-volume-payment"));
+    await seedConsumedUnits(pool, studentId, issued.subscription.id, "8");
+    const historicalFacts = (await pool.query("select * from app.lesson_client_charge_facts where subscription_id=$1 order by id", [issued.subscription.id])).rows;
+    let currentId = issued.subscription.id;
+    const replace = async (packageId: string, suffix: string) => {
+      const preview = await lifecycleService.previewReplacement(actor, studentId, currentId, { newPackageId: packageId });
+      const result = await lifecycleService.replace(actor, studentId, currentId, {
+        expectedVersion: preview.expectedVersion, previewToken: preview.previewToken, confirm: true, reason: "full volume exchange",
+      }, metadata(suffix));
+      currentId = result.replacement.newSubscriptionId;
+      return preview;
+    };
+    const funding = async () => (await pool.query(`select financial.actual_paid_minor::text, financial.obligation_minor::text,
+      financial.paid_units::text from app.subscriptions issued cross join lateral (${subscriptionFundingSql}) financial where issued.id=$1`, [currentId])).rows[0];
+    const preview = await replace(fixture.sourcePackageId, "full-volume-first");
+    expect(preview.usage).toMatchObject({ usedUnits: "8", newAvailableUnits: "10.00" });
+    expect(preview.financial).toMatchObject({ usedValueMinor: "640000", remainingValueMinor: "160000",
+      obligationDeltaMinor: "640000", resultingPosition: { kind: "debt", amountMinor: "640000" } });
+    expect((await pool.query("select lessons_used::text, commercial_snapshot from app.subscriptions where id=$1", [currentId])).rows[0])
+      .toMatchObject({ lessons_used: "0.00", commercial_snapshot: { unitCount: "10.00", commercialRules: {
+        carriedUsedUnits: "0", priorConsumedValueMinor: "640000", replacementMode: "full_volume" } } });
+    expect(await funding()).toMatchObject({ actual_paid_minor: "160000", obligation_minor: "800000" });
+    expect(Number((await funding()).paid_units)).toBe(2);
+    const assertThreeUnitsPaid = () => database.transaction(client => assertAutomaticLessonSubscriptionPayment(client,
+      [{ chargeType: "subscription", subscriptionId: currentId, calculation: { units: "3" } }] as Parameters<typeof assertAutomaticLessonSubscriptionPayment>[1]));
+    await expect(assertThreeUnitsPaid()).rejects.toMatchObject({ response: { code: "LESSON_SUBSCRIPTION_PAYMENT_REQUIRED" } });
+    const cancellation = await lifecycleService.previewCancellation(actor, studentId, currentId);
+    expect(cancellation.financial).toMatchObject({ confirmedFundedMinor: "160000", maximumRefundMinor: "160000" });
+    expect((await replace(fixture.smallPackageId, "full-volume-smaller")).financial.resultingPosition)
+      .toEqual({ kind: "debt", amountMinor: "340000" });
+    expect((await replace(fixture.sourcePackageId, "full-volume-back")).financial.resultingPosition)
+      .toEqual({ kind: "debt", amountMinor: "640000" });
+    await paymentService.record(actor, studentId, { issuedSubscriptionId: currentId,
+      amountMinor: "640000", method: "cashless", occurredAt: new Date().toISOString() }, metadata("full-volume-top-up"));
+    expect(Number((await funding()).paid_units)).toBe(10);
+    await expect(assertThreeUnitsPaid()).resolves.toBeUndefined();
+    await seedConsumedUnits(pool, studentId, currentId, "1");
+    expect((await replace(fixture.sourcePackageId, "full-volume-again")).financial)
+      .toMatchObject({ priorConsumedValueMinor: "720000", resultingPosition: { kind: "debt", amountMinor: "80000" } });
+    expect((await pool.query("select * from app.lesson_client_charge_facts where subscription_id=$1 order by id", [issued.subscription.id])).rows).toEqual(historicalFacts);
+  });
+
+  it("shows current subscription bindings in lesson reads while preserving completed history", async () => {
+    const issued = await issue("read-bindings");
+    await seedReservedLessons(pool, studentId, issued.subscription.id, ["1"], 3);
+    await seedConsumedUnits(pool, studentId, issued.subscription.id, "1");
+    const lessonIds = (await pool.query("select lesson_id from app.lesson_reservations where subscription_id=$1", [issued.subscription.id])).rows.map(row => row.lesson_id);
+    const branchId = (await pool.query("select branch_id from app.students where id=$1", [studentId])).rows[0].branch_id;
+    await database.transaction(async client => {
+      await client.query("update app.lessons set branch_id=$2 where id=any($1::uuid[])", [lessonIds, branchId]);
+      await assignLessonSettlementPlan(client, { lessonId: lessonIds[0], branchId, selectedBy: actor.userId,
+        decision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: studentId, chargeType: "subscription", subscriptionId: issued.subscription.id }] } });
+    });
+    const reads = new ScheduleReadService(database, new CrmPolicy());
+    const preview = await lifecycleService.previewReplacement(actor, studentId, issued.subscription.id, { newPackageId: fixture.sourcePackageId });
+    const result = await lifecycleService.replace(actor, studentId, issued.subscription.id, {
+      expectedVersion: preview.expectedVersion, previewToken: preview.previewToken, confirm: true, reason: "read binding regression",
+    }, metadata("read-bindings-replace"));
+    const lesson = (await reads.listLessons(actor, { lessonId: lessonIds[0] })).items[0]!;
+    expect(lesson.subscriptionId).toBe(result.replacement.newSubscriptionId);
+    expect(lesson.financialDecision).toMatchObject({ clientDecisions: [{ clientId: studentId, subscriptionId: result.replacement.newSubscriptionId }] });
+    const matrix = await reads.getScheduleMatrix(actor, { studentId, from: new Date().toISOString(),
+      to: new Date(Date.now() + 7 * 86400000).toISOString() });
+    expect(matrix.items.find(row => row.id === lessonIds[0])?.financialDecision)
+      .toMatchObject({ clientDecisions: [{ subscriptionId: result.replacement.newSubscriptionId }] });
+    const completedId = (await pool.query("select lesson_id from app.lesson_client_charge_facts where subscription_id=$1", [issued.subscription.id])).rows[0].lesson_id;
+    expect((await reads.listLessons(actor, { lessonId: completedId })).items[0]?.subscriptionId).toBe(issued.subscription.id);
+    expect((await pool.query("select subscription_id from app.lesson_snapshots where lesson_id=$1", [lessonIds[0]])).rows[0].subscription_id).toBe(issued.subscription.id);
+  });
+
+  it("carries unpaid historical consumption as debt without negative paid amounts or refundable funds", async () => {
+    const issued = await issue("unpaid-full-volume");
+    await paymentService.record(actor, studentId, { issuedSubscriptionId: issued.subscription.id,
+      amountMinor: "100000", method: "cashless", occurredAt: new Date().toISOString() }, metadata("unpaid-full-volume-payment"));
+    await seedConsumedUnits(pool, studentId, issued.subscription.id, "8");
+    const preview = await lifecycleService.previewReplacement(actor, studentId, issued.subscription.id, { newPackageId: fixture.sourcePackageId });
+    expect(preview.financial.resultingPosition).toEqual({ kind: "debt", amountMinor: "1340000" });
+    const result = await lifecycleService.replace(actor, studentId, issued.subscription.id, {
+      expectedVersion: preview.expectedVersion, previewToken: preview.previewToken, confirm: true, reason: "unpaid full volume",
+    }, metadata("unpaid-full-volume-replace"));
+    const currentId = result.replacement.newSubscriptionId;
+    const financial = (await pool.query(`select financial.actual_paid_minor::text, financial.obligation_minor::text,
+      financial.paid_units::text from app.subscriptions issued cross join lateral (${subscriptionFundingSql}) financial where issued.id=$1`, [currentId])).rows[0];
+    expect(financial).toMatchObject({ actual_paid_minor: "0", obligation_minor: "1340000" });
+    expect(Number(financial.paid_units)).toBe(0);
+    expect((await lifecycleService.previewCancellation(actor, studentId, currentId)).financial.maximumRefundMinor).toBe("0");
+  });
+
+  it("replaces with a dearer snapshot, preserves payment and refills the full new volume", async () => {
     const issued = await issue("dearer-source");
     await paymentService.record(
       actor,
@@ -217,18 +312,19 @@ describe("Subscription replacement preview/confirm", () => {
       usedUnits: "3",
       reservedLessonCount: 3,
       reservedUnits: "6",
-      transferableReservationCount: 2,
-      transferableReservationUnits: "4",
-      releasedReservationCount: 1,
-      releasedReservationUnits: "2",
+      transferableReservationCount: 3,
+      transferableReservationUnits: "6",
+      releasedReservationCount: 0,
+      releasedReservationUnits: "0",
     });
     expect(preview.financial).toEqual({
       currencyCode: "RUB",
       oldFinalMinor: "800000",
       newFinalMinor: "1000000",
       actualPaidMinor: "800000",
-      obligationDeltaMinor: "200000",
-      resultingPosition: { kind: "debt", amountMinor: "200000" },
+      usedValueMinor: "240000", remainingValueMinor: "560000", priorConsumedValueMinor: "240000",
+      obligationDeltaMinor: "440000",
+      resultingPosition: { kind: "debt", amountMinor: "440000" },
     });
 
     const command = {
@@ -255,12 +351,12 @@ describe("Subscription replacement preview/confirm", () => {
     expect(first.replacement).toMatchObject({
       oldSubscriptionId: issued.subscription.id,
       newPackageId: fixture.dearerPackageId,
-      usedUnits: "3",
-      transferredReservationCount: 2,
-      releasedReservationCount: 1,
-      deltaMinor: "200000",
+      usedUnits: "0",
+      transferredReservationCount: 3,
+      releasedReservationCount: 0,
+      deltaMinor: "440000",
       positionKind: "debt",
-      positionMinor: "200000",
+      positionMinor: "440000",
       ccy: "RUB",
     });
 
@@ -274,18 +370,18 @@ describe("Subscription replacement preview/confirm", () => {
       oldVersion: 2,
       newStatus: "active",
       newVersion: 1,
-      newUsedUnits: "3",
+      newUsedUnits: "0",
       paymentCountOld: 1,
       paymentCountNew: 0,
       paymentMinor: "800000",
       obligationCount: 1,
       obligationType: "replacement_debt",
       obligationDirection: "debit",
-      obligationMinor: "200000",
+      obligationMinor: "440000",
       lifecycleCount: 1,
       reservedOnOld: 0,
-      reservedOnNew: 2,
-      releasedOnOld: 1,
+      reservedOnNew: 3,
+      releasedOnOld: 0,
       auditCount: 1,
       outboxCount: 1,
     });
@@ -432,7 +528,7 @@ describe("Subscription replacement preview/confirm", () => {
     ).toBe(0);
   });
 
-  it("blocks insufficient volume, cross-currency and cross-student paths with persisted=0", async () => {
+  it("allows smaller full volume but blocks cross-currency and cross-student paths with persisted=0", async () => {
     const issued = await issue("blocked-source");
     await seedConsumedUnits(pool, studentId, issued.subscription.id, "3");
     const before = await persistedReplacementCount(
@@ -446,7 +542,7 @@ describe("Subscription replacement preview/confirm", () => {
         issued.subscription.id,
         { newPackageId: fixture.smallPackageId },
       ),
-    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    ).resolves.toMatchObject({ newPackage: { unitCount: "2.00" } });
     await expect(
       lifecycleService.previewReplacement(
         actor,
@@ -550,9 +646,9 @@ async function seedConsumedUnits(
   const lesson = await pool.query<{ id: string }>(
     `
       insert into app.lessons (
-        student_id, scheduled_at, duration_minutes, status
+        student_id, scheduled_at, duration_minutes, status, lifecycle_state
       )
-      values ($1, now() - interval '1 day', 60, 'completed')
+      values ($1, now() - interval '1 day', 60, 'completed', 'successfully_completed')
       returning id
     `,
     [studentId],

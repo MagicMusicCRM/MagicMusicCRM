@@ -1,6 +1,6 @@
 # Subscription replacement coverage and individual plan archive
 
-Status: implemented locally after production 1.5.36+216; not published. No production writes, version bump or installer build in this task.
+Status: published in production 1.5.37+217 on 2026-09-10. The original local implementation evidence below is retained; final release, recovery and publication evidence: release-217-production.md.
 
 ## Root cause and correction
 

@@ -7,6 +7,7 @@ import { LessonQuery } from "../dto/lesson.query";
 import { ScheduleMatrixQuery } from "../dto/schedule-matrix.query";
 import { LessonRow, toLessonDto } from "../crm-mappers";
 import { currentActorRoleSql, managerBranchScopeSql } from "../branch-scope";
+import { resolvePlannedSubscriptionReads } from "./lesson-subscription-read";
 
 interface ScheduleLessonRow extends LessonRow {
   scheduled_utc_offset_minutes?: number | string | null;
@@ -229,7 +230,8 @@ export class ScheduleReadService {
         actor.userId,
       ],
     );
-    const items = result.rows.map((row) => ({
+    const resolvedRows = await resolvePlannedSubscriptionReads(this.database, result.rows);
+    const items = resolvedRows.map((row) => ({
       ...toLessonDto(row),
       scheduledUtcOffsetMinutes:
         row.scheduled_utc_offset_minutes == null
@@ -565,7 +567,8 @@ export class ScheduleReadService {
       ],
     );
 
-    return { items: result.rows.map((row) => toLessonDto(row)) };
+    const resolvedRows = await resolvePlannedSubscriptionReads(this.database, result.rows);
+    return { items: resolvedRows.map((row) => toLessonDto(row)) };
   }
 
   /** Upcoming lessons for the already actor-scoped student set. */
