@@ -589,7 +589,9 @@ class _ThreeRecordPager extends StatefulWidget {
 
 class _ThreeRecordPagerState extends State<_ThreeRecordPager> {
   int _page = 0;
-  final _scroll = ScrollController();
+  // Paging owns its offset. The enclosing ExpansionTile stores a boolean in
+  // PageStorage, so this scroll must neither read nor overwrite that entry.
+  final _scroll = ScrollController(keepScrollOffset: false);
 
   @override
   void dispose() {

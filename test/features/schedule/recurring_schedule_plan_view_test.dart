@@ -1,11 +1,125 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_view.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
 
 void main() {
+  testWidgets(
+    'expanded individual rules survive reopening the client card',
+    (tester) async {
+      final bucket = PageStorageBucket();
+      final plans = [
+        SchedulePlan.fromMap({
+          'id': 'many-rules',
+          'kind': 'individual',
+          'title': 'Индивидуальные занятия',
+          'studentId': 'student-1',
+          'activeFrom': '2026-09-01',
+          'status': 'active',
+          'version': 1,
+          'rows': [],
+          'participants': [],
+          'ruleTimeline': [
+            for (var i = 0; i < 5; i++)
+              _rule(
+                id: 'persist-$i',
+                sourceSeriesId: 'persist-$i',
+                status: 'active',
+                activeFrom: '2026-09-01',
+                activeUntil: null,
+                teacherName: 'Преподаватель $i',
+                roomName: 'Аудитория $i',
+                weekday: i + 1,
+                beginTime: '15:00',
+                durationMinutes: 60,
+                sortBucket: 0,
+                sortAt: '2026-09-01',
+              ),
+          ],
+        }),
+      ];
+      await _pumpView(tester, plans: plans, storageBucket: bucket, width: 390);
+      await tester.tap(find.text('Индивидуальные занятия'));
+      await tester.pumpAndSettle();
+      final pager = find.byKey(
+        const ValueKey('schedule-plan-records-many-rules'),
+      );
+      final scroll = find.descendant(
+        of: pager,
+        matching: find.byType(SingleChildScrollView),
+      );
+      await tester.drag(scroll, const Offset(0, -120));
+      await tester.pumpAndSettle();
+      final position = tester
+          .state<ScrollableState>(
+            find
+                .descendant(of: scroll, matching: find.byType(Scrollable))
+                .first,
+          )
+          .position;
+      expect(position.pixels, greaterThan(0));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpView(tester, plans: plans, storageBucket: bucket, width: 390);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ErrorWidget), findsNothing);
+      expect(find.text('Преподаватель 0'), findsOneWidget);
+      expect(find.text('1–3 из 5'), findsOneWidget);
+      final timelineTop = tester
+          .getTopLeft(find.byType(StudentLessonTimelineView))
+          .dy;
+      await tester.tap(find.byTooltip('Следующие записи'));
+      await tester.pumpAndSettle();
+      expect(find.text('Преподаватель 3'), findsOneWidget);
+      expect(find.text('Преподаватель 0'), findsNothing);
+      expect(
+        tester.getTopLeft(find.byType(StudentLessonTimelineView)).dy,
+        timelineTop,
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.windows,
+      TargetPlatform.android,
+    }),
+  );
+
+  testWidgets(
+    'archive can reopen paginated plans without a render error',
+    (tester) async {
+      await _pumpView(
+        tester,
+        plans: [
+          for (var i = 0; i < 4; i++)
+            SchedulePlan.fromMap({
+              'id': 'archived-$i',
+              'kind': 'individual',
+              'title': 'Архивная серия $i',
+              'studentId': 'student-1',
+              'activeFrom': '2026-09-01',
+              'status': 'ended',
+              'archivedAt': '2026-09-10T12:00:00Z',
+              'version': 2,
+              'rows': [],
+              'participants': [],
+            }),
+        ],
+      );
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.text('Архив (4)'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+      expect(find.text('Архивная серия 0'), findsOneWidget);
+      expect(find.byType(ErrorWidget), findsNothing);
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.windows,
+      TargetPlatform.android,
+    }),
+  );
   testWidgets(
     'paging unequal plan pages keeps the timeline and controls in place',
     (tester) async {
@@ -502,45 +616,53 @@ Future<void> _pumpView(
   List<SchedulePlan>? plans,
   StudentLessonTimelinePage? timeline,
   double textScale = 1,
+  PageStorageBucket? storageBucket,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width, 1400);
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
-    MaterialApp(
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(textScale)),
-        child: child!,
-      ),
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: SizedBox(
-            width: width,
-            child: RecurringSchedulePlanView(
-              plans: plans ?? [_plan('plan-a'), _plan('plan-b')],
-              loading: false,
-              error: null,
-              canWrite: true,
-              canCreatePlan: true,
-              groupMode: false,
-              hasGroupMembers: false,
-              fallbackLessons: const [],
-              timelinePage: timeline ?? _timeline,
-              timelineLoading: false,
-              timelinePaging: false,
-              timelineError: null,
-              onCreate: () {},
-              onRetryPlans: () {},
-              onPreviousTimeline: () {},
-              onNextTimeline: onNextTimeline ?? () {},
-              onRetryTimeline: () {},
-              onEditPlan: onEditPlan ?? (_, _) {},
-              onRemoveRow: onRemoveRow ?? (_, _) {},
-              onEditParticipants: (_) {},
-              onEndPlan: (_) {},
-              onOpenTimelineItem: onOpenTimelineItem ?? (_) async {},
+    ScrollConfiguration(
+      behavior: NoGlowScrollBehavior(),
+      child: MaterialApp(
+        theme: AppTheme.production,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: PageStorage(
+            bucket: storageBucket ?? PageStorageBucket(),
+            child: SingleChildScrollView(
+              child: SizedBox(
+                width: width,
+                child: RecurringSchedulePlanView(
+                  plans: plans ?? [_plan('plan-a'), _plan('plan-b')],
+                  loading: false,
+                  error: null,
+                  canWrite: true,
+                  canCreatePlan: true,
+                  groupMode: false,
+                  hasGroupMembers: false,
+                  fallbackLessons: const [],
+                  timelinePage: timeline ?? _timeline,
+                  timelineLoading: false,
+                  timelinePaging: false,
+                  timelineError: null,
+                  onCreate: () {},
+                  onRetryPlans: () {},
+                  onPreviousTimeline: () {},
+                  onNextTimeline: onNextTimeline ?? () {},
+                  onRetryTimeline: () {},
+                  onEditPlan: onEditPlan ?? (_, _) {},
+                  onRemoveRow: onRemoveRow ?? (_, _) {},
+                  onEditParticipants: (_) {},
+                  onEndPlan: (_) {},
+                  onOpenTimelineItem: onOpenTimelineItem ?? (_) async {},
+                ),
+              ),
             ),
           ),
         ),
