@@ -7,6 +7,8 @@ import { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { LessonSettlementResult } from "./lesson-settlement.port";
+import { currentSubscriptionId, subscriptionLineageSql } from "./subscription-lineage";
+import { reconcileSubscriptionCoverage, synchronizeSubscriptionCoverage, releaseLessonCoverage, subscriptionCoversLesson } from "./subscription-coverage.persistence";
 
 interface LockedSubscriptionRow {
   id: string;
@@ -78,9 +80,10 @@ export class SubscriptionReservationService {
       this.capacityViolation(input.subscriptionId, input.units, "0");
     }
 
+    const subscriptionId = await currentSubscriptionId(client, input.subscriptionId!);
     const subscription = await this.lockSubscription(
       client,
-      input.subscriptionId,
+      subscriptionId,
     );
     if (
       !subscription ||
@@ -92,7 +95,7 @@ export class SubscriptionReservationService {
       subscription.status !== "active" ||
       !(await this.coversLesson(
         client,
-        input.subscriptionId,
+        subscriptionId,
         input.lessonId,
         input.clientId,
       ))
@@ -101,63 +104,22 @@ export class SubscriptionReservationService {
       this.capacityViolation(input.subscriptionId, input.units, "0");
     }
 
-    const capacity = await client.query<{
-      used_units: string;
-      reserved_units: string;
-    }>(
-      `
-        select
-          (
-            $2::numeric + coalesce(
-              (
-                select sum(fact.units)
-                from app.lesson_client_charge_facts_effective fact
-                where fact.subscription_id = $1
-                  and fact.charge_type = 'subscription'
-              ),
-              0
-            )
-          )::text as used_units,
-          coalesce(
-            (
-              select sum(reservation.units)
-              from app.lesson_reservations reservation
-              where reservation.subscription_id = $1
-                and reservation.state = 'reserved'
-            ),
-            0
-          )::text as reserved_units
-      `,
-      [input.subscriptionId, subscription.lessons_used],
+    const covered = await reconcileSubscriptionCoverage(
+      client, subscription,
+      (lessonId, studentId) => this.coversLesson(client, subscription.id, lessonId, studentId),
+      { override: { ...input, subscriptionId } },
     );
-    const used = Number(capacity.rows[0]?.used_units ?? 0);
-    const reserved = Number(capacity.rows[0]?.reserved_units ?? 0);
-    const available = Number(subscription.lessons_total) - used - reserved;
-    if (available + Number.EPSILON < input.units) {
-      if (input.allowUncovered) return;
-      this.capacityViolation(
-        input.subscriptionId,
-        input.units,
-        Math.max(0, available).toFixed(2),
-      );
-    }
-
-    const reservationWrite = await client.query(
-      `
-        insert into app.lesson_reservations (
-          lesson_id,
-          subscription_id,
-          units
-        )
-        values ($1, $2, $3)
-        on conflict do nothing
-        returning id
-      `,
-      [input.lessonId, input.subscriptionId, input.units],
-    );
-    if (!reservationWrite.rows[0]) {
+    if (!covered.coveredLessonIds.has(input.lessonId) && !input.allowUncovered) {
       this.capacityViolation(input.subscriptionId, input.units, "0");
     }
+  }
+
+  async reconcile(
+    client: PoolClient,
+    subscriptionIds: string[],
+    excludedLessonIds: string[] = [],
+  ): Promise<void> {
+    await synchronizeSubscriptionCoverage(client, subscriptionIds, excludedLessonIds);
   }
 
   async lockSettlementCoverage(
@@ -167,7 +129,7 @@ export class SubscriptionReservationService {
   ): Promise<LessonSettlementCoverageSnapshot> {
     const candidates = await client.query<{ subscription_id: string }>(
       `
-        select distinct source.subscription_id
+        select distinct lineage.id as subscription_id
         from (
           select subscription_id from app.lesson_snapshots where lesson_id = $1
           union all
@@ -177,8 +139,9 @@ export class SubscriptionReservationService {
           union all
           select unnest($2::uuid[])
         ) source
-        where source.subscription_id is not null
-        order by source.subscription_id
+        cross join lateral (${subscriptionLineageSql("source.subscription_id", "successors")}) lineage
+        where lineage.id is not null
+        order by lineage.id
       `,
       [lessonId, [...new Set(selectedSubscriptionIds)].sort()],
     );
@@ -256,6 +219,11 @@ export class SubscriptionReservationService {
     client: PoolClient,
     settled: LessonSettlementResult,
   ): Promise<void> {
+    const subscriptions = await client.query<{ subscription_id: string }>(
+      `select distinct subscription_id from app.lesson_reservations
+       where lesson_id = $1 and state = 'reserved' order by subscription_id`,
+      [settled.lessonId],
+    );
     let consumed = 0;
     for (const fact of settled.clientFacts) {
       if (
@@ -290,20 +258,14 @@ export class SubscriptionReservationService {
         lessonId: settled.lessonId,
       });
     }
+    await this.reconcile(client, subscriptions.rows.map((row) => row.subscription_id), [settled.lessonId]);
   }
 
   async releaseForLessons(
     client: PoolClient,
     lessonIds: string[],
   ): Promise<number> {
-    if (lessonIds.length === 0) return 0;
-    const result = await client.query(
-      `update app.lesson_reservations
-       set state = 'released', financial_fact_id = null
-       where lesson_id = any($1::uuid[]) and state = 'reserved'`,
-      [lessonIds],
-    );
-    return result.rowCount ?? 0;
+    return releaseLessonCoverage(client, lessonIds);
   }
 
   async transferActiveReservation(
@@ -469,35 +431,7 @@ export class SubscriptionReservationService {
     lessonId: string,
     recipientStudentId: string,
   ): Promise<boolean> {
-    const result = await client.query<{ covered: boolean }>(
-      `select exists (
-         select 1
-         from app.subscriptions subscription
-         join app.lessons lesson on lesson.id = $2
-         join app.students owner
-           on owner.id = subscription.student_id
-          and owner.deleted_at is null
-         join app.students recipient
-           on recipient.id = $3
-          and recipient.deleted_at is null
-         left join app.schedule_series series on series.id = lesson.series_id
-         left join app.branches branch on branch.id = lesson.branch_id
-         left join app.subscription_packages package
-           on package.id = subscription.package_id
-         where subscription.id = $1
-           and owner.branch_id = lesson.branch_id
-           and recipient.branch_id = lesson.branch_id
-           and (package.branch_id is null or package.branch_id = lesson.branch_id)
-           and (subscription.starts_at is null or subscription.starts_at <=
-             timezone(coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-               lesson.scheduled_at)::date)
-           and (subscription.expires_at is null or subscription.expires_at >=
-             timezone(coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-               lesson.scheduled_at)::date)
-       ) as covered`,
-      [subscriptionId, lessonId, recipientStudentId],
-    );
-    return result.rows[0]?.covered === true;
+    return subscriptionCoversLesson(client, subscriptionId, lessonId, recipientStudentId);
   }
 
   private async clientUserIds(studentId: string): Promise<string[]> {

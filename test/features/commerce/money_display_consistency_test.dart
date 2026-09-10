@@ -49,6 +49,7 @@ void main() {
               onAddExpense: () async {},
               onEditExpense: (_) async {},
               onDeleteExpense: (_) async {},
+              onRetryExpenses: () async {},
               onRetryPayments: () async {},
               onRefreshPayments: () async {},
               onOpenStudent: (_, _) async {},

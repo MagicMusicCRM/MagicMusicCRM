@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
@@ -35,6 +37,8 @@ class RecurringSchedulePlanView extends StatefulWidget {
     required this.onRemoveRow,
     required this.onEditParticipants,
     required this.onEndPlan,
+    this.onArchivePlan,
+    this.onRestorePlan,
     required this.onOpenTimelineItem,
     this.emptyState,
     this.onOpenFallbackLesson,
@@ -61,6 +65,8 @@ class RecurringSchedulePlanView extends StatefulWidget {
   final SchedulePlanRemoveRowIntent onRemoveRow;
   final ValueChanged<SchedulePlan> onEditParticipants;
   final ValueChanged<SchedulePlan> onEndPlan;
+  final ValueChanged<SchedulePlan>? onArchivePlan;
+  final ValueChanged<SchedulePlan>? onRestorePlan;
   final Future<void> Function(String lessonId) onOpenTimelineItem;
   final Widget? emptyState;
   final ValueChanged<Map<String, dynamic>>? onOpenFallbackLesson;
@@ -76,7 +82,10 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
   @override
   Widget build(BuildContext context) {
     final active = widget.plans.where((plan) => plan.isActive).toList();
-    final ended = widget.plans.where((plan) => !plan.isActive).toList();
+    final ended = widget.plans
+        .where((plan) => !plan.isActive && !plan.isArchived)
+        .toList();
+    final archived = widget.plans.where((plan) => plan.isArchived).toList();
     return SizedBox(
       width: double.infinity,
       child: Column(
@@ -99,8 +108,17 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
             const LinearProgressIndicator(color: AppColor.gold)
           else if (widget.error != null && widget.plans.isEmpty)
             _errorState(widget.onRetryPlans, 'Не удалось загрузить расписание')
-          else if (widget.plans.isEmpty)
+          else if (active.isEmpty && ended.isEmpty)
             _emptyPlans()
+          else if (!widget.groupMode)
+            _ThreeRecordPager(
+              key: const ValueKey('individual-schedule-plans'),
+              count: active.length + ended.length,
+              itemBuilder: (index) => _planCard(
+                [...active, ...ended][index],
+                initiallyExpanded: false,
+              ),
+            )
           else ...[
             for (final plan in active) ...[
               _planCard(plan, initiallyExpanded: true),
@@ -109,6 +127,20 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
             if (ended.isNotEmpty) _endedPlans(ended),
           ],
           const SizedBox(height: AppSpace.md),
+          if (archived.isNotEmpty) ...[
+            ExpansionTile(
+              key: const PageStorageKey('archived-schedule-plans'),
+              title: Text('Архив (${archived.length})'),
+              children: [
+                _ThreeRecordPager(
+                  count: archived.length,
+                  itemBuilder: (index) =>
+                      _planCard(archived[index], initiallyExpanded: false),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
           if (widget.groupMode)
             _GroupLessonList(
               lessons: widget.fallbackLessons,
@@ -226,7 +258,17 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
               ),
             ),
             const SizedBox(width: AppSpace.sm),
-            _tag(plan.isGroup ? 'Группа' : 'Индивидуально'),
+            _tag(
+              plan.isArchived
+                  ? 'В архиве'
+                  : plan.isGroup
+                  ? 'Группа'
+                  : !plan.isActive
+                  ? 'Завершено'
+                  : plan.activeUntil == null
+                  ? 'Постоянное'
+                  : 'Временное',
+            ),
           ],
         ),
         subtitle: Text(
@@ -240,6 +282,20 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
           AppSpace.md,
         ),
         children: [
+          if (plan.isArchived)
+            Text('В архиве: ${plan.archiveReason ?? "Без причины"}'),
+          if (plan.isArchived &&
+              widget.canWrite &&
+              widget.onRestorePlan != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('schedule-plan-restore-${plan.id}'),
+                onPressed: () => widget.onRestorePlan!(plan),
+                icon: const Icon(Icons.unarchive_outlined),
+                label: const Text('Восстановить из архива'),
+              ),
+            ),
           if (!plan.isActive && plan.endReason?.trim().isNotEmpty == true) ...[
             Align(
               alignment: Alignment.centerLeft,
@@ -276,10 +332,28 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
               alignment: Alignment.centerLeft,
               child: Text('В расписании нет строк.'),
             )
-          else if (entries.isEmpty)
-            for (final row in plan.currentRows) _currentPlanRow(plan, row)
           else
-            for (final entry in entries) _timelineRuleRow(plan, entry),
+            _ThreeRecordPager(
+              key: ValueKey('schedule-plan-records-${plan.id}'),
+              count: entries.isEmpty ? plan.currentRows.length : entries.length,
+              itemBuilder: (index) => entries.isEmpty
+                  ? _currentPlanRow(plan, plan.currentRows[index])
+                  : _timelineRuleRow(plan, entries[index]),
+            ),
+          if (!plan.isActive &&
+              !plan.isArchived &&
+              !plan.isGroup &&
+              widget.canWrite &&
+              widget.onArchivePlan != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('schedule-plan-archive-${plan.id}'),
+                onPressed: () => widget.onArchivePlan!(plan),
+                icon: const Icon(Icons.archive_outlined),
+                label: const Text('В архив'),
+              ),
+            ),
           if (plan.isActive && widget.canWrite) ...[
             const SizedBox(height: AppSpace.sm),
             Wrap(
@@ -408,7 +482,7 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
             : constraints.maxWidth >= 620
             ? 2
             : 1;
-        final actionWidth = actions.isEmpty ? 0.0 : 48.0;
+        final actionWidth = actions.length * 48.0;
         final available = (constraints.maxWidth - actionWidth - AppSpace.sm * 2)
             .clamp(1.0, double.infinity);
         final cellWidth = (available - AppSpace.sm * (columns - 1)) / columns;
@@ -437,7 +511,7 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
                 ),
               ),
               if (actions.isNotEmpty)
-                Column(mainAxisSize: MainAxisSize.min, children: actions),
+                Row(mainAxisSize: MainAxisSize.min, children: actions),
             ],
           ),
         );
@@ -501,7 +575,96 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
   );
 }
 
-class StudentLessonTimelineView extends StatelessWidget {
+class _ThreeRecordPager extends StatefulWidget {
+  const _ThreeRecordPager({
+    super.key,
+    required this.count,
+    required this.itemBuilder,
+  });
+  final int count;
+  final Widget Function(int index) itemBuilder;
+  @override
+  State<_ThreeRecordPager> createState() => _ThreeRecordPagerState();
+}
+
+class _ThreeRecordPagerState extends State<_ThreeRecordPager> {
+  int _page = 0;
+  // Paging owns its offset. The enclosing ExpansionTile stores a boolean in
+  // PageStorage, so this scroll must neither read nor overwrite that entry.
+  final _scroll = ScrollController(keepScrollOffset: false);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _changePage(int page) {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    setState(() => _page = page);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = math.max(1, (widget.count / 3).ceil());
+    _page = _page.clamp(0, pages - 1);
+    final start = _page * 3;
+    final end = math.min(start + 3, widget.count);
+    final records = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = start; i < end; i++) ...[
+          widget.itemBuilder(i),
+          if (i < end - 1) const SizedBox(height: AppSpace.sm),
+        ],
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (pages > 1)
+          SizedBox(
+            // Paging and expanding records must not resize the client card.
+            height: 320 * MediaQuery.textScalerOf(context).scale(16) / 16,
+            child: Scrollbar(
+              controller: _scroll,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                primary: false,
+                child: records,
+              ),
+            ),
+          )
+        else
+          records,
+        if (pages > 1)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                '${start + 1}–$end из ${widget.count}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              IconButton(
+                tooltip: 'Предыдущие записи',
+                onPressed: _page > 0 ? () => _changePage(_page - 1) : null,
+                icon: const Icon(Icons.chevron_left_rounded),
+              ),
+              IconButton(
+                tooltip: 'Следующие записи',
+                onPressed: _page < pages - 1
+                    ? () => _changePage(_page + 1)
+                    : null,
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+class StudentLessonTimelineView extends StatefulWidget {
   const StudentLessonTimelineView({
     super.key,
     required this.page,
@@ -513,7 +676,6 @@ class StudentLessonTimelineView extends StatelessWidget {
     required this.onRetry,
     required this.onOpen,
   });
-
   final StudentLessonTimelinePage page;
   final bool loading;
   final bool paging;
@@ -522,97 +684,273 @@ class StudentLessonTimelineView extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onRetry;
   final ValueChanged<StudentLessonTimelineItem> onOpen;
+  @override
+  State<StudentLessonTimelineView> createState() =>
+      _StudentLessonTimelineViewState();
+}
+
+class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
+  final ScrollController _scroll = ScrollController();
+  bool _previousPageRequested = false;
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_scrollChanged);
+  }
+
+  void _scrollChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
-  Widget build(BuildContext context) => Container(
-    key: const Key('student-lesson-timeline'),
-    width: double.infinity,
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surface,
-      border: Border.all(color: AppColor.goldLine),
-      borderRadius: BorderRadius.circular(AppRadius.control),
-    ),
-    padding: const EdgeInsets.all(AppSpace.md),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+  void didUpdateWidget(covariant StudentLessonTimelineView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldIds = oldWidget.page.items.map((item) => item.id).join('|');
+    final newIds = widget.page.items.map((item) => item.id).join('|');
+    if (oldIds != newIds ||
+        oldWidget.page.windowStart != widget.page.windowStart) {
+      final showEnd = _previousPageRequested;
+      _previousPageRequested = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) {
+          _scroll.jumpTo(showEnd ? _scroll.position.maxScrollExtent : 0);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _move(bool forward, double step, double maxOffset) {
+    final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+    if (_scroll.hasClients && (forward ? offset < maxOffset - 1 : offset > 1)) {
+      _scroll.animateTo(
+        (offset + (forward ? step : -step)).clamp(0.0, maxOffset),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _previousPageRequested = !forward;
+      (forward ? widget.onNext : widget.onPrevious)();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
+      final width = math.max(1.0, constraints.maxWidth - AppSpace.md * 2 - 2);
+      final columns = math.min(
+        15,
+        math.max(1, ((width + 4) / (39 * scale + 4)).floor()),
+      );
+      final tileWidth = (width - (columns - 1) * 4) / columns;
+      final start = widget.page.windowStart;
+      final byDate = <DateTime, List<StudentLessonTimelineItem>>{};
+      for (final item in widget.page.items) {
+        final local = item.scheduledAt.toLocal();
+        final date = DateTime(local.year, local.month, local.day);
+        (byDate[date] ??= []).add(item);
+      }
+      final dates = byDate.keys.toList()..sort();
+      final days = start == null
+          ? null
+          : [
+              for (final date in dates)
+                byDate[date]!..sort((a, b) {
+                  final time = a.scheduledAt.compareTo(b.scheduledAt);
+                  return time != 0 ? time : a.id.compareTo(b.id);
+                }),
+            ];
+      final contentColumns = days == null
+          ? (widget.page.items.length / 2).ceil()
+          : days.isEmpty
+          ? 0
+          : math.max(15, (days.length / 2).ceil());
+      final dailyCount =
+          days?.fold<int>(1, (count, items) => math.max(count, items.length)) ??
+          1;
+      final rowHeight = days == null
+          ? 40 * scale
+          : (24 + 44 * dailyCount) * scale;
+      final maxOffset = math.max(
+        0.0,
+        contentColumns * (tileWidth + 4) - 4 - width,
+      );
+      final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+      final busy = widget.paging || widget.loading;
+      return Container(
+        key: const Key('student-lesson-timeline'),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(color: AppColor.goldLine),
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        padding: const EdgeInsets.all(AppSpace.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Expanded(
-              child: Text(
-                'Лента занятий',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Лента занятий',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('student-lesson-timeline-previous'),
+                  onPressed: !busy && (offset > 1 || widget.page.hasPrevious)
+                      ? () => _move(false, columns * (tileWidth + 4), maxOffset)
+                      : null,
+                  tooltip: 'Предыдущие занятия',
+                  icon: const Icon(Icons.chevron_left_rounded),
+                ),
+                IconButton(
+                  key: const Key('student-lesson-timeline-next'),
+                  onPressed:
+                      !busy && (offset < maxOffset - 1 || widget.page.hasNext)
+                      ? () => _move(true, columns * (tileWidth + 4), maxOffset)
+                      : null,
+                  tooltip: 'Следующие занятия',
+                  icon: const Icon(Icons.chevron_right_rounded),
+                ),
+              ],
+            ),
+            if (widget.loading && widget.page.items.isEmpty)
+              const LinearProgressIndicator(color: AppColor.gold)
+            else if (widget.error != null && widget.page.items.isEmpty)
+              _timelineError(context)
+            else if (contentColumns == 0)
+              Text(
+                start == null
+                    ? 'Занятий пока нет.'
+                    : 'В этом периоде занятий нет.',
+              )
+            else
+              SizedBox(
+                key: const Key('student-lesson-timeline-grid'),
+                height: rowHeight * 2 + 4,
+                child: Scrollbar(
+                  controller: _scroll,
+                  child: GridView.builder(
+                    controller: _scroll,
+                    primary: false,
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.zero,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisExtent: tileWidth,
+                      mainAxisSpacing: 4,
+                      crossAxisSpacing: 4,
+                    ),
+                    itemCount: contentColumns * 2,
+                    itemBuilder: (context, index) {
+                      final orderedIndex =
+                          (index % 2) * contentColumns + index ~/ 2;
+                      if (days != null) {
+                        if (orderedIndex >= days.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return _StudentTimelineDay(
+                          date: dates[orderedIndex],
+                          items: days[orderedIndex],
+                          scale: scale,
+                          onOpen: widget.onOpen,
+                        );
+                      }
+                      if (orderedIndex >= widget.page.items.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final item = widget.page.items[orderedIndex];
+                      return _StudentTimelineItem(
+                        item: item,
+                        onTap: () => widget.onOpen(item),
+                      );
+                    },
+                  ),
+                ),
               ),
-            ),
-            IconButton(
-              key: const Key('student-lesson-timeline-previous'),
-              onPressed: page.hasPrevious && !paging ? onPrevious : null,
-              tooltip: 'Предыдущие занятия',
-              icon: const Icon(Icons.chevron_left_rounded),
-            ),
-            IconButton(
-              key: const Key('student-lesson-timeline-next'),
-              onPressed: page.hasNext && !paging ? onNext : null,
-              tooltip: 'Следующие занятия',
-              icon: const Icon(Icons.chevron_right_rounded),
-            ),
+            if (widget.error != null && widget.page.items.isNotEmpty)
+              _timelineError(context),
+            if (widget.paging)
+              const LinearProgressIndicator(color: AppColor.gold),
           ],
         ),
-        if (loading && page.items.isEmpty)
-          const LinearProgressIndicator(color: AppColor.gold)
-        else if (error != null && page.items.isEmpty)
-          _timelineError(context)
-        else if (page.items.isEmpty)
-          Text(
-            'Занятий пока нет.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 12,
-            ),
-          )
-        else
-          for (var index = 0; index < page.items.length; index++) ...[
-            _StudentTimelineItem(
-              item: page.items[index],
-              onTap: () => onOpen(page.items[index]),
-            ),
-            if (index != page.items.length - 1)
-              const SizedBox(height: AppSpace.xs),
-          ],
-        if (error != null && page.items.isNotEmpty) ...[
-          const SizedBox(height: AppSpace.sm),
-          _timelineError(context),
-        ],
-        if (paging) ...[
-          const SizedBox(height: AppSpace.sm),
-          const LinearProgressIndicator(color: AppColor.gold),
-        ],
-      ],
-    ),
+      );
+    },
   );
-
   Widget _timelineError(BuildContext context) => Row(
     children: [
       Expanded(
         child: Text(
-          error ?? 'Не удалось загрузить занятия.',
+          widget.error ?? 'Не удалось загрузить занятия.',
           style: TextStyle(
             color: Theme.of(context).colorScheme.error,
             fontSize: 12,
           ),
         ),
       ),
-      TextButton(onPressed: onRetry, child: const Text('Повторить')),
+      TextButton(onPressed: widget.onRetry, child: const Text('Повторить')),
     ],
   );
 }
 
+class _StudentTimelineDay extends StatelessWidget {
+  const _StudentTimelineDay({
+    required this.date,
+    required this.items,
+    required this.scale,
+    required this.onOpen,
+  });
+  final DateTime date;
+  final List<StudentLessonTimelineItem> items;
+  final double scale;
+  final ValueChanged<StudentLessonTimelineItem> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    const weekdays = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+    return Column(
+      key: ValueKey(
+        'student-timeline-date-${DateFormat('yyyy-MM-dd').format(date)}',
+      ),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 24 * scale,
+          child: Center(
+            child: Text(
+              weekdays[date.weekday - 1],
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        for (final item in items)
+          Padding(
+            padding: EdgeInsets.only(bottom: 4 * scale),
+            child: SizedBox(
+              height: 40 * scale,
+              child: _StudentTimelineItem(
+                item: item,
+                onTap: () => onOpen(item),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _StudentTimelineItem extends StatelessWidget {
   const _StudentTimelineItem({required this.item, required this.onTap});
-
   final StudentLessonTimelineItem item;
   final VoidCallback onTap;
-
   @override
   Widget build(BuildContext context) {
     final state = LessonStateProjection.fromMap({
@@ -623,98 +961,104 @@ class _StudentTimelineItem extends StatelessWidget {
         ],
     });
     final local = item.scheduledAt.toLocal();
-    final details = <String>[
-      '${DateFormat('dd.MM.yyyy HH:mm').format(local)} · ${item.durationMinutes} мин',
-      item.teacher?.name ?? 'Педагог не указан',
-      item.room?.name ?? 'Аудитория не указана',
-    ];
-    final hasActionableSuccessor =
+    final successor =
         item.lifecycleState == StudentLessonLifecycleState.rescheduled &&
         item.reschedule.successorId != null;
-    final relation = item.reschedule.predecessorId != null
-        ? 'Новое занятие после переноса'
-        : null;
-    return InkWell(
-      key: ValueKey('student-timeline-${item.id}'),
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.control),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(AppSpace.sm),
-        decoration: BoxDecoration(
-          color: state.token.soft,
-          border: Border.all(color: state.token.accent.withValues(alpha: 0.45)),
-          borderRadius: BorderRadius.circular(AppRadius.control),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final compact = constraints.maxWidth < 620;
-            final title = Row(
+    final noChargeReason = switch (item.settlement.settlementTypeKey) {
+      'unpaid_miss' => 'Неоплачиваемый пропуск. Абонемент не расходуется.',
+      'free_lesson' => 'Бесплатное занятие. Абонемент не расходуется.',
+      _ => null,
+    };
+    final description = [
+      _originLabel(item.origin.kind),
+      '${DateFormat('dd.MM.yyyy HH:mm').format(local)} · ${item.durationMinutes} мин',
+      state.label,
+      if (state.coveredBySubscription) 'Абонемент',
+      if (!state.coveredBySubscription && noChargeReason != null)
+        noChargeReason,
+      item.teacher?.name ?? 'Педагог не указан',
+      item.room?.name ?? 'Аудитория не указана',
+      if (item.reschedule.predecessorId != null) 'Новое занятие после переноса',
+      if (successor) 'Открыть актуальное занятие',
+    ].join('\n');
+    return Tooltip(
+      message: description,
+      child: InkWell(
+        key: ValueKey('student-timeline-${item.id}'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Semantics(
+          label: description,
+          button: true,
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: state.token.soft,
+              border: Border.all(
+                color: state.token.accent.withValues(alpha: 0.55),
+              ),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(state.token.icon, size: 17, color: state.token.accent),
-                const SizedBox(width: AppSpace.xs),
-                Expanded(
-                  child: Text(
-                    _originLabel(item.origin.kind),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                if (state.coveredBySubscription)
-                  const LessonSubscriptionBadge(),
-              ],
-            );
-            final metadata = Wrap(
-              spacing: AppSpace.md,
-              runSpacing: AppSpace.xs,
-              children: [
-                for (final detail in details)
-                  Text(detail, style: const TextStyle(fontSize: 12)),
                 Text(
-                  state.label,
+                  DateFormat('dd.MM').format(local),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: state.token.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                if (relation != null)
-                  Text(relation, style: const TextStyle(fontSize: 12)),
-                if (hasActionableSuccessor)
-                  TextButton(
-                    key: ValueKey('student-timeline-successor-${item.id}'),
-                    onPressed: onTap,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColor.text2,
-                      minimumSize: Size.zero,
-                      padding: EdgeInsets.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text(
-                      'Открыть актуальное занятие',
-                      style: TextStyle(fontSize: 12),
-                    ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        state.token.icon,
+                        size: 10,
+                        color: state.token.accent,
+                      ),
+                      if (state.coveredBySubscription) ...[
+                        const SizedBox(width: 4),
+                        const LessonSubscriptionBadge(
+                          compact: true,
+                          iconOnly: true,
+                        ),
+                      ],
+                      if (!state.coveredBySubscription &&
+                          noChargeReason != null) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.money_off_rounded,
+                          key: ValueKey(
+                            'student-timeline-no-charge-${item.id}',
+                          ),
+                          size: 10,
+                          color: state.token.accent,
+                        ),
+                      ],
+                      if (successor) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.redo_rounded,
+                          key: ValueKey(
+                            'student-timeline-successor-${item.id}',
+                          ),
+                          size: 10,
+                          color: state.token.accent,
+                        ),
+                      ],
+                    ],
                   ),
+                ),
               ],
-            );
-            return compact
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      title,
-                      const SizedBox(height: AppSpace.xs),
-                      metadata,
-                    ],
-                  )
-                : Row(
-                    children: [
-                      SizedBox(width: 220, child: title),
-                      const SizedBox(width: AppSpace.md),
-                      Expanded(child: metadata),
-                    ],
-                  );
-          },
+            ),
+          ),
         ),
       ),
     );

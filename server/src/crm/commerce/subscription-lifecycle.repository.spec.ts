@@ -15,6 +15,7 @@ describe("SubscriptionLifecycleRepository replacement context mapping", () => {
       old_status: "active",
       old_version: "7",
       old_final_price_minor: "120000",
+      old_unit_count: "8", prior_consumed_value_minor: "0", old_obligation_minor: "120000",
       old_currency_code: "RUB",
       legacy_lessons_used: "3.00",
       new_package_id: newPackageId,
@@ -134,6 +135,7 @@ describe("SubscriptionLifecycleRepository replacement context mapping", () => {
         oldStatus: "active",
         oldVersion: 0,
         oldFinalPriceMinor: "0012.3400",
+        oldUnitCount: "8", priorConsumedValueMinor: "0", oldObligationMinor: "120000",
         oldCurrencyCode: "rub",
         legacyLessonsUsed: "12.000",
         newPackage: {
@@ -172,6 +174,7 @@ describe("SubscriptionLifecycleRepository replacement context mapping", () => {
         "oldStatus",
         "oldVersion",
         "oldFinalPriceMinor",
+        "oldUnitCount", "priorConsumedValueMinor", "oldObligationMinor",
         "oldCurrencyCode",
         "legacyLessonsUsed",
         "newPackage",
@@ -357,6 +360,7 @@ describe("SubscriptionLifecycleRepository replacement context mapping", () => {
 
       expect(result).toMatchObject({
         oldFinalPriceMinor: "0012.3400",
+        oldUnitCount: "8", priorConsumedValueMinor: "0", oldObligationMinor: "120000",
         oldCurrencyCode: "rub",
         legacyLessonsUsed: "12.000",
         newPackage: {

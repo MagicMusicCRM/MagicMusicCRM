@@ -1,0 +1,104 @@
+[
+  {
+    "operationId": "createExpense",
+    "method": "POST",
+    "path": "/api/crm/expenses",
+    "body": {
+      "amount": 120.25,
+      "category": "contract-expense",
+      "description": "Аренда зала",
+      "occurredAt": "2026-07-15T10:00:00.000Z"
+    },
+    "status": 201,
+    "response": {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "version": 1,
+      "occurredAt": "2026-07-15T10:00:00.000Z",
+      "amount": 120.25,
+      "category": "contract-expense",
+      "description": "Аренда зала",
+      "branchId": null,
+      "branchName": null,
+      "createdAt": "2026-09-05T10:00:00.000Z"
+    }
+  },
+  {
+    "operationId": "listExpenses",
+    "method": "GET",
+    "path": "/api/crm/expenses",
+    "query": {
+      "category": "contract-expense",
+      "from": "2026-07-01T00:00:00.000Z",
+      "to": "2026-08-01T00:00:00.000Z",
+      "limit": 1
+    },
+    "status": 200,
+    "response": {
+      "items": [
+        {
+          "id": "10000000-0000-4000-8000-000000000002",
+          "version": 1,
+          "occurredAt": "2026-07-15T10:00:00.000Z",
+          "amount": 120.25,
+          "category": "contract-expense",
+          "description": "Аренда зала",
+          "branchId": null,
+          "branchName": null,
+          "createdAt": "2026-09-05T10:00:00.000Z"
+        }
+      ],
+      "nextCursor": null,
+      "total": 120.25
+    }
+  },
+  {
+    "operationId": "updateExpense",
+    "method": "PATCH",
+    "path": "/api/crm/expenses/10000000-0000-4000-8000-000000000002",
+    "body": {
+      "expectedVersion": 1,
+      "amount": 130.5,
+      "category": "contract-expense",
+      "description": ""
+    },
+    "status": 200,
+    "response": {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "version": 2,
+      "occurredAt": "2026-07-15T10:00:00.000Z",
+      "amount": 130.5,
+      "category": "contract-expense",
+      "description": null,
+      "branchId": null,
+      "branchName": null,
+      "createdAt": "2026-09-05T10:00:00.000Z"
+    }
+  },
+  {
+    "operationId": "deleteExpense",
+    "method": "DELETE",
+    "path": "/api/crm/expenses/10000000-0000-4000-8000-000000000002",
+    "query": {
+      "expectedVersion": 2
+    },
+    "status": 200,
+    "response": {
+      "success": true
+    }
+  },
+  {
+    "operationId": "listExpenses",
+    "method": "GET",
+    "path": "/api/crm/expenses",
+    "query": {
+      "category": "contract-expense",
+      "limit": 1
+    },
+    "status": 200,
+    "response": {
+      "items": [],
+      "nextCursor": null,
+      "total": 0
+    }
+  }
+]

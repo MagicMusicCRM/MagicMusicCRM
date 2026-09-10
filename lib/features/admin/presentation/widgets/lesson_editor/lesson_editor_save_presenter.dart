@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 
 import '../lesson_decision_flow.dart';
@@ -29,7 +30,6 @@ Future<TimeOfDay?> pickLessonEditorTime(
 Future<void> presentLessonEditorSaveOutcome(
   BuildContext context,
   LessonSaveOutcome outcome, {
-  required ScrollController scrollController,
   required ValueChanged<LessonEditorValidation> onInvalid,
   required ValueChanged<LessonScheduleAnalysis> onViolations,
   required ValueChanged<LessonEditorSession> onSessionReloaded,
@@ -43,9 +43,13 @@ Future<void> presentLessonEditorSaveOutcome(
     case LessonSaveConfirmed():
       finishLessonEditor(context, 'Изменения занятия применены');
     case LessonSavePreview():
-      scrollToLessonPreview(context, scrollController);
+      revealFormFeedback(context, const Key('lesson-decision-preview'));
     case LessonSaveInvalid(:final validation):
       onInvalid(validation);
+      revealFormFeedback(
+        context,
+        const ValueKey('lesson-form-validation-error'),
+      );
     case LessonSaveViolations(:final violations):
       onViolations(LessonScheduleAnalysis.fromViolations(violations));
       await showLessonEditorConstraints(
@@ -57,7 +61,18 @@ Future<void> presentLessonEditorSaveOutcome(
       throw StateError('Предварительный расчёт занятия не получен.');
     case LessonSaveFailure(:final error, :final reloadedSession):
       if (reloadedSession != null) onSessionReloaded(reloadedSession);
-      showLessonEditorError(context, error, 'Не удалось сохранить занятие.');
+      onInvalid(
+        LessonEditorValidation.invalid(
+          lessonEditorErrorMessage(
+            error,
+            'Не удалось сохранить занятие. Попробуйте ещё раз.',
+          ),
+        ),
+      );
+      revealFormFeedback(
+        context,
+        const ValueKey('lesson-form-validation-error'),
+      );
     case LessonSaveBusy():
       break;
   }

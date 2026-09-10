@@ -260,6 +260,7 @@ class _EventSection extends StatelessWidget {
                           toggle,
                         ],
                       ),
+                      const SizedBox(height: 8),
                       channels,
                     ],
                   );

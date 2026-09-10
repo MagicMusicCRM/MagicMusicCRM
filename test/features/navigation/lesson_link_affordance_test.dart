@@ -133,6 +133,10 @@ void main() {
         expect(find.text('Без аудитории'), findsOneWidget);
         expect(find.byTooltip('Открыть в новой вкладке'), findsNothing);
         expect(find.text('Изменить занятие'), findsOneWidget);
+        await tester.ensureVisible(
+          find.byKey(const Key('lesson-settlement-history')),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('lesson-settlement-history')));
         await tester.pumpAndSettle();
         expect(find.text('План расчёта · заменён'), findsOneWidget);
@@ -149,12 +153,16 @@ void main() {
           findsOneWidget,
         );
 
+        await tester.ensureVisible(linkedText);
+        await tester.pumpAndSettle();
         await tester.tap(linkedText);
         await tester.pumpAndSettle();
         expect(opened?.entityId, 'student-1');
         expect(target, EntityOpenTarget.current);
 
         await tester.tap(find.text('Открыть занятие'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Изменить занятие'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Изменить занятие'));
         await tester.pumpAndSettle();

@@ -19,6 +19,7 @@ class LessonFinancialSectionModel {
     required this.compensationNeedsReason,
     required this.canManageTeacherCompensation,
     this.allowsNoFunding = false,
+    this.requiresChangeReason = false,
   });
 
   final LessonEditorSession session;
@@ -29,6 +30,7 @@ class LessonFinancialSectionModel {
   final bool compensationNeedsReason;
   final bool canManageTeacherCompensation;
   final bool allowsNoFunding;
+  final bool requiresChangeReason;
 }
 
 class LessonFinancialSection extends StatelessWidget {
@@ -143,6 +145,12 @@ class LessonFinancialSection extends StatelessWidget {
           const SizedBox(height: 16),
           TextFormField(
             key: const Key('lesson-edit-reason'),
+            validator: (value) {
+              return model.requiresChangeReason &&
+                      (value ?? '').trim().length < 3
+                  ? 'Укажите причину изменения (от 3 символов)'
+                  : null;
+            },
             initialValue: model.draft.plannedSettlementReason,
             enabled: !model.isSaving,
             minLines: 2,
@@ -469,6 +477,9 @@ class _CompensationOverride extends StatelessWidget {
             ),
             child: TextFormField(
               key: const ValueKey('lesson-compensation-override-reason-field'),
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Укажите причину индивидуального значения оплаты преподавателю'
+                  : null,
               initialValue: draft.plannedSettlementReason,
               enabled: !model.isSaving,
               minLines: 2,

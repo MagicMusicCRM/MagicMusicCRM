@@ -253,15 +253,17 @@ export class LessonPlannedSettlementCommandService {
       ...item, payerStudentId: item.payerStudentId ?? item.clientId,
     })).sort((left, right) => left.subscriptionId.localeCompare(right.subscriptionId)));
     const branchChanged = resources.change && resources.change.before.branchId !== resources.change.after.branchId;
+    await this.reservations.lockSettlementCoverage(client, lessonId, allocations.map((item) => item.subscriptionId));
     if (branchChanged || fundingKey(previousAllocations) !== fundingKey(allocations)) {
       await this.reservations.releaseForLessons(client, [lessonId]);
-      for (const allocation of allocations) {
+    }
+    for (const allocation of [...allocations].sort((a, b) => a.subscriptionId.localeCompare(b.subscriptionId))) {
         await this.reservations.allocate(client, {
           lessonId,
           chargeType: "subscription",
           ...allocation,
+          allowUncovered: true,
         });
-      }
     }
     const financial = await this.previewPlannedFinancial(client, lessonId, dto, prepared);
     const after = await this.repository.listReservedAllocations(client, lessonId);

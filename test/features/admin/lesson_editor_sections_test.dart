@@ -288,6 +288,45 @@ List<String> _forbiddenUsesIn(String source) => [
 ];
 
 void main() {
+  testWidgets(
+    'editing calculation gives the reason field a visible validation error',
+    (tester) async {
+      final form = GlobalKey<FormState>();
+      await tester.pumpWidget(
+        _host(
+          Form(
+            key: form,
+            child: LessonEditorView(
+              model: _viewModel(
+                isEdit: true,
+                draft: _draft(),
+                references: _references(),
+              ),
+              actions: _RecordingActions(),
+            ),
+          ),
+        ),
+      );
+      expect(form.currentState!.validate(), isFalse);
+      await tester.pumpAndSettle();
+      final reason = find.byKey(const Key('lesson-edit-reason'));
+      await tester.ensureVisible(reason);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Укажите причину изменения (от 3 символов)'),
+        findsOneWidget,
+      );
+      await tester.enterText(reason, 'По просьбе ученика');
+      form.currentState!.validate();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Укажите причину изменения (от 3 символов)'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final (size, scale, platform) in [
     (const Size(1280, 900), 1.0, TargetPlatform.windows),
     (const Size(600, 800), 1.3, TargetPlatform.windows),

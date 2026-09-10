@@ -1,6 +1,30 @@
 part of 'client_card.dart';
 
 extension _ClientCardStudent on _ClientCardState {
+  Widget _studentFinanceGuard(ColorScheme cs, Widget Function() child) {
+    return _studentGuard(
+      cs,
+      () => _commerceLoadError == null
+          ? child()
+          : Padding(
+              padding: const EdgeInsets.all(AppSpace.xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Не удалось загрузить финансы'),
+                  const SizedBox(height: AppSpace.md),
+                  Text(_commerceLoadError!, textAlign: TextAlign.center),
+                  TextButton(
+                    onPressed: () =>
+                        _readController.refreshCommerce(_studentId),
+                    child: const Text('Обновить финансы'),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
   // Wraps any student tab body with the shared loading / error / not-found
   // states so per-tab isolation reuses one place.
   Widget _studentGuard(ColorScheme cs, Widget Function() child) {
@@ -182,7 +206,7 @@ extension _ClientCardStudent on _ClientCardState {
 
   // ── Student tab: Оплаты ──────────────────────────────────────────────────
   Widget _buildPaymentsTab(ColorScheme cs, {bool embedded = false}) {
-    return _studentGuard(
+    return _studentFinanceGuard(
       cs,
       () => _paymentsView(
         cs,
@@ -1021,7 +1045,7 @@ extension _ClientCardStudent on _ClientCardState {
             _emitState(() {
               _leadData['status'] = v;
               _edited = true;
-              _leadStatusEditRevision = _editRevision;
+              _draft.leadStatusEdit = _draft.revision;
             });
           }
         },
@@ -1091,7 +1115,7 @@ extension _ClientCardStudent on _ClientCardState {
           _emitState(() {
             _student?['status'] = value;
             _edited = true;
-            _studentStatusEditRevision = _editRevision;
+            _draft.studentStatusEdit = _draft.revision;
           });
         },
       ),

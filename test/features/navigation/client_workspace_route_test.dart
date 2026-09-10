@@ -340,6 +340,9 @@ void main() {
         branches: const [
           {'id': 'branch-1', 'name': 'Главный'},
         ],
+        rooms: const [
+          {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Аудитория 1'},
+        ],
         teachers: const [
           {'id': 'teacher-1', 'firstName': 'Мария', 'lastName': 'Иванова'},
         ],
@@ -403,12 +406,12 @@ void main() {
             'hasNext': false,
           },
         },
-        studentLessonTimelinePage: const {
+        studentLessonTimelinePage: {
           'items': [
             {
               'id': 'lesson-1',
               'version': 1,
-              'scheduledAt': '2026-08-08T12:00:00.000Z',
+              'scheduledAt': DateTime.now().toUtc().toIso8601String(),
               'durationMinutes': 60,
               'lifecycleState': 'scheduled',
               'student': {'id': 'student-1', 'name': 'Анна Смирнова'},
@@ -580,6 +583,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('client-calendar-widget')), findsOneWidget);
+      tester.view.physicalSize = const Size(1280, 720);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('День'));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.text('22:00')).bottom, lessThanOrEqualTo(720));
+      await tester.tap(find.byKey(const Key('client-calendar-back')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('client-desktop-canvas')), findsOneWidget);
+      expect(find.byKey(const Key('client-calendar-widget')), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

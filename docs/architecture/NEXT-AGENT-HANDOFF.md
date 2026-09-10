@@ -1,4 +1,256 @@
-# MagicMusicCRM — актуальная передача
+# MagicMusicCRM — актуальная передача 220
+
+> Обновлено: 2026-09-10. Production клиент 1.5.40+220, tag v1.5.40.
+> Client source: 7ddb5b2b8fb5fe8e8d823cf4d6fa95c9cdd0c563; snapshot C:/Users/Alinka/mm220publish.
+> Сервер остаётся 1.5.39+219, source 2f37c7aee4633a463ba8fad3e322e0d945e50a23.
+> Image: magicmusiccrm-server:1.5.39-219-final, ID sha256:f9d80b7831895395376777d83a0b7b1d609140bb0dff0d9614d7673b3bba6bf0.
+> Schema: 0155_schedule_plan_archive. Сервер, БД и финансовые правила не менялись.
+
+Исправлен серый ErrorWidget при повторном раскрытии индивидуальных серий/архива:
+scroll offset больше не конфликтует с bool раскрытия ExpansionTile в PageStorage.
+Стабильная высота страниц и восстановление серий из архива сохранены.
+
+Проверки: Flutter 1756, backend 315/4115, native Windows/HTTP/DB 26 — PASS.
+Security, contracts, exact server image, signatures, public hashes/readiness — PASS.
+Setup/ZIP/APK/AAB, оба канала автообновления и GitHub Release опубликованы.
+Pre/post backups magicmusiccrm-staging-20260910T183653Z.tgz.enc и magicmusiccrm-staging-20260910T184624Z.tgz.enc
+скопированы вне сервера и восстановлены с server219/stock218.
+Reconciliation issues=[]; coverage preview без изменений; финансовые факты и .env сохранены.
+
+Recovery: временно остановить дальнейшие обновления сохранёнными manifests219;
+установленный клиент автоматически не понизится. Предпочтителен forward fix.
+Сервер и БД не откатывать ради клиентского дефекта.
+Evidence: dist/release220/; audit: ../audits/release-220-production.md.
+Setup: dist/release220/MagicMusicCRM-1.5.40-220-Setup.exe.
+
+## Историческая передача 219 (не текущий статус)
+
+> Описанный дефект серых блоков исправлен в клиенте 1.5.40+220.
+
+> Обновлено: 2026-09-10. Production client/server1.5.39+219; tag v1.5.39.
+> Source: 2f37c7aee4633a463ba8fad3e322e0d945e50a23; image magicmusiccrm-server:1.5.39-219-final.
+> Image ID: sha256:f9d80b7831895395376777d83a0b7b1d609140bb0dff0d9614d7673b3bba6bf0; schema0155_schedule_plan_archive.
+> API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Постраничный блок серий сохраняет высоту; внешняя карточка не скачет.
+В архивной серии есть «Восстановить из архива»: preview, причина, подтверждение,
+version/fingerprint, RBAC и идемпотентность. План остаётся завершённым, занятия —
+отменёнными; возвращается видимость, история и финансы сохраняются. Генерация
+не возобновляется. Изменения финансовых правил218 и остальные исправления сохранены.
+
+Проверки: Flutter 1752, backend 315/4115, Windows/HTTP/DB 26 — PASS.
+Security, contracts, exact image, signatures, public hashes/readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260910T172754Z.tgz.enc и magicmusiccrm-staging-20260910T174509Z.tgz.enc
+проверены вне сервера и восстановлены с candidate и stock218.
+Reconciliation issues=[]; coverage preview 1/0/0; история и .env/OTP сохранены.
+
+Rollback: magicmusiccrm-server:1.5.38-218-final,
+revision078b32e6f48b0396633188df355716a5427c3f5e; restore endpoints временно недоступны,
+но состояние завершённых планов/отменённых занятий и финансовая модель совместимы.
+Предпочтителен forward fix; БД поверх новых операций не откатывать.
+
+Операции /opt/magicmusiccrm/releases/1.5.39-219-2f37c7ae/; evidence dist/release219/.
+Аудит ../audits/release-219-production.md; Setup dist/release219/MagicMusicCRM-1.5.39-219-Setup.exe.
+Посторонние изменения рабочего дерева не включены; источник зафиксирован отдельно.
+
+## Историческая передача 218 (не текущий статус)
+
+> Обновлено: 2026-09-10. Production client/server 1.5.38+218; tag v1.5.38.
+> Source: 078b32e6f48b0396633188df355716a5427c3f5e; image magicmusiccrm-server:1.5.38-218-final.
+> Image ID: sha256:b7147997a79354aeec526a6ab8d11a4de2a4659c2ae01204864dba081ff79be8; schema 0155_schedule_plan_archive.
+> API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Замена выдаёт полный новый объём с зачётом стоимости неиспользованного остатка.
+Исторически потраченные деньги не финансируют новые занятия и не возвращаются.
+Доплата/переплата учитывает реальные оплаты; неоплаченный расчёт остаётся на проверке.
+Будущие занятия и редактор разрешают актуальный абонемент; ближайшие подходящие
+занятия получают резервы. История, лента и архивирование планов217 сохранены.
+Правило: subscription-full-volume-replacement.md; audit: ../audits/release-218-production.md.
+
+Проверки: Flutter1749, backend315/4115, Windows/HTTP/DB26 — PASS.
+Security, exact image, contracts, signatures, public hashes/readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260910T130931Z.tgz.enc и magicmusiccrm-staging-20260910T132434Z.tgz.enc
+сверены вне сервера и восстановлены в изоляции с candidate и recovery.
+Reconciliation issues=[]; coverage preview 1 / 0 изменений / 0 на проверке.
+Финансовые fingerprints и production .env/OTP сохранены; ручного repair нет.
+
+Stock217 несовместим после full_volume. Recovery: magicmusiccrm-server:1.5.37-217-recovery218,
+revision e018f8321d17f98a7a9107a83ce6c608086c68cd; сохраняет новую финансовую семантику и архив,
+временно запрещает замены. Проверены идентичность финансовых модулей и restore.
+Предпочтителен forward fix; БД поверх новых операций не откатывать.
+
+Операции /opt/magicmusiccrm/releases/1.5.38-218-078b32e6/; evidence dist/release218/.
+Setup: dist/release218/MagicMusicCRM-1.5.38-218-Setup.exe.
+Отдельная очередь продления абонементов не добавлялась.
+
+## Историческая передача 217 (не текущий статус)
+
+> Обновлено: 2026-09-10. Production client/server 1.5.37+217; tag v1.5.37.
+> Source: 694d6428a9b308425fa1a1df8805a9aa04ee87a0; image magicmusiccrm-server:1.5.37-217-final.
+> Image ID: sha256:2891449c94586cad8690333e69df19e85a00b9dfa62ef66fbec7e0f3a6464de0; schema 0155_schedule_plan_archive.
+> API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Покрытие учитывает всю цепочку замены абонемента. Увеличение, уменьшение и возврат
+к прежнему пакету распределяют оставшиеся единицы на ближайшие подходящие занятия.
+Завершённые факты и старые решения сохраняются. Лента 216 (30 дат, 15 на строку) сохранена.
+В завершённом индивидуальном плане есть «В архив»: preview, причина, проверка
+финансовых blockers. Отменённые занятия скрываются, история остаётся в архиве.
+
+Проверки: Flutter 1749, backend 313/4101, Windows/HTTP/DB 26 — PASS.
+Strict security, exact image, контракты, подписи, публичные хеши/readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260910T120911Z.tgz.enc и magicmusiccrm-staging-20260910T121627Z.tgz.enc
+сверены вне сервера и восстановлены в изоляции с candidate и совместимым recovery.
+Production reconciliation issues=[]. Preview покрытия: 1 активный абонемент,
+0 изменений и 0 занятий на проверке; apply не требовался. Финансовые fingerprints
+и production .env/OTP сохранены. Ручного удаления или переписывания истории нет.
+
+После публикации 217 нужен совместимый forward fix с includeArchived и архивной
+видимостью. Stock 216 не знает миграцию 0155. Подготовленный magicmusiccrm-server:1.5.36-216-schema0155
+(revision 8ba14e67b43b589badf16d22aa56f117235a4a5f) — runtime 216 плюс SQL 0155; допустим только до
+публикации клиента и без архивных записей. БД поверх новых операций не откатывать.
+Deploy проверяет отдельно pinned current image, его revision и migration; после
+recovery записывает revision recovery. Подробности — в release-217-production.md.
+
+Операции /opt/magicmusiccrm/releases/1.5.37-217-694d6428/; evidence dist/release217/.
+Setup: dist/release217/MagicMusicCRM-1.5.37-217-Setup.exe.
+Архивирование теперь доступно; отдельная очередь продления ещё не реализована.
+
+## Историческая передача 216 (не текущий статус)
+
+> Обновлено: 2026-09-10. Production client/server 1.5.36+216; tag v1.5.36.
+> Source: bd5eb5e437bef632a8a690dd3b78940a5c8cd601; image magicmusiccrm-server:1.5.36-216-final.
+> Image ID: sha256:02331cdcd3c4f4e41d39c02c89f818277e765c06d56049089844b5422cc14109; schema 0154_retire_partial_miss, без новой миграции.
+> API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Лента: 30 дат с занятиями, по 15 в каждой строке, на всю доступную ширину.
+Пустые дни пропускаются; все занятия одной даты остаются вместе. Начальная
+граница — полночь за три календарных дня до сегодня. Это заменяет календарные
+окна 215. На узком экране сохраняется прокрутка. Финансовые правила 215 сохранены.
+API добавил необязательный anchor; старые запросы с from/to продолжают работать.
+
+Проверки: Flutter 1746, backend 313/4095, Windows/HTTP/DB 26 — PASS.
+Strict security, exact image, контракты, подписи, публичные хеши/readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260910T000002Z.tgz.enc и magicmusiccrm-staging-20260910T001214Z.tgz.enc сверены вне сервера
+и восстановлены в изоляции с candidate и rollback. Финальная сверка issues=[].
+Настройки production и OTP не изменены, ручного repair данных нет.
+
+Rollback: magicmusiccrm-server:1.5.35-215-final, revision 4c34f743e3884d1a9636c7214d8736d64a7effac.
+До публикации клиента возможен откат на 215. После обновления клиентов нужен
+forward fix с сохранением anchor API. БД поверх новых операций не откатывать.
+Операции /opt/magicmusiccrm/releases/1.5.36-216-bd5eb5e4/; evidence dist/release216/.
+Аудит docs/audits/release-216-production.md; Setup dist/release216/MagicMusicCRM-1.5.36-216-Setup.exe.
+В production 216 архивирование серий и отдельная очередь продления отсутствуют.
+
+## Историческая передача 215 (не текущий статус)
+
+
+> Обновлено: 2026-09-10. Production client/server 1.5.35+215; tag v1.5.35.
+> Source: 4c34f743e3884d1a9636c7214d8736d64a7effac; image magicmusiccrm-server:1.5.35-215-final.
+> Image ID: sha256:6e0bee44451f474c036007568b12281edafe1794e6a1351c3f22ec73a4d5919d; schema 0154_retire_partial_miss, без новой миграции.
+> Статус: API, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Лента скрывает пустые дни, карточки вдвое уже (дата и значки; подробности при наведении).
+Автоматический расчёт при нехватке денег/оплаченных единиц сразу остаётся на проверке
+сотрудника без списания и начисления преподавателю. Применяется общая формула оплаты
+абонемента. Архивирование серий и отдельная очередь продления ещё не реализованы.
+
+Проверки: Flutter 1743, backend 313 suites/4090 tests, Windows/HTTP/DB 26 — PASS.
+Exact-image, strict security, контракты, подписи, публичные хеши и readiness — PASS.
+Ограничение Semgrep Bash heredoc и существующие предупреждения сборки записаны в аудите.
+Pre/post backups magicmusiccrm-staging-20260909T222020Z.tgz.enc и magicmusiccrm-staging-20260909T222659Z.tgz.enc сверены вне сервера
+и восстановлены в изоляции с candidate и rollback. Финальная сверка issues=[].
+Production .env и OTP-настройка не изменены. Ручной repair данных не выполнялся.
+
+Rollback: magicmusiccrm-server:1.5.34-214-final, revision 48647ccd1bf09ff760ecb7f318ed33b8dd51af85.
+Сохранить схему 0154 и новую историю; БД поверх новых операций не откатывать.
+Операции: /opt/magicmusiccrm/releases/1.5.35-215-4c34f743/; evidence dist/release215/.
+Аудит: docs/audits/release-215-production.md.
+Setup: dist/release215/MagicMusicCRM-1.5.35-215-Setup.exe.
+Рабочая ветка и индекс сохранены; этот выпуск не запускал новую пользовательскую сессию Windows.
+
+## Историческая передача 214 (не текущий статус)
+
+
+> Обновлено: 2026-09-10, production client/server 1.5.34+214
+> Source/tag: 48647ccd1bf09ff760ecb7f318ed33b8dd51af85, v1.5.34
+> Image: magicmusiccrm-server:1.5.34-214-final
+> Image ID: sha256:494923258ba0e9857c304b8f09515be7523626db0cf412ee551b655ec9cf0fed
+> Migration: 0154_retire_partial_miss (без новой миграции)
+> Статус: сервер, Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы и проверены.
+
+Лента: первая строка — три прошедших дня плюс двенадцать дней с сегодняшнего;
+вторая — следующие пятнадцать дней, порядок слева направо. Абонемент покрывает
+ближайшие подходящие незавершённые занятия. Исправлена ошибка «Рассчитать» с причиной.
+Все исправления 213 сохранены. На production общая утилита перераспределила покрытие
+двух занятий; повторный запуск не изменил данные. Финансовая история сохранена.
+
+Свежие проверки: Flutter 1740, backend 313 suites/4082 tests, Windows/HTTP/DB 26 — PASS.
+Exact-image, strict security, контракты, публичные файлы/хеши и readiness — PASS.
+Pre/post backups magicmusiccrm-staging-20260909T205845Z.tgz.enc и magicmusiccrm-staging-20260909T210432Z.tgz.enc находятся вне сервера, сверены
+и восстановлены в изоляции с candidate и rollback. Issues=[] до/после и в финальной сверке.
+Настройка OTP и production .env не изменены.
+
+**Rollback:** image magicmusiccrm-server:1.5.33-213-final, revision
+0cf7212052f5caea9fbad7c010fc096dc6f5bb86. Схему 0154 и новую историю сохранять.
+Не откатывать БД поверх новых операций. Операционные файлы:
+/opt/magicmusiccrm/releases/1.5.34-214-48647ccd/.
+
+Evidence: docs/audits/release-214-production.md; логи dist/release214/.
+Актуальная Windows-сборка открыта из dist/release214/windows-package/ (PID 15176).
+Setup: dist/release214/MagicMusicCRM-1.5.34-214-Setup.exe.
+Release закреплён отдельным tag/commit; рабочая ветка и индекс пользователя сохранены.
+
+## Историческая передача 213 (не текущий статус)
+
+
+> Обновлено: 2026-09-09, выпуск 1.5.33+213
+> Production client/server: `1.5.33+213`
+> Source/tag: `0cf7212052f5caea9fbad7c010fc096dc6f5bb86`, `v1.5.33`
+> Image: `magicmusiccrm-server:1.5.33-213-final`
+> Image ID: `sha256:2198bc6c93ea0029cd5ffd991dbe390abc8517114363f63376267c67d925a433`
+> Migration: `0154_retire_partial_miss` (без новых миграций)
+> Статус: production обновлён; Setup/ZIP/APK/AAB, оба манифеста и GitHub Release опубликованы.
+
+Выпуск разрешён владельцем 2026-09-09. Включены все исправления 212 и последние
+UI-правки: расписание до 01:00 следующего дня с прежним масштабом, один скроллбар
+на ось, свободные модальные окна, подсветка/фокус/прокрутка к ошибке формы,
+удаление ссылки занятия на себя. Исправлены метрики нативного выбора дат на
+телефоне и отступы настроек уведомлений. Joi 18.2.8 и Multer 2.3.0 устраняют новые
+уязвимости зависимостей; NestJS остаётся 11.
+
+Свежие проверки: Flutter 1737, backend 313 suites / 4080 tests после чистой
+установки исправленных зависимостей, 26 Windows/HTTP/DB-проверок PASS. Анализ,
+контракты, strict security, exact-image gate PASS. Реальный Android APK установлен
+и проверен на API35: запуск и валидация входа. Полные сценарии сотрудника выполнены
+на Windows. Замечания SAST/secrets разобраны; подтверждённых уязвимостей/секретов 0.
+Trivy HIGH/CRITICAL 0. Ограничения сканеров и сборочные предупреждения — в evidence.
+
+Pre/post encrypted backups `20260909T183156Z` и `20260909T183604Z` сохранены вне
+сервера, проверены по SHA-256 и восстановлены в изоляции с image 213 и rollback
+212. Drill использует TCP readiness. Известное ограничение GNU signal-harness
+из выпуска 212 остаётся; полный mocked signal-harness не помечен PASS.
+Два production reconciliation: `issues=[]`; readiness PASS. Все четыре серверных
+файла и GitHub assets совпадают с локальными по SHA-256; оба канала выбирают 213.
+
+**Откат сервиса:** совместимый image `magicmusiccrm-server:1.5.32-212-final`,
+commit `04aa69116bbf9d3c7e2df36e0825abc7b24a62a7`; схему 0154 сохранять. Не запускать
+pre-0151 writer (211) для расходов и не затирать новые операции старой копией.
+`partially_paid_miss` неактивен, `partially_paid_lesson` активен; история сохранена.
+
+Настройка входа от 2026-09-09 сохранена: по прямому решению владельца один системный
+администратор входит по проверенному паролю без обязательного email OTP.
+Production `.env` при выпуске не менялся; персональные сведения только в закрытой
+конфигурации. Журнал изменения настройки: `/opt/magicmusiccrm/operations/otp-20260909T170144Z-00b018/`.
+
+Операционные файлы: `/opt/magicmusiccrm/releases/1.5.33-213-0cf72120/`.
+Evidence: `docs/audits/release-213-production.md`; локальные логи: `dist/release213/`.
+Предыдущий выпуск: `docs/audits/release-212-production.md`.
+Релиз закреплён отдельным commit/tag; пользовательская ветка и индекс сохранены.
+Не считать `origin/main` автоматически синхронизированным с production.
+Локальные preview-сборки на основе 212 устарели; актуальный Windows-пакет —
+`dist/release213/windows-package/`.
+
+## Историческая передача 211 (не текущий статус)
 
 > Обновлено: 2026-09-04 23:32 MSK
 > Production: client/server `1.5.31+211`, source `b4f1d0ddd79bafb274b7307a32711e9b31c3970f`

@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { redactSensitive } from '../common/logging/redact.util';
-import { ActorContext } from '../common/security/actor-context';
-import { DatabaseService } from '../db/database.service';
-import { safeAuditReasonText } from '../platform/platform-integrity.util';
+import type { PoolClient } from "pg";
+import { Injectable } from "@nestjs/common";
+import { redactSensitive } from "../common/logging/redact.util";
+import { ActorContext } from "../common/security/actor-context";
+import { DatabaseService } from "../db/database.service";
+import { safeAuditReasonText } from "../platform/platform-integrity.util";
 
 export interface AuditEventInput {
   actor?: ActorContext;
@@ -16,8 +17,11 @@ export interface AuditEventInput {
 export class AuditService {
   constructor(private readonly database: DatabaseService) {}
 
-  async record(event: AuditEventInput): Promise<void> {
-    await this.database.query(
+  async record(event: AuditEventInput, client?: PoolClient): Promise<void> {
+    const executor: {
+      query(sql: string, params: unknown[]): Promise<unknown>;
+    } = client ?? this.database;
+    await executor.query(
       `
         insert into app.audit_events (
           actor_user_id,

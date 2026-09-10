@@ -20,6 +20,7 @@ rollback_image="${ROLLBACK_IMAGE:-}"
 rollback_revision="${ROLLBACK_REVISION:-}"
 rollback_version="${ROLLBACK_VERSION:-}"
 expected_current_migration="${EXPECTED_CURRENT_MIGRATION:-}"
+expected_current_image_id="${EXPECTED_CURRENT_IMAGE_ID:-}"
 expected_migration="${EXPECTED_MIGRATION:-}"
 expected_db_table="${EXPECTED_DB_TABLE:-}"
 expected_db_trigger="${EXPECTED_DB_TRIGGER:-}"
@@ -51,6 +52,10 @@ Required options (or matching uppercase environment variables):
   --expected-db-trigger-function SCHEMA.FUNCTION
   --expected-db-trigger-function-sha256 SHA256
   --expected-db-trigger-update-columns SORTED_CSV
+
+Optional (defaults to the rollback image ID):
+  --expected-current-image-id SHA256_IMAGE_ID
+  Use only when a separately verified rollback image adds migration compatibility.
 
 Release 0142 database contract example:
   --expected-db-table app.schedule_series \
@@ -101,6 +106,8 @@ while [[ $# -gt 0 ]]; do
       require_option_value "$@"; rollback_version="$2"; shift 2 ;;
     --expected-current-migration)
       require_option_value "$@"; expected_current_migration="$2"; shift 2 ;;
+    --expected-current-image-id)
+      require_option_value "$@"; expected_current_image_id="$2"; shift 2 ;;
     --expected-migration)
       require_option_value "$@"; expected_migration="$2"; shift 2 ;;
     --expected-db-table)
@@ -153,6 +160,8 @@ done
   die "rollback version label is invalid"
 [[ "${expected_current_migration}" =~ ^[0-9]{4}_[a-z0-9_]+$ ]] ||
   die "expected current migration ID is invalid"
+[[ -z "${expected_current_image_id}" || "${expected_current_image_id}" =~ ^sha256:[0-9a-f]{64}$ ]] ||
+  die "expected current image ID is invalid"
 [[ "${expected_migration}" =~ ^[0-9]{4}_[a-z0-9_]+$ ]] ||
   die "expected migration ID is invalid"
 [[ "${expected_db_table}" =~ ^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$ ]] ||
@@ -208,8 +217,10 @@ done
 pre_deployed_revision="$(tr -d '[:space:]' <"${DEPLOYED_REVISION_FILE}")"
 [[ "${pre_deployed_revision}" =~ ^[0-9a-f]{8,40}$ ]] ||
   die "deployed revision marker is invalid"
-[[ "${rollback_revision}" == "${pre_deployed_revision}"* ]] ||
-  die "deployed revision marker does not match the rollback revision"
+if [[ -z "${expected_current_image_id}" ]]; then
+  [[ "${rollback_revision}" == "${pre_deployed_revision}"* ]] ||
+    die "deployed revision marker does not match the rollback revision"
+fi
 
 exec 9>"${RELEASE_ROOT}/.deploy-api-release.lock"
 flock -n 9 || die "another API release is already running"
@@ -373,6 +384,13 @@ assert_override_contract() {
 }
 # CONTRACT_HARNESS_END compose-api-image
 
+# CONTRACT_HARNESS_BEGIN current-image-baseline
+assert_current_image_baseline() {
+  [[ "$1" == "${expected_current_image_id:-${rollback_image_id}}" &&
+     "$2" == "${expected_current_migration}" ]]
+}
+# CONTRACT_HARNESS_END current-image-baseline
+
 candidate_image_id="$(assert_image_metadata \
   "${candidate_image}" "${candidate_revision}" "${candidate_version}" candidate)"
 rollback_image_id="$(assert_image_metadata \
@@ -385,8 +403,9 @@ rollback_image_migration_head="$(image_migration_head \
   "${rollback_image_id}" rollback)"
 [[ "${candidate_image_migration_head}" == "${expected_migration}" ]] ||
   die "declared target migration does not match the candidate image head"
-[[ "${rollback_image_migration_head}" == "${expected_current_migration}" ]] ||
-  die "declared current migration does not match the rollback image head"
+[[ "${rollback_image_migration_head}" == "${expected_current_migration}" ||
+   "${rollback_image_migration_head}" == "${expected_migration}" ]] ||
+  die "rollback image head is neither the current nor the target migration"
 assert_override_contract \
   "${candidate_override}" "${candidate_image}" "${candidate_image_id}"
 assert_override_contract \
@@ -398,8 +417,14 @@ api_container_id="$("${compose_base[@]}" ps --all -q api)"
   die "API container is not running"
 current_image_id="$(docker inspect "${api_container_id}" --format '{{.Image}}')"
 current_image_ref="$(docker inspect "${api_container_id}" --format '{{.Config.Image}}')"
-[[ "${current_image_id}" == "${rollback_image_id}" ]] ||
-  die "running API is not the declared rollback image"
+expected_current_image_id="${expected_current_image_id:-${rollback_image_id}}"
+assert_current_image_baseline "${current_image_id}" \
+  "$(image_migration_head "${current_image_id}" current)" ||
+  die "running API image or migration head does not match the declared baseline"
+current_revision="$(docker inspect "${api_container_id}" \
+  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+[[ "${current_revision}" =~ ^[0-9a-f]{40}$ && "${current_revision}" == "${pre_deployed_revision}"* ]] ||
+  die "running API revision does not match the deployed revision marker"
 caddy_container_id="$("${compose_base[@]}" ps --all -q caddy)"
 [[ -n "${caddy_container_id}" ]] || die "Caddy container is missing"
 [[ "$(docker inspect "${caddy_container_id}" --format '{{.State.Running}}')" == true ]] ||
@@ -516,7 +541,7 @@ assert_pre_migration_contract() {
   if [[ "${actual_migration}" == "${candidate_image_migration_head}" ]]; then
     assert_db_objects
   else
-    [[ "${actual_migration}" == "${rollback_image_migration_head}" ]]
+    [[ "${actual_migration}" == "${expected_current_migration:-${rollback_image_migration_head}}" ]]
   fi
 }
 # CONTRACT_HARNESS_END pre-migration-contract
@@ -700,6 +725,19 @@ select not (
 FUNDING_ROLLBACK_SQL
 }
 
+assert_versioned_expense_rollback() {
+  local actual_migration
+  actual_migration="$(get_migration)" || return 1
+  [[ "${actual_migration}" =~ ^[0-9]{4}_[a-z0-9_]+$ ]] || return 1
+  # Old writers do not append expense revisions or advance expected versions.
+  # After 0151, remain closed instead of resuming writes with a pre-0151 image.
+  if [[ "${actual_migration:0:4}" > 0150 &&
+        "${rollback_image_migration_head:0:4}" < 0151 ]]; then
+    printf 'AUTOMATIC_ROLLBACK|BLOCKED|expense-history-aware-image-required\n' >&2
+    return 1
+  fi
+}
+
 assert_legacy_lesson_funding_rollback() {
   local actual_migration funding_compatible
 
@@ -804,12 +842,13 @@ automatic_rollback() {
   # Restore only the canonical production runtime; disabled workers are invalid in production.
   if stop_service_fail_closed caddy &&
     stop_service_fail_closed api &&
+    assert_versioned_expense_rollback &&
     assert_legacy_lesson_funding_rollback &&
     recreate_api "${rollback_override}" "${workers_enabled_override}" &&
     rollback_schema="$(verify_rollback_stage \
       "${workers_enabled_override}" true)" &&
     start_caddy && wait_public_ready "${rollback_schema}"; then
-    if printf '%s\n' "${pre_deployed_revision}" \
+    if printf '%s\n' "${rollback_revision}" \
       >"${DEPLOYED_REVISION_FILE}" &&
       printf '%s\n' "${rollback_schema}" \
         >"${state_dir}/rollback-migration.txt" &&

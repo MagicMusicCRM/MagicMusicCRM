@@ -666,6 +666,7 @@ function validationReadCount(kind: InvalidKind, value: unknown): number {
 function expectedAccessTrace(family: FamilyCase): string[] {
   const keys = family.fields.map(([field]) => field);
   const trace = ["ownKeys", ...keys.map((key) => `has:${key}`)];
+  if (family.fixture.kind === "subscription.replace") trace.unshift("get:replacementMode");
   trace.push("get:kind");
   for (const [field, kind] of family.fields.slice(1, -2)) {
     for (
@@ -689,6 +690,18 @@ function expectedAccessTrace(family: FamilyCase): string[] {
 }
 
 describe("subscription preview token public codec", () => {
+  it("signs full-volume replacement facts and rejects missing or invalid accounting fields", () => {
+    const family = FAMILIES.find(item => item.fixture.kind === "subscription.replace")!;
+    const payload = { ...family.fixture, replacementMode: "full_volume", oldUnitCount: "8",
+      priorConsumedValueMinor: "600000", oldObligationMinor: "1400000" };
+    expect(family.verify(family.sign(payload), NOW)).toEqual(payload);
+    for (const key of ["replacementMode", "oldUnitCount", "priorConsumedValueMinor", "oldObligationMinor"]) {
+      const missing: Payload = { ...payload };
+      delete missing[key];
+      expectTokenError(() => family.sign(missing), "PREVIEW_TOKEN_INVALID");
+      expectTokenError(() => family.sign({ ...payload, [key]: "invalid" }), "PREVIEW_TOKEN_INVALID");
+    }
+  });
   it.each(FAMILIES)(
     "$name has stable bytes and exact round-trip output",
     (family) => {

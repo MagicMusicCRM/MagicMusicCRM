@@ -208,6 +208,20 @@ class _LessonDecisionApi extends MagicApiClient {
     expect(path, '/crm/lessons/$expectedLessonId/$operationKey/preview');
     previewAttempts += 1;
     previews.add(Map<String, dynamic>.from(data as Map));
+    if (operationKey == 'planned-settlement') {
+      expect(
+        previews.last.keys,
+        everyElement(
+          isIn([
+            'expectedVersion',
+            'reasonText',
+            'financialDecision',
+            'resources',
+          ]),
+        ),
+        reason: 'Match the strict planned-settlement preview DTO',
+      );
+    }
     if (previewFailureCode != null &&
         previewAttempts == previewFailureAttempt) {
       previewRedirected = true;
@@ -638,6 +652,50 @@ Map<String, dynamic> _normalizeCancelDecision(Map<String, dynamic> decision) {
 }
 
 void main() {
+  test(
+    'editing a lesson uses the planned-settlement wire contract with a reason',
+    () async {
+      final api = _LessonDecisionApi(operationKey: 'planned-settlement');
+      final controller = LessonDecisionController(
+        crm: MagicCrmService(api),
+        operation: LessonDecisionOperation.edit,
+        lesson: _lesson,
+        canManageTeacherCompensation: false,
+      );
+      final preview = await controller.preview(
+        reason: 'Исправление занятия',
+        settlementTypeKey: 'lesson',
+        compensationRuleKey: 'none',
+      );
+      expect(preview.canConfirm, isTrue);
+      expect(api.previews.single['reasonText'], 'Исправление занятия');
+      expect(api.previews.single, isNot(contains('reasonCode')));
+    },
+  );
+
+  testWidgets('empty reason blocks preview and scrolls back to its error', (
+    tester,
+  ) async {
+    final api = _LessonDecisionApi();
+    await _openAndFill(tester, api);
+    tester.view.physicalSize = const Size(960, 640);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('lesson-decision-reason')), '');
+    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+    await tester.pumpAndSettle();
+    expect(api.previews, isEmpty);
+    expect(api.commits, isEmpty);
+    expect(find.text('Укажите причину'), findsOneWidget);
+    final reason = tester.getRect(
+      find.byKey(const Key('lesson-decision-reason')),
+    );
+    expect(reason.top, greaterThanOrEqualTo(0));
+    expect(reason.bottom, lessThanOrEqualTo(640));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'cancel opens unpaid and paid miss autofills full duration once',
     (tester) async {
@@ -803,21 +861,20 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Частично оплачиваемый пропуск').last);
+      expect(find.text('Частично оплачиваемый пропуск'), findsNothing);
+      await tester.tap(find.text('Оплачиваемый пропуск').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Процент ставки').last);
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.byKey(
-          const Key('lesson-decision-client-duration-$_firstGroupStudentId'),
-        ),
-        '30',
-      );
-      await tester.enterText(
-        find.byKey(const Key('teacher-credited-duration-minutes')),
-        '45',
+        find.byKey(const Key('lesson-decision-compensation-value')),
+        '62,50',
       );
       await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Оплачиваемый пропуск').last);
+      await tester.tap(find.text('Бесплатное занятие').last);
       await tester.pump();
 
       expect(
@@ -838,11 +895,10 @@ void main() {
 
       expect(api.previews, hasLength(1));
       expect(api.previews.single['financialDecision'], {
-        'settlementTypeKey': 'paid_miss',
+        'settlementTypeKey': 'free_lesson',
         'clientDecisions': [
           {
             'clientId': _firstGroupStudentId,
-            'chargeDurationMinutes': 30,
             'chargeType': 'subscription',
             'payerStudentId': _firstGroupStudentId,
             'subscriptionId': _crossPayerSubscriptionId,
@@ -850,15 +906,14 @@ void main() {
         ],
         'teacherCompensationRuleKey': 'percent',
         'teacherCompensationValueMinor': '6250',
-        'teacherCreditedDurationMinutes': 45,
+        'teacherCreditedDurationMinutes': 60,
         'teacherCompensationSource': 'manual',
       });
       expect(api.normalizedDecisions.single, {
-        'settlementTypeKey': 'paid_miss',
+        'settlementTypeKey': 'free_lesson',
         'clientDecisions': [
           {
             'clientId': _firstGroupStudentId,
-            'chargeDurationMinutes': 30,
             'chargeType': 'subscription',
             'payerStudentId': _firstGroupStudentId,
             'subscriptionId': _crossPayerSubscriptionId,
@@ -866,7 +921,7 @@ void main() {
         ],
         'teacherCompensationRuleKey': 'percent',
         'teacherCompensationValueMinor': '6250',
-        'teacherCreditedDurationMinutes': 45,
+        'teacherCreditedDurationMinutes': 60,
         'teacherCompensationSource': 'manual',
       });
     },
@@ -1827,6 +1882,10 @@ void main() {
         findsOneWidget,
       );
 
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('lesson-decision-submit')));
       await tester.pumpAndSettle();
       expect(api.commits, hasLength(1));

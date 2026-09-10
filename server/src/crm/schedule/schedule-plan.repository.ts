@@ -1,7 +1,14 @@
 import { unchangedScheduleLessonSql } from "./schedule-lesson-template";
+import { releaseLessonCoverage } from "../commerce/subscription-coverage.persistence";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
+import { currentActorRoleSql } from "../branch-scope";
+import {
+  lockSchedulePlanActorScope,
+  schedulePlanBranchScopeSql,
+  schedulePlanWriteScopeSql,
+} from "./schedule-plan-access";
 import { DatabaseService } from "../../db/database.service";
 import {
   SchedulePlanParticipantDto,
@@ -19,6 +26,7 @@ import type {
 } from "./schedule-plan-timeline";
 
 export interface LockedSchedulePlan {
+  archived_at?: Date | string | null;
   id: string;
   kind: "individual" | "group";
   title: string;
@@ -126,6 +134,8 @@ export class SchedulePlanRepository {
       ended_by: string | null;
       ended_by_name: string | null;
       end_reason: string | null;
+      archived_at: Date | string | null;
+      archive_reason: string | null;
       participants: Record<string, unknown>[];
       scheduled_lesson_count: string;
       covered_lesson_count: string;
@@ -134,7 +144,7 @@ export class SchedulePlanRepository {
         with visible_plans as (
           select plan.*,
             row_number() over (
-              partition by plan.status
+              partition by plan.status, (plan.archived_at is not null)
               order by plan.active_from desc, plan.id
             ) as status_rank
           from app.schedule_plans plan
@@ -144,16 +154,18 @@ export class SchedulePlanRepository {
                 and student_participant.student_id = $3
             ))
             and ($4::uuid is null or plan.group_id = $4)
+            and ($6::boolean or plan.archived_at is null)
+            and ${schedulePlanBranchScopeSql("plan", "$2")}
             and (
-              $1::text = any(array['admin','manager','director','system_admin'])
-              or ($1::text = 'teacher' and exists (
+              ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
+              or (${currentActorRoleSql("$1")} = 'teacher' and exists (
                 select 1 from app.schedule_series scoped_series
                 join app.teachers teacher on teacher.id = scoped_series.teacher_id
                 join app.profiles profile on profile.id = teacher.profile_id
                 where scoped_series.plan_id = plan.id
                   and profile.user_id = $2::uuid
               ))
-              or ($1::text = 'client' and (
+              or (${currentActorRoleSql("$1")} = 'client' and (
                 exists (
                   select 1 from app.students student
                   join app.profiles profile on profile.id = student.profile_id
@@ -170,12 +182,12 @@ export class SchedulePlanRepository {
         )
         select plan.id, plan.kind, plan.title, plan.student_id, plan.group_id,
           plan.subscription_id, plan.active_from::text,
-          plan.active_until::text, plan.status, plan.version, plan.ended_at,
-          case when $1::text = any(array['admin','manager','director','system_admin'])
+          plan.active_until::text, plan.status, plan.version, plan.ended_at, plan.archived_at, plan.archive_reason,
+          case when ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
             then plan.ended_by end as ended_by,
-          case when $1::text = any(array['admin','manager','director','system_admin'])
+          case when ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
             then plan.end_reason end as end_reason,
-          case when $1::text = any(array['admin','manager','director','system_admin'])
+          case when ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
             then nullif(trim(coalesce(ended_by_profile.first_name, '') || ' ' ||
               coalesce(ended_by_profile.last_name, '')), '')
             end as ended_by_name,
@@ -213,11 +225,12 @@ export class SchedulePlanRepository {
         order by (plan.status = 'active') desc, plan.active_from desc, plan.id
       `,
       [
-        actor.role,
+        actor.userId,
         actor.userId,
         query.studentId ?? null,
         query.groupId ?? null,
         query.includeEnded === true,
+        query.includeArchived === true,
       ],
     );
     const planIds = result.rows.map((row) => row.id);
@@ -430,6 +443,8 @@ export class SchedulePlanRepository {
           endedBy: row.ended_by,
           endedByName: row.ended_by_name,
           endReason: row.end_reason,
+          archivedAt: row.archived_at == null ? null : new Date(row.archived_at).toISOString(),
+          archiveReason: row.archive_reason,
           rowDefinitions: series.map((item) => ({
               id: item.id,
               teacherId: item.teacher_id,
@@ -498,12 +513,18 @@ export class SchedulePlanRepository {
     );
   }
 
-  async lock(client: PoolClient, planId: string): Promise<LockedSchedulePlan> {
+  async lock(
+    client: PoolClient,
+    planId: string,
+    actor: ActorContext,
+  ): Promise<LockedSchedulePlan> {
+    await lockSchedulePlanActorScope(client, actor);
     const result = await client.query<LockedSchedulePlan>(
       `select id, kind, title, student_id, group_id, subscription_id,
-         active_from::text, active_until::text, status, version
-       from app.schedule_plans where id = $1 for update`,
-      [planId],
+         active_from::text, active_until::text, status, version, archived_at
+       from app.schedule_plans plan where id = $1
+         and ${schedulePlanWriteScopeSql("plan", "$2")} for update`,
+      [planId, actor.userId],
     );
     if (!result.rows[0])
       throw new NotFoundException("План расписания не найден.");
@@ -717,11 +738,7 @@ export class SchedulePlanRepository {
       [planId, from, untilExclusive],
     );
     if (removed.rows.length) {
-      await client.query(
-        `update app.lesson_reservations set state = 'released', updated_at = now()
-         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
-        [removed.rows.map((row) => row.id)],
-      );
+      await releaseLessonCoverage(client, removed.rows.map((row) => row.id));
     }
     return removed.rows.map((row) => row.id);
   }
@@ -1073,11 +1090,7 @@ export class SchedulePlanRepository {
       [seriesId, effectiveFrom],
     );
     if (removed.rows.length) {
-      await client.query(
-        `update app.lesson_reservations set state = 'released', updated_at = now()
-         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
-        [removed.rows.map((row) => row.id)],
-      );
+      await releaseLessonCoverage(client, removed.rows.map((row) => row.id));
     }
     return removed.rows.map((row) => row.series_date);
   }
@@ -1256,15 +1269,15 @@ export class SchedulePlanRepository {
     }>(
       `with visible_plan as (
          select plan.id from app.schedule_plans plan
-         where plan.id = $3 and (
-           $1::text = any(array['admin','manager','director','system_admin'])
-           or ($1::text = 'teacher' and exists (
+         where plan.id = $3 and ${schedulePlanBranchScopeSql("plan", "$2")} and (
+           ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
+           or (${currentActorRoleSql("$1")} = 'teacher' and exists (
              select 1 from app.schedule_series scoped_series
              join app.teachers teacher on teacher.id = scoped_series.teacher_id
              join app.profiles profile on profile.id = teacher.profile_id
              where scoped_series.plan_id = plan.id and profile.user_id = $2::uuid
            ))
-           or ($1::text = 'client' and (
+           or (${currentActorRoleSql("$1")} = 'client' and (
              exists (
                select 1 from app.students student join app.profiles profile
                  on profile.id = student.profile_id
@@ -1320,7 +1333,7 @@ export class SchedulePlanRepository {
        order by lesson.scheduled_at ${order}, lesson.id ${order}
        limit $6`,
       [
-        actor.role,
+        actor.userId,
         actor.userId,
         planId,
         cursor.scheduledAt,

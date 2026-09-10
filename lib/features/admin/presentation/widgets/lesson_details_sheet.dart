@@ -42,6 +42,14 @@ String lessonStatusLabel(String? status) =>
 /// verbatim: they may contain implementation details and are not actionable.
 String lessonSettlementIssueLabel(String? failureCode) {
   return switch (failureCode) {
+    'LESSON_SUBSCRIPTION_PAYMENT_REQUIRED' =>
+      'Оплаченных занятий в абонементе недостаточно. Подтвердите оплату или выберите другой источник, затем подтвердите расчёт. Списание и оплата преподавателю пока не выполнены.',
+    'LESSON_ACCOUNT_INSUFFICIENT_BALANCE' =>
+      'На личном счёте недостаточно средств. Пополните счёт или измените источник оплаты, затем подтвердите расчёт. Списание и оплата преподавателю пока не выполнены.',
+    'LESSON_ACCOUNT_PAYER_REQUIRED' =>
+      'Укажите доступного плательщика для списания с личного счёта, затем подтвердите расчёт.',
+    'SUBSCRIPTION_CAPACITY' =>
+      'Выбранный абонемент не может покрыть занятие: проверьте остаток, срок действия и плательщика. Выберите подходящий абонемент или другой источник оплаты, затем подтвердите расчёт. Списание и оплата преподавателю пока не выполнены.',
     'LESSON_SETTLEMENT_PLAN_MISSING' =>
       'Не найден план списания и оплаты преподавателю.',
     'LESSON_SNAPSHOT_INCOMPLETE' =>
@@ -104,7 +112,9 @@ Widget _referenceRow(
       key: ValueKey('lesson-reference-${reference.label}'),
       text: reference.value,
       onPressed: () => onOpen(EntityOpenTarget.current),
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      style: Theme.of(
+        context,
+      ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
     ),
   );
 }
@@ -163,7 +173,7 @@ Future<void> showLessonDetailsSheet(
             Navigator.pop(surfaceContext);
             onOpenReference?.call(reference.link!, target);
           }),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
         ],
         detailRow(
           surfaceContext,
@@ -171,7 +181,7 @@ Future<void> showLessonDetailsSheet(
           'Время',
           timeRange,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
         detailRow(
           surfaceContext,
           Icons.info_outline_rounded,

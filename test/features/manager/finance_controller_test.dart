@@ -32,8 +32,10 @@ class _FinanceApiClient extends MagicApiClient {
   final List<_Mutation> mutations = [];
   final List<Completer<Map<String, dynamic>>> paymentRequests = [];
   final List<Completer<List<int>>> exportRequests = [];
+  final List<Completer<Map<String, dynamic>>> expenseRequests = [];
   int expenseReads = 0;
   Object? exportError;
+  Object? expenseLoadFailure;
 
   @override
   Future<T> get<T>(
@@ -55,6 +57,10 @@ class _FinanceApiClient extends MagicApiClient {
     }
     if (path == '/crm/expenses') {
       expenseReads += 1;
+      if (expenseRequests.isNotEmpty) {
+        return await expenseRequests.removeAt(0).future as T;
+      }
+      if (expenseLoadFailure != null) throw expenseLoadFailure!;
       return <String, dynamic>{
             'items': <dynamic>[
               <String, dynamic>{
@@ -150,6 +156,110 @@ Map<String, dynamic> _payments(num amount) => <String, dynamic>{
 };
 
 void main() {
+  for (final expenses in [false, true]) {
+    test(
+      'pagination preserves the query, retries and ignores stale pages: expenses=$expenses',
+      () async {
+        final api = _FinanceApiClient();
+        final controller = _controller(api, branchId: 'first');
+        addTearDown(controller.dispose);
+        final requests = expenses ? api.expenseRequests : api.paymentRequests;
+        Map<String, dynamic> page(String id, String? cursor) => {
+          'items': [
+            {'id': id, 'amount': 100, 'category': 'other'},
+          ],
+          'total': 300,
+          'totalAmount': 300,
+          'totalCount': 3,
+          'nextCursor': cursor,
+        };
+        final initial = Completer<Map<String, dynamic>>();
+        requests.add(initial);
+        final load = expenses
+            ? controller.loadExpenses()
+            : controller.loadPayments();
+        initial.complete(page('a', 'cursor-a'));
+        await load;
+        final failed = Completer<Map<String, dynamic>>();
+        requests.add(failed);
+        final more = expenses
+            ? controller.loadMoreExpenses()
+            : controller.loadMorePayments();
+        failed.completeError(StateError('offline'));
+        await more;
+        expect(
+          expenses
+              ? controller.state.expensesPageError
+              : controller.state.paymentsPageError,
+          isNotNull,
+        );
+        final retry = Completer<Map<String, dynamic>>();
+        requests.add(retry);
+        final retryLoad = expenses
+            ? controller.loadMoreExpenses()
+            : controller.loadMorePayments();
+        retry.complete({
+          'items': [
+            {'id': 'a', 'amount': 100},
+            {'id': 'b', 'amount': 100},
+          ],
+          'nextCursor': 'cursor-b',
+        });
+        await retryLoad;
+        expect(
+          expenses
+              ? controller.state.expenses.length
+              : controller.state.payments.length,
+          2,
+        );
+        final pageRequests = api.gets
+            .where((r) => r.parameters['cursor'] == 'cursor-a')
+            .toList();
+        expect(pageRequests.length, 2);
+        expect(pageRequests[0].parameters, pageRequests[1].parameters);
+        final late = Completer<Map<String, dynamic>>();
+        requests.add(late);
+        final lateLoad = expenses
+            ? controller.loadMoreExpenses()
+            : controller.loadMorePayments();
+        final fresh = Completer<Map<String, dynamic>>();
+        requests.add(fresh);
+        final changed = controller.updateExternalQuery(null, 'second');
+        fresh.complete(page('new', null));
+        await changed;
+        late.complete(page('old', null));
+        await lateLoad;
+        expect(
+          expenses
+              ? controller.state.expenses.single['id']
+              : controller.state.payments.single.id,
+          'new',
+        );
+      },
+    );
+  }
+
+  test(
+    'expense refresh failure preserves data and is not a mutation failure',
+    () async {
+      final api = _FinanceApiClient();
+      final controller = _controller(api);
+      await controller.loadExpenses();
+      final previous = controller.state.expenses;
+      api.expenseLoadFailure = StateError('offline');
+      await controller.createExpense(amount: 250, category: 'other');
+      expect(api.mutations.length, 1);
+      expect(controller.state.expenses, previous);
+      expect(controller.state.expensesTotal, 100);
+      expect(controller.state.expenseError, isNull);
+      expect(controller.state.expensesLoadError, isNotNull);
+      api.expenseLoadFailure = null;
+      await controller.loadExpenses();
+      expect(controller.state.expensesLoadError, isNull);
+      controller.dispose();
+    },
+  );
+
   test('latest range and branch win over an older payment response', () async {
     final api = _FinanceApiClient();
     final first = Completer<Map<String, dynamic>>();
@@ -243,12 +353,13 @@ void main() {
       );
       await controller.updateExpense(
         expenseId: 'expense-a',
+        expectedVersion: 1,
         amount: 1000,
         category: 'rent',
         description: '',
         branchId: 'branch-expense',
       );
-      await controller.deleteExpense('expense-a');
+      await controller.deleteExpense('expense-a', expectedVersion: 1);
 
       expect(api.expenseReads, 3);
       expect(api.mutations.map((item) => item.method), [

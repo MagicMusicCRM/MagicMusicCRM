@@ -2257,6 +2257,9 @@ void main() {
     final lesson = _editableLesson()..remove('version');
     await _pumpDialog(tester, client, lesson: lesson);
     await _moveEditableLessonToNextDay(tester);
+    final reason = find.byKey(const Key('lesson-edit-reason'));
+    await tester.ensureVisible(reason);
+    await tester.enterText(reason, 'Перенос по просьбе ученика');
 
     await tester.ensureVisible(find.text('Рассчитать'));
     await tester.tap(find.text('Рассчитать'));

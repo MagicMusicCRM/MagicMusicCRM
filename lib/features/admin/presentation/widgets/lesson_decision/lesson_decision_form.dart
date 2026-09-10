@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
@@ -615,7 +616,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   Future<void> _calculate() async {
     if (_busy) return;
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    if (!validateAndRevealForm(_formKey)) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -644,6 +645,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       );
       if (!mounted) return;
       setState(() => _preview = preview);
+      revealFormFeedback(context, const Key('lesson-decision-preview'));
     } catch (error) {
       if (mounted) {
         final recovered = await widget.controller.recoverStaleCommit(error);
@@ -651,6 +653,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
           setState(
             () => _error = recovered ?? mapLessonTransitionFailure(error),
           );
+          revealFormFeedback(context, const Key('lesson-decision-error'));
         }
       }
     } finally {
@@ -703,6 +706,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
             _commitAttempted = false;
           }
         });
+        revealFormFeedback(context, const Key('lesson-decision-error'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

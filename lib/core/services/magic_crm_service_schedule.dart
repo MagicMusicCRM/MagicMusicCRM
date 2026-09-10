@@ -8,6 +8,9 @@ extension MagicCrmSchedule on MagicCrmService {
     String? cursor,
     String direction = 'next',
     int limit = 24,
+    DateTime? from,
+    DateTime? to,
+    DateTime? anchor,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/students/${Uri.encodeComponent(studentId)}/lesson-timeline',
@@ -15,6 +18,9 @@ extension MagicCrmSchedule on MagicCrmService {
         'cursor': ?cursor,
         'direction': direction,
         'limit': limit,
+        if (from != null) 'from': from.toUtc().toIso8601String(),
+        if (to != null) 'to': to.toUtc().toIso8601String(),
+        if (anchor != null) 'anchor': anchor.toUtc().toIso8601String(),
       },
     );
     return StudentLessonTimelinePage.fromJson(response);
@@ -690,6 +696,7 @@ extension MagicCrmSchedule on MagicCrmService {
     String? studentId,
     String? groupId,
     bool includeEnded = true,
+    bool includeArchived = false,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/schedule-plans',
@@ -697,6 +704,7 @@ extension MagicCrmSchedule on MagicCrmService {
         'studentId': ?studentId,
         'groupId': ?groupId,
         if (includeEnded) 'includeEnded': 'true',
+        if (includeArchived) 'includeArchived': 'true',
       },
     );
     return _items(response).map(SchedulePlan.fromMap).toList(growable: false);
@@ -931,6 +939,52 @@ extension MagicCrmSchedule on MagicCrmService {
       },
     );
   }
+
+  Future<Map<String, dynamic>> previewSchedulePlanArchive(String planId) =>
+      _api.post<Map<String, dynamic>>(
+        '/crm/schedule-plans/$planId/archive/preview',
+        data: const {},
+      );
+
+  Future<Map<String, dynamic>> previewSchedulePlanRestore(String planId) =>
+      _api.post<Map<String, dynamic>>(
+        '/crm/schedule-plans/$planId/restore/preview',
+        data: const {},
+      );
+
+  Future<Map<String, dynamic>> restoreSchedulePlan(
+    String planId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String impactFingerprint,
+    required String reasonText,
+  }) => _api.postIdempotent<Map<String, dynamic>>(
+    '/crm/schedule-plans/$planId/restore',
+    identity: identity,
+    data: {
+      'expectedVersion': expectedVersion,
+      'impactFingerprint': impactFingerprint,
+      'reasonText': reasonText.trim(),
+      'confirm': true,
+    },
+  );
+
+  Future<Map<String, dynamic>> archiveSchedulePlan(
+    String planId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String impactFingerprint,
+    required String reasonText,
+  }) => _api.postIdempotent<Map<String, dynamic>>(
+    '/crm/schedule-plans/$planId/archive',
+    identity: identity,
+    data: {
+      'expectedVersion': expectedVersion,
+      'impactFingerprint': impactFingerprint,
+      'reasonText': reasonText.trim(),
+      'confirm': true,
+    },
+  );
 
   /// KVA-236: серии постоянного расписания.
   Future<List<Map<String, dynamic>>> listScheduleSeries({

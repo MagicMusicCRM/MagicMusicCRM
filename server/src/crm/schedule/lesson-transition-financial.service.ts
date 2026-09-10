@@ -252,6 +252,7 @@ export class LessonTransitionFinancialService {
       });
     }
     await this.reservations.releaseForLessons(client, [source.id]);
+    await this.reservations.reconcile(client, allocations.map((item) => item.subscriptionId), [source.id]);
     return {
       sourceSettlement,
       successorPlanId: successorId,

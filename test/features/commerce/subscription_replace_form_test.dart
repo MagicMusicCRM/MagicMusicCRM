@@ -22,6 +22,7 @@ const _previewResponse = <String, dynamic>{
   },
   'usage': {
     'usedUnits': '3',
+    'newAvailableUnits': '12',
     'reservedLessonCount': 4,
     'reservedUnits': '4',
     'transferableReservationCount': 3,
@@ -36,14 +37,18 @@ const _previewResponse = <String, dynamic>{
     'oldFinalMinor': '800000',
     'newFinalMinor': '1000000',
     'actualPaidMinor': '800000',
-    'obligationDeltaMinor': '200000',
-    'resultingPosition': {'kind': 'debt', 'amountMinor': '200000'},
+    'obligationDeltaMinor': '500000',
+    'usedValueMinor': '300000',
+    'remainingValueMinor': '500000',
+    'priorConsumedValueMinor': '300000',
+    'resultingPosition': {'kind': 'debt', 'amountMinor': '500000'},
   },
   'warnings': [
     {
-      'code': 'USED_UNITS_TRANSFERRED',
+      'code': 'USED_UNITS_RETAINED_IN_HISTORY',
       'units': '3',
-      'message': 'Использованные единицы будут перенесены.',
+      'message':
+          'Использованные занятия останутся в истории старого абонемента.',
     },
     {
       'code': 'FUTURE_LESSONS_PRESERVED',
@@ -79,9 +84,9 @@ const _replacementResponse = <String, dynamic>{
     'transferredReservationUnits': '3',
     'releasedReservationCount': 1,
     'releasedReservationUnits': '1',
-    'deltaMinor': '200000',
+    'deltaMinor': '500000',
     'positionKind': 'debt',
-    'positionMinor': '200000',
+    'positionMinor': '500000',
     'ccy': 'RUB',
     'obligationFactId': 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
   },
@@ -165,6 +170,8 @@ void main() {
 
     expect(preview.newPackage.name, 'Вокал — 12 часов');
     expect(preview.usage.usedUnits, '3');
+    expect(preview.usage.newAvailableUnits, '12');
+    expect(preview.financial.remainingValueMinor, BigInt.from(500000));
     expect(preview.usage.futureLessonCount, 4);
     expect(preview.usage.releasedReservationCount, 1);
     expect(
@@ -173,7 +180,7 @@ void main() {
     );
     expect(
       preview.financial.resultingPosition.amountMinor,
-      BigInt.from(200000),
+      BigInt.from(500000),
     );
     expect(preview.warnings, hasLength(4));
     expect(api.postRequests.single.path, endsWith('/replace/preview'));
@@ -188,7 +195,7 @@ void main() {
       'reason': 'client.requested_change',
     });
     expect(result.replacement.newPackageId, _newPackageId);
-    expect(result.replacement.positionMinor, BigInt.from(200000));
+    expect(result.replacement.positionMinor, BigInt.from(500000));
     expect(result.replayed, isFalse);
   });
 
@@ -252,15 +259,17 @@ void main() {
 
       expect(find.byKey(const Key('subscription-replace-old')), findsOneWidget);
       expect(find.byKey(const Key('subscription-replace-new')), findsOneWidget);
-      expect(find.text('Использовано'), findsOneWidget);
+      expect(find.text('Использовано в старом'), findsOneWidget);
       expect(find.text('Будущие занятия'), findsOneWidget);
+      expect(find.text('Полный объём нового'), findsOneWidget);
+      expect(find.text('Зачёт остатка старого'), findsOneWidget);
       expect(find.text('Долг после пересчёта'), findsOneWidget);
       expect(
         _normalizedTexts(
           tester,
           find.byKey(const Key('subscription-replace-financial')),
         ),
-        contains('2 000,00 ₽'),
+        contains('5 000,00 ₽'),
       );
       expect(
         find.text('Фактические платежи останутся неизменными.'),

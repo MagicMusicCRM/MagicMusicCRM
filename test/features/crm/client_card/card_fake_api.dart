@@ -185,6 +185,7 @@ class FakeCardApiClient extends MagicApiClient {
   Completer<void>? studentPatchGate;
   Completer<void>? nextStudentCardGate;
   int studentPatchFailures = 0;
+  Object? commerceFailure;
   int studentPatchConflicts = 0;
   int leadPatchConflicts = 0;
   int internalNotePutConflicts = 0;
@@ -524,6 +525,7 @@ class FakeCardApiClient extends MagicApiClient {
           as T;
     }
     if (student != null && path == '/crm/students/${student!['id']}/commerce') {
+      if (commerceFailure != null) throw commerceFailure!;
       final subscriptions = studentSubscriptions
           .map(_commerceSubscription)
           .toList(growable: false);

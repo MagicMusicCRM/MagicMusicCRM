@@ -1,3 +1,6 @@
+import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
+import { PlatformIntegrityRepository } from "../platform/platform-integrity.repository";
 import { PGlite } from "@electric-sql/pglite";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
@@ -126,10 +129,28 @@ describe("FinanceService subscription-backed lesson costs", () => {
       const typedPolicy = policy as unknown as CrmPolicy;
       const realtime = {} as RealtimeBus;
       const service = new FinanceService(
-        new FinancePaymentService(database, audit, typedPolicy, realtime),
+        new FinancePaymentService(
+          database,
+          typedPolicy,
+          {} as PaymentLifecycleService,
+        ),
         new StudentFinanceQueryService(database, typedPolicy),
-        new StudentAccountTransferService(database, audit, typedPolicy),
-        new ExpenseService(database, audit, typedPolicy, realtime),
+        new StudentAccountTransferService(
+          database,
+          new PlatformIntegrityService(
+            database,
+            new PlatformIntegrityRepository(),
+          ),
+          typedPolicy,
+        ),
+        new ExpenseService(
+          database,
+          new PlatformIntegrityService(
+            database,
+            new PlatformIntegrityRepository(),
+          ),
+          typedPolicy,
+        ),
       );
       const actor = { userId: "director-a", role: "director" as const };
 

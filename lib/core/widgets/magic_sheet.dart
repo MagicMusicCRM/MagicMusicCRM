@@ -7,6 +7,38 @@ const magicModalDesktopBreakpoint = 840.0;
 // Matches the lesson editor: 680 logical pixels of content plus dialog padding.
 const magicModalFormWidth = 728.0;
 
+ThemeData _modalTheme(BuildContext context) {
+  final theme = Theme.of(context);
+  final controls = ButtonStyle(
+    minimumSize: const WidgetStatePropertyAll(Size(64, 48)),
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+    ),
+    textStyle: WidgetStatePropertyAll(
+      theme.textTheme.labelLarge?.copyWith(fontSize: 15, height: 1.35),
+    ),
+  );
+  return theme.copyWith(
+    visualDensity: VisualDensity.standard,
+    textTheme: theme.textTheme.copyWith(
+      bodyMedium: theme.textTheme.bodyMedium?.copyWith(
+        fontSize: 16,
+        height: 1.45,
+      ),
+      bodySmall: theme.textTheme.bodySmall?.copyWith(fontSize: 14, height: 1.4),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: theme.filledButtonTheme.style?.merge(controls) ?? controls,
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: theme.outlinedButtonTheme.style?.merge(controls) ?? controls,
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: theme.textButtonTheme.style?.merge(controls) ?? controls,
+    ),
+  );
+}
+
 bool usesDesktopMagicModal(BuildContext context) => kIsWeb
     ? MediaQuery.sizeOf(context).width >= magicModalDesktopBreakpoint
     : switch (Theme.of(context).platform) {
@@ -72,7 +104,7 @@ Future<T?> showMagicDialog<T>({
         child: ClipRRect(
           borderRadius: BorderRadius.circular(AppRadius.sheet),
           child: Theme(
-            data: Theme.of(context).copyWith(
+            data: _modalTheme(context).copyWith(
               dialogTheme: Theme.of(context).dialogTheme.copyWith(
                 constraints: const BoxConstraints.tightFor(
                   width: magicModalFormWidth,
@@ -274,21 +306,24 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
               liveRegion: true,
               label:
                   '${widget.title == null ? 'Окно' : 'Окно «${widget.title}»'}: $stateLabel',
-              child: _MagicSheetFrame(
-                title: widget.title,
-                subtitle: widget.subtitle,
-                icon: widget.icon,
-                actions: widget.actions,
-                body: widget.body,
-                fillHeight: true,
-                showHandle: true,
-                embeddedDialog: widget.embeddedDialog,
-                showCloseButton: widget.showCloseButton,
-                scrollController: scrollController,
-                expandLabel: _expanded ? 'Свернуть' : 'Развернуть',
-                onToggleExtent: _toggleExtent,
-                onHandleDragUpdate: _onHandleDragUpdate,
-                onHandleDragEnd: _onHandleDragEnd,
+              child: Theme(
+                data: _modalTheme(context),
+                child: _MagicSheetFrame(
+                  title: widget.title,
+                  subtitle: widget.subtitle,
+                  icon: widget.icon,
+                  actions: widget.actions,
+                  body: widget.body,
+                  fillHeight: true,
+                  showHandle: true,
+                  embeddedDialog: widget.embeddedDialog,
+                  showCloseButton: widget.showCloseButton,
+                  scrollController: scrollController,
+                  expandLabel: _expanded ? 'Свернуть' : 'Развернуть',
+                  onToggleExtent: _toggleExtent,
+                  onHandleDragUpdate: _onHandleDragUpdate,
+                  onHandleDragEnd: _onHandleDragEnd,
+                ),
               ),
             ),
           ),
@@ -409,7 +444,7 @@ class _MagicSheetFrame extends StatelessWidget {
               ),
             ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 2, 12, 13),
+            padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
             child: _buildHeader(context),
           ),
           const Divider(height: 1, color: AppColor.divider),
@@ -449,7 +484,8 @@ class _MagicSheetFrame extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppColor.text,
-                  fontSize: 17,
+                  fontSize: 20,
+                  height: 1.3,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.2,
                 ),
@@ -463,7 +499,8 @@ class _MagicSheetFrame extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppColor.text2,
-                      fontSize: 12.5,
+                      fontSize: 14,
+                      height: 1.4,
                     ),
                   ),
                 ),

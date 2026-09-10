@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/group_schedule_participants_editor.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_section.dart';
@@ -166,12 +167,13 @@ Map<String, dynamic> _timelinePage({
   bool hasNext = false,
   String? previousCursor,
   String? nextCursor,
+  DateTime? scheduledAt,
 }) => {
   'items': [
     {
       'id': lessonId,
       'version': 1,
-      'scheduledAt': '2026-08-07T13:00:00.000Z',
+      'scheduledAt': (scheduledAt ?? DateTime.now()).toUtc().toIso8601String(),
       'durationMinutes': 60,
       'lifecycleState': state,
       'student': {'id': 'student-1', 'name': 'Анна Смирнова'},
@@ -201,11 +203,98 @@ Map<String, dynamic> _timelinePage({
   'nextCursor': nextCursor,
 };
 
+class _ArchiveCardApiClient extends FakeCardApiClient {
+  _ArchiveCardApiClient({
+    this.blocked = false,
+    this.failOnce = false,
+    bool archived = false,
+  }) : super(
+         role: 'manager',
+         schedulePlans: [
+           {
+             ..._activePlan,
+             'status': 'ended',
+             if (archived) ...{
+               'archivedAt': '2026-09-10T00:00:00Z',
+               'archiveReason': 'Ошибочная серия',
+             },
+           },
+         ],
+       );
+  final bool blocked;
+  bool failOnce;
+  int previewRequests = 0;
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path.endsWith('/archive/preview') ||
+        path.endsWith('/restore/preview')) {
+      previewRequests++;
+      return <String, dynamic>{
+            'version': 1,
+            'lessonCount': 7,
+            'canConfirm': !blocked,
+            'blockers': blocked ? ['В серии есть оплаты.'] : [],
+            'impactFingerprint': List.filled(64, 'a').join(),
+          }
+          as T;
+    }
+    return super.post(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
+
+  @override
+  Future<T> postIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (!path.endsWith('/archive') && !path.endsWith('/restore')) {
+      return super.postIdempotent(
+        path,
+        identity: identity,
+        data: data,
+        queryParameters: queryParameters,
+        authenticated: authenticated,
+      );
+    }
+    idempotentRequests.add((
+      path: path,
+      data: Map<String, dynamic>.from(data as Map),
+      identity: identity,
+    ));
+    if (failOnce) {
+      failOnce = false;
+      throw const MagicApiException(message: 'Временная ошибка сети');
+    }
+    final restore = path.endsWith('/restore');
+    schedulePlans.single['archivedAt'] = restore
+        ? null
+        : '2026-09-10T00:00:00Z';
+    schedulePlans.single['archiveReason'] = restore
+        ? null
+        : (data)['reasonText'];
+    return <String, dynamic>{'version': 2, 'hiddenLessons': 7} as T;
+  }
+}
+
 class _PagingCardApiClient extends FakeCardApiClient {
   _PagingCardApiClient({this.remainingNextFailures = 0})
     : super(role: 'manager', schedulePlans: const [_activePlan, _endedPlan]);
 
   int remainingNextFailures;
+  String? initialFrom;
 
   @override
   Future<T> get<T>(
@@ -217,8 +306,10 @@ class _PagingCardApiClient extends FakeCardApiClient {
       final query = {...?queryParameters};
       getRequests.add(path);
       getCalls.add((path: path, query: query));
-      final cursor = query['cursor']?.toString();
-      if (cursor == 'cursor-next') {
+      final from = query['anchor'].toString();
+      initialFrom ??= from;
+      final backwards = query['direction'] == 'previous';
+      if (from != initialFrom && !backwards) {
         if (remainingNextFailures > 0) {
           remainingNextFailures--;
           throw const MagicApiException(message: 'Временная ошибка сети');
@@ -226,20 +317,30 @@ class _PagingCardApiClient extends FakeCardApiClient {
         return _timelinePage(
               lessonId: 'lesson-page-2',
               predecessorId: 'lesson-page-1',
-              hasPrevious: true,
-              previousCursor: 'cursor-previous',
+              scheduledAt: DateTime.parse(from).add(const Duration(days: 3)),
             )
             as T;
       }
-      return _timelinePage(
-            lessonId: 'lesson-page-1',
-            state: 'rescheduled',
-            successorId: 'lesson-page-2',
-            covered: false,
-            hasNext: true,
-            nextCursor: 'cursor-next',
-          )
-          as T;
+      final firstPage = _timelinePage(
+        lessonId: 'lesson-page-1',
+        state: 'rescheduled',
+        successorId: 'lesson-page-2',
+        covered: false,
+        scheduledAt: DateTime.parse(initialFrom!).add(const Duration(days: 3)),
+      );
+      firstPage['items'] = [
+        ...firstPage['items'] as List,
+        for (var i = 1; i <= (backwards ? 29 : 30); i++)
+          (_timelinePage(
+                    lessonId: 'page-one-date-$i',
+                    scheduledAt: DateTime.parse(
+                      initialFrom!,
+                    ).add(Duration(days: 3 + i)),
+                  )['items']
+                  as List)
+              .single,
+      ];
+      return firstPage as T;
     }
     return super.get<T>(
       path,
@@ -332,6 +433,164 @@ class _ExactLessonCardApiClient extends FakeCardApiClient {
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
 
+  testWidgets(
+    'restore from archive validates reason and retries without reactivating the plan',
+    (tester) async {
+      final api = _ArchiveCardApiClient(archived: true, failOnce: true);
+      await _pump(tester, api);
+      await tester.tap(find.text('Архив (1)'));
+      await tester.pumpAndSettle();
+      final expansion = find.byKey(
+        const PageStorageKey('schedule-plan-expansion-plan-active'),
+      );
+      await tester.tap(
+        find.descendant(of: expansion, matching: find.byType(ListTile)).first,
+      );
+      await tester.pumpAndSettle();
+      final restore = find.byKey(
+        const ValueKey('schedule-plan-restore-plan-active'),
+      );
+      await tester.ensureVisible(restore);
+      await tester.tap(restore);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Занятия не возобновятся'), findsOneWidget);
+      final submit = find.byKey(const Key('schedule-restore-confirm'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.text('Укажите причину восстановления'), findsOneWidget);
+      expect(api.idempotentRequests, isEmpty);
+      await tester.enterText(
+        find.byKey(const Key('schedule-restore-reason')),
+        'Архивировано по ошибке',
+      );
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('schedule-restore-error')), findsOneWidget);
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(api.idempotentRequests, hasLength(2));
+      expect(
+        api.idempotentRequests.first.path,
+        '/crm/schedule-plans/plan-active/restore',
+      );
+      expect(
+        api.idempotentRequests.first.identity,
+        same(api.idempotentRequests.last.identity),
+      );
+      expect(
+        api.idempotentRequests.first.data,
+        api.idempotentRequests.last.data,
+      );
+      expect(api.schedulePlans.single['status'], 'ended');
+      expect(find.text('Архив (1)'), findsNothing);
+      expect(find.text('Завершено'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('schedule-plan-plan-active')),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('read-only archive exposes neither restore nor its requests', (
+    tester,
+  ) async {
+    final api = _ArchiveCardApiClient(archived: true);
+    await _pump(tester, api, canWrite: false);
+    await tester.tap(find.text('Архив (1)'));
+    await tester.pumpAndSettle();
+    final expansion = find.byKey(
+      const PageStorageKey('schedule-plan-expansion-plan-active'),
+    );
+    await tester.tap(
+      find.descendant(of: expansion, matching: find.byType(ListTile)).first,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('schedule-plan-restore-plan-active')),
+      findsNothing,
+    );
+    expect(api.previewRequests, 0);
+    expect(api.idempotentRequests, isEmpty);
+  });
+
+  testWidgets('read-only schedule never offers or requests archiving', (
+    tester,
+  ) async {
+    final api = _ArchiveCardApiClient();
+    await _pump(tester, api, canWrite: false);
+    expect(
+      find.byKey(const ValueKey('schedule-plan-archive-plan-active')),
+      findsNothing,
+    );
+    expect(api.previewRequests, 0);
+    expect(api.idempotentRequests, isEmpty);
+  });
+
+  testWidgets(
+    'archive validates reason, retries with one identity and moves the series into archive',
+    (tester) async {
+      final api = _ArchiveCardApiClient(failOnce: true);
+      await _pump(tester, api);
+      await tester.tap(
+        find.byKey(const ValueKey('schedule-plan-archive-plan-active')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Занятий в серии: 7'), findsOneWidget);
+      final submit = find.byKey(const Key('schedule-archive-confirm'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.text('Укажите причину архивирования'), findsOneWidget);
+      expect(api.idempotentRequests, isEmpty);
+      await tester.enterText(
+        find.byKey(const Key('schedule-archive-reason')),
+        'Ошибочная серия',
+      );
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('schedule-archive-error')), findsOneWidget);
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(api.idempotentRequests, hasLength(2));
+      expect(
+        api.idempotentRequests.first.identity,
+        same(api.idempotentRequests.last.identity),
+      );
+      expect(
+        api.idempotentRequests.first.data,
+        api.idempotentRequests.last.data,
+      );
+      expect(find.text('Архив (1)'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('schedule-plan-archive-plan-active')),
+        findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('archive explains financial blockers without offering commit', (
+    tester,
+  ) async {
+    final api = _ArchiveCardApiClient(blocked: true);
+    await _pump(tester, api);
+    await tester.tap(
+      find.byKey(const ValueKey('schedule-plan-archive-plan-active')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('В серии есть оплаты.'), findsOneWidget);
+    expect(find.byKey(const Key('schedule-archive-confirm')), findsNothing);
+    expect(api.idempotentRequests, isEmpty);
+  });
+
   testWidgets('canonical timeline keeps subscription coverage visible', (
     tester,
   ) async {
@@ -340,7 +599,14 @@ void main() {
 
     expect(find.text('Лента занятий'), findsOneWidget);
     expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
-    expect(find.text('Абонемент'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message?.contains('Абонемент') ?? false),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('schedule-plan-tray-plan-active')),
       findsNothing,
@@ -359,54 +625,78 @@ void main() {
       expect(find.text('Вокальная группа'), findsOneWidget);
       expect(find.text('Лента занятий'), findsOneWidget);
       expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
-      expect(find.text('Завершённые (1)'), findsOneWidget);
-      expect(find.text('Завершённое фортепиано'), findsNothing);
-
-      await tester.ensureVisible(find.text('Завершённые (1)'));
-      await tester.tap(find.text('Завершённые (1)'));
-      await tester.pumpAndSettle();
+      expect(find.text('Завершено'), findsOneWidget);
       expect(find.text('Завершённое фортепиано'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
 
-  testWidgets('global timeline pages and retries the failed cursor', (
-    tester,
-  ) async {
-    final api = _PagingCardApiClient(remainingNextFailures: 1);
-    await _pump(tester, api, width: 840);
+  testWidgets(
+    'global timeline preserves its occupied-date page when loading fails',
+    (tester) async {
+      final api = _PagingCardApiClient(remainingNextFailures: 1);
+      await _pump(tester, api, width: 840);
 
-    expect(
-      find.byKey(const ValueKey('student-timeline-lesson-page-1')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const Key('student-lesson-timeline-next')));
-    await tester.pumpAndSettle();
-    expect(find.text('Временная ошибка сети'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('student-timeline-lesson-page-1')),
-      findsOneWidget,
-    );
-    expect(api.getCalls.last.query, {
-      'cursor': 'cursor-next',
-      'direction': 'next',
-      'limit': 24,
-    });
+      expect(
+        find.byKey(const ValueKey('student-timeline-lesson-page-1')),
+        findsOneWidget,
+      );
+      await tester.drag(
+        find.byKey(const Key('student-lesson-timeline')),
+        const Offset(-4000, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('student-lesson-timeline-next')));
+      await tester.pumpAndSettle();
+      expect(find.text('Временная ошибка сети'), findsOneWidget);
+      await tester.drag(
+        find.byKey(const Key('student-lesson-timeline-grid')),
+        const Offset(4000, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('student-timeline-lesson-page-1')),
+        findsOneWidget,
+      );
+      final failedQuery = api.getCalls.last.query;
+      expect(failedQuery['cursor'], isNull);
+      expect(failedQuery['limit'], 40);
+      expect(
+        DateTime.parse(
+          failedQuery['anchor'] as String,
+        ).difference(DateTime.parse(api.initialFrom!)).inDays,
+        33,
+      );
 
-    await tester.tap(find.text('Повторить'));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('student-timeline-lesson-page-2')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const Key('student-lesson-timeline-previous')));
-    await tester.pumpAndSettle();
-    expect(api.getCalls.last.query, {
-      'cursor': 'cursor-previous',
-      'direction': 'previous',
-      'limit': 24,
-    });
-  });
+      await tester.tap(find.text('Повторить'));
+      await tester.pumpAndSettle();
+      expect(api.getCalls.last.query, failedQuery);
+      expect(
+        find.byKey(const ValueKey('student-timeline-lesson-page-2')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('student-lesson-timeline-previous')),
+      );
+      await tester.pumpAndSettle();
+      expect(api.getCalls.last.query['direction'], 'previous');
+      expect(
+        DateTime.parse(api.getCalls.last.query['anchor'] as String),
+        DateTime.parse(
+          failedQuery['anchor'] as String,
+        ).add(const Duration(days: 3)),
+      );
+      await tester.drag(
+        find.byKey(const Key('student-lesson-timeline-grid')),
+        const Offset(4000, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('student-timeline-lesson-page-1')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('timeline opens the exact lesson ID', (tester) async {
     final api = _ExactLessonCardApiClient();
@@ -431,7 +721,14 @@ void main() {
     await _pump(tester, api);
 
     expect(find.text('Постоянных расписаний пока нет'), findsOneWidget);
-    expect(find.text('Разовое занятие'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message?.contains('Разовое занятие') ?? false),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('student-timeline-lesson-manual')),
       findsOneWidget,
@@ -615,6 +912,7 @@ void main() {
         find.byKey(const ValueKey('schedule-plan-created-plan-1')),
         findsOneWidget,
       );
+      await _expandPlan(tester, 'created-plan-1');
       for (var index = 1; index <= 3; index++) {
         expect(
           find.byKey(ValueKey('schedule-plan-row-edit-created-series-$index')),
@@ -1060,7 +1358,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Изменить набор дней'), findsOneWidget);
-      expect(find.text('16:00'), findsOneWidget);
+      expect(find.text('16:00').hitTestable(), findsOneWidget);
       await tester.ensureVisible(
         find.byKey(const ValueKey('preferred-schedule-save')),
       );
@@ -1118,13 +1416,8 @@ void main() {
       find.byKey(const ValueKey('schedule-plan-end-plan-active')),
       findsNothing,
     );
-    expect(find.text('Завершённые (1)'), findsOneWidget);
-    await tester.tap(find.text('Завершённые (1)'));
-    await tester.pumpAndSettle();
+    expect(find.text('Завершено'), findsOneWidget);
     expect(find.text('Индивидуальный вокал'), findsOneWidget);
-    await tester.ensureVisible(find.text('Индивидуальный вокал'));
-    await tester.tap(find.text('Индивидуальный вокал'));
-    await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('schedule-plan-end-history-plan-active')),
       findsOneWidget,
@@ -1194,6 +1487,7 @@ Future<void> _pump(
   String? groupId,
   String? subjectName,
   List<GroupScheduleMemberOption> groupMembers = const [],
+  bool canWrite = true,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width, 1000);
@@ -1225,7 +1519,7 @@ Future<void> _pump(
                 subscriptions: const [
                   {'id': 'subscription-1', 'label': '12 занятий'},
                 ],
-                canWrite: true,
+                canWrite: canWrite,
                 onChanged: () {},
               ),
             ),
@@ -1233,6 +1527,22 @@ Future<void> _pump(
         ),
       ),
     ),
+  );
+  await tester.pumpAndSettle();
+  if (groupId == null &&
+      find
+          .byKey(const PageStorageKey('schedule-plan-expansion-plan-active'))
+          .evaluate()
+          .isNotEmpty) {
+    await _expandPlan(tester, 'plan-active');
+  }
+}
+
+Future<void> _expandPlan(WidgetTester tester, String id) async {
+  final tile = find.byKey(PageStorageKey('schedule-plan-expansion-$id'));
+  await tester.ensureVisible(tile);
+  await tester.tap(
+    find.descendant(of: tile, matching: find.byType(ListTile)).first,
   );
   await tester.pumpAndSettle();
 }

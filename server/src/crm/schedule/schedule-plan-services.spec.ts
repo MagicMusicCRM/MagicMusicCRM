@@ -325,31 +325,48 @@ describe("Schedule plan semantic owners", () => {
     [3, 30, 3, 21],
     [30, 3, 21, 3],
     [30, 30, 12, 12],
-  ])("fills the initial tray with %i past and %i future lessons", async (
-    past, future, expectedPast, expectedFuture,
-  ) => {
-    const previous = Array.from({length: past}, (_, i) => trayRow(
-      `00000000-0000-4000-8000-${String(100 - i).padStart(12, '0')}`,
-      new Date(Date.UTC(2026, 0, 31 - i, 12)).toISOString(),
-    ));
-    const next = Array.from({length: future}, (_, i) => trayRow(
-      `00000000-0000-4000-8000-${String(101 + i).padStart(12, '0')}`,
-      new Date(Date.UTC(2026, 1, 1 + i, 12)).toISOString(),
-    ));
-    const repository = {trayPage: jest.fn(async (
-      _actor: ActorContext, _plan: string, direction: string,
-      _cursor: unknown, limit: number,
-    ) => (direction === 'previous' ? previous : next).slice(0, limit + 1))};
-    const service = new SchedulePlanQueryService(repository as unknown as SchedulePlanRepository);
-    const page = await service.tray(actor, 'plan-a', {limit: 24});
-    expect(page.items.map((item) => item.id)).toEqual([
-      ...previous.slice(0, expectedPast).reverse(), ...next.slice(0, expectedFuture),
-    ].map((item) => item.id));
-    expect(page.hasPrevious).toBe(past > expectedPast);
-    expect(page.hasNext).toBe(future > expectedFuture);
-    expect(page.previousCursor === null).toBe(!page.hasPrevious);
-    expect(page.nextCursor === null).toBe(!page.hasNext);
-  });
+  ])(
+    "fills the initial tray with %i past and %i future lessons",
+    async (past, future, expectedPast, expectedFuture) => {
+      const previous = Array.from({ length: past }, (_, i) =>
+        trayRow(
+          `00000000-0000-4000-8000-${String(100 - i).padStart(12, "0")}`,
+          new Date(Date.UTC(2026, 0, 31 - i, 12)).toISOString(),
+        ),
+      );
+      const next = Array.from({ length: future }, (_, i) =>
+        trayRow(
+          `00000000-0000-4000-8000-${String(101 + i).padStart(12, "0")}`,
+          new Date(Date.UTC(2026, 1, 1 + i, 12)).toISOString(),
+        ),
+      );
+      const repository = {
+        trayPage: jest.fn(
+          async (
+            _actor: ActorContext,
+            _plan: string,
+            direction: string,
+            _cursor: unknown,
+            limit: number,
+          ) => (direction === "previous" ? previous : next).slice(0, limit + 1),
+        ),
+      };
+      const service = new SchedulePlanQueryService(
+        repository as unknown as SchedulePlanRepository,
+      );
+      const page = await service.tray(actor, "plan-a", { limit: 24 });
+      expect(page.items.map((item) => item.id)).toEqual(
+        [
+          ...previous.slice(0, expectedPast).reverse(),
+          ...next.slice(0, expectedFuture),
+        ].map((item) => item.id),
+      );
+      expect(page.hasPrevious).toBe(past > expectedPast);
+      expect(page.hasNext).toBe(future > expectedFuture);
+      expect(page.previousCursor === null).toBe(!page.hasPrevious);
+      expect(page.nextCursor === null).toBe(!page.hasNext);
+    },
+  );
 
   it("rejects a centuries-long historical range before occurrence expansion", async () => {
     const client = {
@@ -399,6 +416,7 @@ describe("Schedule plan semantic owners", () => {
     let subscriptionSql = "";
     const client = {
       query: jest.fn(async (sql: string, values?: unknown[]) => {
+        if (sql.includes("as allowed")) return { rows: [{ allowed: true }] };
         if (sql.includes("pg_advisory_xact_lock")) {
           advisoryKeys.push(String(values?.[0]));
           events.push(`lock:${String(values?.[0])}`);
@@ -438,18 +456,22 @@ describe("Schedule plan semantic owners", () => {
       {} as SchedulePlanRepository,
     );
 
-    await definition.lockAndValidate(client, {
-      planId: "plan-a",
-      kind: "group",
-      studentId: null,
-      groupId: "group-a",
-      subscriptionId: null,
-      participants: [
-        { studentId: "student-b", subscriptionId: "subscription-b" },
-        { studentId: "student-a", subscriptionId: "subscription-a" },
-      ],
-      rows: [scheduleRow(), scheduleRow()],
-    });
+    await definition.lockAndValidate(
+      client,
+      {
+        planId: "plan-a",
+        kind: "group",
+        studentId: null,
+        groupId: "group-a",
+        subscriptionId: null,
+        participants: [
+          { studentId: "student-b", subscriptionId: "subscription-b" },
+          { studentId: "student-a", subscriptionId: "subscription-a" },
+        ],
+        rows: [scheduleRow(), scheduleRow()],
+      },
+      actor,
+    );
 
     expect(advisoryKeys).toEqual(
       [
@@ -666,14 +688,24 @@ describe("Schedule plan semantic owners", () => {
       includeEnded: true,
     });
 
-    expect((database.query as jest.Mock)).toHaveBeenCalledTimes(3);
-    expect((database.query as jest.Mock).mock.calls[1][1]).toEqual([["plan-a"]]);
-    expect((database.query as jest.Mock).mock.calls[2][1]).toEqual([["plan-a"]]);
+    expect(database.query as jest.Mock).toHaveBeenCalledTimes(3);
+    expect((database.query as jest.Mock).mock.calls[1][1]).toEqual([
+      ["plan-a"],
+    ]);
+    expect((database.query as jest.Mock).mock.calls[2][1]).toEqual([
+      ["plan-a"],
+    ]);
     expect(result.items[0]).toMatchObject({
       rows: [{ id: "series-current", active: true }],
       ruleTimeline: expect.arrayContaining([
-        expect.objectContaining({ id: "series-retired", kind: "recurring_rule" }),
-        expect.objectContaining({ id: "series-current", kind: "recurring_rule" }),
+        expect.objectContaining({
+          id: "series-retired",
+          kind: "recurring_rule",
+        }),
+        expect.objectContaining({
+          id: "series-current",
+          kind: "recurring_rule",
+        }),
         expect.objectContaining({
           id: "series-finite-expired",
           kind: "recurring_rule",
@@ -684,7 +716,10 @@ describe("Schedule plan semantic owners", () => {
           kind: "recurring_rule",
           status: "expired",
         }),
-        expect.objectContaining({ id: "lesson-exception", kind: "dated_exception" }),
+        expect.objectContaining({
+          id: "lesson-exception",
+          kind: "dated_exception",
+        }),
         expect.objectContaining({ id: "successor-c", kind: "dated_exception" }),
       ]),
       exceptions: expect.arrayContaining([

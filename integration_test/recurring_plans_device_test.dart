@@ -234,7 +234,7 @@ void main() {
         child: ProviderScope(
           overrides: [magicApiClientProvider.overrideWithValue(api)],
           child: MaterialApp(
-            theme: AppTheme.dark,
+            theme: AppTheme.production,
             home: Scaffold(
               body: SafeArea(
                 child: SingleChildScrollView(
@@ -261,12 +261,17 @@ void main() {
 
     expect(find.text('Индивидуальный вокал'), findsOneWidget);
     expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
-    expect(find.text('Абонемент'), findsOneWidget);
-    expect(find.text('Завершённое фортепиано'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message?.contains('Абонемент') ?? false),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Завершённое фортепиано'), findsOneWidget);
     await captureEvidence(tester, 'recurring-plan-active-timeline');
-    await tester.ensureVisible(find.text('Завершённые (1)'));
-    await tester.tap(find.text('Завершённые (1)'));
-    await tester.pumpAndSettle();
+    await _expandPlan(tester, 'plan-active');
     expect(find.text('Завершённое фортепиано'), findsOneWidget);
 
     final edit = find.byKey(
@@ -369,12 +374,7 @@ void main() {
       find.byKey(const ValueKey('schedule-plan-end-plan-active')),
       findsNothing,
     );
-    expect(find.text('Завершённые (2)'), findsOneWidget);
-    if (find.text('Индивидуальный вокал').evaluate().isEmpty) {
-      await tester.ensureVisible(find.text('Завершённые (2)'));
-      await tester.tap(find.text('Завершённые (2)'));
-      await tester.pumpAndSettle();
-    }
+    expect(find.text('Завершено'), findsNWidgets(2));
     if (find
         .byKey(const ValueKey('schedule-plan-end-history-plan-active'))
         .evaluate()
@@ -407,7 +407,7 @@ void main() {
         child: ProviderScope(
           overrides: [magicApiClientProvider.overrideWithValue(api)],
           child: MaterialApp(
-            theme: AppTheme.dark,
+            theme: AppTheme.production,
             home: Scaffold(
               body: SafeArea(
                 child: SingleChildScrollView(
@@ -432,7 +432,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Завершённое фортепиано'), findsNothing);
+    expect(find.text('Завершённое фортепиано'), findsOneWidget);
     expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('schedule-plan-tray-plan-active')),
@@ -446,7 +446,14 @@ void main() {
     ]) {
       expect(find.byKey(ValueKey('student-timeline-$id')), findsOneWidget);
     }
-    expect(find.text('Разовое занятие'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message?.contains('Разовое занятие') ?? false),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('student-timeline-lesson-device-successor')),
       findsNothing,
@@ -474,6 +481,7 @@ void main() {
       'limit': 24,
     });
 
+    await _expandPlan(tester, 'plan-active');
     final remove = find.byKey(const ValueKey('remove-plan-row-series-active'));
     await tester.ensureVisible(remove);
     await tester.tap(remove);
@@ -545,7 +553,7 @@ void main() {
         child: ProviderScope(
           overrides: [magicApiClientProvider.overrideWithValue(api)],
           child: MaterialApp(
-            theme: AppTheme.dark,
+            theme: AppTheme.production,
             home: Scaffold(
               body: SafeArea(
                 child: SingleChildScrollView(
@@ -615,6 +623,7 @@ void main() {
       find.byKey(const ValueKey('schedule-plan-created-plan-1')),
       findsOneWidget,
     );
+    await _expandPlan(tester, 'created-plan-1');
     for (var index = 1; index <= 3; index++) {
       expect(
         find.byKey(ValueKey('schedule-plan-row-edit-created-series-$index')),
@@ -636,6 +645,15 @@ void main() {
     expect(tester.takeException(), isNull);
     debugPrint('V7_INDIVIDUAL_PLAN_MIXED_ROWS_DEVICE_PASS');
   });
+}
+
+Future<void> _expandPlan(WidgetTester tester, String id) async {
+  final tile = find.byKey(PageStorageKey('schedule-plan-expansion-$id'));
+  await tester.ensureVisible(tile);
+  await tester.tap(
+    find.descendant(of: tile, matching: find.byType(ListTile)).first,
+  );
+  await tester.pumpAndSettle();
 }
 
 Future<void> _chooseReferences(WidgetTester tester) async {

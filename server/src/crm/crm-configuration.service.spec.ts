@@ -337,7 +337,6 @@ describe("CrmConfigurationService", () => {
       "lesson",
       "free_lesson",
       "paid_miss",
-      "partially_paid_miss",
       "unpaid_miss",
     ]);
     expect(

@@ -99,11 +99,18 @@ export class SchedulePlanRowRemovalService {
   ): Promise<SchedulePlanRowRemovalPreviewProjection> {
     this.policy.assertCanWriteCrm(actor);
     return this.database.transaction(async (client) => {
-      const plan = await this.repository.lock(client, planId);
+      const plan = await this.repository.lock(client, planId, actor);
       this.assertActiveVersion(plan, dto.expectedVersion);
-      const row = await this.repository.lockCurrentRow(client, planId, seriesId);
+      const row = await this.repository.lockCurrentRow(
+        client,
+        planId,
+        seriesId,
+      );
       const normalized = await this.normalize(client, plan, row, dto);
-      const currentSeries = await this.repository.currentSeriesIds(client, planId);
+      const currentSeries = await this.repository.currentSeriesIds(
+        client,
+        planId,
+      );
       const endsPlan = this.endsPlan(currentSeries.rows, seriesId);
       const impact = await this.cancellations.inspectEligible(client, {
         planId,
@@ -213,9 +220,12 @@ export class SchedulePlanRowRemovalService {
     version: number,
   ): Promise<RowRemovalMutationReference> {
     const signed = this.verifyToken(dto.previewToken);
-    const plan = await this.repository.lock(client, planId);
+    const plan = await this.repository.lock(client, planId, actor);
     this.assertActiveVersion(plan, dto.expectedVersion);
-    const currentSeries = await this.repository.currentSeriesIds(client, planId);
+    const currentSeries = await this.repository.currentSeriesIds(
+      client,
+      planId,
+    );
     await lockSchedulePlanSeries(
       client,
       currentSeries.rows.map((series) => series.id),

@@ -25,60 +25,12 @@ int? _clientVersion(Object? value) {
 }
 
 extension _ClientCardPersistence on _ClientCardState {
-  static const _autoSaveDelay = Duration(milliseconds: 800);
-
-  void _scheduleAutoSave() {
-    if (!mounted || _autoSaveConflict) return;
-    _autoSaveTimer?.cancel();
-    _autoSavePending = true;
-    _autoSaveTimer = Timer(_autoSaveDelay, () {
-      _autoSaveTimer = null;
-      unawaited(_runAutoSave());
-    });
-  }
-
-  Future<bool> _runAutoSave() async {
-    if (!mounted) return false;
-    _autoSavePending = false;
-    if (_autoSaveConflict) return false;
-    if (_hasInvalidEditedEmail) return false;
-    if (!_edited) return true;
-
-    final active = _autoSaveInFlight;
-    if (active != null) {
-      _autoSaveQueued = true;
-      return active;
-    }
-
-    final revision = _editRevision;
-    final save = _persistEdits(editRevision: revision);
-    _autoSaveInFlight = save;
-    final saved = await save;
-    if (_autoSaveInFlight == save) _autoSaveInFlight = null;
-    if (!mounted) return saved;
-
-    _emitState(() => _autoSaveFailed = !saved);
-    final queued = _autoSaveQueued;
-    _autoSaveQueued = false;
-    if (queued && _edited && !_autoSaveConflict) return _runAutoSave();
-    return saved;
-  }
-
-  Future<bool> _flushAutoSave() async {
-    _autoSaveTimer?.cancel();
-    _autoSaveTimer = null;
-    _autoSavePending = false;
-    final active = _autoSaveInFlight;
-    if (active != null) await active;
-    if (!mounted) return false;
-    if (_autoSaveConflict) return false;
-    if (!_edited) return true;
-    return _runAutoSave();
-  }
+  void _scheduleAutoSave() => _draft.schedule();
+  Future<bool> _flushAutoSave() => _draft.flush();
 
   Future<void> _retryAutoSave() async {
     if (_saving) return;
-    if (_autoSaveConflict) {
+    if (_draft.conflict) {
       final applyDraft = await showMagicDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -100,16 +52,10 @@ extension _ClientCardPersistence on _ClientCardState {
         ),
       );
       if (applyDraft != true || !mounted) return;
-      _autoSaveConflict = false;
+      _draft.conflict = false;
       _syncWorkspaceFormDirty();
     }
-    _autoSaveTimer?.cancel();
-    _autoSaveTimer = null;
-    _emitState(() {
-      _autoSavePending = false;
-      _autoSaveFailed = false;
-    });
-    await _runAutoSave();
+    await _draft.retry();
   }
 
   Widget _buildAutoSaveControl(ColorScheme colors, {bool enabled = true}) {
@@ -126,7 +72,7 @@ extension _ClientCardPersistence on _ClientCardState {
         ],
       );
     }
-    if (_autoSaveFailed) {
+    if (_draft.failed) {
       return FilledButton.icon(
         key: const Key('client-autosave-retry'),
         onPressed: enabled && !_saving
@@ -136,7 +82,7 @@ extension _ClientCardPersistence on _ClientCardState {
         label: const Text('Повторить'),
       );
     }
-    final saving = _saving || _autoSavePending || _edited;
+    final saving = _saving || _draft.pending || _edited;
     return Semantics(
       liveRegion: true,
       label: saving ? 'Сохраняем изменения' : 'Изменения сохранены',
@@ -230,21 +176,21 @@ extension _ClientCardPersistence on _ClientCardState {
     _emitState(() => _saving = true);
     try {
       final service = ref.read(magicCrmServiceProvider);
-      final targetRevision = editRevision ?? _editRevision;
+      final targetRevision = editRevision ?? _draft.revision;
       final leadCoreFields = _fieldsThroughRevision(
-        _leadCoreEditRevisions,
+        _draft.leadCoreEdits,
         targetRevision,
       );
       final leadCustomFields = _fieldsThroughRevision(
-        _leadCustomEditRevisions,
+        _draft.leadCustomEdits,
         targetRevision,
       );
       final saveLeadStatus = _revisionWasSaved(
-        _leadStatusEditRevision,
+        _draft.leadStatusEdit,
         targetRevision,
       );
       final saveLeadResponsible = _revisionWasSaved(
-        _leadResponsibleEditRevision,
+        _draft.leadResponsibleEdit,
         targetRevision,
       );
       final hasLeadChanges =
@@ -314,31 +260,31 @@ extension _ClientCardPersistence on _ClientCardState {
         );
         _leadData['version'] = updatedLead['version'] ?? _leadData['version'];
         _restoredLeadExpectedVersion = null;
-        _clearSavedRevisions(_leadCoreEditRevisions, targetRevision);
-        _clearSavedRevisions(_leadCustomEditRevisions, targetRevision);
-        if (_revisionWasSaved(_leadStatusEditRevision, targetRevision)) {
-          _leadStatusEditRevision = null;
+        _clearSavedRevisions(_draft.leadCoreEdits, targetRevision);
+        _clearSavedRevisions(_draft.leadCustomEdits, targetRevision);
+        if (_revisionWasSaved(_draft.leadStatusEdit, targetRevision)) {
+          _draft.leadStatusEdit = null;
         }
-        if (_revisionWasSaved(_leadResponsibleEditRevision, targetRevision)) {
-          _leadResponsibleEditRevision = null;
+        if (_revisionWasSaved(_draft.leadResponsibleEdit, targetRevision)) {
+          _draft.leadResponsibleEdit = null;
           _leadResponsibleChanged = false;
         }
       }
 
       final studentCoreFields = _fieldsThroughRevision(
-        _studentCoreEditRevisions,
+        _draft.studentCoreEdits,
         targetRevision,
       );
       final studentCustomFields = _fieldsThroughRevision(
-        _studentCustomEditRevisions,
+        _draft.studentCustomEdits,
         targetRevision,
       );
       final saveStudentStatus = _revisionWasSaved(
-        _studentStatusEditRevision,
+        _draft.studentStatusEdit,
         targetRevision,
       );
       final saveStudentResponsible = _revisionWasSaved(
-        _studentResponsibleEditRevision,
+        _draft.studentResponsibleEdit,
         targetRevision,
       );
       final hasStudentChanges =
@@ -405,16 +351,13 @@ extension _ClientCardPersistence on _ClientCardState {
               updatedStudent['version'] ?? _student!['version'];
         }
         _restoredStudentExpectedVersion = null;
-        _clearSavedRevisions(_studentCoreEditRevisions, targetRevision);
-        _clearSavedRevisions(_studentCustomEditRevisions, targetRevision);
-        if (_revisionWasSaved(_studentStatusEditRevision, targetRevision)) {
-          _studentStatusEditRevision = null;
+        _clearSavedRevisions(_draft.studentCoreEdits, targetRevision);
+        _clearSavedRevisions(_draft.studentCustomEdits, targetRevision);
+        if (_revisionWasSaved(_draft.studentStatusEdit, targetRevision)) {
+          _draft.studentStatusEdit = null;
         }
-        if (_revisionWasSaved(
-          _studentResponsibleEditRevision,
-          targetRevision,
-        )) {
-          _studentResponsibleEditRevision = null;
+        if (_revisionWasSaved(_draft.studentResponsibleEdit, targetRevision)) {
+          _draft.studentResponsibleEdit = null;
           _studentResponsibleChanged = false;
         }
       }
@@ -428,7 +371,7 @@ extension _ClientCardPersistence on _ClientCardState {
       if (_mode.hasStudentHalf) ref.invalidate(studentBoardProvider);
       if (mounted) {
         _markDirty(() {
-          _autoSaveConflict = false;
+          _draft.conflict = false;
           if (!_hasPendingCardEdits) {
             _edited = false;
           }
@@ -445,7 +388,7 @@ extension _ClientCardPersistence on _ClientCardState {
         await _reloadAndRebaseClientDraft();
         _restoredLeadExpectedVersion = null;
         _restoredStudentExpectedVersion = null;
-        _autoSaveConflict = true;
+        _draft.conflict = true;
         _syncWorkspaceFormDirty();
       }
       if (mounted) {
@@ -488,7 +431,7 @@ extension _ClientCardPersistence on _ClientCardState {
           final local = Map<String, dynamic>.from(_leadData);
           final rebased = {...local, ...Map<String, dynamic>.from(latestLead)};
           void preserve(String revisionKey, List<String> storageKeys) {
-            if (!_leadCoreEditRevisions.containsKey(revisionKey)) return;
+            if (!_draft.leadCoreEdits.containsKey(revisionKey)) return;
             for (final key in storageKeys) {
               if (local.containsKey(key)) {
                 rebased[key] = local[key];
@@ -504,10 +447,10 @@ extension _ClientCardPersistence on _ClientCardState {
           preserve('email', const ['email']);
           preserve('branchId', const ['branch_id']);
           preserve('sourceId', const ['source_id']);
-          if (_leadStatusEditRevision != null) {
+          if (_draft.leadStatusEdit != null) {
             rebased['status'] = local['status'];
           }
-          if (_leadResponsibleEditRevision != null) {
+          if (_draft.leadResponsibleEdit != null) {
             for (final key in const ['assigned_to', 'assigned_name']) {
               if (local.containsKey(key)) {
                 rebased[key] = local[key];
@@ -527,7 +470,7 @@ extension _ClientCardPersistence on _ClientCardState {
           final localCustom = Map<String, dynamic>.from(
             local['custom_data'] as Map? ?? const {},
           );
-          for (final key in _leadCustomEditRevisions.keys) {
+          for (final key in _draft.leadCustomEdits.keys) {
             if (localCustom.containsKey(key)) {
               latestCustom[key] = localCustom[key];
             } else {
@@ -547,7 +490,7 @@ extension _ClientCardPersistence on _ClientCardState {
             ...Map<String, dynamic>.from(latestStudent),
           };
           void preserve(String revisionKey, List<String> storageKeys) {
-            if (!_studentCoreEditRevisions.containsKey(revisionKey)) return;
+            if (!_draft.studentCoreEdits.containsKey(revisionKey)) return;
             for (final key in storageKeys) {
               if (local.containsKey(key)) {
                 rebased[key] = local[key];
@@ -563,7 +506,7 @@ extension _ClientCardPersistence on _ClientCardState {
           preserve('email', const ['email']);
           preserve('branchId', const ['branch_id']);
           preserve('sourceId', const ['source_id']);
-          if (_studentStatusEditRevision != null) {
+          if (_draft.studentStatusEdit != null) {
             rebased['status'] = local['status'];
           }
           final latestCustom = {
@@ -578,8 +521,8 @@ extension _ClientCardPersistence on _ClientCardState {
             local['custom_data'] as Map? ?? const {},
           );
           final preservedCustomKeys = <String>{
-            ..._studentCustomEditRevisions.keys,
-            if (_studentResponsibleEditRevision != null) ...const {
+            ..._draft.studentCustomEdits.keys,
+            if (_draft.studentResponsibleEdit != null) ...const {
               'responsible',
               'responsibleUserId',
               'responsibleName',
@@ -690,18 +633,18 @@ extension _ClientCardPersistence on _ClientCardState {
         }
       }
       _edited = true;
-      final revision = _editRevision;
+      final revision = _draft.revision;
       if (entity == 'students') {
-        _studentCustomEditRevisions[key] = revision;
+        _draft.studentCustomEdits[key] = revision;
         if (_isConverted &&
             _ClientCardState._commonClientCustomFieldKeys.contains(key)) {
-          _leadCustomEditRevisions[key] = revision;
+          _draft.leadCustomEdits[key] = revision;
         }
       } else {
-        _leadCustomEditRevisions[key] = revision;
+        _draft.leadCustomEdits[key] = revision;
         if (_isConverted &&
             _ClientCardState._commonClientCustomFieldKeys.contains(key)) {
-          _studentCustomEditRevisions[key] = revision;
+          _draft.studentCustomEdits[key] = revision;
         }
       }
     });

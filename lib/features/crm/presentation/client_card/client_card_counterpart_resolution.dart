@@ -11,7 +11,6 @@ extension _ClientCardCounterpartResolution on _ClientCardState {
       _mode = ClientMode.converted;
       _resolvedLeadId = leadId;
       // Lead-side sections start loading now.
-      _loadingCard = true;
     });
     // Parallel, isolated lead-half fetches against the resolved lead id. Lead
     // statuses are needed for the header label and the originating-lead card;
@@ -36,8 +35,6 @@ extension _ClientCardCounterpartResolution on _ClientCardState {
     _emitState(() {
       _mode = ClientMode.converted;
       _resolvedStudentId = studentId;
-      _loadingStudent = true;
-      _studentError = null;
     });
     // Parallel, isolated student-half fetch against the resolved student id.
     _fetchStudentData(studentId: studentId);

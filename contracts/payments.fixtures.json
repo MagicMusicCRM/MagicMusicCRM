@@ -1,0 +1,236 @@
+[
+  {
+    "operationId": "createPaymentRecord",
+    "method": "POST",
+    "path": "/api/crm/students/10000000-0000-4000-8000-000000000003/payment-records",
+    "body": {
+      "amountMinor": "12345",
+      "currencyCode": "RUB",
+      "status": "unpaid",
+      "dueAt": "2026-09-05T10:00:00.000Z",
+      "reason": "Создать обязательство"
+    },
+    "status": 201,
+    "response": {
+      "paymentRecord": {
+        "id": "10000000-0000-4000-8000-000000000002",
+        "studentId": "10000000-0000-4000-8000-000000000003",
+        "issuedSubscriptionId": null,
+        "installmentId": null,
+        "amountMinor": "12345",
+        "currencyCode": "RUB",
+        "status": "unpaid",
+        "dueAt": "2026-09-05T10:00:00.000Z",
+        "method": null,
+        "externalIdentifier": null,
+        "verificationNote": "Создать обязательство",
+        "actualPaymentId": null,
+        "version": 1,
+        "createdBy": {
+          "userId": "10000000-0000-4000-8000-000000000001",
+          "name": "Contract Actor"
+        },
+        "verifiedBy": {
+          "userId": null,
+          "name": null
+        },
+        "verifiedAt": null,
+        "subscriptionName": null,
+        "recipientStudentId": "10000000-0000-4000-8000-000000000003",
+        "createdAt": "2026-09-05T10:00:00.000Z",
+        "updatedAt": "2026-09-05T10:00:00.000Z"
+      },
+      "statusHistory": [
+        {
+          "id": "10000000-0000-4000-8000-000000000010",
+          "beforeStatus": null,
+          "afterStatus": "unpaid",
+          "reason": "Создать обязательство",
+          "actor": {
+            "userId": "10000000-0000-4000-8000-000000000001",
+            "name": "Contract Actor"
+          },
+          "version": 1,
+          "actualPaymentId": null,
+          "occurredAt": "2026-09-05T10:00:00.000Z"
+        }
+      ],
+      "actualPayment": null
+    }
+  },
+  {
+    "operationId": "transitionPaymentRecord",
+    "method": "POST",
+    "path": "/api/crm/students/10000000-0000-4000-8000-000000000003/payment-records/10000000-0000-4000-8000-000000000002/transition",
+    "body": {
+      "expectedVersion": 1,
+      "targetStatus": "posted_pending",
+      "reason": "Проверить поступление"
+    },
+    "status": 201,
+    "response": {
+      "paymentRecord": {
+        "id": "10000000-0000-4000-8000-000000000002",
+        "studentId": "10000000-0000-4000-8000-000000000003",
+        "issuedSubscriptionId": null,
+        "installmentId": null,
+        "amountMinor": "12345",
+        "currencyCode": "RUB",
+        "status": "posted_pending",
+        "dueAt": "2026-09-05T10:00:00.000Z",
+        "method": null,
+        "externalIdentifier": null,
+        "verificationNote": "Проверить поступление",
+        "actualPaymentId": null,
+        "version": 2,
+        "createdBy": {
+          "userId": "10000000-0000-4000-8000-000000000001",
+          "name": "Contract Actor"
+        },
+        "verifiedBy": {
+          "userId": null,
+          "name": null
+        },
+        "verifiedAt": null,
+        "subscriptionName": null,
+        "recipientStudentId": "10000000-0000-4000-8000-000000000003",
+        "createdAt": "2026-09-05T10:00:00.000Z",
+        "updatedAt": "2026-09-05T10:00:00.000Z"
+      },
+      "statusHistory": [
+        {
+          "id": "10000000-0000-4000-8000-000000000010",
+          "beforeStatus": null,
+          "afterStatus": "unpaid",
+          "reason": "Создать обязательство",
+          "actor": {
+            "userId": "10000000-0000-4000-8000-000000000001",
+            "name": "Contract Actor"
+          },
+          "version": 1,
+          "actualPaymentId": null,
+          "occurredAt": "2026-09-05T10:00:00.000Z"
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000011",
+          "beforeStatus": "unpaid",
+          "afterStatus": "posted_pending",
+          "reason": "Проверить поступление",
+          "actor": {
+            "userId": "10000000-0000-4000-8000-000000000001",
+            "name": "Contract Actor"
+          },
+          "version": 2,
+          "actualPaymentId": null,
+          "occurredAt": "2026-09-05T10:00:00.000Z"
+        }
+      ],
+      "actualPayment": null
+    }
+  },
+  {
+    "operationId": "transitionPaymentRecord",
+    "method": "POST",
+    "path": "/api/crm/students/10000000-0000-4000-8000-000000000003/payment-records/10000000-0000-4000-8000-000000000002/transition",
+    "body": {
+      "expectedVersion": 2,
+      "targetStatus": "paid",
+      "reason": "Подтвердить оплату",
+      "method": "cashless",
+      "externalIdentifier": "contract-receipt-1",
+      "occurredAt": "2026-09-05T10:00:00.000Z"
+    },
+    "status": 201,
+    "response": {
+      "paymentRecord": {
+        "id": "10000000-0000-4000-8000-000000000002",
+        "studentId": "10000000-0000-4000-8000-000000000003",
+        "issuedSubscriptionId": null,
+        "installmentId": null,
+        "amountMinor": "12345",
+        "currencyCode": "RUB",
+        "status": "paid",
+        "dueAt": "2026-09-05T10:00:00.000Z",
+        "method": "cashless",
+        "externalIdentifier": "contract-receipt-1",
+        "verificationNote": "Подтвердить оплату",
+        "actualPaymentId": "10000000-0000-4000-8000-000000000004",
+        "version": 3,
+        "createdBy": {
+          "userId": "10000000-0000-4000-8000-000000000001",
+          "name": "Contract Actor"
+        },
+        "verifiedBy": {
+          "userId": "10000000-0000-4000-8000-000000000001",
+          "name": "Contract Actor"
+        },
+        "verifiedAt": "2026-09-05T10:00:00.000Z",
+        "subscriptionName": null,
+        "recipientStudentId": "10000000-0000-4000-8000-000000000003",
+        "createdAt": "2026-09-05T10:00:00.000Z",
+        "updatedAt": "2026-09-05T10:00:00.000Z"
+      },
+      "statusHistory": [
+        {
+          "id": "10000000-0000-4000-8000-000000000010",
+          "beforeStatus": null,
+          "afterStatus": "unpaid",
+          "reason": "Создать обязательство",
+          "actor": {
+            "userId": "10000000-0000-4000-8000-000000000001",
+            "name": "Contract Actor"
+          },
+          "version": 1,
+          "actualPaymentId": null,
+          "occurredAt": "2026-09-05T10:00:00.000Z"
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000011",
+          "beforeStatus": "unpaid",
+          "afterStatus": "posted_pending",
+          "reason": "Проверить поступление",
+          "actor": {
+            "userId": "10000000-0000-4000-8000-000000000001",
+            "name": "Contract Actor"
+          },
+          "version": 2,
+          "actualPaymentId": null,
+          "occurredAt": "2026-09-05T10:00:00.000Z"
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000012",
+          "beforeStatus": "posted_pending",
+          "afterStatus": "paid",
+          "reason": "Подтвердить оплату",
+          "actor": {
+            "userId": "10000000-0000-4000-8000-000000000001",
+            "name": "Contract Actor"
+          },
+          "version": 3,
+          "actualPaymentId": "10000000-0000-4000-8000-000000000004",
+          "occurredAt": "2026-09-05T10:00:00.000Z"
+        }
+      ],
+      "actualPayment": {
+        "id": "10000000-0000-4000-8000-000000000004",
+        "studentId": "10000000-0000-4000-8000-000000000003",
+        "issuedSubscriptionId": null,
+        "amountMinor": "12345",
+        "currencyCode": "RUB",
+        "method": "cashless",
+        "occurredAt": "2026-09-05T10:00:00.000Z",
+        "branchId": "10000000-0000-4000-8000-000000000005",
+        "branchName": "Contract Branch",
+        "comment": null,
+        "invoiceIdentifier": "contract-receipt-1",
+        "status": "paid",
+        "acceptedBy": {
+          "userId": "10000000-0000-4000-8000-000000000001",
+          "name": "Contract Actor"
+        },
+        "version": 1,
+        "createdAt": "2026-09-05T10:00:00.000Z"
+      }
+    }
+  }
+]

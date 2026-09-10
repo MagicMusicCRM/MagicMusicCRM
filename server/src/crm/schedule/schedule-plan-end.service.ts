@@ -86,7 +86,7 @@ export class SchedulePlanEndService {
     this.policy.assertCanWriteCrm(actor);
     const normalized = this.definition.normalizeEnd(dto);
     return this.database.transaction(async (client) => {
-      const plan = await this.repository.lock(client, planId);
+      const plan = await this.repository.lock(client, planId, actor);
       await this.definition.assertEndable(client, plan, normalized);
       const impact = await this.repository.endImpact(
         client,
@@ -176,7 +176,7 @@ export class SchedulePlanEndService {
     version: number,
   ): Promise<EndMutationReference> {
     const signed = this.previewTokens.verifySchedulePlanEnd(dto.previewToken);
-    const plan = await this.repository.lock(client, planId);
+    const plan = await this.repository.lock(client, planId, actor);
     await this.definition.assertEndable(client, plan, normalized);
     const currentSeries = await this.repository.currentSeriesIds(
       client,

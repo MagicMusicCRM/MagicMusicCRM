@@ -1,6 +1,7 @@
 import 'dart:async';
 // ignore_for_file: annotate_overrides
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
@@ -88,6 +89,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     implements LessonEditorActions {
   static const _policy = LessonEditorDecisionPolicy();
   final _scroll = ScrollController(keepScrollOffset: false);
+  final _formKey = GlobalKey<FormState>();
   late LessonEditorSession _session;
   late LessonEditorDraft _draft;
   var _refs = const LessonEditorReferenceState.empty();
@@ -96,8 +98,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   late final LessonEditorSaveFlow _flow;
   (bool loading, String? error) _loadState = (true, null);
   (bool analyzing, String? error) _scheduleState = (false, null);
-  bool _saving = false;
-  bool _dirty = false;
+  bool _saving = false, _dirty = false;
   Future<LessonEditorLoadPatch?>? _referenceLoad;
   LessonEditorValidation _valid = const LessonEditorValidation.valid();
   LessonScheduleAnalysis? _conflicts;
@@ -170,6 +171,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       (_conflicts, _loadState.$1, _saving, _scheduleState.$1),
       (_valid.message, _loadState.$2, _scheduleState.$2),
       actions: this,
+      formKey: _formKey,
       canManageTeacherCompensation: _canManageTeacherCompensation,
       pageMode: widget.pageMode,
       embeddedSurface: widget.embeddedSurface,
@@ -273,6 +275,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
 
   Future<void> save() async {
     if (_saving || _referenceLoad != null) return;
+    if (!validateAndRevealForm(_formKey)) return;
     setState(() {
       _saving = true;
       _valid = const LessonEditorValidation.valid();
@@ -295,7 +298,6 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       await presentLessonEditorSaveOutcome(
         context,
         outcome,
-        scrollController: _scroll,
         onInvalid: (validation) => setState(() => _valid = validation),
         onViolations: (analysis) => setState(() => _conflicts = analysis),
         onSessionReloaded: (session) => _session = session,

@@ -142,8 +142,13 @@ export class CrmStudentsController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: CreateTransferDto,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
   ) {
-    return this.finance.createAccountTransfer(actor, id, dto);
+    return this.finance.createAccountTransfer(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   // Отдельный эндпоинт, а не поле в PATCH students/:id: бан снимает человеку

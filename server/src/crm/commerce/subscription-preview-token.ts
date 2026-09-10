@@ -156,6 +156,10 @@ export interface SubscriptionPurchasePreviewTokenPayload {
 
 export interface SubscriptionReplacePreviewTokenPayload {
   kind: "subscription.replace";
+  replacementMode?: "full_volume";
+  oldUnitCount?: string;
+  priorConsumedValueMinor?: string;
+  oldObligationMinor?: string;
   actorUserId: string;
   studentId: string;
   payerStudentId: string;
@@ -733,7 +737,15 @@ const replaceRules: readonly PreviewPayloadRule[] = [
 function assertReplacePayload(
   value: unknown,
 ): asserts value is SubscriptionReplacePreviewTokenPayload {
-  assertExactPayload(value, "subscription.replace", replaceRules);
+  const payload = asPreviewPayload(value);
+  const rules: readonly PreviewPayloadRule[] = payload.replacementMode === undefined ? replaceRules : [
+    ...replaceRules,
+    ["replacementMode", (p) => p.replacementMode !== "full_volume"],
+    ["oldUnitCount", (p) => !isUnits(p.oldUnitCount)],
+    ["priorConsumedValueMinor", (p) => !isMinor(p.priorConsumedValueMinor)],
+    ["oldObligationMinor", (p) => !isSignedMinor(p.oldObligationMinor)],
+  ];
+  assertExactPayload(value, "subscription.replace", rules);
 }
 
 const cancelRules: readonly PreviewPayloadRule[] = [

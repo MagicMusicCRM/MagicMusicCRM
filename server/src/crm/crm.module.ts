@@ -14,6 +14,8 @@ import { AdminStaffController } from "./admin-staff.controller";
 import { CrmStudentsController } from "./crm-students.controller";
 import { CrmDashboardController } from "./crm-dashboard.controller";
 import { CrmScheduleController } from "./crm-schedule.controller";
+import { SchedulePlanArchiveController } from "./schedule/schedule-plan-archive.controller";
+import { SchedulePlanArchiveService } from "./schedule/schedule-plan-archive.service";
 import { CrmPeopleController } from "./crm-people.controller";
 import { CrmFacilitiesController } from "./crm-facilities.controller";
 import { CrmReferenceDataController } from "./crm-reference-data.controller";
@@ -194,6 +196,7 @@ import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline
     CrmStudentsController,
     CrmDashboardController,
     CrmScheduleController,
+    SchedulePlanArchiveController,
     CrmPeopleController,
     CrmFacilitiesController,
     CrmReferenceDataController,
@@ -296,6 +299,7 @@ import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline
     SchedulePlanConstraintPreviewService,
     SchedulePlanMutationService,
     SchedulePlanEndService,
+    SchedulePlanArchiveService,
     FuturePlanLessonCancellationService,
     SchedulePlanRowRemovalService,
     SchedulePlanService,

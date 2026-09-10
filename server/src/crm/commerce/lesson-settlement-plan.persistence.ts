@@ -1,5 +1,6 @@
 import { loadExcludedLessonParticipantIds } from "./lesson-settlement-facts.persistence";
 import { assertLessonPayers, resolveLessonFunding } from "./lesson-funding";
+import { currentSubscriptionId } from "./subscription-lineage";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import {
@@ -210,7 +211,11 @@ export async function plannedLessonSubscriptionAllocations(
   if ((plan.decision.clientDecisions ?? []).some((item) => !knownIds.has(item.clientId))) {
     invalidLessonSettlementDecision("UNKNOWN_LESSON_CLIENT", "clientDecisions");
   }
-  return calculatePlanAllocations(charges, durationMinutes, plan, catalog);
+  const allocations = calculatePlanAllocations(charges, durationMinutes, plan, catalog);
+  for (const allocation of allocations) {
+    allocation.subscriptionId = await currentSubscriptionId(client, allocation.subscriptionId);
+  }
+  return allocations;
 }
 
 async function loadPlanAllocationSources(

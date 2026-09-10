@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { VersionedMutationMetadata } from "../platform/versioned-mutation-metadata";
 import { ActorContext } from "../common/security/actor-context";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
@@ -50,31 +51,56 @@ export class FinanceService {
     actor: ActorContext,
     fromStudentId: string,
     dto: CreateTransferDto,
+    metadata?: VersionedMutationMetadata,
   ) {
-    return this.transfers.createAccountTransfer(actor, fromStudentId, dto);
+    return this.transfers.createAccountTransfer(
+      actor,
+      fromStudentId,
+      dto,
+      metadata,
+    );
   }
 
-  async createPayment(actor: ActorContext, dto: CreatePaymentDto) {
-    return this.payments.createPayment(actor, dto);
+  async createPayment(
+    actor: ActorContext,
+    dto: CreatePaymentDto,
+    metadata?: VersionedMutationMetadata,
+  ) {
+    return this.payments.createPayment(actor, dto, metadata);
   }
 
   async listExpenses(actor: ActorContext, query: ExpenseQuery) {
     return this.expenses.listExpenses(actor, query);
   }
 
-  async createExpense(actor: ActorContext, dto: UpsertExpenseDto) {
-    return this.expenses.createExpense(actor, dto);
+  async createExpense(
+    actor: ActorContext,
+    dto: UpsertExpenseDto,
+    metadata?: VersionedMutationMetadata,
+  ) {
+    return this.expenses.createExpense(actor, dto, metadata);
   }
 
   async updateExpense(
     actor: ActorContext,
     expenseId: string,
     dto: UpdateExpenseDto,
+    metadata?: VersionedMutationMetadata,
   ) {
-    return this.expenses.updateExpense(actor, expenseId, dto);
+    return this.expenses.updateExpense(actor, expenseId, dto, metadata);
   }
 
-  async deleteExpense(actor: ActorContext, expenseId: string) {
-    return this.expenses.deleteExpense(actor, expenseId);
+  async deleteExpense(
+    actor: ActorContext,
+    expenseId: string,
+    expectedVersion?: number,
+    metadata?: VersionedMutationMetadata,
+  ) {
+    return this.expenses.deleteExpense(
+      actor,
+      expenseId,
+      expectedVersion,
+      metadata,
+    );
   }
 }

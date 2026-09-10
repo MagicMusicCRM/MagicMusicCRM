@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/observability/app_performance.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -36,6 +37,7 @@ import 'schedule_teacher_timeline.dart';
 part 'schedule_widget_widgets.dart';
 part 'schedule_widget_actions.dart';
 part 'schedule_widget_toolbar.dart';
+part 'schedule_widget_desktop_toolbar.dart';
 part 'schedule_widget_week_view.dart';
 part 'schedule_widget_room_day_view.dart';
 part 'schedule_widget_context_banners.dart';
@@ -142,13 +144,14 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // is_trial / conflict_types / teacher_id all ride along in the matrix).
   bool _onlyTrial = false;
   bool _onlyConflicts = false;
-  bool _filtersExpanded = false;
+  bool _fitDayToViewport = true;
   String? _filterTeacherId;
   String? _filterRoomId;
   String? _filterClientType;
   String? _filterClientId;
   String? _filterClientName;
   bool _hideOtherClientLessons = true;
+  final _desktopSearchController = TextEditingController();
   String _scheduleSearchQuery = '';
   bool _scheduleSearchLoading = false;
   // The user's own branch (staff assignment), resolved once, used as the
@@ -262,6 +265,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     _filterClientName = filters['clientName']?.toString();
     _hideOtherClientLessons = filters['showOtherClientLessons'] != true;
     _scheduleSearchQuery = filters['scheduleQuery']?.toString().trim() ?? '';
+    _desktopSearchController.text = _scheduleSearchQuery;
+    _fitDayToViewport = filters['fitDayToViewport'] != false;
     _onlyTrial = filters['trial'] == true || filters['trial'] == '1';
     _onlyConflicts =
         filters['conflicts'] == true || filters['conflicts'] == '1';
@@ -299,6 +304,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     filters: {
       'view': _currentView.name,
       'dayMode': _dayViewMode.name,
+      'fitDayToViewport': _fitDayToViewport,
       if (widget.clientId != null) 'section': 'lessons',
       if (widget.clientId != null) 'clientCalendarMode': _currentView.name,
       if (_selectedBranchId != null) 'branchId': _selectedBranchId,
@@ -324,6 +330,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   @override
   void dispose() {
+    _desktopSearchController.dispose();
     _realtimeDebounce?.cancel();
     _highlightClearTimer?.cancel();
     super.dispose();
@@ -417,48 +424,57 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     // collapses to a bare skeleton when you change branch/date/view.
     final firstLoad = (_isLoading || _loadError != null) && !_hasLoadedOnce;
     final refreshing = _isLoading && _hasLoadedOnce;
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Column(
-        children: [
-          _buildScheduleToolbar(firstLoad: firstLoad),
-          SizedBox(
-            height: 2,
-            child: refreshing
-                ? const LinearProgressIndicator(
-                    minHeight: 2,
-                    backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation(AppColor.gold),
-                  )
-                : null,
-          ),
-          if (!firstLoad) ...[
-            if (_currentView == ScheduleView.day)
-              ScheduleDayModeToggle(
-                mode: _dayViewMode,
-                onModeChanged: (m) {
-                  if (_dayViewMode == m) return;
-                  _emitState(() => _dayViewMode = m);
-                  _fetchAll();
-                },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final desktop = constraints.maxWidth >= 720;
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Column(
+            children: [
+              _buildScheduleToolbar(firstLoad: firstLoad),
+              SizedBox(
+                height: 2,
+                child: refreshing
+                    ? const LinearProgressIndicator(
+                        minHeight: 2,
+                        backgroundColor: Colors.transparent,
+                        valueColor: AlwaysStoppedAnimation(AppColor.gold),
+                      )
+                    : null,
               ),
-          ],
-          if (!firstLoad && _filterClientId != null) _buildClientFilterBanner(),
-          if (!firstLoad && widget.clientId != null)
-            _buildClientContextBanner(),
-          if (!firstLoad && _hasScheduleSearch) _buildScheduleSearchBanner(),
-          if (!firstLoad &&
-              widget.canWrite &&
-              _currentView != ScheduleView.month) ...[
-            ScheduleDayLegend(week: _currentView == ScheduleView.week),
-          ],
-          if (!firstLoad && _currentView == ScheduleView.day) ...[
-            _buildAvailabilitySummary(),
-          ],
-          Expanded(child: _buildScheduleContent()),
-        ],
-      ),
+              if (!firstLoad) ...[
+                if (!desktop && _currentView == ScheduleView.day)
+                  ScheduleDayModeToggle(
+                    mode: _dayViewMode,
+                    onModeChanged: (m) {
+                      if (_dayViewMode == m) return;
+                      _emitState(() => _dayViewMode = m);
+                      _fetchAll();
+                    },
+                  ),
+              ],
+              if (!firstLoad && _filterClientId != null)
+                _buildClientFilterBanner(),
+              if (!firstLoad && widget.clientId != null)
+                _buildClientContextBanner(),
+              if (!firstLoad && _hasScheduleSearch)
+                _buildScheduleSearchBanner(),
+              if (!desktop &&
+                  !firstLoad &&
+                  widget.canWrite &&
+                  _currentView != ScheduleView.month) ...[
+                ScheduleDayLegend(week: _currentView == ScheduleView.week),
+              ],
+              if (!desktop &&
+                  !firstLoad &&
+                  _currentView == ScheduleView.day) ...[
+                _buildAvailabilitySummary(),
+              ],
+              Expanded(child: _buildScheduleContent()),
+            ],
+          ),
+        );
+      },
     );
   }
 }

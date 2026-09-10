@@ -1,8 +1,8 @@
 // Real HTTP journeys against the application and a disposable local database.
 // No mocked controllers, guards, repositories or financial commands.
 const assert = require('node:assert/strict');
-const { randomUUID, randomBytes } = require('node:crypto');
-const { spawn } = require('node:child_process');
+const { randomUUID, randomBytes, createHash } = require('node:crypto');
+const { spawn, execFileSync } = require('node:child_process');
 const { once } = require('node:events');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -11,6 +11,20 @@ const { createRequire } = require('node:module');
 
 const root = path.resolve(__dirname, '..');
 const server = path.join(root, 'server');
+function sourceFingerprint() {
+  const names = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard',
+    'lib', 'server/src', 'server/db', 'integration_test', 'scripts',
+    'pubspec.yaml', 'pubspec.lock', 'server/package.json', 'server/package-lock.json'], { cwd: root })
+    .toString().split('\0').filter(Boolean).sort();
+  const hash = createHash('sha256');
+  for (const name of names) {
+    if (!fs.existsSync(path.join(root, name))) continue;
+    hash.update(name).update('\0').update(fs.readFileSync(path.join(root, name))).update('\0');
+  }
+  return hash.digest('hex');
+}
+const testedSource = sourceFingerprint();
+const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim();
 const dependency = createRequire(path.join(server, 'package.json'));
 dependency('ts-node').register({ project: path.join(server, 'tsconfig.json'), transpileOnly: true });
 const { Pool } = dependency('pg');
@@ -29,6 +43,16 @@ let admin;
 let created = false;
 let requestCount = 0;
 let serverErrorCount = 0;
+
+async function stopApi() {
+  const child = api;
+  api = undefined;
+  if (child && child.exitCode === null && child.signalCode === null) {
+    const stopped = once(child, 'exit');
+    child.kill();
+    await stopped;
+  }
+}
 
 async function check(name, work) {
   try {
@@ -62,13 +86,14 @@ async function request(method, endpoint, body, expected = 200, options = {}) {
 
 async function seed() {
   const email = `http-${runId}@example.test`;
+  const employeeEmail = `employee-${runId}@example.test`;
   const password = `Test-${randomBytes(18).toString('hex')}!`;
   const passwordHash = await new PasswordService().hash(password);
-  async function person(role, name, credentials = false) {
+  async function person(role, name, credentials = false, loginEmail = email) {
     const user = (await pool.query(
       `insert into app.users (email, role, email_verified_at, is_app_account, password_hash)
        values ($1,$2,now(),true,$3) returning id`,
-      [credentials ? email : `${name}-${runId}@example.test`, role, credentials ? passwordHash : null],
+      [credentials ? loginEmail : `${name}-${runId}@example.test`, role, credentials ? passwordHash : null],
     )).rows[0].id;
     const profile = (await pool.query(
       `insert into app.profiles (user_id, first_name, last_name) values ($1,$2,'HTTP test') returning id`,
@@ -77,6 +102,7 @@ async function seed() {
     return { user, profile };
   }
   await person('system_admin', 'Operator', true);
+  await person('director', 'Employee', true, employeeEmail);
   const branch = (await pool.query(
     `insert into app.branches (name, timezone_name) values ('HTTP test','Europe/Moscow') returning id`,
   )).rows[0].id;
@@ -106,12 +132,13 @@ async function seed() {
       [student.profile, branch])).rows[0].id;
     students.push(studentId);
     subscriptions.push((await pool.query(`insert into app.subscriptions
-      (student_id,lessons_total,lessons_used,status) values ($1,12,0,'active') returning id`, [studentId])).rows[0].id);
+      (student_id,payer_student_id,funding_mode,lessons_total,lessons_used,status)
+      values ($1,$1,'legacy',12,0,'active') returning id`, [studentId])).rows[0].id);
   }
-  return { email, password, branch, rooms, teachers, students, subscriptions };
+  return { email, employeeEmail, password, branch, rooms, teachers, students, subscriptions };
 }
 
-async function startApi(fixture) {
+async function startApi(fixture, completionWorker = false) {
   const listener = net.createServer();
   listener.listen(0, '127.0.0.1');
   await once(listener, 'listening');
@@ -119,7 +146,7 @@ async function startApi(fixture) {
   await new Promise(resolve => listener.close(resolve));
   // Empty working directory prevents ConfigModule from loading a developer's .env.
   const working = path.join(output, 'runtime');
-  fs.mkdirSync(working);
+  fs.mkdirSync(working, { recursive: true });
   const env = {};
   for (const key of ['SystemRoot', 'WINDIR', 'PATH', 'Path', 'TEMP', 'TMP', 'HOME', 'USERPROFILE']) {
     if (process.env[key]) env[key] = process.env[key];
@@ -128,16 +155,17 @@ async function startApi(fixture) {
     NODE_ENV: 'test', PORT: String(port), DATABASE_URL: pool.options.connectionString,
     JWT_ACCESS_SECRET: randomBytes(32).toString('hex'),
     MANAGED_PASSWORD_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
-    AUTH_OTP_BYPASS_EMAILS: fixture.email,
+    AUTH_OTP_BYPASS_EMAILS: `${fixture.email},${fixture.employeeEmail}`,
     TS_NODE_PROJECT: path.join(server, 'tsconfig.json'),
     V4_ACCESS_MODE: 'v4', V4_ACCESS_KILL_SWITCH: 'false',
     V4_SCHEDULE_MODE: 'v4', V4_SCHEDULE_KILL_SWITCH: 'false', V4_PARITY_UNEXPLAINED_DIFFS: '0',
-    PLATFORM_OUTBOX_WORKER_ENABLED: 'false', LESSON_COMPLETION_WORKER_ENABLED: 'false',
+    PLATFORM_OUTBOX_WORKER_ENABLED: 'false', LESSON_COMPLETION_WORKER_ENABLED: String(completionWorker),
+    LESSON_COMPLETION_WORKER_POLL_MS: '1000',
     INSTALLMENT_DUE_WORKER_ENABLED: 'false', LESSON_REMINDERS_ENABLED: 'false',
     TASK_REMINDERS_ENABLED: 'false', SCHEDULE_SERIES_AUTOEXTEND: 'false',
     FILE_STORAGE_ROOT: path.join(working, 'storage'),
   });
-  fs.mkdirSync(env.FILE_STORAGE_ROOT);
+  fs.mkdirSync(env.FILE_STORAGE_ROOT, { recursive: true });
   const log = fs.openSync(path.join(output, 'api.log'), 'w');
   api = spawn(process.execPath, ['-r', dependency.resolve('ts-node/register/transpile-only'),
     path.join(server, 'src/main.ts')], { cwd: working, env, windowsHide: true, stdio: ['ignore', log, log] });
@@ -189,7 +217,9 @@ async function journeys(f) {
   const year = now.getUTCFullYear() + (now.getUTCMonth() > 8 ? 1 : 0);
   const activeFrom = `${year}-09-01`;
   const activeUntil = `${year}-12-01`;
-  const decision = { settlementTypeKey: 'lesson', teacherCompensationRuleKey: 'standard' };
+  const decision = { settlementTypeKey: 'lesson', teacherCompensationRuleKey: 'standard',
+    clientDecisions: [{ clientId: f.students[0], payerStudentId: f.students[0],
+      chargeType: 'subscription', subscriptionId: f.subscriptions[0] }] };
   let standalone;
   const standaloneDraft = {
     clientRef: { type: 'student', id: f.students[1] }, teacherId: f.teachers[0],
@@ -379,7 +409,7 @@ async function windowsJourney(fixture) {
 }
 
 async function runDeviceTest(testFile, logName, extraEnv = {}) {
-  assert(['lesson_live_http_device_test.dart', 'lesson_settlement_device_test.dart'].includes(testFile));
+  assert(['lesson_live_http_device_test.dart', 'lesson_settlement_device_test.dart', 'employee_journey_live_test.dart'].includes(testFile));
   const log = fs.openSync(path.join(output, logName), 'w');
   // Fixed command text; fixture values travel in the child environment, never argv.
   const flutter = spawn('cmd.exe', ['/d', '/s', '/c',
@@ -393,6 +423,10 @@ async function runDeviceTest(testFile, logName, extraEnv = {}) {
 }
 
 async function main() {
+  for (const argument of process.argv.slice(2)) {
+    assert(['--windows', '--restore', '--release-journeys'].includes(argument), `Unknown gate option: ${argument}`);
+  }
+  if (process.argv.includes('--release-journeys')) assert.equal(process.platform, 'win32', 'Employee release journeys require Windows');
   const adminUrl = new URL(process.env.HTTP_JOURNEY_ADMIN_URL ?? 'postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/postgres');
   assert(['127.0.0.1', 'localhost', '[::1]'].includes(adminUrl.hostname) && adminUrl.pathname === '/postgres',
     'Only a local PostgreSQL maintenance database is permitted');
@@ -406,10 +440,34 @@ async function main() {
   const fixture = await seed();
   await startApi(fixture);
   await journeys(fixture);
+  if (process.argv.includes('--release-journeys')) {
+    await stopApi();
+    await startApi(fixture, true);
+    await check('Employee UI journey with real persistence and failure recovery', async () => {
+      const scheduled = new Date();
+      scheduled.setUTCDate(scheduled.getUTCDate() + 1);
+      scheduled.setUTCHours(16, 0, 0, 0);
+      await runDeviceTest('employee_journey_live_test.dart', 'employee-windows.log', {
+        HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, email: fixture.employeeEmail, password: fixture.password,
+          branchId: fixture.branch, roomId: fixture.rooms[0], scheduledAt: scheduled.toISOString() }),
+      });
+      const result = JSON.parse(fs.readFileSync(path.join(output, 'employee-result.json'), 'utf8'));
+      const { verifyEmployeeResult } = require('./release-journey-verification.cjs');
+      await verifyEmployeeResult(pool, result);
+      return { scenarios: result.scenarios, verified: 'UI → HTTP → PostgreSQL' };
+    });
+  }
   if (process.argv.includes('--windows')) {
     await check('Windows form → real HTTP → persisted lesson, payer, price and standard pay', () => windowsJourney(fixture));
     await check('Five Windows financial form scenarios with controlled API responses', () =>
       runDeviceTest('lesson_settlement_device_test.dart', 'windows-forms.log'));
+  }
+  if (process.argv.includes('--restore') || process.argv.includes('--release-journeys')) {
+    await stopApi();
+    await check('Backup restores into a fresh isolated database with identical persisted facts', async () => {
+      const { verifyLocalRestore } = require('./release-journey-verification.cjs');
+      return verifyLocalRestore({ pool, admin, output, databaseUrl: pool.options.connectionString });
+    });
   }
 }
 
@@ -417,18 +475,20 @@ main().catch(error => {
   results.push({ name: 'Journey setup or execution', status: 'FAIL', detail: String(error.message) });
   console.error(String(error.message));
 }).finally(async () => {
-  if (api && api.exitCode === null) {
-    const stopped = once(api, 'exit');
-    api.kill();
-    await stopped;
-  }
+  await stopApi();
   if (pool) await pool.end();
   // Remove only the fresh database created by this invocation, never an input database.
   if (created) await admin.query(`drop database ${databaseName} with (force)`);
   if (admin) await admin.end();
+  if (testedSource !== sourceFingerprint()) {
+    results.push({ name: 'Candidate source remained unchanged', status: 'FAIL', detail: 'Source changed during the gate; rerun the final candidate.' });
+  }
   const report = { finishedAt: new Date().toISOString(), requestCount, serverErrorCount,
+    revision, sourceSha256: testedSource,
     passed: results.filter(r => r.status === 'PASS').length, failed: results.filter(r => r.status === 'FAIL').length,
-    scope: 'Real HTTP and PostgreSQL, seeded synthetic reference data and existing subscriptions; background workers disabled; no production requests.', results };
+    scope: 'Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.',
+    employeeUiRequired: process.argv.includes('--release-journeys'),
+    restoreRequired: process.argv.includes('--restore') || process.argv.includes('--release-journeys'), results };
   fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(report, null, 2));
   console.log(`RESULT ${report.passed} passed, ${report.failed} failed; ${requestCount} HTTP requests; ${serverErrorCount} server errors`);
   console.log(`REPORT ${path.join(output, 'result.json')}`);

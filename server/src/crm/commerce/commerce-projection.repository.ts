@@ -1,3 +1,4 @@
+import { subscriptionFundingSql } from "./subscription-funding.sql";
 import {
   ForbiddenException,
   Injectable,
@@ -5,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
-import { branchIdExpr } from "../branch-scope";
+import { branchIdExpr, currentActorRoleSql } from "../branch-scope";
 import {
   CommerceAccountDto,
   CommerceMovementDto,
@@ -55,6 +56,7 @@ export class CommerceProjectionRepository {
         left join app.branches branch
           on branch.id::text = ${branchIdExpr("student")}
         where student.deleted_at is null
+          and ${currentActorRoleSql("$1")} = $2::text
           and (
             student_profile.user_id = $1
             or exists (
@@ -87,7 +89,7 @@ export class CommerceProjectionRepository {
           )
         order by student.created_at desc, student_id
       `,
-      [actor.userId],
+      [actor.userId, actor.role],
     );
     return result.rows.map((row) => this.toScope(row, "self"));
   }
@@ -115,6 +117,7 @@ export class CommerceProjectionRepository {
             on branch.id::text = ${branchIdExpr("student")}
           where student.id = $2
             and student.deleted_at is null
+            and ${currentActorRoleSql("$1")} = $3::text
             and (
               student_profile.user_id = $1
               or exists (
@@ -146,7 +149,7 @@ export class CommerceProjectionRepository {
               )
             )
         `,
-        [actor.userId, studentId],
+        [actor.userId, studentId, actor.role],
       );
       const row = result.rows[0];
       if (!row) this.throwClientNotFound();
@@ -168,8 +171,9 @@ export class CommerceProjectionRepository {
             on branch.id::text = ${branchIdExpr("student")}
           where student.id = $2
             and student.deleted_at is null
+            and ${currentActorRoleSql("$1")} = $3::text
         `,
-        [actor.userId, studentId],
+        [actor.userId, studentId, actor.role],
       );
       const row = result.rows[0];
       if (!row) this.throwClientNotFound();
@@ -193,6 +197,7 @@ export class CommerceProjectionRepository {
           on branch.id::text = ${branchIdExpr("student")}
         where student.id = $2
           and student.deleted_at is null
+          and ${currentActorRoleSql("$1")} = $3::text
           and ${branchIdExpr("student")} is not null
           and exists (
             select 1
@@ -209,7 +214,7 @@ export class CommerceProjectionRepository {
                 ${branchIdExpr("student")}
           )
       `,
-      [actor.userId, studentId],
+      [actor.userId, studentId, actor.role],
     );
     const row = result.rows[0];
     if (!row) {
@@ -351,99 +356,7 @@ export class CommerceProjectionRepository {
               and reservation.state = 'reserved'
           ) reservation on true
           left join lateral (
-            with recursive lifecycle_chain(id) as (
-              select issued.id
-              union
-              select event.before_issued_subscription_id
-              from app.subscription_lifecycle_events event
-              join lifecycle_chain current
-                on current.id = event.after_issued_subscription_id
-              where event.event_type = 'replace'
-            ), totals as (
-              select
-                coalesce((
-                  select sum(payment.amount_minor)
-                   from app.commerce_ordinary_payments payment
-                  where payment.issued_subscription_id in (
-                    select id from lifecycle_chain
-                  )
-                    and payment.deleted_at is null
-                ), 0)::numeric
-                + coalesce((
-                  select sum(adjustment.amount_minor)
-                   from app.commerce_ordinary_account_adjustments adjustment
-                   join app.commerce_ordinary_payments source_payment
-                    on source_payment.id = adjustment.source_payment_id
-                  where source_payment.issued_subscription_id in (
-                    select id from lifecycle_chain
-                  )
-                    and adjustment.deleted_at is null
-                    and adjustment.status = 'paid'
-                ), 0)::numeric
-                as actual_paid_minor,
-                coalesce((
-                  select sum(
-                    case
-                      when obligation.direction = 'debit'
-                        then obligation.amount_minor
-                      else -obligation.amount_minor
-                    end
-                  )
-                  from app.subscription_obligation_facts obligation
-                  where obligation.issued_subscription_id in (
-                    select id from lifecycle_chain
-                  )
-                ), 0)::numeric as obligation_minor,
-                coalesce((
-                  select sum(record.amount_minor)
-                   from app.commerce_ordinary_payment_records record
-                  where record.issued_subscription_id in (
-                    select id from lifecycle_chain
-                  )
-                    and record.status = 'posted_pending'
-                ), 0)::numeric as pending_minor,
-                coalesce((
-                  select sum(record.amount_minor)
-                   from app.commerce_ordinary_payment_records record
-                  where record.issued_subscription_id in (
-                    select id from lifecycle_chain
-                  )
-                    and record.status = 'unpaid'
-                ), 0)::numeric as debt_minor
-            )
-            select
-              totals.actual_paid_minor,
-              totals.obligation_minor,
-              totals.pending_minor,
-              totals.debt_minor,
-              case
-                when totals.obligation_minor <= 0 then
-                  (issued.commercial_snapshot ->> 'unitCount')::numeric
-                else least(
-                  (issued.commercial_snapshot ->> 'unitCount')::numeric,
-                  greatest(totals.actual_paid_minor, 0)
-                    * (issued.commercial_snapshot ->> 'unitCount')::numeric
-                    / totals.obligation_minor
-                )
-              end as paid_units,
-              (
-                select min(pending.due_at)
-                from (
-                  select
-                    installment.due_at,
-                    sum(
-                      case
-                        when installment.status = 'void' then 0
-                        else installment.amount_minor
-                      end
-                    ) over (order by installment.installment_number)
-                      as cumulative_minor
-                  from app.subscription_installments installment
-                  where installment.issued_subscription_id = issued.id
-                ) pending
-                where pending.cumulative_minor > totals.actual_paid_minor
-              ) as next_payment_at
-            from totals
+            ${subscriptionFundingSql}
           ) financial on true
           left join lateral (
             select jsonb_agg(

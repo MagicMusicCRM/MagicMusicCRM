@@ -19,6 +19,9 @@ export type ReplacementReadyContext = ReplacementContext & {
 };
 
 export interface ReplacementCalculation {
+  usedValueMinor: bigint;
+  remainingValueMinor: bigint;
+  priorConsumedValueMinor: bigint;
   deltaMinor: bigint;
   positionMinor: bigint;
   positionKind: "debt" | "overpayment" | "settled";
@@ -63,16 +66,11 @@ export class SubscriptionReplacementPolicy {
         newCurrencyCode: context.newPackage.currencyCode,
       });
     }
-    if (
-      unitsToHundredths(context.newPackage.unitCount) <
-      unitsToHundredths(context.usedUnits)
-    ) {
+    if (unitsToHundredths(context.oldUnitCount) <= 0n ||
+        unitsToHundredths(context.newPackage.unitCount) <= 0n) {
       throw new UnprocessableEntityException({
-        code: "REPLACEMENT_VOLUME_BELOW_USED",
-        message:
-          "Объём нового пакета не может быть меньше уже использованного.",
-        usedUnits: context.usedUnits,
-        newUnitCount: context.newPackage.unitCount,
+        code: "REPLACEMENT_VOLUME_INVALID",
+        message: "Для пересчёта нужен положительный объём обоих абонементов.",
       });
     }
   }
@@ -81,9 +79,20 @@ export class SubscriptionReplacementPolicy {
     const oldFinal = BigInt(context.oldFinalPriceMinor);
     const newFinal = BigInt(context.newPackage.basePriceMinor);
     const paid = BigInt(context.actualPaidMinor);
-    const positionMinor = newFinal - paid;
+    const total = unitsToHundredths(context.oldUnitCount);
+    const used = unitsToHundredths(context.usedUnits);
+    // Value the unused entitlement at the issued (discounted) price. Round
+    // once in integer minor units; the consumed and unused parts sum exactly.
+    const remainingValueMinor = oldFinal * (used < total ? total - used : 0n) / total;
+    const usedValueMinor = oldFinal - remainingValueMinor;
+    const priorConsumedValueMinor = BigInt(context.priorConsumedValueMinor) + usedValueMinor;
+    const deltaMinor = newFinal - remainingValueMinor;
+    const positionMinor = BigInt(context.oldObligationMinor) + deltaMinor - paid;
     return {
-      deltaMinor: newFinal - oldFinal,
+      usedValueMinor,
+      remainingValueMinor,
+      priorConsumedValueMinor,
+      deltaMinor,
       positionMinor,
       positionKind:
         positionMinor > 0n
@@ -97,9 +106,7 @@ export class SubscriptionReplacementPolicy {
   planReservations(
     context: ReplacementReadyContext,
   ): ReplacementReservationPlan {
-    let remaining =
-      unitsToHundredths(context.newPackage.unitCount) -
-      unitsToHundredths(context.usedUnits);
+    let remaining = unitsToHundredths(context.newPackage.unitCount);
     let exhausted = false;
     let transferred = 0n;
     let released = 0n;
@@ -143,7 +150,10 @@ export class SubscriptionReplacementPolicy {
       installments: [],
       paymentMethod: null,
       commercialRules: {
-        carriedUsedUnits: context.usedUnits,
+        replacementMode: "full_volume",
+        carriedUsedUnits: "0",
+        priorConsumedValueMinor: this.calculate(context).priorConsumedValueMinor.toString(),
+        previousUsedUnits: context.usedUnits,
         replacedFromSubscriptionId: oldIssuedSubscriptionId,
       },
     };
@@ -160,6 +170,10 @@ export class SubscriptionReplacementPolicy {
     const reservationPlan = this.planReservations(context);
     return {
       kind: "subscription.replace",
+      replacementMode: "full_volume",
+      oldUnitCount: context.oldUnitCount,
+      priorConsumedValueMinor: context.priorConsumedValueMinor,
+      oldObligationMinor: context.oldObligationMinor,
       actorUserId: actor.userId,
       studentId: context.studentId,
       payerStudentId: context.payerStudentId,
@@ -216,9 +230,9 @@ export class SubscriptionReplacementPolicy {
     const warnings: LifecycleWarning[] = [];
     if (unitsToHundredths(context.usedUnits) > 0n) {
       warnings.push({
-        code: "USED_UNITS_TRANSFERRED",
+        code: "USED_UNITS_RETAINED_IN_HISTORY",
         units: context.usedUnits,
-        message: "Использованные единицы будут перенесены в новый абонемент.",
+        message: "Использованные занятия останутся в истории старого абонемента. Новый пакет получит полный объём.",
       });
     }
     if (context.futureLessonCount > 0) {

@@ -1,10 +1,323 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_view.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
 
 void main() {
+  testWidgets(
+    'expanded individual rules survive reopening the client card',
+    (tester) async {
+      final bucket = PageStorageBucket();
+      final plans = [
+        SchedulePlan.fromMap({
+          'id': 'many-rules',
+          'kind': 'individual',
+          'title': 'Индивидуальные занятия',
+          'studentId': 'student-1',
+          'activeFrom': '2026-09-01',
+          'status': 'active',
+          'version': 1,
+          'rows': [],
+          'participants': [],
+          'ruleTimeline': [
+            for (var i = 0; i < 5; i++)
+              _rule(
+                id: 'persist-$i',
+                sourceSeriesId: 'persist-$i',
+                status: 'active',
+                activeFrom: '2026-09-01',
+                activeUntil: null,
+                teacherName: 'Преподаватель $i',
+                roomName: 'Аудитория $i',
+                weekday: i + 1,
+                beginTime: '15:00',
+                durationMinutes: 60,
+                sortBucket: 0,
+                sortAt: '2026-09-01',
+              ),
+          ],
+        }),
+      ];
+      await _pumpView(tester, plans: plans, storageBucket: bucket, width: 390);
+      await tester.tap(find.text('Индивидуальные занятия'));
+      await tester.pumpAndSettle();
+      final pager = find.byKey(
+        const ValueKey('schedule-plan-records-many-rules'),
+      );
+      final scroll = find.descendant(
+        of: pager,
+        matching: find.byType(SingleChildScrollView),
+      );
+      await tester.drag(scroll, const Offset(0, -120));
+      await tester.pumpAndSettle();
+      final position = tester
+          .state<ScrollableState>(
+            find
+                .descendant(of: scroll, matching: find.byType(Scrollable))
+                .first,
+          )
+          .position;
+      expect(position.pixels, greaterThan(0));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpView(tester, plans: plans, storageBucket: bucket, width: 390);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ErrorWidget), findsNothing);
+      expect(find.text('Преподаватель 0'), findsOneWidget);
+      expect(find.text('1–3 из 5'), findsOneWidget);
+      final timelineTop = tester
+          .getTopLeft(find.byType(StudentLessonTimelineView))
+          .dy;
+      await tester.tap(find.byTooltip('Следующие записи'));
+      await tester.pumpAndSettle();
+      expect(find.text('Преподаватель 3'), findsOneWidget);
+      expect(find.text('Преподаватель 0'), findsNothing);
+      expect(
+        tester.getTopLeft(find.byType(StudentLessonTimelineView)).dy,
+        timelineTop,
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.windows,
+      TargetPlatform.android,
+    }),
+  );
+
+  testWidgets(
+    'archive can reopen paginated plans without a render error',
+    (tester) async {
+      await _pumpView(
+        tester,
+        plans: [
+          for (var i = 0; i < 4; i++)
+            SchedulePlan.fromMap({
+              'id': 'archived-$i',
+              'kind': 'individual',
+              'title': 'Архивная серия $i',
+              'studentId': 'student-1',
+              'activeFrom': '2026-09-01',
+              'status': 'ended',
+              'archivedAt': '2026-09-10T12:00:00Z',
+              'version': 2,
+              'rows': [],
+              'participants': [],
+            }),
+        ],
+      );
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.text('Архив (4)'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+      expect(find.text('Архивная серия 0'), findsOneWidget);
+      expect(find.byType(ErrorWidget), findsNothing);
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.windows,
+      TargetPlatform.android,
+    }),
+  );
+  testWidgets(
+    'paging unequal plan pages keeps the timeline and controls in place',
+    (tester) async {
+      await _pumpView(
+        tester,
+        plans: [
+          for (final id in ['plan-a', 'plan-b', 'plan-c', 'plan-d']) _plan(id),
+        ],
+      );
+      final next = find.byTooltip('Следующие записи');
+      final timeline = find.byType(StudentLessonTimelineView);
+      final controlsTop = tester.getTopLeft(next).dy;
+      final timelineTop = tester.getTopLeft(timeline).dy;
+      await tester.tap(next);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(next).dy, controlsTop);
+      expect(tester.getTopLeft(timeline).dy, timelineTop);
+      await tester.tap(find.byTooltip('Предыдущие записи'));
+      await tester.pumpAndSettle();
+      final expansion = find.byKey(
+        const PageStorageKey('schedule-plan-expansion-plan-a'),
+      );
+      await tester.tap(
+        find.descendant(of: expansion, matching: find.byType(ListTile)).first,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(next).dy, controlsTop);
+      expect(tester.getTopLeft(timeline).dy, timelineTop);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  test(
+    'settlement review explains missing funds without exposing error codes',
+    () {
+      expect(
+        lessonSettlementIssueLabel('LESSON_ACCOUNT_INSUFFICIENT_BALANCE'),
+        contains('На личном счёте недостаточно средств'),
+      );
+      expect(
+        lessonSettlementIssueLabel('SUBSCRIPTION_CAPACITY'),
+        contains('Выбранный абонемент не может покрыть занятие'),
+      );
+      expect(
+        lessonSettlementIssueLabel('SUBSCRIPTION_CAPACITY'),
+        contains('оплата преподавателю пока не выполнены'),
+      );
+      expect(
+        lessonSettlementIssueLabel('LESSON_SUBSCRIPTION_PAYMENT_REQUIRED'),
+        contains('Оплаченных занятий в абонементе недостаточно'),
+      );
+    },
+  );
+  testWidgets('compact cells keep time and no-charge explanation in tooltip', (
+    tester,
+  ) async {
+    await _pumpView(
+      tester,
+      width: 1050,
+      plans: [],
+      timeline: StudentLessonTimelinePage.fromJson({
+        'windowStart': '2026-09-08',
+        'hasPrevious': true,
+        'hasNext': true,
+        'items': [
+          {
+            ..._lesson('unpaid', 'manual'),
+            'scheduledAt': DateTime(2026, 9, 11, 15).toIso8601String(),
+            'settlement': {
+              'coveredBySubscription': false,
+              'settlementTypeKey': 'unpaid_miss',
+            },
+          },
+        ],
+      }),
+    );
+    final tile = find.byKey(const ValueKey('student-timeline-unpaid'));
+    expect(tester.getSize(tile).width, inInclusiveRange(60, 70));
+    expect(
+      find.descendant(of: tile, matching: find.text('11.09')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('15:00'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('student-timeline-no-charge-unpaid')),
+      findsOneWidget,
+    );
+    final tooltip = tester.widget<Tooltip>(
+      find.ancestor(of: tile, matching: find.byType(Tooltip)).first,
+    );
+    expect(tooltip.message, contains('11.09.2026 15:00'));
+    expect(tooltip.message, contains('Неоплачиваемый пропуск'));
+    expect(tooltip.message, contains('Абонемент не расходуется'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty calendar period has a message and working navigation', (
+    tester,
+  ) async {
+    var next = 0;
+    await _pumpView(
+      tester,
+      width: 1050,
+      plans: [],
+      timeline: StudentLessonTimelinePage.fromJson({
+        'windowStart': '2026-09-08',
+        'hasPrevious': true,
+        'items': [],
+        'hasNext': true,
+      }),
+      onNextTimeline: () => next++,
+    );
+    expect(find.text('В этом периоде занятий нет.'), findsOneWidget);
+    expect(find.text('—'), findsNothing);
+    await tester.tap(find.byKey(const Key('student-lesson-timeline-next')));
+    expect(next, 1);
+  });
+
+  testWidgets(
+    'calendar timeline reads across fifteen days before the second row',
+    (tester) async {
+      final start = DateTime(2026, 9, 6);
+      final timeline = StudentLessonTimelinePage.fromJson({
+        'windowStart': start.toIso8601String(),
+        'items': [
+          for (var i = 0; i < 30; i++)
+            {
+              ..._lesson('day-$i', 'manual'),
+              'scheduledAt': DateTime(2026, 9, 6 + i * 2, 15).toIso8601String(),
+            },
+        ],
+        'hasPrevious': true,
+        'hasNext': true,
+      });
+      await _pumpView(tester, width: 1050, timeline: timeline, plans: []);
+      Rect tile(int day) =>
+          tester.getRect(find.byKey(ValueKey('student-timeline-day-$day')));
+      expect(tile(1).top, tile(0).top);
+      expect(tile(1).left, greaterThan(tile(0).left));
+      expect(tile(14).top, tile(0).top);
+      expect(tile(15).top, greaterThan(tile(0).bottom));
+      expect(tile(15).left, tile(0).left);
+      expect(tile(29).top, tile(15).top);
+      final grid = tester.getRect(
+        find.byKey(const Key('student-lesson-timeline-grid')),
+      );
+      expect(tile(14).right, closeTo(grid.right, 1));
+      expect(tile(29).right, closeTo(grid.right, 1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'calendar omits empty days and orders several lessons within a day across the year boundary',
+    (tester) async {
+      final start = DateTime(2026, 12, 29);
+      final timeline = StudentLessonTimelinePage.fromJson({
+        'windowStart': start.toIso8601String(),
+        'hasPrevious': true,
+        'hasNext': true,
+        'items': [
+          {
+            ..._lesson('evening', 'manual'),
+            'scheduledAt': DateTime(2027, 1, 1, 19).toIso8601String(),
+          },
+          {
+            ..._lesson('morning', 'manual'),
+            'scheduledAt': DateTime(2027, 1, 1, 9).toIso8601String(),
+          },
+          {
+            ..._lesson('row-two', 'manual'),
+            'scheduledAt': DateTime(2027, 1, 13, 10).toIso8601String(),
+          },
+        ],
+      });
+      await _pumpView(tester, width: 1440, timeline: timeline, plans: []);
+      final empty = find.byKey(
+        const ValueKey('student-timeline-date-2026-12-29'),
+      );
+      expect(empty, findsNothing);
+      expect(find.text('—'), findsNothing);
+      final morning = tester.getRect(
+        find.byKey(const ValueKey('student-timeline-morning')),
+      );
+      final evening = tester.getRect(
+        find.byKey(const ValueKey('student-timeline-evening')),
+      );
+      expect(morning.left, evening.left);
+      expect(morning.bottom, lessThan(evening.top));
+      final secondRow = tester.getRect(
+        find.byKey(const ValueKey('student-timeline-row-two')),
+      );
+      expect(secondRow.top, morning.top);
+      expect(secondRow.left, greaterThan(morning.right));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final width in const [390.0, 768.0, 1440.0]) {
     testWidgets('shows one full-width student timeline at ${width.toInt()}', (
       tester,
@@ -17,10 +330,20 @@ void main() {
         find.byKey(const ValueKey('schedule-plan-tray-plan-a')),
         findsNothing,
       );
-      expect(find.text('Разовое занятие'), findsOneWidget);
-      expect(find.text('Абонемент'), findsOneWidget);
-      expect(find.text('Отменено'), findsOneWidget);
-      expect(find.text('Перенесено'), findsOneWidget);
+      for (final label in [
+        'Разовое занятие',
+        'Абонемент',
+        'Отменено',
+        'Перенесено',
+      ]) {
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Tooltip && (widget.message?.contains(label) ?? false),
+          ),
+          findsWidgets,
+        );
+      }
       expect(
         find.byKey(const ValueKey('student-timeline-lesson-cancelled')),
         findsOneWidget,
@@ -34,10 +357,28 @@ void main() {
         find.byKey(const Key('student-lesson-timeline')),
       );
       expect(timeline.width, closeTo(width, 0.1));
-      expect(
-        tester.getRect(find.text('Разовое занятие')).width,
-        greaterThan(70),
+      final grid = tester.getRect(
+        find.byKey(const Key('student-lesson-timeline-grid')),
       );
+      final tiles = _timeline.items
+          .map(
+            (item) => tester.getRect(
+              find.byKey(ValueKey('student-timeline-${item.id}')),
+            ),
+          )
+          .toList();
+      expect(tiles.map((tile) => tile.top.round()).toSet(), hasLength(2));
+      expect(
+        tiles.every(
+          (tile) => tile.top >= grid.top && tile.bottom <= grid.bottom,
+        ),
+        isTrue,
+      );
+      expect(grid.height, closeTo(84, 0.1));
+      for (final tile in tiles) {
+        expect(tile.height, closeTo(40, 0.1));
+        expect(tile.width, inInclusiveRange(39, 100));
+      }
       expect(tester.takeException(), isNull);
     });
   }
@@ -91,6 +432,10 @@ void main() {
       onEditPlan: (_, row) => edited = row,
       onRemoveRow: (_, row) => removed = row,
     );
+    await tester.tap(
+      find.byKey(const PageStorageKey('schedule-plan-expansion-plan-a')),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('Мария Иванова'), findsWidgets);
     expect(find.text('четверг'), findsOneWidget);
@@ -127,6 +472,138 @@ void main() {
     expect(edited?.id, 'series-current');
     expect(removed?.id, 'series-current');
   });
+
+  testWidgets('individual plans collapse and page in groups of three', (
+    tester,
+  ) async {
+    await _pumpView(
+      tester,
+      plans: [
+        for (final id in ['plan-a', 'plan-b', 'plan-c', 'plan-d']) _plan(id),
+      ],
+    );
+    expect(find.byKey(const ValueKey('schedule-plan-plan-d')), findsNothing);
+    expect(find.text('1–3 из 4'), findsOneWidget);
+    expect(find.text('Действует'), findsNothing);
+    final toggle = find.byKey(
+      const PageStorageKey('schedule-plan-expansion-plan-a'),
+    );
+    await tester.tap(
+      find.descendant(of: toggle, matching: find.byType(ListTile)).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Действует'), findsOneWidget);
+    await tester.tap(
+      find.descendant(of: toggle, matching: find.byType(ListTile)).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Действует'), findsNothing);
+    await tester.tap(find.byTooltip('Следующие записи'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('schedule-plan-plan-d')), findsOneWidget);
+    expect(find.byKey(const ValueKey('schedule-plan-plan-a')), findsNothing);
+    await tester.tap(find.byTooltip('Предыдущие записи'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('schedule-plan-plan-a')), findsOneWidget);
+    expect(find.text('Действует'), findsNothing);
+  });
+
+  testWidgets('temporary individual plan shows at most three rule records', (
+    tester,
+  ) async {
+    final plan = SchedulePlan.fromMap({
+      'id': 'temporary',
+      'kind': 'individual',
+      'title': 'Временное расписание',
+      'studentId': 'student-1',
+      'activeFrom': '2026-09-01',
+      'activeUntil': '2026-10-01',
+      'status': 'active',
+      'version': 1,
+      'rows': [],
+      'participants': [],
+      'ruleTimeline': [
+        for (var i = 0; i < 7; i++)
+          _rule(
+            id: 'rule-$i',
+            sourceSeriesId: 'rule-$i',
+            status: 'active',
+            activeFrom: '2026-09-01',
+            activeUntil: '2026-10-01',
+            teacherName: 'Педагог $i',
+            roomName: 'Класс $i',
+            weekday: i + 1,
+            beginTime: '16:00',
+            durationMinutes: 60,
+            sortBucket: 0,
+            sortAt: '2026-09-01',
+          ),
+      ],
+    });
+    await _pumpView(tester, plans: [plan]);
+    final toggle = find.byKey(
+      const PageStorageKey('schedule-plan-expansion-temporary'),
+    );
+    await tester.tap(
+      find.descendant(of: toggle, matching: find.byType(ListTile)).first,
+    );
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) {
+      expect(find.text('Педагог $i'), findsOneWidget);
+    }
+    expect(find.text('Педагог 3'), findsNothing);
+    await tester.tap(find.byTooltip('Следующие записи'));
+    await tester.pumpAndSettle();
+    expect(find.text('Педагог 0'), findsNothing);
+    expect(find.text('Педагог 3'), findsOneWidget);
+    expect(find.text('Педагог 6'), findsNothing);
+    await tester.tap(
+      find.descendant(of: toggle, matching: find.byType(ListTile)).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Педагог 3'), findsNothing);
+  });
+
+  for (final textScale in [1.0, 1.5, 2.0]) {
+    testWidgets(
+      'two-row timeline scrolls locally before requesting API page at scale $textScale',
+      (tester) async {
+        var nextCalls = 0;
+        final timeline = StudentLessonTimelinePage.fromJson({
+          'items': [
+            for (var i = 0; i < 24; i++) _lesson('scroll-$i', 'manual'),
+          ],
+          'hasPrevious': false,
+          'hasNext': true,
+          'nextCursor': 'more',
+        });
+        await _pumpView(
+          tester,
+          width: 390,
+          textScale: textScale,
+          plans: [],
+          timeline: timeline,
+          onNextTimeline: () => nextCalls++,
+        );
+        final first = find.byKey(const ValueKey('student-timeline-scroll-0'));
+        final left = tester.getTopLeft(first).dx;
+        await tester.tap(find.byKey(const Key('student-lesson-timeline-next')));
+        await tester.pumpAndSettle();
+        expect(nextCalls, 0);
+        if (first.evaluate().isNotEmpty) {
+          expect(tester.getTopLeft(first).dx, lessThan(left));
+        }
+        for (var i = 0; i < 15 && nextCalls == 0; i++) {
+          await tester.tap(
+            find.byKey(const Key('student-lesson-timeline-next')),
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(nextCalls, 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
 
 Future<void> _pumpView(
@@ -136,39 +613,56 @@ Future<void> _pumpView(
   VoidCallback? onNextTimeline,
   void Function(SchedulePlan plan, SchedulePlanRow? row)? onEditPlan,
   void Function(SchedulePlan plan, SchedulePlanRow row)? onRemoveRow,
+  List<SchedulePlan>? plans,
+  StudentLessonTimelinePage? timeline,
+  double textScale = 1,
+  PageStorageBucket? storageBucket,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width, 1400);
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: SizedBox(
-            width: width,
-            child: RecurringSchedulePlanView(
-              plans: [_plan('plan-a'), _plan('plan-b')],
-              loading: false,
-              error: null,
-              canWrite: true,
-              canCreatePlan: true,
-              groupMode: false,
-              hasGroupMembers: false,
-              fallbackLessons: const [],
-              timelinePage: _timeline,
-              timelineLoading: false,
-              timelinePaging: false,
-              timelineError: null,
-              onCreate: () {},
-              onRetryPlans: () {},
-              onPreviousTimeline: () {},
-              onNextTimeline: onNextTimeline ?? () {},
-              onRetryTimeline: () {},
-              onEditPlan: onEditPlan ?? (_, _) {},
-              onRemoveRow: onRemoveRow ?? (_, _) {},
-              onEditParticipants: (_) {},
-              onEndPlan: (_) {},
-              onOpenTimelineItem: onOpenTimelineItem ?? (_) async {},
+    ScrollConfiguration(
+      behavior: NoGlowScrollBehavior(),
+      child: MaterialApp(
+        theme: AppTheme.production,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: PageStorage(
+            bucket: storageBucket ?? PageStorageBucket(),
+            child: SingleChildScrollView(
+              child: SizedBox(
+                width: width,
+                child: RecurringSchedulePlanView(
+                  plans: plans ?? [_plan('plan-a'), _plan('plan-b')],
+                  loading: false,
+                  error: null,
+                  canWrite: true,
+                  canCreatePlan: true,
+                  groupMode: false,
+                  hasGroupMembers: false,
+                  fallbackLessons: const [],
+                  timelinePage: timeline ?? _timeline,
+                  timelineLoading: false,
+                  timelinePaging: false,
+                  timelineError: null,
+                  onCreate: () {},
+                  onRetryPlans: () {},
+                  onPreviousTimeline: () {},
+                  onNextTimeline: onNextTimeline ?? () {},
+                  onRetryTimeline: () {},
+                  onEditPlan: onEditPlan ?? (_, _) {},
+                  onRemoveRow: onRemoveRow ?? (_, _) {},
+                  onEditParticipants: (_) {},
+                  onEndPlan: (_) {},
+                  onOpenTimelineItem: onOpenTimelineItem ?? (_) async {},
+                ),
+              ),
             ),
           ),
         ),

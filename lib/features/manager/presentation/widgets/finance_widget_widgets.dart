@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -121,7 +122,10 @@ class FinanceView extends StatefulWidget {
     required this.onAddExpense,
     required this.onEditExpense,
     required this.onDeleteExpense,
+    this.onLoadMorePayments,
+    this.onLoadMoreExpenses,
     required this.onRetryPayments,
+    required this.onRetryExpenses,
     required this.onRefreshPayments,
     required this.onOpenStudent,
   });
@@ -135,7 +139,10 @@ class FinanceView extends StatefulWidget {
   final FinanceVoidAction onAddExpense;
   final FinanceValueAction<Map<String, dynamic>> onEditExpense;
   final FinanceValueAction<Map<String, dynamic>> onDeleteExpense;
+  final FinanceVoidAction? onLoadMorePayments;
+  final FinanceVoidAction? onLoadMoreExpenses;
   final FinanceVoidAction onRetryPayments;
+  final FinanceVoidAction onRetryExpenses;
   final FinanceVoidAction onRefreshPayments;
   final Future<void> Function(String id, String name) onOpenStudent;
 
@@ -171,7 +178,13 @@ class _FinanceViewState extends State<FinanceView> {
             onExportXlsx: widget.onExportXlsx,
           ),
           _ExpensesPanel(
+            hasMore: state.expensesNextCursor != null,
+            loadingMore: state.expensesLoadingMore,
+            pageError: state.expensesPageError,
+            onLoadMore: widget.onLoadMoreExpenses,
             loading: state.expensesLoading,
+            error: state.expensesLoadError,
+            onRetry: widget.onRetryExpenses,
             saving: state.savingExpense,
             total: state.expensesTotal,
             expenses: state.expenses,
@@ -183,6 +196,7 @@ class _FinanceViewState extends State<FinanceView> {
             child: _PaymentsPanel(
               state: state,
               scrollController: _paymentsScrollController,
+              onLoadMore: widget.onLoadMorePayments,
               onRetry: widget.onRetryPayments,
               onRefresh: widget.onRefreshPayments,
               onOpenStudent: widget.onOpenStudent,
@@ -298,6 +312,7 @@ class _PeriodSelector extends StatelessWidget {
 
 class _PaymentsPanel extends StatelessWidget {
   const _PaymentsPanel({
+    this.onLoadMore,
     required this.state,
     required this.scrollController,
     required this.onRetry,
@@ -305,6 +320,7 @@ class _PaymentsPanel extends StatelessWidget {
     required this.onOpenStudent,
   });
 
+  final FinanceVoidAction? onLoadMore;
   final FinanceState state;
   final ScrollController scrollController;
   final FinanceVoidAction onRetry;
@@ -340,11 +356,19 @@ class _PaymentsPanel extends StatelessWidget {
         child: ListView.builder(
           controller: controller,
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          itemCount: state.payments.length,
-          itemBuilder: (context, index) => _PaymentTile(
-            payment: state.payments[index],
-            onOpenStudent: onOpenStudent,
-          ),
+          itemCount:
+              state.payments.length +
+              (state.paymentsNextCursor != null ? 1 : 0),
+          itemBuilder: (context, index) => index == state.payments.length
+              ? _FinanceNextPage(
+                  loading: state.paymentsLoadingMore,
+                  error: state.paymentsPageError,
+                  onLoad: onLoadMore,
+                )
+              : _PaymentTile(
+                  payment: state.payments[index],
+                  onOpenStudent: onOpenStudent,
+                ),
         ),
       ),
     );
@@ -562,7 +586,13 @@ class _ExportButton extends StatelessWidget {
 /// the negative amount color (danger) come from the v7 [AppColor] tokens.
 class _ExpensesPanel extends StatelessWidget {
   const _ExpensesPanel({
+    required this.hasMore,
+    required this.loadingMore,
+    required this.pageError,
+    this.onLoadMore,
     required this.loading,
+    required this.error,
+    required this.onRetry,
     required this.saving,
     required this.total,
     required this.expenses,
@@ -571,7 +601,13 @@ class _ExpensesPanel extends StatelessWidget {
     required this.onDelete,
   });
 
+  final bool hasMore;
+  final bool loadingMore;
+  final Object? pageError;
+  final FinanceVoidAction? onLoadMore;
   final bool loading;
+  final Object? error;
+  final VoidCallback onRetry;
   final bool saving;
   final double total;
   final List<Map<String, dynamic>> expenses;
@@ -615,7 +651,9 @@ class _ExpensesPanel extends StatelessWidget {
                       )
                     else
                       Text(
-                        formatPaymentMajor(total),
+                        error != null
+                            ? 'Данные не обновлены'
+                            : formatPaymentMajor(total),
                         style: const TextStyle(
                           color: AppColor.danger,
                           fontSize: 22,
@@ -635,6 +673,15 @@ class _ExpensesPanel extends StatelessWidget {
                 padding: EdgeInsets.only(top: 8),
                 child: SkeletonBox(height: 14, radius: AppRadius.sm),
               ),
+          ] else if (error != null) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'Не удалось обновить расходы. Сохранённую операцию повторять не нужно.',
+            ),
+            TextButton(
+              onPressed: onRetry,
+              child: const Text('Обновить список'),
+            ),
           ] else if (expenses.isEmpty) ...[
             const SizedBox(height: 10),
             Text(
@@ -644,11 +691,20 @@ class _ExpensesPanel extends StatelessWidget {
           ] else ...[
             const SizedBox(height: 10),
             SizedBox(
-              height: expenses.length <= 3 ? expenses.length * 52 : 196,
+              height: !hasMore && expenses.length <= 3
+                  ? expenses.length * 52
+                  : 196,
               child: ListView.builder(
                 key: const ValueKey('expense-history-list'),
-                itemCount: expenses.length,
+                itemCount: expenses.length + (hasMore ? 1 : 0),
                 itemBuilder: (context, index) {
+                  if (index == expenses.length) {
+                    return _FinanceNextPage(
+                      loading: loadingMore,
+                      error: pageError,
+                      onLoad: onLoadMore,
+                    );
+                  }
                   final expense = expenses[index];
                   return _ExpenseRow(
                     expense: expense,
@@ -726,7 +782,7 @@ class _ExpenseRow extends StatelessWidget {
     final amount = (expense['amount'] as num?)?.toDouble() ?? 0;
     final category = _expenseCategoryLabel(expense['category'] as String?);
     final description = (expense['description'] ?? '').toString().trim();
-    final rawDate = expense['createdAt'];
+    final rawDate = expense['occurredAt'] ?? expense['createdAt'];
     final dt = rawDate != null ? DateTime.tryParse(rawDate.toString()) : null;
     final dateStr = dt != null
         ? DateFormat('d MMM', 'ru').format(dt.toLocal())
@@ -825,7 +881,9 @@ class _ExpenseRow extends StatelessWidget {
 /// dropdown, optional description, and a flat-gold «Сохранить» that pops the
 /// sheet with the payload consumed by the finance composition shell.
 class ExpenseSheetForm extends StatefulWidget {
-  const ExpenseSheetForm({super.key, this.initialExpense});
+  const ExpenseSheetForm({super.key, this.initialExpense, this.onSubmit});
+
+  final Future<bool> Function(Map<String, dynamic> data)? onSubmit;
 
   final Map<String, dynamic>? initialExpense;
 
@@ -837,11 +895,20 @@ class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
   late final TextEditingController _amountCtrl;
   late final TextEditingController _descriptionCtrl;
   late String _category;
+  late DateTime _occurredAt;
+  bool _submitting = false;
+  String? _submitError;
+  Map<String, dynamic>? _pendingData;
 
   @override
   void initState() {
     super.initState();
     final expense = widget.initialExpense;
+    _occurredAt =
+        DateTime.tryParse(
+          (expense?['occurredAt'] ?? expense?['createdAt'] ?? '').toString(),
+        )?.toLocal() ??
+        DateTime.now();
     final amount = (expense?['amount'] as num?)?.toDouble();
     final amountText = amount == null
         ? ''
@@ -876,17 +943,77 @@ class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
     return double.tryParse(raw);
   }
 
-  bool get _canSubmit => (_amount ?? 0) > 0;
+  bool get _canSubmit =>
+      !_submitting &&
+      (_amount ?? 0) > 0 &&
+      _amount! < 1e10 &&
+      (_amount! * 100 - (_amount! * 100).round()).abs() < 0.0001;
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_canSubmit) return;
     final description = _descriptionCtrl.text.trim();
-    Navigator.pop(context, {
-      'amount': _amount,
-      'category': _category,
-      'description': description.isEmpty ? null : description,
-      'branchId': widget.initialExpense?['branchId'],
+    final data =
+        _pendingData ??
+        <String, dynamic>{
+          'amount': _amount,
+          'category': _category,
+          'description': description.isEmpty ? null : description,
+          'branchId': widget.initialExpense?['branchId'],
+          'occurredAt': _occurredAt.toUtc().toIso8601String(),
+        };
+    final submit = widget.onSubmit;
+    if (submit == null) {
+      Navigator.pop(context, data);
+      return;
+    }
+    _pendingData = data;
+    setState(() {
+      _submitting = true;
+      _submitError = null;
     });
+    try {
+      final saved = await submit(data);
+      if (mounted && saved) Navigator.pop(context, true);
+    } catch (error) {
+      // Keep the exact command after an ambiguous response so retrying cannot
+      // turn a committed write into a second operation with edited fields.
+      if (error is MagicApiException &&
+          error.statusCode != null &&
+          error.statusCode! >= 400 &&
+          error.statusCode! < 500) {
+        _pendingData = null;
+      }
+      if (mounted) {
+        setState(
+          () => _submitError = userErrorMessage(
+            error,
+            fallback: 'Не удалось сохранить расход. Повторите попытку.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _pickOccurredAt() async {
+    final date = await showMagicDatePicker(
+      context: context,
+      initialDate: _occurredAt,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (date != null && mounted) {
+      setState(
+        () => _occurredAt = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          _occurredAt.hour,
+          _occurredAt.minute,
+        ),
+      );
+    }
   }
 
   @override
@@ -897,6 +1024,17 @@ class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        TextButton.icon(
+          onPressed: _submitting || _pendingData != null
+              ? null
+              : _pickOccurredAt,
+          icon: const Icon(Icons.calendar_today_outlined),
+          label: Text(
+            'Дата расхода: ${DateFormat("dd.MM.yyyy").format(_occurredAt)}',
+          ),
+        ),
+        if (_submitError != null)
+          Text(_submitError!, style: const TextStyle(color: AppColor.danger)),
         Text(
           'Сумма (₽)',
           style: TextStyle(
@@ -907,6 +1045,7 @@ class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
         ),
         const SizedBox(height: 6),
         TextField(
+          enabled: !_submitting && _pendingData == null,
           controller: _amountCtrl,
           autofocus: widget.initialExpense == null,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -955,8 +1094,11 @@ class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
             for (final c in _kExpenseCategories)
               DropdownMenuItem(value: c.key, child: Text(c.label)),
           ],
-          onChanged: (v) =>
-              setState(() => _category = v ?? _kExpenseCategories.first.key),
+          onChanged: _submitting || _pendingData != null
+              ? null
+              : (v) => setState(
+                  () => _category = v ?? _kExpenseCategories.first.key,
+                ),
         ),
         const SizedBox(height: AppSpace.md),
         Text(
@@ -969,6 +1111,7 @@ class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
         ),
         const SizedBox(height: 6),
         TextField(
+          enabled: !_submitting && _pendingData == null,
           controller: _descriptionCtrl,
           minLines: 1,
           maxLines: 3,
@@ -1039,4 +1182,31 @@ class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
       ],
     );
   }
+}
+
+class _FinanceNextPage extends StatelessWidget {
+  const _FinanceNextPage({
+    required this.loading,
+    required this.error,
+    required this.onLoad,
+  });
+  final bool loading;
+  final Object? error;
+  final FinanceVoidAction? onLoad;
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      if (error != null) const Text('Не удалось загрузить следующую страницу.'),
+      TextButton(
+        onPressed: loading ? null : onLoad,
+        child: Text(
+          loading
+              ? 'Загрузка…'
+              : error != null
+              ? 'Повторить загрузку'
+              : 'Загрузить ещё',
+        ),
+      ),
+    ],
+  );
 }

@@ -119,7 +119,10 @@ class LessonDecisionCatalog {
     return LessonDecisionCatalog(
       settlementTypes: parse('settlementTypes')
           .where(
-            (item) => item.allowedContexts.contains(operation.catalogContext),
+            // Older servers may still advertise the retired school option.
+            (item) =>
+                item.key != 'partially_paid_miss' &&
+                item.allowedContexts.contains(operation.catalogContext),
           )
           .toList(),
       compensationRules: parse('teacherCompensationRules'),

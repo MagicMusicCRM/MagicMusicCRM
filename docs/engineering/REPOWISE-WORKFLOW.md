@@ -8,15 +8,15 @@ RepoWise используется для сокращения времени п�
 
 | Задача | RepoWise |
 |---|---|
-| Первый вход в незнакомый репозиторий | `get_overview` один раз |
+| Первое знакомство с архитектурой репозитория | `get_overview` один раз |
 | «Как работает / где находится / почему» | `get_answer` |
 | Найти все совпадения, symbol или path | `search_codebase` |
 | Понять связи файла/модуля | `get_context` |
 | Прочитать точное тело symbol | `get_symbol` |
 | Оценить файл до широкой правки | `get_risk` |
-| Выбрать hotspot для рефакторинга | `get_health` |
-| Найти cleanup-кандидаты | `get_dead_code` |
-| Проверить commit/range перед merge | `get_change_risk` |
+| Подготовить широкий рефакторинг | `get_health` |
+| Найти неиспользуемый код | `get_dead_code` |
+| Проверить существенные изменения кода перед merge | `get_change_risk` |
 | Найти rationale решения | `get_why`; при сбое — current decisions и git |
 
 `get_answer` не нужно предварять отдельным search. Search нужен, когда требуются

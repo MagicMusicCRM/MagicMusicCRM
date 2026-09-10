@@ -2,7 +2,7 @@ part of 'schedule_widget.dart';
 
 extension _ScheduleTeacherDayView on _ScheduleWidgetState {
   Widget _buildDayViewByTeacher() {
-    final dayLessons = _lessonsForDate(_selectedDate);
+    final dayLessons = _lessonsForDate(_selectedDate, extendedEvening: true);
     final teacherIds = _filterTeacherId == null
         ? _teacherFilterOptions.map((teacher) => teacher.id).toList()
         : <String>[_filterTeacherId!];
@@ -55,6 +55,7 @@ extension _ScheduleTeacherDayView on _ScheduleWidgetState {
           id: lesson['id']?.toString() ?? '',
           columnId: teacherId,
           startLocal: start,
+          displayDate: _selectedDate,
           durationMinutes: _durationMinutes(lesson),
           title: group.isNotEmpty
               ? group

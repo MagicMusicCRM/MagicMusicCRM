@@ -2,6 +2,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 
 void main() {
+  test('retired partial miss is unavailable even from an older server', () {
+    for (final operation in LessonDecisionOperation.values) {
+      final catalog = LessonDecisionCatalog.fromJson({
+        'settlementTypes': [
+          for (final key in [
+            'partially_paid_miss',
+            'partially_paid_lesson',
+            'paid_miss',
+          ])
+            {
+              'stableKey': key,
+              'label': key,
+              'order': 0,
+              'active': true,
+              'allowedContexts': ['cancel', 'reschedule', 'settle'],
+            },
+        ],
+      }, operation);
+      expect(catalog.settlementTypes.map((item) => item.key), [
+        'partially_paid_lesson',
+        'paid_miss',
+      ]);
+    }
+  });
   test(
     'cancel draft starts as unpaid miss with zero client and teacher time',
     () {
@@ -67,9 +91,7 @@ void main() {
         compensationRules: [],
       ),
       lesson: const {'durationMinutes': 60, 'studentId': 'student-1'},
-      clients: const [
-        LessonDecisionParticipant(id: 'student-1', name: 'Анна'),
-      ],
+      clients: const [LessonDecisionParticipant(id: 'student-1', name: 'Анна')],
       existingClientDecisions: const [
         {
           'clientId': 'student-1',

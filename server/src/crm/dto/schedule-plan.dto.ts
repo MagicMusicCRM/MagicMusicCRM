@@ -171,6 +171,10 @@ export class UpdateSchedulePlanDto {
 
 export class SchedulePlanQuery {
   @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  includeArchived?: boolean;
+  @IsOptional()
   @IsUUID()
   studentId?: string;
 

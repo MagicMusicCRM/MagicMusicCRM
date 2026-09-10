@@ -1,0 +1,135 @@
+[
+  {
+    "method": "POST",
+    "status": 201,
+    "operationId": "previewPaymentCorrection",
+    "path": "/api/crm/students/20000000-0000-4000-8000-000000000001/payment-records/20000000-0000-4000-8000-000000000003/correction/preview",
+    "body": {
+      "expectedVersion": 1,
+      "amountMinor": "15000",
+      "status": "paid",
+      "dueAt": "2026-09-05T10:00:00.000Z",
+      "method": "cashless",
+      "externalIdentifier": "receipt-corrected",
+      "occurredAt": "2026-09-05T10:00:00.000Z",
+      "branchId": "20000000-0000-4000-8000-000000000002"
+    },
+    "response": {
+      "paymentRecordId": "20000000-0000-4000-8000-000000000003",
+      "expectedVersion": 1,
+      "currencyCode": "RUB",
+      "before": {
+        "amountMinor": "12345",
+        "status": "paid",
+        "dueAt": "2026-09-05T10:00:00.000Z",
+        "method": "cashless",
+        "externalIdentifier": "receipt-original",
+        "occurredAt": "2026-09-05T10:00:00.000Z",
+        "branchId": "20000000-0000-4000-8000-000000000002",
+        "verificationNote": null
+      },
+      "after": {
+        "amountMinor": "15000",
+        "status": "paid",
+        "dueAt": "2026-09-05T10:00:00.000Z",
+        "method": "cashless",
+        "externalIdentifier": "receipt-corrected",
+        "occurredAt": "2026-09-05T10:00:00.000Z",
+        "branchId": "20000000-0000-4000-8000-000000000002",
+        "verificationNote": null
+      },
+      "walletDeltaMinor": "2655",
+      "walletBalanceMinor": "12345",
+      "resultingBalanceMinor": "15000",
+      "negativeBalanceWarning": false,
+      "issuedSubscriptionId": null,
+      "installmentId": null,
+      "previewToken": "synthetic-correction-token",
+      "expiresAt": "2026-09-05T10:05:00.000Z"
+    }
+  },
+  {
+    "method": "POST",
+    "status": 201,
+    "operationId": "correctPayment",
+    "path": "/api/crm/students/20000000-0000-4000-8000-000000000001/payment-records/20000000-0000-4000-8000-000000000003/correction",
+    "body": {
+      "previewToken": "synthetic-correction-token",
+      "confirm": true,
+      "reason": "Исправить сумму оплаты"
+    },
+    "response": {
+      "correction": {
+        "id": "20000000-0000-4000-8000-000000000005",
+        "sourcePaymentRecordId": "20000000-0000-4000-8000-000000000003",
+        "replacementPaymentRecordId": "20000000-0000-4000-8000-000000000004",
+        "reversalAdjustmentId": "20000000-0000-4000-8000-000000000006",
+        "reason": "Исправить сумму оплаты",
+        "occurredAt": "2026-09-05T10:00:00.000Z"
+      },
+      "replacement": {
+        "id": "20000000-0000-4000-8000-000000000004",
+        "amountMinor": "15000",
+        "currencyCode": "RUB",
+        "status": "paid",
+        "version": 1
+      },
+      "resultingBalanceMinor": "15000",
+      "replayed": false,
+      "auditId": "20000000-0000-4000-8000-000000000007",
+      "eventId": "20000000-0000-4000-8000-000000000008"
+    }
+  },
+  {
+    "method": "POST",
+    "status": 201,
+    "operationId": "previewPaymentReversal",
+    "path": "/api/crm/students/20000000-0000-4000-8000-000000000001/payment-records/20000000-0000-4000-8000-000000000004/reversal/preview",
+    "body": {
+      "expectedVersion": 1
+    },
+    "response": {
+      "paymentRecordId": "20000000-0000-4000-8000-000000000004",
+      "status": "paid",
+      "amountMinor": "15000",
+      "currencyCode": "RUB",
+      "walletDeltaMinor": "-15000",
+      "walletBalanceMinor": "15000",
+      "resultingBalanceMinor": "0",
+      "negativeBalanceWarning": false,
+      "issuedSubscriptionId": null,
+      "installmentId": null,
+      "operation": "monetary_reversal",
+      "previewToken": "synthetic-reversal-token",
+      "expiresAt": "2026-09-05T10:05:00.000Z"
+    }
+  },
+  {
+    "method": "POST",
+    "status": 201,
+    "operationId": "reversePayment",
+    "path": "/api/crm/students/20000000-0000-4000-8000-000000000001/payment-records/20000000-0000-4000-8000-000000000004/reversal",
+    "body": {
+      "previewToken": "synthetic-reversal-token",
+      "confirm": true,
+      "reason": "Отменить ошибочную оплату"
+    },
+    "response": {
+      "paymentRecordId": "20000000-0000-4000-8000-000000000004",
+      "operation": "monetary_reversal",
+      "exclusion": {
+        "id": "20000000-0000-4000-8000-000000000009",
+        "sourceKind": "payment",
+        "sourceId": "20000000-0000-4000-8000-000000000010",
+        "counterpartKind": "account_adjustment",
+        "counterpartId": "20000000-0000-4000-8000-000000000011",
+        "reason": "Отменить ошибочную оплату",
+        "actorUserId": "20000000-0000-4000-8000-000000000012",
+        "actorName": null,
+        "auditEventId": "20000000-0000-4000-8000-000000000013",
+        "occurredAt": "2026-09-05T10:00:00.000Z"
+      },
+      "replayed": false
+    }
+  }
+]

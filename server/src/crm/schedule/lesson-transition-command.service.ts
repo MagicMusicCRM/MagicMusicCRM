@@ -12,7 +12,7 @@ import type {
   VersionedMutationCommand,
   VersionedMutationResult,
 } from "../../platform/platform-integrity.types";
-import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
+import { acquireLessonSettlementCoordinationGate, acquireSingleLessonSettlementGate } from "../commerce/lesson-settlement-locks";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
@@ -320,7 +320,10 @@ export class LessonTransitionCommandService {
     dto: TransitionCommandDto,
     operation: TransitionOperation,
   ): Promise<SignedTransitionPreview> {
-    await acquireLessonSettlementCoordinationGate(client);
+    // Reschedule creates another lesson; terminal transitions lock one existing lesson.
+    // Never upgrade a shared gate to exclusive after acquiring domain locks.
+    if (operation === "reschedule") await acquireLessonSettlementCoordinationGate(client);
+    else await acquireSingleLessonSettlementGate(client);
     const lockedResolution = this.actionableChains
       ? await this.actionableChains.resolve(actor, requestedLessonId, client)
       : initialResolution;

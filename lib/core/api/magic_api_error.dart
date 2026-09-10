@@ -49,6 +49,20 @@ class MagicApiException implements Exception {
   }
 
   static String _messageFromDioType(DioException error) {
+    final isRead = const {
+      'GET',
+      'HEAD',
+      'OPTIONS',
+    }.contains(error.requestOptions.method.toUpperCase());
+    if (!isRead &&
+        const {
+          DioExceptionType.connectionError,
+          DioExceptionType.sendTimeout,
+          DioExceptionType.receiveTimeout,
+        }.contains(error.type)) {
+      return 'Не удалось получить подтверждение. Действие могло сохраниться. '
+          'Обновите данные и проверьте результат перед повтором.';
+    }
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:

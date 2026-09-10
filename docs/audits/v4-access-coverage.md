@@ -27,7 +27,7 @@ expand legacy access.
 | `access.user.override.manage` | 1 |
 | `access.user.role.assign` | 5 |
 | `commerce.client_finance.read` | 2 |
-| `commerce.client_finance.write` | 13 |
+| `commerce.client_finance.write` | 14 |
 | `commerce.package.manage` | 4 |
 | `commerce.package.read` | 1 |
 | `commerce.school_finance.read` | 10 |
@@ -40,7 +40,7 @@ expand legacy access.
 | `config.crm.read` | 3 |
 | `crm.client.read.basic` | 111 |
 | `crm.client.read.contacts` | 2 |
-| `crm.client.write` | 39 |
+| `crm.client.write` | 38 |
 | `crm.comment.read.shared` | 2 |
 | `report.export.xlsx` | 5 |
 | `report.status.read` | 16 |
