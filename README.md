@@ -2,9 +2,9 @@
 
 Magic Music CRM — private production CRM для сети музыкальных школ. Клиент
 написан на Flutter, backend — NestJS/PostgreSQL; Redis и Socket.IO обеспечивают
-worker/realtime-контур. Интерфейс русский, production-тема только тёмная.
+worker/realtime-контур. Интерфейс русский; тема — светлая Quiet Graphite & Sophisticated Gold.
 
-## Текущее состояние
+## Исторический срез на 11 августа 2026
 
 Обновлено: 2026-08-11.
 
@@ -77,9 +77,14 @@ flutter run --dart-define=MAGIC_API_BASE_URL=http://localhost:3000/api
 flutter analyze
 flutter test
 npm --prefix server run typecheck
-npm --prefix server test
+npm --prefix server run test:full
 npm --prefix server run build
 ```
+
+Серверный gate создаёт мигрированный шаблон и отдельную локальную БД на каждый
+suite; skipped/pending/todo и неполный набор не считаются PASS. Команды для
+отдельных файлов, режима без БД и свежего coverage:
+[docs/engineering/TESTING.md](docs/engineering/TESTING.md).
 
 Release и production используют отдельные scripts/runbooks, backup, rollback и
 reconciliation. Наличие успешных unit-тестов само по себе не закрывает owner

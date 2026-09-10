@@ -1,0 +1,41 @@
+{
+  "measuredAt": "2026-09-10T15:14:51.957Z",
+  "sourceComparison": {
+    "compared": 1923,
+    "missing": [],
+    "different": []
+  },
+  "releaseEvidence": {
+    "tests": 4115,
+    "passed": 4115,
+    "pending": 0,
+    "failed": 0
+  },
+  "layers": [
+    {
+      "layer": "flutter",
+      "files": 260,
+      "declarationsApprox": 1625,
+      "fileReadingMarkers": 34,
+      "pgliteMarkers": 0,
+      "skipMarkers": 0
+    },
+    {
+      "layer": "device",
+      "files": 26,
+      "declarationsApprox": 62,
+      "fileReadingMarkers": 0,
+      "pgliteMarkers": 0,
+      "skipMarkers": 1
+    },
+    {
+      "layer": "server",
+      "files": 315,
+      "declarationsApprox": 2134,
+      "fileReadingMarkers": 57,
+      "pgliteMarkers": 11,
+      "skipMarkers": 11
+    }
+  ],
+  "limitations": "Markers are search heuristics, not semantic classifications. Case counts and timings are release218 evidence, not fresh full runs. File reading also includes legitimate fixtures and migrations."
+}

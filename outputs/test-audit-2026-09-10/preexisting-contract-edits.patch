@@ -1,0 +1,105 @@
+diff --git a/scripts/check-api-contracts.ps1 b/scripts/check-api-contracts.ps1
+index ba83a92ce..781aeb3f2 100644
+--- a/scripts/check-api-contracts.ps1
++++ b/scripts/check-api-contracts.ps1
+@@ -1,15 +1,6 @@
+ param([switch]$Offline)
+ $ErrorActionPreference = 'Stop'
+ $repoRoot = Split-Path -Parent $PSScriptRoot
+-if (-not $Offline) {
+-    if (-not $env:V4_PLATFORM_TEST_DATABASE_URL) {
+-        throw 'Set V4_PLATFORM_TEST_DATABASE_URL to an isolated localhost audit_fix database, or explicitly use -Offline.'
+-    }
+-    $target = [Uri]$env:V4_PLATFORM_TEST_DATABASE_URL
+-    if ($target.Host -notin @('localhost', '127.0.0.1') -or $target.AbsolutePath -notlike '*audit_fix*') {
+-        throw 'The full contract check requires an isolated localhost audit_fix database.'
+-    }
+-}
+ Push-Location $repoRoot
+ try {
+     npm --prefix server run contract:check
+@@ -22,7 +13,9 @@ try {
+     try {
+         $testPaths = @('src/contracts/expense-contract.spec.ts', 'src/contracts/payment-contract.spec.ts', 'src/crm/commerce/payment-result-consistency.spec.ts')
+         if (-not $Offline) { $testPaths += @('src/contracts/expense-http-postgres.integration.spec.ts', 'src/contracts/payment-http-postgres.integration.spec.ts') }
+-        npm test -- --runTestsByPath @testPaths
++        $runnerArguments = @('--runTestsByPath') + $testPaths
++        if ($Offline) { $runnerArguments = @('--no-database') + $runnerArguments }
++        npm test -- @runnerArguments
+         if ($LASTEXITCODE -ne 0) { throw 'Backend contract check failed.' }
+     } finally { Pop-Location }
+ } finally { Pop-Location }
+diff --git a/scripts/check-expense-contract.ps1 b/scripts/check-expense-contract.ps1
+index c1a132a13..0836f743f 100644
+--- a/scripts/check-expense-contract.ps1
++++ b/scripts/check-expense-contract.ps1
+@@ -1,15 +1,6 @@
+ param([switch]$Offline)
+ $ErrorActionPreference = 'Stop'
+ $repoRoot = Split-Path -Parent $PSScriptRoot
+-if (-not $Offline) {
+-    if (-not $env:V4_PLATFORM_TEST_DATABASE_URL) {
+-        throw 'Set V4_PLATFORM_TEST_DATABASE_URL to an isolated localhost audit_fix database, or explicitly use -Offline.'
+-    }
+-    $target = [Uri]$env:V4_PLATFORM_TEST_DATABASE_URL
+-    if ($target.Host -notin @('localhost', '127.0.0.1') -or $target.AbsolutePath -notlike '*audit_fix*') {
+-        throw 'The full contract check requires an isolated localhost audit_fix database.'
+-    }
+-}
+ Push-Location $repoRoot
+ try {
+     npm --prefix server run contract:check
+@@ -20,7 +11,9 @@ try {
+     try {
+         $testPaths = @('src/contracts/expense-contract.spec.ts')
+         if (-not $Offline) { $testPaths += 'src/contracts/expense-http-postgres.integration.spec.ts' }
+-        npm test -- --runTestsByPath @testPaths
++        $runnerArguments = @('--runTestsByPath') + $testPaths
++        if ($Offline) { $runnerArguments = @('--no-database') + $runnerArguments }
++        npm test -- @runnerArguments
+         if ($LASTEXITCODE -ne 0) { throw 'Backend contract check failed.' }
+     } finally { Pop-Location }
+ } finally { Pop-Location }
+diff --git a/docs/engineering/API-CONTRACTS.md b/docs/engineering/API-CONTRACTS.md
+index 6d9c495bf..ec221f5e2 100644
+--- a/docs/engineering/API-CONTRACTS.md
++++ b/docs/engineering/API-CONTRACTS.md
+@@ -20,11 +20,11 @@ reversal под /api/crm/students/{studentId}/payment-records/{paymentRecordId}.
+ ./scripts/check-api-contracts.ps1 -Offline
+ ```
+
+-Полная проверка требует уже мигрированную изолированную localhost-базу с audit_fix
+-в имени. Синтетические команды записывают финансовую историю в этой тестовой БД:
++Полная проверка требует доступный локальный PostgreSQL. Штатный test runner
++сам создаёт мигрированный шаблон и отдельную временную БД на каждый suite,
++а затем очищает только базы своего запуска:
+
+ ```powershell
+-$env:V4_PLATFORM_TEST_DATABASE_URL = '<адрес изолированной localhost-базы audit_fix>'
+ ./scripts/check-api-contracts.ps1
+ ```
+
+@@ -33,6 +33,12 @@ PostgreSQL пропуском; для пропуска требуется явн
+ и автоматическая загрузка .env не используются. Сетевой HTTP-сервер теста
+ слушает только 127.0.0.1 на свободном порту.
+
++По умолчанию используется локальный test PostgreSQL на порту 54329. Другой
++локальный экземпляр задаётся через `TEST_POSTGRES_ADMIN_URL` с БД `postgres`;
++параметры application `DATABASE_URL` и `V4_PLATFORM_TEST_DATABASE_URL` не
++определяют адрес этого запуска. В `-Offline` входы PostgreSQL заблокированы,
++а выбранные wire-тесты выполняются без БД. Полный процесс: [TESTING.md](TESTING.md).
++
+ ## Что проверяется
+
+ 1. contracts/expenses.openapi.json точно совпадает с экспортом актуального кода.
+
+diff --git a/server/package.json b/server/package.json
+--- a/server/package.json
++++ b/server/package.json
+@@ -37,5 +37,5 @@
+     "contract:export": "ts-node scripts/export-expense-openapi.ts",
+     "contract:check": "ts-node scripts/export-expense-openapi.ts --check",
+-    "test:contracts": "npm run contract:check && npm test -- --runTestsByPath src/contracts/expense-contract.spec.ts",
++    "test:contracts": "npm run contract:check && npm test -- --no-database --runTestsByPath src/contracts/expense-contract.spec.ts",
+     "contract:payments:export": "ts-node scripts/export-payment-openapi.ts",
+     "contract:payments:check": "ts-node scripts/export-payment-openapi.ts --check",
