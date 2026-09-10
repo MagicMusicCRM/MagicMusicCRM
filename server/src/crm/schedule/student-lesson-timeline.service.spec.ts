@@ -458,8 +458,10 @@ describe("StudentLessonTimelineRepository scope", () => {
       "case when charge.charge_type is not null then charge.charge_type = 'subscription'",
     );
     expect(normalizedSql).toContain(
-      "reservation.subscription_id = target_funding.subscription_id",
+      "reservation.subscription_id in ( with recursive subscription_lineage",
     );
+    expect(normalizedSql).toContain("select target_funding.subscription_id::uuid");
+    expect(normalizedSql).toContain("predecessor.student_id = successor.student_id");
     expect(normalizedSql).toContain(
       "participant_decision.item->>'settlementTypeKey'",
     );

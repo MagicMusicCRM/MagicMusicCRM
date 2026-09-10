@@ -696,6 +696,7 @@ extension MagicCrmSchedule on MagicCrmService {
     String? studentId,
     String? groupId,
     bool includeEnded = true,
+    bool includeArchived = false,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/schedule-plans',
@@ -703,6 +704,7 @@ extension MagicCrmSchedule on MagicCrmService {
         'studentId': ?studentId,
         'groupId': ?groupId,
         if (includeEnded) 'includeEnded': 'true',
+        if (includeArchived) 'includeArchived': 'true',
       },
     );
     return _items(response).map(SchedulePlan.fromMap).toList(growable: false);
@@ -937,6 +939,29 @@ extension MagicCrmSchedule on MagicCrmService {
       },
     );
   }
+
+  Future<Map<String, dynamic>> previewSchedulePlanArchive(String planId) =>
+      _api.post<Map<String, dynamic>>(
+        '/crm/schedule-plans/$planId/archive/preview',
+        data: const {},
+      );
+
+  Future<Map<String, dynamic>> archiveSchedulePlan(
+    String planId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String impactFingerprint,
+    required String reasonText,
+  }) => _api.postIdempotent<Map<String, dynamic>>(
+    '/crm/schedule-plans/$planId/archive',
+    identity: identity,
+    data: {
+      'expectedVersion': expectedVersion,
+      'impactFingerprint': impactFingerprint,
+      'reasonText': reasonText.trim(),
+      'confirm': true,
+    },
+  );
 
   /// KVA-236: серии постоянного расписания.
   Future<List<Map<String, dynamic>>> listScheduleSeries({

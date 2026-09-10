@@ -228,6 +228,8 @@ class SchedulePlanParticipant {
 
 class SchedulePlan {
   const SchedulePlan({
+    this.archivedAt,
+    this.archiveReason,
     this.scheduledLessonCount,
     this.coveredLessonCount,
     required this.id,
@@ -251,6 +253,8 @@ class SchedulePlan {
   });
 
   factory SchedulePlan.fromMap(Map<String, dynamic> map) => SchedulePlan(
+    archivedAt: map['archivedAt']?.toString(),
+    archiveReason: map['archiveReason']?.toString(),
     scheduledLessonCount: (map['scheduledLessonCount'] as num?)?.toInt(),
     coveredLessonCount: (map['coveredLessonCount'] as num?)?.toInt(),
     id: map['id']?.toString() ?? '',
@@ -304,7 +308,10 @@ class SchedulePlan {
   final List<ScheduleRuleTimelineEntry> ruleTimeline;
   final List<ScheduleRuleTimelineEntry> exceptions;
 
-  bool get isActive => status == 'active';
+  final String? archivedAt;
+  final String? archiveReason;
+  bool get isArchived => archivedAt != null;
+  bool get isActive => status == 'active' && !isArchived;
   bool get isGroup => kind == 'group';
   List<SchedulePlanRow> get currentRows =>
       rows.where((row) => row.active).toList();

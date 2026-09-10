@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { loadLessonSettlementPlan, plannedLessonSubscriptionAllocations } from "./lesson-settlement-plan.persistence";
 import type { PlannedSubscriptionAllocation } from "./lesson-settlement.port";
+import { currentSubscriptionId, subscriptionLineageSql } from "./subscription-lineage";
 
 export interface CoverageSubscription {
   id: string;
@@ -54,7 +55,9 @@ export async function subscriptionCoversLesson(client: PoolClient, subscriptionI
 }
 
 export async function synchronizeSubscriptionCoverage(client: PoolClient, subscriptionIds: string[], excludedLessonIds: string[] = []): Promise<void> {
-  for (const id of [...new Set(subscriptionIds)].sort()) {
+  const currentIds: string[] = [];
+  for (const id of [...new Set(subscriptionIds)].sort()) currentIds.push(await currentSubscriptionId(client, id));
+  for (const id of [...new Set(currentIds)].sort()) {
     const subscription = await lockCoverageSubscription(client, id);
     if (subscription) await reconcileSubscriptionCoverage(client, subscription,
       (lessonId, studentId) => subscriptionCoversLesson(client, id, lessonId, studentId), { excludedLessonIds });
@@ -107,12 +110,14 @@ export async function reconcileSubscriptionCoverage(
             and consumed.state = 'consumed')
         and (
           exists (select 1 from app.lesson_snapshots snapshot
-            where snapshot.lesson_id = lesson.id and snapshot.subscription_id = $1)
+            where snapshot.lesson_id = lesson.id and snapshot.subscription_id in (${subscriptionLineageSql("$1", "ancestors")}))
           or exists (select 1 from app.lesson_snapshot_participants participant
-            where participant.lesson_id = lesson.id and participant.subscription_id = $1)
+            where participant.lesson_id = lesson.id and participant.subscription_id in (${subscriptionLineageSql("$1", "ancestors")}))
           or exists (select 1 from app.lesson_settlement_plans plan,
               jsonb_array_elements(coalesce(plan.decision->'clientDecisions', '[]'::jsonb)) choice
-            where plan.lesson_id = lesson.id and choice->>'subscriptionId' = $1::text)
+            where plan.lesson_id = lesson.id and choice->>'subscriptionId' in (
+              select id::text from (${subscriptionLineageSql("$1", "ancestors")}) lineage
+            ))
         )
       ))
     order by lesson.scheduled_at, lesson.id

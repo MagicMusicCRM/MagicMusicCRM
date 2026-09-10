@@ -168,6 +168,7 @@ const ACTION_TITLES: Record<string, string> = {
   'crm.lesson_settlement_completed': 'Занятие проведено',
   'crm.lessons_bulk_transitioned': 'Статус занятий изменён',
   'crm.schedule_plan_ended': 'План занятий завершён',
+  'crm.schedule_plan_archived': 'План занятий перенесён в архив',
   'crm.schedule_plan_created': 'План занятий создан',
   'crm.schedule_plan_updated': 'План занятий изменён',
   'crm.schedule_plan_row_removed': 'Строка расписания удалена',

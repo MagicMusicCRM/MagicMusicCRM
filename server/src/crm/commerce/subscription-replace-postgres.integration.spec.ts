@@ -36,6 +36,9 @@ import { SubscriptionPreviewTokenService } from "./subscription-preview-token.se
 import { SubscriptionPurchaseCommandService } from "./subscription-purchase-command.service";
 import { SubscriptionPurchasePreviewService } from "./subscription-purchase-preview.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
+import { StudentLessonTimelineRepository } from "../schedule/student-lesson-timeline.repository";
+import { assignLessonSettlementPlan } from "./lesson-settlement-plan.persistence";
+import { previewLessonSettlement, settleLesson } from "./lesson-settlement-execution";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -288,6 +291,84 @@ describe("Subscription replacement preview/confirm", () => {
     });
   });
 
+  it("keeps timeline coverage after replacing a subscription and returning to its original package", async () => {
+    const issued = await issue("timeline-replacement");
+    await seedReservedLessons(pool, studentId, issued.subscription.id, ["1", "1", "1"], 10);
+    const lessonIds = (await pool.query<{ lesson_id: string }>(
+      "select lesson_id from app.lesson_reservations where subscription_id = $1",
+      [issued.subscription.id],
+    )).rows.map(row => row.lesson_id);
+    const timeline = new StudentLessonTimelineRepository(database);
+    const covered = async () => (await timeline.listPage(actor, studentId, "next", {
+      scheduledAt: "2020-01-01T00:00:00Z", id: "00000000-0000-0000-0000-000000000000",
+    }, 100)).filter(row => lessonIds.includes(row.id)).map(row => row.covered_by_subscription);
+    expect(await covered()).toEqual([true, true, true]);
+    let subscriptionId = issued.subscription.id;
+    for (const newPackageId of [fixture.cheaperPackageId, fixture.sourcePackageId]) {
+      const preview = await lifecycleService.previewReplacement(actor, studentId, subscriptionId, { newPackageId });
+      const result = await lifecycleService.replace(actor, studentId, subscriptionId, {
+        expectedVersion: preview.expectedVersion, previewToken: preview.previewToken,
+        confirm: true, reason: "timeline replacement regression",
+      }, metadata(`timeline-${newPackageId}`));
+      subscriptionId = result.replacement.newSubscriptionId;
+      expect(await covered()).toEqual([true, true, true]);
+    }
+  });
+
+  it("refills nearest planned lessons when a smaller replacement is changed back to the original package", async () => {
+    const issued = await issue("refill-replacement");
+    await seedReservedLessons(pool, studentId, issued.subscription.id, ["1", "1", "1", "1", "1"], 20);
+    const lessonIds = (await pool.query<{ lesson_id: string }>(`
+      select r.lesson_id from app.lesson_reservations r join app.lessons l on l.id = r.lesson_id
+      where r.subscription_id = $1 order by l.scheduled_at`, [issued.subscription.id])).rows.map(row => row.lesson_id);
+    const branchId = (await pool.query("select branch_id from app.students where id = $1", [studentId])).rows[0].branch_id;
+    await database.transaction(async client => {
+      await client.query("update app.lessons set branch_id = $2 where id = any($1::uuid[])", [lessonIds, branchId]);
+      for (const lessonId of lessonIds) await assignLessonSettlementPlan(client, {
+        lessonId, branchId, selectedBy: actor.userId,
+        decision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "none" },
+      });
+    });
+    let subscriptionId = issued.subscription.id;
+    for (const [newPackageId, expected] of [[fixture.smallPackageId, 2], [fixture.sourcePackageId, 5]] as const) {
+      const preview = await lifecycleService.previewReplacement(actor, studentId, subscriptionId, { newPackageId });
+      const result = await lifecycleService.replace(actor, studentId, subscriptionId, {
+        expectedVersion: preview.expectedVersion, previewToken: preview.previewToken,
+        confirm: true, reason: "restore nearest lesson coverage",
+      }, metadata(`refill-${newPackageId}`));
+      subscriptionId = result.replacement.newSubscriptionId;
+      const reserved = await pool.query<{ lesson_id: string }>(`
+        select r.lesson_id from app.lesson_reservations r join app.lessons l on l.id = r.lesson_id
+        where r.subscription_id = $1 and r.state = 'reserved' order by l.scheduled_at`, [subscriptionId]);
+      expect(reserved.rows.map(row => row.lesson_id)).toEqual(lessonIds.slice(0, expected));
+    }
+    await pool.query("update app.lesson_reservations set state = 'released' where subscription_id = $1 and state = 'reserved'", [subscriptionId]);
+    const reservations = new SubscriptionReservationService(database, {} as RealtimeBus);
+    await database.transaction(client => reservations.reconcile(client, [issued.subscription.id]));
+    const restored = await pool.query("select id, lesson_id from app.lesson_reservations where subscription_id = $1 and state = 'reserved' order by lesson_id", [subscriptionId]);
+    expect(restored.rows.map(row => row.lesson_id)).toEqual([...lessonIds].sort());
+    await database.transaction(client => reservations.reconcile(client, [subscriptionId]));
+    expect((await pool.query("select id, lesson_id from app.lesson_reservations where subscription_id = $1 and state = 'reserved' order by lesson_id", [subscriptionId])).rows).toEqual(restored.rows);
+    await database.transaction(async client => {
+      await client.query("savepoint replacement_settlement");
+      const teacher = await client.query("insert into app.teachers(profile_id) values($1) returning id", [fixture.profileIds[0]]);
+      await client.query("update app.lessons set teacher_id = $2, lifecycle_state = 'successfully_completed' where id = $1", [lessonIds[0], teacher.rows[0].id]);
+      const input = {
+        context: "settle" as const, decision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: studentId, subscriptionId: issued.subscription.id }] },
+        reasonText: "Verify replacement funding",
+      };
+      const preview = await previewLessonSettlement(client, lessonIds[0]!, input);
+      expect(preview.clientFacts[0]?.subscriptionId).toBe(subscriptionId);
+      const coverage = await reservations.lockSettlementCoverage(client, lessonIds[0]!, [issued.subscription.id]);
+      expect(coverage.subscriptions.map(row => row.id)).toContain(subscriptionId);
+      const settled = await settleLesson(client, lessonIds[0]!, input);
+      expect(settled.clientFacts[0]?.subscriptionId).toBe(subscriptionId);
+      expect(await settleLesson(client, lessonIds[0]!, input)).toEqual(settled);
+      await client.query("rollback to savepoint replacement_settlement");
+    });
+  });
+
   it("creates a credit differential for a cheaper replacement without copying payments", async () => {
     const issued = await issue("cheaper-source");
     await paymentService.record(
@@ -521,6 +602,7 @@ async function seedReservedLessons(
   studentId: string,
   subscriptionId: string,
   units: string[],
+  offsetDays = 0,
 ): Promise<void> {
   for (let index = 0; index < units.length; index += 1) {
     const lesson = await pool.query<{ id: string }>(
@@ -536,7 +618,7 @@ async function seedReservedLessons(
         )
         returning id
       `,
-      [studentId, index + 1],
+      [studentId, index + 1 + offsetDays],
     );
     await pool.query(
       `
@@ -549,11 +631,11 @@ async function seedReservedLessons(
           client_charge_value,
           teacher_compensation_type,
           teacher_compensation_value,
-          subscription_id
+          subscription_id, duration_minutes, validation_state
         )
         values (
           $1, 'student', $2, 'standard.success', 'subscription', $3::numeric,
-          'none', 0, $4
+          'none', 0, $4, 60, 'valid'
         )
       `,
       [lesson.rows[0]!.id, studentId, units[index], subscriptionId],

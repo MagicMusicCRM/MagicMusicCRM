@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/group_schedule_participants_editor.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_section.dart';
@@ -202,6 +203,76 @@ Map<String, dynamic> _timelinePage({
   'nextCursor': nextCursor,
 };
 
+class _ArchiveCardApiClient extends FakeCardApiClient {
+  _ArchiveCardApiClient({this.blocked = false, this.failOnce = false})
+    : super(
+        role: 'manager',
+        schedulePlans: [
+          {..._activePlan, 'status': 'ended'},
+        ],
+      );
+  final bool blocked;
+  bool failOnce;
+  int previewRequests = 0;
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path.endsWith('/archive/preview')) {
+      previewRequests++;
+      return <String, dynamic>{
+            'version': 1,
+            'lessonCount': 7,
+            'canConfirm': !blocked,
+            'blockers': blocked ? ['В серии есть оплаты.'] : [],
+            'impactFingerprint': List.filled(64, 'a').join(),
+          }
+          as T;
+    }
+    return super.post(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
+
+  @override
+  Future<T> postIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (!path.endsWith('/archive')) {
+      return super.postIdempotent(
+        path,
+        identity: identity,
+        data: data,
+        queryParameters: queryParameters,
+        authenticated: authenticated,
+      );
+    }
+    idempotentRequests.add((
+      path: path,
+      data: Map<String, dynamic>.from(data as Map),
+      identity: identity,
+    ));
+    if (failOnce) {
+      failOnce = false;
+      throw const MagicApiException(message: 'Временная ошибка сети');
+    }
+    schedulePlans.single['archivedAt'] = '2026-09-10T00:00:00Z';
+    schedulePlans.single['archiveReason'] = (data)['reasonText'];
+    return <String, dynamic>{'version': 2, 'hiddenLessons': 7} as T;
+  }
+}
+
 class _PagingCardApiClient extends FakeCardApiClient {
   _PagingCardApiClient({this.remainingNextFailures = 0})
     : super(role: 'manager', schedulePlans: const [_activePlan, _endedPlan]);
@@ -345,6 +416,79 @@ class _ExactLessonCardApiClient extends FakeCardApiClient {
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  testWidgets('read-only schedule never offers or requests archiving', (
+    tester,
+  ) async {
+    final api = _ArchiveCardApiClient();
+    await _pump(tester, api, canWrite: false);
+    expect(
+      find.byKey(const ValueKey('schedule-plan-archive-plan-active')),
+      findsNothing,
+    );
+    expect(api.previewRequests, 0);
+    expect(api.idempotentRequests, isEmpty);
+  });
+
+  testWidgets(
+    'archive validates reason, retries with one identity and moves the series into archive',
+    (tester) async {
+      final api = _ArchiveCardApiClient(failOnce: true);
+      await _pump(tester, api);
+      await tester.tap(
+        find.byKey(const ValueKey('schedule-plan-archive-plan-active')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Занятий в серии: 7'), findsOneWidget);
+      final submit = find.byKey(const Key('schedule-archive-confirm'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.text('Укажите причину архивирования'), findsOneWidget);
+      expect(api.idempotentRequests, isEmpty);
+      await tester.enterText(
+        find.byKey(const Key('schedule-archive-reason')),
+        'Ошибочная серия',
+      );
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('schedule-archive-error')), findsOneWidget);
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(api.idempotentRequests, hasLength(2));
+      expect(
+        api.idempotentRequests.first.identity,
+        same(api.idempotentRequests.last.identity),
+      );
+      expect(
+        api.idempotentRequests.first.data,
+        api.idempotentRequests.last.data,
+      );
+      expect(find.text('Архив (1)'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('schedule-plan-archive-plan-active')),
+        findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('archive explains financial blockers without offering commit', (
+    tester,
+  ) async {
+    final api = _ArchiveCardApiClient(blocked: true);
+    await _pump(tester, api);
+    await tester.tap(
+      find.byKey(const ValueKey('schedule-plan-archive-plan-active')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('В серии есть оплаты.'), findsOneWidget);
+    expect(find.byKey(const Key('schedule-archive-confirm')), findsNothing);
+    expect(api.idempotentRequests, isEmpty);
+  });
 
   testWidgets('canonical timeline keeps subscription coverage visible', (
     tester,
@@ -1242,6 +1386,7 @@ Future<void> _pump(
   String? groupId,
   String? subjectName,
   List<GroupScheduleMemberOption> groupMembers = const [],
+  bool canWrite = true,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width, 1000);
@@ -1273,7 +1418,7 @@ Future<void> _pump(
                 subscriptions: const [
                   {'id': 'subscription-1', 'label': '12 занятий'},
                 ],
-                canWrite: true,
+                canWrite: canWrite,
                 onChanged: () {},
               ),
             ),

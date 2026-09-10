@@ -127,6 +127,9 @@ describe("lesson settlement execution", () => {
         if (sql.includes("from app.lesson_participant_exclusions")) {
           return queryResult([]);
         }
+        if (sql.includes("select issued.id from app.subscriptions issued")) {
+          return queryResult([{ id: "subscription-a" }]);
+        }
         if (sql.includes("where id = any")) {
           return queryResult([{
             id: "subscription-a",

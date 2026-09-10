@@ -12,6 +12,8 @@ import { RealtimeBus } from "../../realtime/realtime-bus";
 import { ClientArchiveService } from "../clients/client-archive.service";
 import { ClientReferenceService } from "../clients/client-reference.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { SchedulePlanArchiveService } from "./schedule-plan-archive.service";
+import { StudentLessonTimelineRepository } from "./student-lesson-timeline.repository";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
@@ -57,6 +59,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   let materializer: ScheduleSeriesMaterializerService;
   let constraints: ScheduleConstraintEngine;
   let reservations: SubscriptionReservationService;
+  let planArchives: SchedulePlanArchiveService;
   let lifecycle: LessonLifecycleRepository;
   let settlement: LessonSettlementService;
   let archives: ClientArchiveService;
@@ -102,6 +105,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       reservations,
     );
     const repository = new SchedulePlanRepository(database);
+    planArchives = new SchedulePlanArchiveService(database, platform, policy, repository);
     const definition = new SchedulePlanDefinitionService(repository);
     settlement = new LessonSettlementService(database);
     const previewTokens = new SubscriptionPreviewTokenService({
@@ -170,6 +174,51 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it.each([false, true])("archives cancelled individual plans without erasing history; financial blocker=%s", async (withPayment) => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const metadata = () => ({ idempotencyKey: randomUUID(), requestId: randomUUID() });
+    try {
+      const created = await plans.create(actor, {
+        kind: "individual", title: "Archive regression", studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0], activeFrom: fixture.effectiveFrom, activeUntil: fixture.until60,
+        rows: [row(fixture, isoWeekday(addDays(fixture.effectiveFrom, 1)), "10:00")],
+      }, metadata());
+      expect((await planArchives.preview(actor, created.id)).canConfirm).toBe(false);
+      const end = { expectedVersion: created.version, lastDate: fixture.effectiveFrom, reasonText: "Incorrect schedule" };
+      const endPreview = await plans.previewEnd(actor, created.id, end);
+      await plans.end(actor, created.id, { ...end, confirm: true, previewToken: endPreview.previewToken }, metadata());
+      const before = await pool.query("select id, lifecycle_state from app.lessons where series_id = $1 order by id", [created.seriesIds[0]]);
+      expect(before.rows.length).toBeGreaterThan(0);
+      if (withPayment) await pool.query(`insert into app.payments(student_id, amount, currency, payment_date, lesson_id)
+        values($1, 100, 'RUB', current_date, $2)`, [fixture.studentIds[0], before.rows[0].id]);
+      const preview = await planArchives.preview(actor, created.id);
+      const command = { expectedVersion: preview.version, impactFingerprint: preview.impactFingerprint, confirm: true as const, reasonText: "Test series" };
+      const key = metadata();
+      if (withPayment) {
+        expect(preview.canConfirm).toBe(false);
+        await expect(planArchives.archive(actor, created.id, command, key)).rejects.toMatchObject({ status: 422 });
+      } else {
+        expect(preview.canConfirm).toBe(true);
+        await expect(planArchives.archive(actor, created.id, { ...command, impactFingerprint: "0".repeat(64) }, metadata()))
+          .rejects.toMatchObject({ status: 409 });
+        const first = await planArchives.archive(actor, created.id, command, key);
+        expect((await planArchives.archive(actor, created.id, command, key)).replayed).toBe(true);
+        expect(first.hiddenLessons).toBe(before.rows.length);
+        expect((await plans.list(actor, { studentId: fixture.studentIds[0], includeEnded: true })).items).toHaveLength(0);
+        expect((await plans.list(actor, { studentId: fixture.studentIds[0], includeEnded: true, includeArchived: true })).items[0]?.archivedAt).toBeTruthy();
+        const timeline = await new StudentLessonTimelineRepository(database).listPage(actor, fixture.studentIds[0]!, "next", {
+          scheduledAt: "2000-01-01T00:00:00Z", id: "00000000-0000-0000-0000-000000000000",
+        }, 100);
+        expect(timeline).toHaveLength(0);
+        await expect(pool.query(`insert into app.payments(student_id, amount, currency, payment_date, lesson_id)
+          values($1, 100, 'RUB', current_date, $2)`, [fixture.studentIds[0], before.rows[0].id])).rejects.toMatchObject({ code: "23514" });
+      }
+      const after = await pool.query("select id, lifecycle_state from app.lessons where series_id = $1 order by id", [created.seriesIds[0]]);
+      expect(after.rows).toEqual(before.rows);
+    } finally { await cleanup(pool, fixture); }
+  });
+
   it.each(["manager", "admin"] as const)(
     "restricts %s plan reads and commands to assigned branches",
     async (role) => {
@@ -213,6 +262,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         await expect(
           plans.previewEnd(outsider, created.id, end),
         ).rejects.toMatchObject({ status: 404 });
+        await expect(planArchives.preview(outsider, created.id)).rejects.toMatchObject({ status: 404 });
+        await expect(planArchives.preview({ ...outsider, role: "director" }, created.id)).rejects.toMatchObject({ status: 404 });
         await expect(
           plans.previewRemoveRow(outsider, created.id, created.seriesIds[0]!, {
             expectedVersion: 1,

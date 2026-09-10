@@ -25,6 +25,7 @@ eval "$(extract_contract_section image-migration-head)"
 eval "$(extract_contract_section db-object-contract)"
 eval "$(extract_contract_section pre-migration-contract)"
 eval "$(extract_contract_section rollback-recovery)"
+eval "$(extract_contract_section current-image-baseline)"
 eval "$(extract_contract_section cutover)"
 eval "$(extract_function resolve_compose_service_contract)"
 eval "$(extract_function assert_override_contract)"
@@ -372,6 +373,23 @@ expect_fail 'a schema change after the pre-migration snapshot fails closed' \
   assert_pre_migration_contract 0142_candidate
 
 event_file="${test_tmp}/events.log"
+expected_current_migration=0141_previous
+rollback_image_id=sha256:rollback
+expected_current_image_id=
+expect_pass 'default baseline requires the rollback image' \
+  assert_current_image_baseline sha256:rollback 0141_previous
+expect_fail 'unexpected live image fails closed' \
+  assert_current_image_baseline sha256:other 0141_previous
+expected_current_image_id=sha256:current
+expect_pass 'separately pinned baseline permits a compatible rollback image' \
+  assert_current_image_baseline sha256:current 0141_previous
+expect_fail 'separate baseline still rejects a changed schema head' \
+  assert_current_image_baseline sha256:current 0142_candidate
+fake_current_migration=0141_previous
+rollback_image_migration_head=0142_candidate
+expect_pass 'compatibility rollback may include target migrations before cutover' \
+  assert_pre_migration_contract 0141_previous
+unset expected_current_migration expected_current_image_id
 stage_file="${test_tmp}/stage.txt"
 recreate_count_file="${test_tmp}/recreate-count.txt"
 api_running_file="${test_tmp}/api-running.txt"
@@ -589,7 +607,7 @@ assert_log_contains 'reconcile:1|workers-enabled:workers-enabled'
 assert_log_contains 'compose:stop api:1'
 assert_log_contains start-caddy
 assert_log_contains 'public-ready:0142_candidate'
-[[ "$(cat -- "${DEPLOYED_REVISION_FILE}")" == "${pre_deployed_revision}" ]] || {
+[[ "$(cat -- "${DEPLOYED_REVISION_FILE}")" == "${rollback_revision}" ]] || {
   printf 'deploy-api-release behavior: successful rollback lost deployed revision\n' >&2
   exit 1
 }

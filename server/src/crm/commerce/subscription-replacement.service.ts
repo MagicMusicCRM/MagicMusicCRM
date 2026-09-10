@@ -283,6 +283,7 @@ export class SubscriptionReplacementService {
             actorUserId: actor.userId,
             reason,
           });
+          await this.reservations.reconcile(client, [replacement.id]);
           const resultRef = createReplacementResultRef({
             issuedSubscriptionId,
             nextVersion,

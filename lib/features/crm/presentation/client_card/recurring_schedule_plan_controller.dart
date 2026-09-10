@@ -45,6 +45,7 @@ class RecurringSchedulePlanController extends ChangeNotifier {
       plans = await _service.listSchedulePlans(
         studentId: studentId,
         groupId: groupId,
+        includeArchived: true,
       );
       if (timelineLoad != null) await timelineLoad;
     } catch (exception) {

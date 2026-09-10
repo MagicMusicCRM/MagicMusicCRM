@@ -1,5 +1,6 @@
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { assertLessonPayers, resolveLessonFunding } from "./lesson-funding";
+import { currentSubscriptionId, subscriptionLineageSql } from "./subscription-lineage";
 import {
   ConflictException,
   UnprocessableEntityException,
@@ -134,6 +135,11 @@ async function calculateConfiguredLessonSettlement(
     charges,
     clientDecisions,
   );
+  if (!input.correction) {
+    for (const fact of clientFacts) {
+      if (fact.subscriptionId) fact.subscriptionId = await currentSubscriptionId(client, fact.subscriptionId);
+    }
+  }
   return { catalog, clientFacts, teacherFact: calculateConfiguredTeacherFact(source, input, catalog) };
 }
 
@@ -371,6 +377,14 @@ async function assertExistingLessonSettlementDecision(
       .filter((decision) => !excludedClients.has(decision.clientId))
       .map((decision) => [decision.clientId, decision]),
   );
+  for (const fact of existing.clientFacts) {
+    const selected = clients.get(fact.clientId);
+    if (!selected?.subscriptionId || !fact.subscriptionId || selected.subscriptionId === fact.subscriptionId) continue;
+    const inherited = await client.query<{ inherited: boolean }>(
+      `select $2::uuid in (${subscriptionLineageSql("$1", "ancestors")}) as inherited`,
+      [fact.subscriptionId, selected.subscriptionId]);
+    if (inherited.rows[0]?.inherited) clients.set(fact.clientId, { ...selected, subscriptionId: fact.subscriptionId });
+  }
   const ownerBySubscription = await loadExistingSubscriptionOwners(
     client,
     existing,

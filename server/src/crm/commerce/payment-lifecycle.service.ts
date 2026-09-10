@@ -151,7 +151,7 @@ export class PaymentLifecycleService {
             if (actualPaymentId) {
               if (dto.lessonId) {
                 const lesson = await client.query(
-                  "select id from app.lessons where id=$1 and student_id=$2 and deleted_at is null for share",
+                  "select id from app.lessons where id=$1 and student_id=$2 and deleted_at is null and archived_at is null for share",
                   [dto.lessonId, studentId],
                 );
                 if (!lesson.rows[0])

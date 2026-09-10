@@ -37,6 +37,7 @@ class RecurringSchedulePlanView extends StatefulWidget {
     required this.onRemoveRow,
     required this.onEditParticipants,
     required this.onEndPlan,
+    this.onArchivePlan,
     required this.onOpenTimelineItem,
     this.emptyState,
     this.onOpenFallbackLesson,
@@ -63,6 +64,7 @@ class RecurringSchedulePlanView extends StatefulWidget {
   final SchedulePlanRemoveRowIntent onRemoveRow;
   final ValueChanged<SchedulePlan> onEditParticipants;
   final ValueChanged<SchedulePlan> onEndPlan;
+  final ValueChanged<SchedulePlan>? onArchivePlan;
   final Future<void> Function(String lessonId) onOpenTimelineItem;
   final Widget? emptyState;
   final ValueChanged<Map<String, dynamic>>? onOpenFallbackLesson;
@@ -78,7 +80,10 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
   @override
   Widget build(BuildContext context) {
     final active = widget.plans.where((plan) => plan.isActive).toList();
-    final ended = widget.plans.where((plan) => !plan.isActive).toList();
+    final ended = widget.plans
+        .where((plan) => !plan.isActive && !plan.isArchived)
+        .toList();
+    final archived = widget.plans.where((plan) => plan.isArchived).toList();
     return SizedBox(
       width: double.infinity,
       child: Column(
@@ -101,7 +106,7 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
             const LinearProgressIndicator(color: AppColor.gold)
           else if (widget.error != null && widget.plans.isEmpty)
             _errorState(widget.onRetryPlans, 'Не удалось загрузить расписание')
-          else if (widget.plans.isEmpty)
+          else if (active.isEmpty && ended.isEmpty)
             _emptyPlans()
           else if (!widget.groupMode)
             _ThreeRecordPager(
@@ -120,6 +125,20 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
             if (ended.isNotEmpty) _endedPlans(ended),
           ],
           const SizedBox(height: AppSpace.md),
+          if (archived.isNotEmpty) ...[
+            ExpansionTile(
+              key: const PageStorageKey('archived-schedule-plans'),
+              title: Text('Архив (${archived.length})'),
+              children: [
+                _ThreeRecordPager(
+                  count: archived.length,
+                  itemBuilder: (index) =>
+                      _planCard(archived[index], initiallyExpanded: false),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
           if (widget.groupMode)
             _GroupLessonList(
               lessons: widget.fallbackLessons,
@@ -238,7 +257,9 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
             ),
             const SizedBox(width: AppSpace.sm),
             _tag(
-              plan.isGroup
+              plan.isArchived
+                  ? 'В архиве'
+                  : plan.isGroup
                   ? 'Группа'
                   : !plan.isActive
                   ? 'Завершено'
@@ -259,6 +280,8 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
           AppSpace.md,
         ),
         children: [
+          if (plan.isArchived)
+            Text('В архиве: ${plan.archiveReason ?? "Без причины"}'),
           if (!plan.isActive && plan.endReason?.trim().isNotEmpty == true) ...[
             Align(
               alignment: Alignment.centerLeft,
@@ -302,6 +325,20 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
               itemBuilder: (index) => entries.isEmpty
                   ? _currentPlanRow(plan, plan.currentRows[index])
                   : _timelineRuleRow(plan, entries[index]),
+            ),
+          if (!plan.isActive &&
+              !plan.isArchived &&
+              !plan.isGroup &&
+              widget.canWrite &&
+              widget.onArchivePlan != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('schedule-plan-archive-${plan.id}'),
+                onPressed: () => widget.onArchivePlan!(plan),
+                icon: const Icon(Icons.archive_outlined),
+                label: const Text('В архив'),
+              ),
             ),
           if (plan.isActive && widget.canWrite) ...[
             const SizedBox(height: AppSpace.sm),

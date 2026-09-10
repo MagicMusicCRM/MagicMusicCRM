@@ -93,6 +93,7 @@ describe("lesson settlement plan persistence", () => {
         if (text.includes("select duration_minutes from app.lessons")) {
           return queryResult([{ duration_minutes: 60 }]);
         }
+        if (text.includes("with recursive subscription_lineage")) return queryResult([{ id: "subscription-a" }]);
         if (text.includes("select snapshot.client_type, snapshot.client_id")) {
           return queryResult([{
             client_type: "student",

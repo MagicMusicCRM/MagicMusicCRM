@@ -7,6 +7,7 @@ import { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { LessonSettlementResult } from "./lesson-settlement.port";
+import { currentSubscriptionId, subscriptionLineageSql } from "./subscription-lineage";
 import { reconcileSubscriptionCoverage, synchronizeSubscriptionCoverage, releaseLessonCoverage, subscriptionCoversLesson } from "./subscription-coverage.persistence";
 
 interface LockedSubscriptionRow {
@@ -79,9 +80,10 @@ export class SubscriptionReservationService {
       this.capacityViolation(input.subscriptionId, input.units, "0");
     }
 
+    const subscriptionId = await currentSubscriptionId(client, input.subscriptionId!);
     const subscription = await this.lockSubscription(
       client,
-      input.subscriptionId,
+      subscriptionId,
     );
     if (
       !subscription ||
@@ -93,7 +95,7 @@ export class SubscriptionReservationService {
       subscription.status !== "active" ||
       !(await this.coversLesson(
         client,
-        input.subscriptionId,
+        subscriptionId,
         input.lessonId,
         input.clientId,
       ))
@@ -105,7 +107,7 @@ export class SubscriptionReservationService {
     const covered = await reconcileSubscriptionCoverage(
       client, subscription,
       (lessonId, studentId) => this.coversLesson(client, subscription.id, lessonId, studentId),
-      { override: { ...input, subscriptionId: input.subscriptionId } },
+      { override: { ...input, subscriptionId } },
     );
     if (!covered.coveredLessonIds.has(input.lessonId) && !input.allowUncovered) {
       this.capacityViolation(input.subscriptionId, input.units, "0");
@@ -127,7 +129,7 @@ export class SubscriptionReservationService {
   ): Promise<LessonSettlementCoverageSnapshot> {
     const candidates = await client.query<{ subscription_id: string }>(
       `
-        select distinct source.subscription_id
+        select distinct lineage.id as subscription_id
         from (
           select subscription_id from app.lesson_snapshots where lesson_id = $1
           union all
@@ -137,8 +139,9 @@ export class SubscriptionReservationService {
           union all
           select unnest($2::uuid[])
         ) source
-        where source.subscription_id is not null
-        order by source.subscription_id
+        cross join lateral (${subscriptionLineageSql("source.subscription_id", "successors")}) lineage
+        where lineage.id is not null
+        order by lineage.id
       `,
       [lessonId, [...new Set(selectedSubscriptionIds)].sort()],
     );

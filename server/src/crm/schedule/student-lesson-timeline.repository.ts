@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { ActorContext } from "../../common/security/actor-context";
 import { managerAdminRolesSql } from "../../common/security/role-sql";
 import { DatabaseService } from "../../db/database.service";
+import { subscriptionLineageSql } from "../commerce/subscription-lineage";
 import {
   currentActorRoleSql,
   managerBranchScopeSql,
@@ -181,7 +182,9 @@ export class StudentLessonTimelineRepository {
                  from app.lesson_reservations reservation
                  where reservation.lesson_id = lesson.id
                    and reservation.state = 'reserved'
-                   and reservation.subscription_id = target_funding.subscription_id
+                   and reservation.subscription_id in (
+                     ${subscriptionLineageSql("target_funding.subscription_id", "successors")}
+                   )
                )
              )
            end
@@ -285,7 +288,7 @@ export class StudentLessonTimelineRepository {
            participant_snapshot.subscription_id
          ) as subscription_id
        ) target_funding on true
-       where (lesson.scheduled_at, lesson.id) ${comparison}
+       where lesson.archived_at is null and (lesson.scheduled_at, lesson.id) ${comparison}
          ($4::timestamptz, $5::uuid)
          and ($7::timestamptz is null or lesson.scheduled_at >= $7::timestamptz)
          and ($8::timestamptz is null or lesson.scheduled_at < $8::timestamptz)

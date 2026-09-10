@@ -14,6 +14,8 @@ import 'recurring_schedule_plan_controller.dart';
 import 'recurring_schedule_plan_view.dart';
 import 'schedule_plan_mutation_flow.dart';
 import 'schedule_plan_row_removal_flow.dart';
+import 'schedule_plan_archive_form.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 class RecurringSchedulePlanSection extends ConsumerStatefulWidget {
   const RecurringSchedulePlanSection({
@@ -134,6 +136,7 @@ class _RecurringSchedulePlanSectionState
         onRemoveRow: _removeRow,
         onEditParticipants: _editParticipants,
         onEndPlan: _endPlan,
+        onArchivePlan: _archivePlan,
         onOpenTimelineItem: _openTimelineItem,
         emptyState: const MagicPageState(
           kind: MagicPageStateKind.empty,
@@ -204,6 +207,21 @@ class _RecurringSchedulePlanSectionState
     successMessage: 'Расписание завершено',
     errorMessage: 'Не удалось завершить расписание',
   );
+
+  Future<void> _archivePlan(SchedulePlan plan) async {
+    if (!widget.canWrite || plan.isActive || plan.isArchived || plan.isGroup) {
+      return;
+    }
+    final archived = await showMagicSheet<bool>(
+      context,
+      title: 'Архивировать расписание',
+      icon: Icons.archive_outlined,
+      builder: (_) => SchedulePlanArchiveForm(service: _crm, plan: plan),
+    );
+    if (archived == true && mounted) {
+      await _reload('Расписание перенесено в архив');
+    }
+  }
 
   Future<void> _removeRow(SchedulePlan plan, SchedulePlanRow row) async {
     try {
