@@ -12,6 +12,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ActorContext } from "../common/security/actor-context";
+import {
+  assertVersionedMutationMetadata,
+  VersionedMutationMetadata,
+} from "../platform/versioned-mutation-metadata";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { BlacklistService } from "./blacklist.service";
@@ -71,7 +75,11 @@ export class CrmStudentsController {
   async createStudent(
     @CurrentActor() actor: ActorContext,
     @Body() dto: StrictCreateStudentDto,
+    @Headers("idempotency-key") idempotencyKey: string,
+    @Headers("x-request-id") requestId: string,
   ) {
+    const metadata: VersionedMutationMetadata = { idempotencyKey, requestId };
+    assertVersionedMutationMetadata(metadata);
     const validated = await this.clientWrites.validateStudentCreate(dto);
     return this.crm.createStudent(
       actor,
@@ -83,6 +91,7 @@ export class CrmStudentsController {
         customDataPatch: { branchId: validated.branchId },
       },
       validated,
+      metadata,
     );
   }
 

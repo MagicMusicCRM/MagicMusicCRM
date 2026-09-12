@@ -371,6 +371,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? firstName,
     String? lastName,
     String? phone,
+    bool clearPhone = false,
     String? email,
     bool clearEmail = false,
     String? source,
@@ -391,6 +392,7 @@ extension MagicCrmLeads on MagicCrmService {
     if (firstName != null) data['firstName'] = firstName.trim();
     if (lastName != null) data['lastName'] = lastName.trim();
     if (phone != null) data['phone'] = phone.trim();
+    if (clearPhone) data['clearPhone'] = true;
     if (email != null) data['email'] = email.trim();
     if (clearEmail) data['clearEmail'] = true;
     if (source != null) data['source'] = source.trim();

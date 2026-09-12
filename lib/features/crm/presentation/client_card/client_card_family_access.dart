@@ -192,6 +192,7 @@ extension _ClientCardFamilyAccess on _ClientCardState {
       await ref
           .read(magicCrmServiceProvider)
           .linkUserToClient(widget.entityType, _entityId, userId);
+      await _reloadAndRebaseClientDraft();
       await _fetchClientAccess();
       if (mounted) {
         MagicToast.show(

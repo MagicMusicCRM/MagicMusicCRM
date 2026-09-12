@@ -107,8 +107,7 @@ extension _ClientCardWorkspaceDraft on _ClientCardState {
           key: _studentCoreDraftValue(key),
       },
       'custom': {
-        for (final key in _draft.studentCustomEdits.keys)
-          key: customData[key],
+        for (final key in _draft.studentCustomEdits.keys) key: customData[key],
       },
       if (_draft.studentStatusEdit != null) 'status': student['status'],
       if (_draft.studentResponsibleEdit != null)

@@ -127,6 +127,53 @@ bool _isUnauthorizedRouteError(Object? error) {
   return cause is MagicApiException && cause.isUnauthorized;
 }
 
+String _signedOutLocation(Uri requested) {
+  if (requested.path == '/' || requested.path.isEmpty) return '/login';
+  return Uri(
+    path: '/login',
+    queryParameters: {'from': requested.toString()},
+  ).toString();
+}
+
+String? _safePostLoginLocation(GoRouterState state) {
+  if (state.matchedLocation != '/login') return null;
+  final raw = state.uri.queryParameters['from'];
+  if (raw == null || raw.isEmpty) return null;
+  final target = Uri.tryParse(raw);
+  if (target == null || target.hasScheme || target.hasAuthority) return null;
+  if (!target.path.startsWith('/') || target.path == '/') return null;
+  if (const {
+    '/login',
+    '/register',
+    '/email-otp',
+    '/password-reset',
+  }.contains(target.path)) {
+    return null;
+  }
+  return target.toString();
+}
+
+String? _staffClientLocation(Uri requested, String roleRoute) {
+  if (requested.pathSegments.length != 2 ||
+      !const {
+        'student',
+        'students',
+        'leads',
+      }.contains(requested.pathSegments.first)) {
+    return null;
+  }
+  final rawType = requested.pathSegments.first == 'leads' ? 'lead' : 'student';
+  return Uri(
+    path: roleRoute,
+    queryParameters: {
+      'section': 'clients',
+      'entityType': rawType,
+      'entityId': requested.pathSegments[1],
+      'f.section': ?requested.queryParameters['section'],
+    },
+  ).toString();
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 /// Root navigator key — lets non-widget code (e.g. the Windows update prompt)
 /// reach a live context to show an app-level dialog.
@@ -185,10 +232,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       final routeGateState = ref.read(_routeGateStateProvider);
       switch (routeGateState.phase) {
         case _RouteGatePhase.authLoading:
+          if (loc == '/' || isAuthRoute) return null;
+          return _signedOutLocation(state.uri);
         case _RouteGatePhase.gateLoading:
-          return loc == '/' ? null : '/';
+          return loc == '/' || isAuthRoute ? null : '/';
         case _RouteGatePhase.signedOut:
-          return isAuthRoute ? null : '/login';
+          return isAuthRoute ? null : _signedOutLocation(state.uri);
         case _RouteGatePhase.gateError:
           if (_isUnauthorizedRouteError(routeGateState.error)) {
             return isAuthRoute ? null : '/login';
@@ -218,6 +267,16 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isGateRoute) {
         return roleRoute;
+      }
+
+      final postLoginLocation = _safePostLoginLocation(state);
+      if (postLoginLocation != null) {
+        final requested = Uri.parse(postLoginLocation);
+        if (role != 'client') {
+          final normalized = _staffClientLocation(requested, roleRoute);
+          if (normalized != null) return normalized;
+        }
+        return postLoginLocation;
       }
 
       if (isAuthRoute || loc == '/') {
@@ -271,25 +330,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (loc.startsWith('/teacher') && role != 'teacher') return roleRoute;
       if (loc.startsWith('/client') && role != 'client') return roleRoute;
 
-      if (role != 'client' &&
-          state.uri.pathSegments.length == 2 &&
-          const {
-            'student',
-            'students',
-            'leads',
-          }.contains(state.uri.pathSegments.first)) {
-        final rawType = state.uri.pathSegments.first == 'leads'
-            ? 'lead'
-            : 'student';
-        return Uri(
-          path: roleRoute,
-          queryParameters: {
-            'section': 'clients',
-            'entityType': rawType,
-            'entityId': state.uri.pathSegments[1],
-            'f.section': ?state.uri.queryParameters['section'],
-          },
-        ).toString();
+      if (role != 'client') {
+        final normalized = _staffClientLocation(state.uri, roleRoute);
+        if (normalized != null) return normalized;
       }
 
       return null;

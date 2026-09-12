@@ -250,10 +250,12 @@ extension _MessengerActions on _MessengerScreenState {
     try {
       final updated = await svc.assignChat(chatId);
       if (!mounted) return;
-      // Apply server's authoritative assigned_to.
+      final serverAssignment = updated['assigned_to'];
       _patchOpenChatAssignment(
         chatId,
-        updated['assigned_to'] as Map<String, dynamic>?,
+        serverAssignment is Map
+            ? Map<String, dynamic>.from(serverAssignment)
+            : optimistic,
       );
     } catch (e) {
       if (!mounted) return;

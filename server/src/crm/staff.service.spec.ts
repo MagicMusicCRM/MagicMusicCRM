@@ -230,6 +230,7 @@ describe("StaffService", () => {
       "working",
       JSON.stringify({ telegram: "@staff" }),
       null,
+      false,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

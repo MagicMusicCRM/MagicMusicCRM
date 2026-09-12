@@ -236,8 +236,12 @@ class _PhoneReviewDecision {
 
 class _PhoneReviewResolutionDialog extends StatefulWidget {
   final String rawPhone;
+  final _PhoneReviewDecision? initialDecision;
 
-  const _PhoneReviewResolutionDialog({required this.rawPhone});
+  const _PhoneReviewResolutionDialog({
+    required this.rawPhone,
+    this.initialDecision,
+  });
 
   @override
   State<_PhoneReviewResolutionDialog> createState() =>
@@ -247,13 +251,20 @@ class _PhoneReviewResolutionDialog extends StatefulWidget {
 class _PhoneReviewResolutionDialogState
     extends State<_PhoneReviewResolutionDialog> {
   late final TextEditingController _phone;
-  final TextEditingController _note = TextEditingController();
+  late final TextEditingController _note;
   String _action = 'corrected';
 
   @override
   void initState() {
     super.initState();
     _phone = TextEditingController(text: widget.rawPhone);
+    _action = widget.initialDecision?.action ?? 'corrected';
+    if (widget.initialDecision?.phone case final phone?) {
+      _phone.text = phone;
+    }
+    _note = TextEditingController(
+      text: widget.initialDecision?.resolutionNote ?? '',
+    );
     _phone.addListener(_rebuild);
     _note.addListener(_rebuild);
   }

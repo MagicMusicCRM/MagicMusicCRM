@@ -38,6 +38,10 @@ Widget? buildStaffWorkspacePrimaryDestination({
               onTabChange: onOverviewTabChange,
             ),
     2 when snapshot.allows('schedule.lesson.read.assigned') => ScheduleWidget(
+      key: ValueKey(
+        'workspace-schedule-${tab.tabId}-'
+        '${route.link.rawEntityType}-${route.link.entityId}',
+      ),
       initialLink: route.link,
       initialViewState: route.viewState,
       canWrite: snapshot.allows('schedule.lesson.write'),

@@ -61,6 +61,11 @@ const facadeMethodContracts = [
       { name: "actor", type: "ActorContext", optional: false },
       { name: "dto", type: "CreateStudentDto", optional: false },
       { name: "validated", type: "ValidatedStudentCreate", optional: true },
+      {
+        name: "metadata",
+        type: "VersionedMutationMetadata",
+        optional: true,
+      },
     ],
   },
   {

@@ -29,6 +29,10 @@ export class LessonQuery {
 
   @IsOptional()
   @IsUUID()
+  groupId?: string;
+
+  @IsOptional()
+  @IsUUID()
   teacherId?: string;
 
   @IsOptional()

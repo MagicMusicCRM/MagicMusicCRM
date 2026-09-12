@@ -263,7 +263,8 @@ class _WorkspaceSectionEffect {
       final section = sectionKeyForTab(selected);
       if (section == null) {
         _lastMarkedSection = null;
-      } else if (section != _lastMarkedSection) {
+      } else if (section != _lastMarkedSection &&
+          _canMarkWorkspaceSectionSeen(snapshot, section)) {
         _lastMarkedSection = section;
         unawaited(
           ref
@@ -279,6 +280,14 @@ class _WorkspaceSectionEffect {
       }
     });
   }
+}
+
+bool _canMarkWorkspaceSectionSeen(CapabilitySnapshot snapshot, String section) {
+  if (section != 'clients') return true;
+  if (snapshot.role == 'teacher') {
+    return snapshot.allows('crm.client.read.basic');
+  }
+  return snapshot.allows('crm.client.write');
 }
 
 void _bindWorkspaceProviders(

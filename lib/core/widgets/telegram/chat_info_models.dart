@@ -126,7 +126,13 @@ class ChatInfoAccessPolicy {
       request.chatType == 'group' && isManagerTier && !isSystemGroup;
 
   bool canOpenMember(String? userId) =>
-      isManagerTier && userId != null && userId.isNotEmpty;
+      isManagerTier &&
+      userId != null &&
+      userId.isNotEmpty;
+
+  bool canOpenMemberRecord(Map<String, dynamic> member) =>
+      canOpenMember(member['user_id']?.toString()) &&
+      member['user_role']?.toString() != 'client';
 
   bool canRemoveMember(Map<String, dynamic> member) =>
       canManageGroup && member['is_current_user'] != true;

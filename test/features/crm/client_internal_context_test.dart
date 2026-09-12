@@ -104,7 +104,11 @@ void main() {
           accountId: 'restricted-admin',
           role: 'admin',
           accessVersion: 1,
-          capabilities: {'report.status.read', 'workflow.task.read'},
+          capabilities: {
+            'crm.client.write',
+            'report.status.read',
+            'workflow.task.read',
+          },
           scopes: {},
         ),
       );

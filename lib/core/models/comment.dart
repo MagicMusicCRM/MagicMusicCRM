@@ -17,6 +17,7 @@ class Comment {
   String? get entityId => _m['entity_id']?.toString();
   String? get authorId => _m['author_id']?.toString();
   String get authorName => _m['author_name']?.toString() ?? '';
+  String? get authorRole => _m['author_role']?.toString();
   String? get body => _m['body']?.toString();
   String? get content => _m['content']?.toString();
   String? get kind => _m['kind']?.toString();

@@ -538,6 +538,7 @@ export class ScheduleReadService {
             ))
           )
           and ($4::uuid is null or l.teacher_id = $4)
+          and ($9::uuid is null or l.group_id = $9)
           and ($5::timestamptz is null or l.scheduled_at >= $5)
           and ($6::timestamptz is null or l.scheduled_at <= $6)
           and ($7::boolean is null or l.is_trial = $7)
@@ -564,6 +565,7 @@ export class ScheduleReadService {
         query.to ?? null,
         query.isTrial ?? null,
         limit,
+        query.groupId ?? null,
       ],
     );
 

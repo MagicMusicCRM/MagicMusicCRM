@@ -2,6 +2,8 @@ import { ConflictException, Injectable, NotFoundException } from "@nestjs/common
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
+import type { VersionedMutationMetadata } from "../platform/versioned-mutation-metadata";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import {
   ValidatedCustomFields,
@@ -34,15 +36,65 @@ export class LeadCommandService {
     private readonly policy: CrmPolicy,
     private readonly realtime: RealtimeBus,
     private readonly writes: LeadWriteRepository,
+    private readonly integrity?: PlatformIntegrityService,
   ) {}
 
   async create(
     actor: ActorContext,
     dto: UpsertLeadDto,
     validated?: ValidatedLeadCreate,
+    metadata?: VersionedMutationMetadata,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    const { lead, branchId } = await this.writes.create(actor, dto, validated);
+    let writeResult: Awaited<ReturnType<LeadWriteRepository["create"]>>;
+    let replayed = false;
+    if (metadata) {
+      if (!this.integrity) {
+        throw new Error("PlatformIntegrityService is required for idempotent client creation.");
+      }
+      let firstWrite: Awaited<ReturnType<LeadWriteRepository["create"]>> | undefined;
+      const mutation = await this.integrity.executeVersionedMutation<{
+        leadId: string;
+      }>({
+        actorKey: actor.userId,
+        actorUserId: actor.userId,
+        operation: "crm.lead.create",
+        idempotencyKey: metadata.idempotencyKey,
+        requestId: metadata.requestId,
+        payload: { dto, validated },
+        aggregateType: "client_create_command",
+        aggregateId: metadata.idempotencyKey,
+        expectedVersion: 0,
+        audit: {
+          action: "crm.lead_create_committed",
+          entityType: "client_create_command",
+          entityId: metadata.idempotencyKey,
+        },
+        outbox: { type: "crm.lead.create.committed" },
+        mutate: async (client) => {
+          firstWrite = await this.writes.createInTransaction(
+            client,
+            actor,
+            dto,
+            validated,
+          );
+          return { leadId: firstWrite.lead.id };
+        },
+      });
+      replayed = mutation.replayed;
+      if (firstWrite) {
+        writeResult = firstWrite;
+      } else {
+        const lead = await this.writes.findCreated(
+          String(mutation.resultRef.leadId),
+        );
+        if (!lead) throw new NotFoundException("Созданный лид не найден.");
+        writeResult = { lead, branchId: null };
+      }
+    } else {
+      writeResult = await this.writes.create(actor, dto, validated);
+    }
+    const { lead, branchId } = writeResult;
     if (!dto.clearAssignedTo && !dto.assignedTo) {
       const claimedVersion = await ensureResponsibleSafe(
         this.database,
@@ -52,18 +104,20 @@ export class LeadCommandService {
       );
       if (claimedVersion !== null) lead.version = claimedVersion;
     }
-    await this.audit.record({
-      actor,
-      action: "crm.lead_created",
-      entityType: "lead",
-      entityId: lead.id,
-    });
-    this.realtime.emitCrmChanged({
-      entity: "lead",
-      action: "created",
-      id: lead.id,
-      branchId: branchId ?? null,
-    });
+    if (!replayed) {
+      await this.audit.record({
+        actor,
+        action: "crm.lead_created",
+        entityType: "lead",
+        entityId: lead.id,
+      });
+      this.realtime.emitCrmChanged({
+        entity: "lead",
+        action: "created",
+        id: lead.id,
+        branchId: branchId ?? null,
+      });
+    }
     return {
       ...toLeadDto(lead),
       ...(validated ? { warnings: validated.warnings } : {}),

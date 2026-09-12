@@ -34,7 +34,9 @@ describe("FamilyService", () => {
     expect(result).toEqual({ id: "fam-1", name: "Ивановы", branchId: "b1" });
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("insert into app.families");
-    expect(query.mock.calls[0][1]).toEqual(["Ивановы", "b1"]);
+    expect(query.mock.calls[0][0]).toContain("select $1, $2::uuid");
+    expect(query.mock.calls[0][0]).toContain("app.staff_branch_assignments");
+    expect(query.mock.calls[0][1]).toEqual(["Ивановы", "b1", actor.userId]);
   });
 
   it("returns a family with members and resolved names for an entity", async () => {
@@ -54,8 +56,9 @@ describe("FamilyService", () => {
       { id: "m2", entityType: "profile", entityId: "p1", role: "parent", isPrimaryContact: true, name: "Иван Иванов" },
     ]);
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual(["student", "s1"]);
-    expect(query.mock.calls[1][1]).toEqual(["fam-1"]);
+    expect(query.mock.calls[0][0]).toContain("app.staff_branch_assignments");
+    expect(query.mock.calls[0][1]).toEqual(["student", "s1", actor.userId]);
+    expect(query.mock.calls[1][1]).toEqual(["fam-1", actor.userId]);
   });
 
   it("setPrimaryPayer enforces member-in-family and 404s on no match", async () => {
@@ -67,6 +70,7 @@ describe("FamilyService", () => {
     ).rejects.toThrow("Семья или участник не найдены.");
     expect(query.mock.calls[0][0]).toContain("from app.family_members m");
     expect(query.mock.calls[0][0]).toContain("m.family_id = $1");
+    expect(query.mock.calls[0][0]).toContain("app.staff_branch_assignments");
   });
 
   it("setPrimaryPayer succeeds when the member belongs to the family", async () => {
@@ -81,6 +85,41 @@ describe("FamilyService", () => {
       { rows: [], rowCount: 0 } as unknown as { rows: Record<string, unknown>[] },
     ]);
     await expect(service.removeFamilyMember(actor, "missing")).rejects.toThrow("Участник семьи не найден.");
+  });
+
+  it("clears the payer reference before removing the current primary payer", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [{ member_id: "fm-1", is_primary_payer: true, removed_id: "fm-1" }],
+      },
+    ]);
+    await expect(service.removeFamilyMember(actor, "fm-1")).resolves.toEqual({
+      success: true,
+    });
+  });
+
+  it("returns 404 when an entity belongs to a family outside actor scope", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [] },
+      { rows: [{ exists: true }] },
+    ]);
+    await expect(
+      service.getFamilyForEntity(actor, "lead", "foreign-lead"),
+    ).rejects.toThrow("Семья не найдена.");
+  });
+
+  it("rejects a missing or cross-branch family member target", async () => {
+    const { service, query, audit } = createServiceWithQueryResults([{ rows: [] }]);
+    await expect(
+      service.addFamilyMember(actor, "fam-1", {
+        entityType: "student",
+        entityId: "missing",
+        role: "child",
+      }),
+    ).rejects.toThrow("Семья или участник не найдены в доступном филиале.");
+    expect(query.mock.calls[0][0]).toContain("app.students target");
+    expect(query.mock.calls[0][0]).toContain("app.staff_branch_assignments");
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("audits adding a family member", async () => {
@@ -103,7 +142,7 @@ describe("FamilyService", () => {
 
   it("audits removing a family member", async () => {
     const { service, audit } = createServiceWithQueryResults([
-      { rows: [], rowCount: 1 } as unknown as { rows: Record<string, unknown>[] },
+      { rows: [{ member_id: "fm-1", is_primary_payer: false, removed_id: "fm-1" }] },
     ]);
     await service.removeFamilyMember(actor, "fm-1");
     expect(audit.record).toHaveBeenCalledWith(

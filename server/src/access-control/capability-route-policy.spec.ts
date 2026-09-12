@@ -20,6 +20,7 @@ describe("capability route policy", () => {
     ["POST", "/crm/client-pipelines/publish", "system.settings.manage"],
     ["GET", "/crm/comments", "crm.client.read.basic"],
     ["POST", "/crm/comments", "crm.comment.read.shared"],
+    ["POST", "/crm/sections/seen", "crm.client.read.basic"],
     ["GET", "/crm/lessons", "schedule.lesson.read.assigned"],
     ["GET", "/crm/schedule-plans", "schedule.lesson.read.assigned"],
     ["POST", "/crm/schedule-plans", "schedule.lesson.write"],

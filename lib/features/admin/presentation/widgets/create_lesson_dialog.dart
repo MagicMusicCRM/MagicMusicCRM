@@ -17,8 +17,7 @@ import 'lesson_editor/lesson_editor_save_presenter.dart';
 import 'lesson_editor/lesson_editor_schedule_controller.dart';
 import 'lesson_editor/lesson_editor_view.dart';
 
-class CreateLessonDialog extends ConsumerStatefulWidget
-    implements LessonEditorInitialSource {
+class CreateLessonDialog extends ConsumerStatefulWidget implements LessonEditorInitialSource {
   final DateTime? initialDate;
   final String? initialRoomId, initialBranchId, leadId, leadName;
   final String? clientType, clientId, clientName;
@@ -165,7 +164,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Widget build(BuildContext context) => LessonEditorDismissGuard(
-    isDirty: _dirty && !_saving,
+    isDirty: _dirty,
+    isBusy: _saving,
     child: LessonEditorView.fromState(
       (_session, _draft, _refs),
       (_conflicts, _loadState.$1, _saving, _scheduleState.$1),

@@ -77,8 +77,8 @@ export class MyProfileService implements MyProfileOperations {
         update app.profiles p
         set
           first_name = coalesce($2, p.first_name),
-          last_name = coalesce($3, p.last_name),
-          phone = coalesce($4, p.phone),
+          last_name = case when $8::boolean then $3 else p.last_name end,
+          phone = case when $9::boolean then $4 else p.phone end,
           dob = coalesce($5::date, p.dob),
           email_otp_2fa_enabled = coalesce($6, p.email_otp_2fa_enabled),
           avatar_file_id = coalesce($7::uuid, p.avatar_file_id),
@@ -102,6 +102,8 @@ export class MyProfileService implements MyProfileOperations {
         dto.dob ?? null,
         dto.emailOtp2faEnabled ?? null,
         dto.avatarFileId ?? null,
+        dto.lastName !== undefined,
+        dto.phone !== undefined,
       ],
     );
 

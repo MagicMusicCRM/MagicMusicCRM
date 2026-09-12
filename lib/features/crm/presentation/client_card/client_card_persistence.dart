@@ -240,12 +240,14 @@ extension _ClientCardPersistence on _ClientCardState {
               ? _clientLastName
               : null,
           phone: leadCoreFields.contains('phone') ? _clientPhone : null,
+          clearPhone: leadCoreFields.contains('phone') && _clientPhone == null,
           email: saveLeadEmail ? _clientEmail : null,
           clearEmail: saveLeadEmail && _clientEmail == null,
           sourceId: leadCoreFields.contains('sourceId')
               ? _clientSourceId
               : null,
           statusId: statusId,
+          statusComment: statusId == null ? null : _pendingLeadStatusComment,
           assignedTo: saveLeadResponsible
               ? _leadData['assigned_to']?.toString()
               : null,
@@ -264,6 +266,7 @@ extension _ClientCardPersistence on _ClientCardState {
         _clearSavedRevisions(_draft.leadCustomEdits, targetRevision);
         if (_revisionWasSaved(_draft.leadStatusEdit, targetRevision)) {
           _draft.leadStatusEdit = null;
+          _pendingLeadStatusComment = null;
         }
         if (_revisionWasSaved(_draft.leadResponsibleEdit, targetRevision)) {
           _draft.leadResponsibleEdit = null;
@@ -331,6 +334,8 @@ extension _ClientCardPersistence on _ClientCardState {
               ? _clientLastName
               : null,
           phone: studentCoreFields.contains('phone') ? _clientPhone : null,
+          clearPhone:
+              studentCoreFields.contains('phone') && _clientPhone == null,
           email: saveStudentEmail ? _clientEmail : null,
           clearEmail: saveStudentEmail && _clientEmail == null,
           status: saveStudentStatus ? (_student?['status']?.toString()) : null,

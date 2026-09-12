@@ -107,10 +107,15 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
     // Deep-link from the overview «Новые лиды» tile: open the board already
     // filtered to new (no-status) leads. Consumed once; the board's provider
     // watches _filters, so setting it here is enough — no manual refetch.
-    final focus = ref.read(crmSectionFocusProvider.notifier).consume('leads');
+    final focus = ref.read(crmSectionFocusProvider);
     if (focus != null && focus.filters['status'] == 'new') {
       _filters = _filters.copyWith(quick: 'new');
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(crmSectionFocusProvider.notifier).consume('leads');
+      }
+    });
     _loadStatuses();
     _loadFilterMetadata();
   }

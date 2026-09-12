@@ -788,7 +788,7 @@ void main() {
       accountId: 'account-1',
       role: 'admin',
       accessVersion: 1,
-      capabilities: {'crm.client.read.basic'},
+      capabilities: {'crm.client.read.basic', 'crm.client.write'},
       scopes: {},
     );
     await tester.pumpWidget(

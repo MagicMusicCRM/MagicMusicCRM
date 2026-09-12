@@ -258,6 +258,7 @@ describe("schedule read contract", () => {
       null,
       true,
       10,
+      null,
     ]);
   });
 
@@ -285,6 +286,7 @@ describe("schedule read contract", () => {
       null,
       null,
       10,
+      null,
     ]);
     expect(sql).toContain("from app.users scope_actor");
     expect(sql).toContain("scope_actor.role::text");
@@ -316,6 +318,7 @@ describe("schedule read contract", () => {
       null,
       null,
       1,
+      null,
     ]);
   });
 
@@ -376,6 +379,7 @@ describe("schedule read contract", () => {
       null,
       null,
       10,
+      null,
     ]);
   });
 

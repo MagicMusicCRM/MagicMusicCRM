@@ -770,13 +770,14 @@ class _SalesSettingsState extends ConsumerState<_SalesSettings> {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              FilterChip(
-                key: const ValueKey('subscription-packages-archive-filter'),
-                selected: _showArchived,
-                onSelected: (value) => setState(() => _showArchived = value),
-                avatar: const Icon(Icons.archive_outlined, size: 18),
-                label: const Text('Показать архив'),
-              ),
+              if (widget.canEdit)
+                FilterChip(
+                  key: const ValueKey('subscription-packages-archive-filter'),
+                  selected: _showArchived,
+                  onSelected: (value) => setState(() => _showArchived = value),
+                  avatar: const Icon(Icons.archive_outlined, size: 18),
+                  label: const Text('Показать архив'),
+                ),
               if (widget.canEdit)
                 FilledButton.icon(
                   onPressed: () async {

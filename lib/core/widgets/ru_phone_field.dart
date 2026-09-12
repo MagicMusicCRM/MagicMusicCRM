@@ -16,6 +16,7 @@ class RuPhoneField extends StatefulWidget {
     this.labelText = 'Телефон',
     this.decoration,
     this.international = false,
+    this.enabled = true,
   });
 
   final ValueChanged<String> onCanonicalChanged;
@@ -26,6 +27,7 @@ class RuPhoneField extends StatefulWidget {
   /// When `true`, disables the RU mask/formatter.  The field accepts any phone
   /// string and emits it raw (trimmed) via [onCanonicalChanged].
   final bool international;
+  final bool enabled;
 
   @override
   State<RuPhoneField> createState() => _RuPhoneFieldState();
@@ -65,7 +67,10 @@ class _RuPhoneFieldState extends State<RuPhoneField> {
         controller: _controller,
         keyboardType: TextInputType.phone,
         decoration: decoration,
-        onChanged: (text) => widget.onCanonicalChanged(text.trim()),
+        enabled: widget.enabled,
+        onChanged: widget.enabled
+            ? (text) => widget.onCanonicalChanged(text.trim())
+            : null,
       );
     }
 
@@ -74,7 +79,10 @@ class _RuPhoneFieldState extends State<RuPhoneField> {
       keyboardType: TextInputType.phone,
       inputFormatters: [RuPhoneTextInputFormatter()],
       decoration: decoration,
-      onChanged: (text) => widget.onCanonicalChanged(digitsToCanonical(text)),
+      enabled: widget.enabled,
+      onChanged: widget.enabled
+          ? (text) => widget.onCanonicalChanged(digitsToCanonical(text))
+          : null,
     );
   }
 }

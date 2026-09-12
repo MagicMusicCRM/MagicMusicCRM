@@ -36,6 +36,8 @@ describe("PhoneReviewService", () => {
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.phone_review_queue");
     expect(query.mock.calls[0][0]).toContain("resolved_at is null");
+    expect(query.mock.calls[0][0]).toContain("app.staff_branch_assignments");
+    expect(query.mock.calls[0][1]).toEqual([actor.userId]);
   });
 
   it("lists open phone-review-queue rows", async () => {
@@ -62,7 +64,8 @@ describe("PhoneReviewService", () => {
       reason: "too_short",
       createdAt: "2026-06-19T00:00:00.000Z",
     });
-    expect(query.mock.calls[0][1]).toEqual([25]);
+    expect(query.mock.calls[0][0]).toContain("app.staff_branch_assignments");
+    expect(query.mock.calls[0][1]).toEqual([actor.userId, 25]);
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
   });
 
@@ -102,6 +105,8 @@ describe("PhoneReviewService", () => {
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(clientQuery.mock.calls[0][0]).toContain("for update");
+    expect(clientQuery.mock.calls[0][0]).toContain("app.staff_branch_assignments");
+    expect(clientQuery.mock.calls[0][1]).toEqual(["q1", actor.userId]);
     expect(clientQuery.mock.calls[1][0]).toContain("update app.leads");
     expect(clientQuery.mock.calls[1][0]).toContain("version = version + 1");
     expect(clientQuery.mock.calls[1][1]).toEqual(["l1", "+79991234567"]);

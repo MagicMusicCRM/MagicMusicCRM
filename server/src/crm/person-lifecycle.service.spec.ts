@@ -149,4 +149,49 @@ describe("PersonLifecycleService", () => {
       }),
     );
   });
+
+  it("qualifies the teacher assignment version while restoring", async () => {
+    const archived = row({
+      lifecycle_state: "archived",
+      status: "inactive",
+      version: 2,
+      lifecycle_previous_status: "active",
+      lifecycle_account_was_active: true,
+      lifecycle_snapshot: { branchAssignments: [{ branchId: "branch-a" }] },
+      branch_assignments: [{ branchId: "branch-a" }],
+    });
+    const active = row({ ...archived, lifecycle_state: "active", version: 3 });
+    const { service, integrity } = createService([[archived], [], [active]]);
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [archived] })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValue({ rows: [], rowCount: 1 });
+    integrity.executeVersionedMutation.mockImplementation(async (command) => {
+      const resultRef = await command.mutate({ query: clientQuery }, 3);
+      return {
+        resultRef,
+        version: 3,
+        replayed: false,
+        auditId: "audit-a",
+        eventId: "event-a",
+      };
+    });
+
+    await service.restore(
+      director,
+      "teacher",
+      "teacher-a",
+      { expectedVersion: 2, reasonText: "Возвращаем", confirm: true },
+      metadata,
+    );
+
+    const assignmentUpdate = clientQuery.mock.calls.find((call) =>
+      String(call[0]).includes("update app.teacher_branches"),
+    );
+    expect(assignmentUpdate).toBeDefined();
+    expect(String(assignmentUpdate![0])).toContain(
+      "version = assignment.version + 1",
+    );
+  });
 });

@@ -192,15 +192,24 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     // A filter deep-linked from the overview («Пробные занятия» / «Конфликты
     // расписания») — consumed once before the first fetch so the grid opens
     // filtered. Day view is what actually renders these filters, so switch to it.
-    final focus = ref
-        .read(crmSectionFocusProvider.notifier)
-        .consume('schedule');
+    final focus = ref.read(crmSectionFocusProvider);
     if (focus != null) {
       if (focus.filters['trial'] == '1') _onlyTrial = true;
       if (focus.filters['conflicts'] == '1') _onlyConflicts = true;
       _currentView = ScheduleView.day;
     }
-    if (widget.active) _fetchAll();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(crmSectionFocusProvider.notifier).consume('schedule');
+      }
+    });
+    if (widget.active) {
+      if (widget.initialLink?.entityType == EntityLinkType.lesson) {
+        unawaited(_resolveInitialLessonLink());
+      } else {
+        _fetchAll();
+      }
+    }
     // The client card sets the focus BEFORE this widget mounts (it sets focus,
     // closes the card and routes here). `ref.listen` in build only catches
     // *changes*, so pick up an already-set focus once on first frame.
@@ -213,6 +222,48 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       final focus = ref.read(scheduleNavigationProvider);
       if (focus != null) _applyScheduleFocus(focus);
     });
+  }
+
+  Future<void> _resolveInitialLessonLink() async {
+    final lessonId = widget.initialLink?.entityId;
+    if (lessonId == null || lessonId.isEmpty) {
+      await _fetchAll();
+      return;
+    }
+    try {
+      final rows = await ref
+          .read(magicCrmServiceProvider)
+          .listLessons(lessonId: lessonId, limit: 1);
+      final lesson = rows
+          .where((row) => row['id']?.toString() == lessonId)
+          .firstOrNull;
+      if (!mounted || lesson == null) {
+        await _fetchAll();
+        return;
+      }
+      final rawOffset = lesson['scheduled_utc_offset_minutes'];
+      final offset = rawOffset is num
+          ? rawOffset.toInt()
+          : int.tryParse(rawOffset?.toString() ?? '') ?? 180;
+      final instant = DateTime.tryParse(lesson['scheduled_at']?.toString() ?? '');
+      if (instant != null) {
+        final local = instant.toUtc().add(Duration(minutes: offset));
+        final date = scheduleDisplayDate(local);
+        _selectedDate = date;
+        _displayedMonth = DateTime(date.year, date.month);
+      }
+      final branchId = lesson['branch_id']?.toString();
+      if (branchId?.isNotEmpty == true) {
+        _selectedBranchId = branchId;
+        _allBranchesSelected = false;
+      }
+      _lessons = [lesson];
+      await _fetchAll();
+      if (mounted) await _fetchDayLessons(_selectedDate);
+    } catch (error) {
+      debugPrint('Error resolving linked lesson: $error');
+      if (mounted) await _fetchAll();
+    }
   }
 
   void _restorePendingClientFocus() {

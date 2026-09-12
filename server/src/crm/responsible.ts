@@ -62,7 +62,6 @@ export async function ensureResponsible(
             and lower(btrim(sm.status)) = any($4::text[])
           order by sm.created_at desc, sm.id asc
           limit 1
-          for update of l
         ),
         target as (
           select l.id
@@ -72,7 +71,6 @@ export async function ensureResponsible(
             and l.deleted_at is null
               and l.assigned_to is null
               and nullif(btrim(coalesce(l.custom_data->>'responsible', '')), '') is null
-            returning l.version
           limit 1
         )
         update app.leads l
@@ -88,6 +86,7 @@ export async function ensureResponsible(
         where l.id = target.id
           and l.assigned_to is null
           and nullif(btrim(coalesce(l.custom_data->>'responsible', '')), '') is null
+        returning l.version
       `,
       [
         entityId,

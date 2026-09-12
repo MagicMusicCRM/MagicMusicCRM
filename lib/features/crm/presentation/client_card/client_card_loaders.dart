@@ -53,6 +53,16 @@ extension _ClientCardLoaders on _ClientCardState {
       final raw = await ref.read(leadStatusesProvider.future);
       if (!mounted) return;
       _emitState(() {
+        _statusRequiresReason
+          ..clear()
+          ..addEntries(
+            raw.map(
+              (row) => MapEntry(
+                row['key'].toString(),
+                row['requiresReason'] == true || row['requires_reason'] == true,
+              ),
+            ),
+          );
         _statuses = raw
             .map<StatusRecord>(
               (r) => (

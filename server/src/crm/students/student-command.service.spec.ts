@@ -80,6 +80,10 @@ describe("StudentCommandService", () => {
         events.push("transaction");
         return student;
       }),
+      createInTransaction: jest.fn(async () => {
+        events.push("transaction");
+        return student;
+      }),
       update: jest.fn(async () => {
         events.push("transaction");
         return {
@@ -97,6 +101,12 @@ describe("StudentCommandService", () => {
         };
       }),
     };
+    const integrity = {
+      executeVersionedMutation: jest.fn(async (command) => ({
+        resultRef: await command.mutate({ query: jest.fn() }),
+        replayed: false,
+      })),
+    };
     const service = new StudentCommandService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
@@ -104,6 +114,7 @@ describe("StudentCommandService", () => {
       notifications as unknown as NotificationsService,
       realtime as unknown as RealtimeBus,
       mutations as unknown as StudentMutationExecutor,
+      integrity as never,
     );
     return {
       service,
@@ -114,8 +125,47 @@ describe("StudentCommandService", () => {
       notifications,
       realtime,
       mutations,
+      integrity,
     };
   };
+
+  it("replays a create key without inserting or publishing twice", async () => {
+    const { service, mutations, integrity, audit, realtime } = createHarness();
+    let committed = false;
+    integrity.executeVersionedMutation.mockImplementation(async (command) => {
+      if (committed) {
+        return { resultRef: { studentId: student.id }, replayed: true };
+      }
+      committed = true;
+      return {
+        resultRef: await command.mutate({ query: jest.fn() }),
+        replayed: false,
+      };
+    });
+    const metadata = {
+      idempotencyKey: "create-student-0001",
+      requestId: "request-student-0001",
+    };
+    const responsibleUserId = "11111111-1111-4111-8111-111111111111";
+
+    const first = await service.createStudent(
+      actor,
+      { firstName: "Анна", customDataPatch: { responsibleUserId } },
+      undefined,
+      metadata,
+    );
+    const retry = await service.createStudent(
+      actor,
+      { firstName: "Анна", customDataPatch: { responsibleUserId } },
+      undefined,
+      metadata,
+    );
+
+    expect(retry.id).toBe(first.id);
+    expect(mutations.createInTransaction).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(realtime.emitCrmChanged).toHaveBeenCalledTimes(1);
+  });
 
   it("normalizes create input and publishes only after mutation and fallback", async () => {
     const { service, events, mutations, policy } = createHarness();
@@ -292,6 +342,7 @@ describe("StudentCommandService", () => {
       phone: "+79990000000",
       email: "student@example.com",
       clearEmail: false,
+      clearPhone: false,
       status: "active",
       customDataPatch: {},
       requestedResponsibleId: undefined,

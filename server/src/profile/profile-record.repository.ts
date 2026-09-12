@@ -46,7 +46,7 @@ export interface ProfileDtoProjection {
   firstName: string | null;
   lastName: string | null;
   phone: string | null;
-  dob: Date | string | null;
+  dob: string | null;
   avatarFileId: string | null;
   emailOtp2faEnabled: boolean;
   isAppAccount: boolean;
@@ -156,7 +156,7 @@ export class ProfileRecordRepository implements ProfileRecordPort {
       firstName: row.first_name,
       lastName: row.last_name,
       phone: row.phone,
-      dob: row.dob,
+      dob: this.dateOnly(row.dob),
       avatarFileId: row.avatar_file_id,
       emailOtp2faEnabled: row.email_otp_2fa_enabled,
       isAppAccount: row.is_app_account ?? true,
@@ -164,6 +164,15 @@ export class ProfileRecordRepository implements ProfileRecordPort {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+
+  private dateOnly(value: Date | string | null): string | null {
+    if (value == null) return null;
+    if (typeof value === "string") return value.slice(0, 10);
+    const year = value.getFullYear().toString().padStart(4, "0");
+    const month = (value.getMonth() + 1).toString().padStart(2, "0");
+    const day = value.getDate().toString().padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   toProfileSummaryDto(row: ProfileRow): ProfileSummaryProjection {

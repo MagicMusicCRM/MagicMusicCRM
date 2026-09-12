@@ -225,7 +225,10 @@ export class SchedulePlanEndService {
     preservedTerminalLessons: number;
     preservedChangedLessons: number;
   }> {
-    const lastDate = this.previousDate(input.effectiveFrom);
+    const previousDate = this.previousDate(input.effectiveFrom);
+    const lastDate = previousDate < input.plan.active_from
+      ? input.plan.active_from
+      : previousDate;
     await this.finishPlan(
       client,
       input.actorUserId,

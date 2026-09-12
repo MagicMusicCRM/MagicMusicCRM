@@ -14,6 +14,7 @@ import { typedClientValueMapSql } from "./client-config.repository";
 
 interface ClientCardCompositionRow {
   header: Record<string, unknown> | null;
+  editor: Record<string, unknown> | null;
   lessons: Array<Record<string, unknown>>;
   tasks: Array<Record<string, unknown>>;
   homework: Array<Record<string, unknown>>;
@@ -59,7 +60,7 @@ export class ClientCardReadService {
       projection === "full"
         ? ["admin_comment", "teacher_note", "progress"]
         : projection === "teacher"
-          ? ["teacher_note", "progress"]
+          ? ["admin_comment", "teacher_note", "progress"]
           : ["progress"];
 
     const result = await this.database.query<ClientCardCompositionRow>(
@@ -79,6 +80,18 @@ export class ClientCardReadService {
               when target.type = 'student' then student_profile.last_name
               else lead.last_name
             end as last_name,
+            case
+              when target.type = 'student' then student_profile.phone
+              else lead.phone
+            end as phone,
+            case
+              when target.type = 'student' then student.contact_email
+              else lead.email
+            end as email,
+            case
+              when target.type = 'student' then student.source_id
+              else lead.source_id
+            end as source_id,
             case
               when target.type = 'student' then student.status
               else lead_status.name
@@ -195,7 +208,25 @@ export class ClientCardReadService {
               'description', homework.description,
               'status', homework.status,
               'dueAt', homework.due_at,
-              'createdAt', homework.created_at
+              'createdAt', homework.created_at,
+              'attachments', coalesce((
+                select jsonb_agg(
+                  jsonb_build_object(
+                    'id', attachment.id,
+                    'fileId', file.id,
+                    'fileName', file.original_name,
+                    'mimeType', file.mime_type,
+                    'sizeBytes', file.size_bytes::integer,
+                    'kind', attachment.kind,
+                    'createdAt', attachment.created_at
+                  ) order by attachment.created_at, attachment.id
+                )
+                from app.homework_attachments attachment
+                join app.file_objects file
+                  on file.id = attachment.file_id
+                 and file.deleted_at is null
+                where attachment.homework_id = homework.id
+              ), '[]'::jsonb)
             ) as item
           from target
           join app.lesson_homeworks homework
@@ -318,6 +349,14 @@ export class ClientCardReadService {
             )
             from header_row header
           ) as header,
+          (
+            select case when $13::boolean then jsonb_build_object(
+              'phone', header.phone,
+              'email', header.email,
+              'sourceId', header.source_id
+            ) else null end
+            from header_row header
+          ) as editor,
           (
             select coalesce(jsonb_agg(page.item order by page.occurred_at desc),
               '[]'::jsonb)
@@ -446,6 +485,7 @@ export class ClientCardReadService {
         projection === "teacher",
         actor.role,
         actor.userId,
+        projection === "full",
       ],
     );
     const row = result.rows[0];
@@ -513,6 +553,7 @@ export class ClientCardReadService {
           ? {
               id: ref.id,
               ...(row.header as Record<string, unknown>),
+              ...(row.editor ?? {}),
             }
           : null,
       ...(projection === "full"

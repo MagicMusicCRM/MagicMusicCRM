@@ -136,7 +136,11 @@ abstract final class CrmConfigurationSnapshotOps {
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
     final suffix = '_${index + 1}';
-    final base = normalized.isEmpty ? 'option' : normalized;
+    final base = normalized.isEmpty
+        ? 'option'
+        : RegExp(r'^[a-z]').hasMatch(normalized)
+        ? normalized
+        : 'option_$normalized';
     return '${base.substring(0, base.length.clamp(0, 64 - suffix.length))}$suffix';
   }
 

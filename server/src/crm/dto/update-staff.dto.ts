@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsBoolean,
   MaxLength,
 } from "class-validator";
 
@@ -35,6 +36,10 @@ export class UpdateStaffDto {
   @IsString()
   @MaxLength(160)
   position?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  clearPosition?: boolean;
 
   @IsOptional()
   @IsString()

@@ -14,17 +14,20 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: SearchablePickerField(
-        label: label,
-        selectedId: selectedId,
-        placeholder: 'Выберите значение',
-        hintText: field.hint ?? 'Введите значение для поиска',
-        items: [
-          for (final option in field.options)
-            SearchableSelectItem(id: option, label: option),
-        ],
-        onSelected: (item) =>
-            _updateCustomDataForEntity(field.entity, field.key, item?.id),
+      child: IgnorePointer(
+        ignoring: !_canWriteClient,
+        child: SearchablePickerField(
+          label: label,
+          selectedId: selectedId,
+          placeholder: 'Выберите значение',
+          hintText: field.hint ?? 'Введите значение для поиска',
+          items: [
+            for (final option in field.options)
+              SearchableSelectItem(id: option, label: option),
+          ],
+          onSelected: (item) =>
+              _updateCustomDataForEntity(field.entity, field.key, item?.id),
+        ),
       ),
     );
   }
@@ -47,10 +50,16 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
               ChoiceChip(
                 label: Text(option),
                 selected: selectedId == option,
-                onSelected: (selected) {
-                  if (!selected) return;
-                  _updateCustomDataForEntity(field.entity, field.key, option);
-                },
+                onSelected: !_canWriteClient
+                    ? null
+                    : (selected) {
+                        if (!selected) return;
+                        _updateCustomDataForEntity(
+                          field.entity,
+                          field.key,
+                          option,
+                        );
+                      },
               ),
           ],
         ),
@@ -68,8 +77,10 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
       return SwitchListTile(
         value: selected,
         activeThumbColor: AppColor.gold,
-        onChanged: (value) =>
-            _updateCustomDataForEntity(field.entity, field.key, value),
+        onChanged: _canWriteClient
+            ? (value) =>
+                  _updateCustomDataForEntity(field.entity, field.key, value)
+            : null,
         title: Text(label),
         subtitle: field.hint == null ? null : Text(field.hint!),
         contentPadding: EdgeInsets.zero,
@@ -77,8 +88,13 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
     }
     return CheckboxListTile(
       value: selected,
-      onChanged: (value) =>
-          _updateCustomDataForEntity(field.entity, field.key, value == true),
+      onChanged: _canWriteClient
+          ? (value) => _updateCustomDataForEntity(
+              field.entity,
+              field.key,
+              value == true,
+            )
+          : null,
       title: Text(label),
       subtitle: field.hint == null ? null : Text(field.hint!),
       contentPadding: EdgeInsets.zero,
@@ -106,15 +122,17 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
               FilterChip(
                 label: Text(option),
                 selected: selected.contains(option),
-                onSelected: (checked) {
-                  final next = {...selected};
-                  checked ? next.add(option) : next.remove(option);
-                  _updateCustomDataForEntity(
-                    field.entity,
-                    field.key,
-                    next.toList(growable: false),
-                  );
-                },
+                onSelected: !_canWriteClient
+                    ? null
+                    : (checked) {
+                        final next = {...selected};
+                        checked ? next.add(option) : next.remove(option);
+                        _updateCustomDataForEntity(
+                          field.entity,
+                          field.key,
+                          next.toList(growable: false),
+                        );
+                      },
               ),
           ],
         ),
@@ -143,23 +161,26 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
           isDense: true,
         ),
         keyboardType: keyboard,
-        onChanged: (v) {
-          final trimmed = v.trim();
-          final numeric = const {
-            'number',
-            'money',
-            'duration',
-          }.contains(field.type);
-          _updateCustomDataForEntity(
-            field.entity,
-            field.key,
-            trimmed.isEmpty
-                ? null
-                : numeric
-                ? num.tryParse(trimmed.replaceAll(',', '.'))
-                : v,
-          );
-        },
+        readOnly: !_canWriteClient,
+        onChanged: !_canWriteClient
+            ? null
+            : (v) {
+                final trimmed = v.trim();
+                final numeric = const {
+                  'number',
+                  'money',
+                  'duration',
+                }.contains(field.type);
+                _updateCustomDataForEntity(
+                  field.entity,
+                  field.key,
+                  trimmed.isEmpty
+                      ? null
+                      : numeric
+                      ? num.tryParse(trimmed.replaceAll(',', '.'))
+                      : v,
+                );
+              },
       ),
     );
   }
@@ -178,23 +199,25 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        onTap: () async {
-          final picked = await showMagicDatePicker(
-            context: context,
-            initialDate: dt ?? DateTime.now(),
-            firstDate: DateTime(1950),
-            lastDate: DateTime(2100),
-            // Dates here are often far away (birthdates) — allow typing.
-            initialEntryMode: DatePickerEntryMode.input,
-          );
-          if (picked != null) {
-            _updateCustomDataForEntity(
-              field.entity,
-              field.key,
-              DateFormat('yyyy-MM-dd').format(picked),
-            );
-          }
-        },
+        onTap: !_canWriteClient
+            ? null
+            : () async {
+                final picked = await showMagicDatePicker(
+                  context: context,
+                  initialDate: dt ?? DateTime.now(),
+                  firstDate: DateTime(1950),
+                  lastDate: DateTime(2100),
+                  // Dates here are often far away (birthdates) — allow typing.
+                  initialEntryMode: DatePickerEntryMode.input,
+                );
+                if (picked != null) {
+                  _updateCustomDataForEntity(
+                    field.entity,
+                    field.key,
+                    DateFormat('yyyy-MM-dd').format(picked),
+                  );
+                }
+              },
         child: InputDecorator(
           decoration: _inputDecoration(
             cs,

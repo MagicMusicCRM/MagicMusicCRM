@@ -301,8 +301,17 @@ class LessonEditorDecisionPolicy {
           item.status == 'active' &&
           item.assignedBranchIds.contains(branchId),
     );
+    final branch = references.branches
+        .where((item) => item.id == branchId)
+        .firstOrNull;
+    final offset = int.tryParse(
+      (branch?.raw['utcOffsetMinutes'] ?? branch?.raw['utc_offset_minutes'])
+              ?.toString() ??
+          '',
+    );
     return draft.copyWith(
       branchId: branchId,
+      utcOffsetMinutes: offset ?? 180,
       teacherId: keepsTeacher ? draft.teacherId : null,
       roomId: null,
       settlementTypeKey: null,
@@ -549,9 +558,9 @@ class LessonEditorDecisionPolicy {
       local.year,
       local.month,
       local.day,
-      local.hour - 3,
+      local.hour,
       local.minute,
-    );
+    ).subtract(Duration(minutes: draft.utcOffsetMinutes));
     return {
       'teacherId': draft.teacherId,
       'branchId': draft.branchId,

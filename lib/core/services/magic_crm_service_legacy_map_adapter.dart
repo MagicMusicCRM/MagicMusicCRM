@@ -409,6 +409,10 @@ Map<String, dynamic> _legacyLeadStatus(Map<String, dynamic> item) {
     'color': item['color'] ?? '8B5CF6',
     'sort_order': item['sortOrder'],
     'created_at': item['createdAt'],
+    'requiresReason': item['requiresReason'] == true,
+    'requires_reason': item['requiresReason'] == true,
+    'isTerminal': item['isTerminal'] == true,
+    'is_terminal': item['isTerminal'] == true,
   };
 }
 
@@ -618,6 +622,7 @@ Map<String, dynamic> _legacyComment(Map<String, dynamic> item) {
     'entity_id': item['entityId'],
     'author_id': item['authorId'],
     'author_name': item['authorName'],
+    'author_role': item['authorRole'],
     'body': content,
     'content': content,
     'kind': item['kind'],

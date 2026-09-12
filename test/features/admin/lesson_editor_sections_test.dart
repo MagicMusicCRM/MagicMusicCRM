@@ -1692,7 +1692,7 @@ void main() {
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Отмена'))
           .onPressed,
-      isNotNull,
+      isNull,
     );
     expect(
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
@@ -1809,7 +1809,7 @@ void main() {
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Отмена'))
           .onPressed,
-      isNotNull,
+      isNull,
     );
     expect(
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,

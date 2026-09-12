@@ -146,6 +146,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
   String _commentKind = 'admin_comment';
   // Resolved status list: either the one passed in or self-fetched.
   List<StatusRecord> _statuses = const [];
+  final Map<String, bool> _statusRequiresReason = {};
+  String? _pendingLeadStatusComment;
   bool _saving = false;
   late final ClientCardDraftController _draft;
   bool _converting = false;
@@ -221,6 +223,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
   set _customFieldsExpanded(bool value) =>
       _workspaceController.customFieldsExpanded = value;
   bool _internalContextAllowed = false;
+  bool get _canWriteClient =>
+      widget.capabilitySnapshot?.allows('crm.client.write') ??
+      crmHasManagerAccess(_currentActorRole() ?? '');
+  bool? get _explicitFinanceAccess =>
+      widget.capabilitySnapshot?.allows('commerce.client_finance.read');
   bool _internalContextLoading = false;
   bool _operationalHistoryLoadingMore = false;
   String? _internalContextError;
@@ -472,6 +479,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _readController = ClientCardDataController(
       crm: ref.read(magicCrmServiceProvider),
       resolveRole: _resolveActorRole,
+      canReadFinance: () => _explicitFinanceAccess,
     )..addListener(_onReadModelsChanged);
     final restoredOffset = widget.initialViewState?.scrollOffset ?? 0;
     _workspaceController = ClientCardWorkspaceController(
@@ -530,6 +538,17 @@ class _ClientCardState extends ConsumerState<ClientCard>
   @override
   void didUpdateWidget(covariant ClientCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.capabilitySnapshot?.accessVersion !=
+        widget.capabilitySnapshot?.accessVersion) {
+      if (!_canWriteClient) {
+        _internalContextAllowed = false;
+        _internalNote = null;
+        _operationalHistory = const [];
+      }
+      if (_studentId.isNotEmpty) {
+        unawaited(_readController.refreshCommerce(_studentId));
+      }
+    }
     _scheduleWorkspaceFormRegistration();
     if (oldWidget.initialSection != widget.initialSection) {
       _workspaceController.restoreSection(widget.initialSection);
@@ -745,8 +764,22 @@ class _ClientCardState extends ConsumerState<ClientCard>
   @override
   void dispose() {
     _workspaceRegistrationGeneration++;
-    _syncWorkspaceFormDirty();
-    _unregisterWorkspaceForm(preserveDirtyDraft: true);
+    final workspaceScope = _registeredWorkspaceScope;
+    final tabId = _registeredWorkspaceTabId;
+    final formKey = _registeredWorkspaceFormKey;
+    _registeredWorkspaceScope = null;
+    _registeredWorkspaceTabId = null;
+    _registeredWorkspaceFormKey = null;
+    if (workspaceScope != null && tabId != null && formKey != null) {
+      final dirty = _edited || _internalNotePending;
+      workspaceScope.controller.detachForm(
+        tabId,
+        formKey,
+        dirty: dirty,
+        expectedVersion: _workspaceExpectedVersion,
+        draft: dirty ? _buildWorkspaceDraft() : const {},
+      );
+    }
     _draft.dispose();
     _readController.dispose();
     _commentCtrl.dispose();
@@ -828,7 +861,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
           ),
         ],
       ),
-      actionBar: _isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs),
+      actionBar: _canWriteClient
+          ? (_isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs))
+          : null,
       onCloseRequested: _handleClose,
     );
   }

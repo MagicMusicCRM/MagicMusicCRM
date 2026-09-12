@@ -59,10 +59,13 @@ class ClientCardDataController extends ChangeNotifier {
   ClientCardDataController({
     required MagicCrmService crm,
     required Future<String> Function() resolveRole,
+    bool? Function()? canReadFinance,
   }) : _crm = crm,
-       _resolveRole = resolveRole;
+       _resolveRole = resolveRole,
+       _canReadFinance = canReadFinance;
   final MagicCrmService _crm;
   final Future<String> Function() _resolveRole;
+  final bool? Function()? _canReadFinance;
   bool _disposed = false;
   int _studentGeneration = 0, _leadGeneration = 0;
   int _commerceGeneration = 0;
@@ -178,6 +181,9 @@ class ClientCardDataController extends ChangeNotifier {
     String id,
   ) async {
     try {
+      if (_canReadFinance?.call() == false) {
+        return (student: null, error: null);
+      }
       final role = await _resolveRole();
       if (_disposed || !crmHasClientCardFinanceAccess(role)) {
         return (student: null, error: null);

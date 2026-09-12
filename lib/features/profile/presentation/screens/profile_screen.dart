@@ -160,21 +160,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     setState(() => _isSaving = true);
+    String? uploadedAvatarUrl;
     try {
       String? updatedAvatarUrl = _ogAvatarUrl;
 
       // 1. Upload new avatar if picked
       if (_newAvatarBytes != null) {
         final attachments = ref.read(chatAttachmentServiceProvider);
-        updatedAvatarUrl = await attachments.uploadAvatar(
+        uploadedAvatarUrl = await attachments.uploadAvatar(
           bytes: _newAvatarBytes!,
           fileName:
               'profile_${_userId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
         );
-        // Clean up old avatar
-        if (_ogAvatarUrl != null) {
-          await attachments.deleteAvatar(_ogAvatarUrl);
-        }
+        updatedAvatarUrl = uploadedAvatarUrl;
       }
 
       // 2. Update DB
@@ -189,6 +187,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 : _dobController.text.trim(),
             avatarFileId: updatedAvatarUrl,
           );
+
+      // The profile now points to the new file. Old storage may be cleaned up
+      // only after that durable update succeeds.
+      if (uploadedAvatarUrl != null && _ogAvatarUrl != null) {
+        try {
+          await ref
+              .read(chatAttachmentServiceProvider)
+              .deleteAvatar(_ogAvatarUrl);
+        } catch (_) {
+          // A stale old file is safe to clean up asynchronously later; failing
+          // here would incorrectly report that the saved profile was rejected.
+        }
+      }
 
       // 3. Update local OG vars
       _ogFirstName = _firstNameController.text.trim();
@@ -217,6 +228,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         widget.onUpdate!();
       }
     } catch (e) {
+      if (uploadedAvatarUrl != null) {
+        try {
+          await ref
+              .read(chatAttachmentServiceProvider)
+              .deleteAvatar(uploadedAvatarUrl);
+        } catch (_) {
+          // Preserve the original save error if orphan cleanup also fails.
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -66,7 +66,7 @@ void main() {
   );
 
   test(
-    'capabilities override schedule and task fallbacks but not teacher finance',
+    'authoritative capabilities control finance schedule and task access',
     () {
       const snapshot = CapabilitySnapshot(
         accountId: 'teacher-1',
@@ -86,18 +86,12 @@ void main() {
         hasStudentHalf: true,
       );
 
-      expect(access.canReadClientFinance, isFalse);
+      expect(access.canReadClientFinance, isTrue);
       expect(access.canWriteSchedule, isTrue);
       expect(access.canReadSchedule, isTrue);
       expect(access.canReadTasks, isTrue);
-      expect(
-        access.sections.map((item) => item.$3),
-        isNot(contains('payments')),
-      );
-      expect(
-        access.sections.map((item) => item.$3),
-        isNot(contains('subscriptions')),
-      );
+      expect(access.sections.map((item) => item.$3), contains('payments'));
+      expect(access.sections.map((item) => item.$3), contains('subscriptions'));
     },
   );
 
@@ -155,7 +149,7 @@ void main() {
     ]);
   });
 
-  test('authoritative snapshot role keeps subscription sales available', () {
+  test('authoritative snapshot hides finance when capability is absent', () {
     for (final role in const ['admin', 'director', 'system_admin']) {
       final access = ClientCardAccessPolicy.project(
         actorRole: '',
@@ -169,10 +163,10 @@ void main() {
         hasStudentHalf: true,
       );
 
-      expect(access.canReadClientFinance, isTrue, reason: role);
+      expect(access.canReadClientFinance, isFalse, reason: role);
       expect(
         access.sections.map((item) => item.$3),
-        contains('subscriptions'),
+        isNot(contains('subscriptions')),
         reason: role,
       );
     }
@@ -195,7 +189,7 @@ void main() {
         hasStudentHalf: true,
       );
 
-      expect(access.canReadClientFinance, isTrue);
+      expect(access.canReadClientFinance, isFalse);
       expect(access.canReadSchedule, isFalse);
       expect(access.canWriteSchedule, isFalse);
       expect(access.canReadTasks, isFalse);

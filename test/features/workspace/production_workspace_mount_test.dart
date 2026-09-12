@@ -1001,7 +1001,7 @@ CapabilitySnapshot _workspaceSnapshot(
   accountId: accountId,
   role: 'manager',
   accessVersion: accessVersion,
-  capabilities: const {'crm.client.read.basic'},
+  capabilities: const {'crm.client.read.basic', 'crm.client.write'},
   scopes: const {},
 );
 

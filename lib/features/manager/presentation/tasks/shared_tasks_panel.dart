@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
@@ -45,6 +46,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
   late SharedTasksController _controller;
   StreamController<void>? _realtimeRefreshes;
   ProviderSubscription<AsyncValue<CrmChangedEvent>>? _realtimeSubscription;
+  ProviderSubscription<CrmSectionFocus?>? _sectionFocusSubscription;
   bool _focusConsumed = false;
 
   @override
@@ -56,6 +58,11 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
         ? StreamController<void>.broadcast()
         : null;
     final now = DateTime.now();
+    final sectionFocus = ref.read(crmSectionFocusProvider);
+    final focusedOverdue =
+        (sectionFocus?.section == 'tasks' &&
+            sectionFocus?.filters['due'] == 'overdue') ||
+        widget.initialLink?.optionalFocus?.filter['due'] == 'overdue';
     _controller = SharedTasksController(
       dataSource: _dataSource,
       refreshes: _realtimeRefreshes?.stream,
@@ -66,6 +73,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
         scope: widget.defaultToMineToday ? 'mine' : 'all',
         day: widget.defaultToMineToday ? sharedTasksMoscowToday() : null,
         calendarMonth: DateTime(now.year, now.month),
+        state: focusedOverdue ? 'overdue' : 'open',
       ),
     )..addListener(_onControllerChanged);
     if (_realtimeRefreshes case final refreshes?) {
@@ -78,7 +86,29 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
         }
       });
     }
+    _sectionFocusSubscription = ref.listenManual<CrmSectionFocus?>(
+      crmSectionFocusProvider,
+      (_, next) {
+        if (next?.section != 'tasks') return;
+        final nextState = next!.filters['due'] == 'overdue'
+            ? 'overdue'
+            : 'open';
+        if (_controller.state.query.state != nextState) {
+          unawaited(
+            _controller.setQuery(
+              _controller.state.query.copyWith(state: nextState),
+            ),
+          );
+        }
+        ref.read(crmSectionFocusProvider.notifier).consume('tasks');
+      },
+    );
     Future<void>.microtask(_load);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(crmSectionFocusProvider.notifier).consume('tasks');
+      }
+    });
   }
 
   @override
@@ -93,7 +123,15 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
     );
     final defaultsChanged =
         oldWidget.defaultToMineToday != widget.defaultToMineToday;
-    if (!focusChanged && !linkedChanged && !defaultsChanged) return;
+    final oldRouteState = _routeTaskState(oldWidget.initialLink);
+    final nextRouteState = _routeTaskState(widget.initialLink);
+    final routeStateChanged = oldRouteState != nextRouteState;
+    if (!focusChanged &&
+        !linkedChanged &&
+        !defaultsChanged &&
+        !routeStateChanged) {
+      return;
+    }
     if (focusChanged) _focusConsumed = false;
 
     final query = _controller.state.query;
@@ -109,6 +147,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
           day: defaultsChanged
               ? (widget.defaultToMineToday ? sharedTasksMoscowToday() : null)
               : query.day,
+          state: routeStateChanged ? nextRouteState : query.state,
         ),
       ),
     );
@@ -116,6 +155,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
 
   @override
   void dispose() {
+    _sectionFocusSubscription?.close();
     _realtimeSubscription?.close();
     _controller
       ..removeListener(_onControllerChanged)
@@ -126,6 +166,9 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
   }
 
   String? get _focusedTaskId => _focusedTaskIdFor(widget.initialLink);
+
+  String _routeTaskState(EntityLink? link) =>
+      link?.optionalFocus?.filter['due'] == 'overdue' ? 'overdue' : 'open';
 
   Future<void> _load({bool showLoading = true}) =>
       _controller.refresh(showLoading: showLoading);
@@ -195,10 +238,11 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
       kind: AppSurfaceKind.quickView,
       title: task['title']?.toString() ?? 'Задача',
       icon: Icons.task_alt_rounded,
-      builder: (context) => SharedTaskDetails(
+      builder: (surfaceContext) => SharedTaskDetails(
         task: task,
         history: _dataSource.history(task['id'].toString()),
-        onOpenEntity: (link) => _openLinkedEntity(task, link),
+        onOpenEntity: (link) =>
+            _openLinkedEntity(task, link, surfaceContext: surfaceContext),
       ),
     );
   }
@@ -223,8 +267,9 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
 
   Future<void> _openLinkedEntity(
     Map<String, dynamic> task,
-    EntityLink link,
-  ) async {
+    EntityLink link, {
+    required BuildContext surfaceContext,
+  }) async {
     final scoped = widget.linkedEntity;
     final destination =
         scoped?.rawEntityType == link.rawEntityType &&
@@ -232,6 +277,9 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
         ? scoped!
         : link;
     if (!destination.isSupported) return;
+    Navigator.of(surfaceContext).pop();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
     await openEntityLink(
       context,
       ref,

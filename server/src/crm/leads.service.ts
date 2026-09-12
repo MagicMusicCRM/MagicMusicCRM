@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ActorContext } from "../common/security/actor-context";
+import type { VersionedMutationMetadata } from "../platform/versioned-mutation-metadata";
 import {
   ValidatedCustomFields,
   ValidatedLeadCreate,
@@ -56,8 +57,9 @@ export class LeadsService {
     actor: ActorContext,
     dto: UpsertLeadDto,
     validated?: ValidatedLeadCreate,
+    metadata?: VersionedMutationMetadata,
   ) {
-    return this.commands.create(actor, dto, validated);
+    return this.commands.create(actor, dto, validated, metadata);
   }
 
   updateLead(

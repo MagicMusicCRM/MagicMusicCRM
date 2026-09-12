@@ -488,7 +488,7 @@ describe("Comment sharing (PostgreSQL)", () => {
     await expect(
       sharing.setTeacherSharing(actors.manager, {
         commentId: comment.id,
-        sharedWithTeacher: false,
+        sharedWithTeacher: true,
         expectedVersion: 1,
         reasonCode: "test.stale",
         requestId: staleRequestId,

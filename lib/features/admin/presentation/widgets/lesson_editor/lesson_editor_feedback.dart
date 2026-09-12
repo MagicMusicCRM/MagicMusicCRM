@@ -211,7 +211,10 @@ class LessonEditorActionsRow extends StatelessWidget {
       spacing: AppSpace.sm,
       overflowSpacing: AppSpace.sm,
       children: [
-        TextButton(onPressed: actions.cancel, child: const Text('Отмена')),
+        TextButton(
+          onPressed: isSaving ? null : actions.cancel,
+          child: const Text('Отмена'),
+        ),
         FilledButton(
           onPressed: isSaving || !canSave ? null : actions.save,
           child: isSaving

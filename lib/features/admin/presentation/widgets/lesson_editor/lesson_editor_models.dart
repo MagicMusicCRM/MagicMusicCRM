@@ -58,6 +58,7 @@ class LessonEditorDraft {
     this.plannedSettlementReason = '',
     this.notes = '',
     this.clientDecisions = const [],
+    this.utcOffsetMinutes = 180,
   });
 
   final DateTime localStart;
@@ -80,6 +81,7 @@ class LessonEditorDraft {
   final String plannedSettlementReason;
   final String notes;
   final List<Map<String, dynamic>> clientDecisions;
+  final int utcOffsetMinutes;
 
   LessonEditorDraft copyWith({
     DateTime? localStart,
@@ -102,6 +104,7 @@ class LessonEditorDraft {
     String? plannedSettlementReason,
     String? notes,
     List<Map<String, dynamic>>? clientDecisions,
+    int? utcOffsetMinutes,
   }) => LessonEditorDraft(
     localStart: localStart ?? this.localStart,
     durationMinutes: durationMinutes ?? this.durationMinutes,
@@ -148,6 +151,7 @@ class LessonEditorDraft {
         plannedSettlementReason ?? this.plannedSettlementReason,
     notes: notes ?? this.notes,
     clientDecisions: clientDecisions ?? this.clientDecisions,
+    utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
   );
 
   LessonEditorDraft withDate(DateTime value) => copyWith(

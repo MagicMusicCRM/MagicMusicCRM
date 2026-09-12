@@ -1040,10 +1040,21 @@ extension _ClientCardStudent on _ClientCardState {
             ),
           );
         }).toList(),
-        onChanged: (v) {
+        onChanged: !_canWriteClient
+            ? null
+            : (v) async {
           if (v != null) {
+            String? reason;
+            if (_statusRequiresReason[v] == true) {
+              reason = await showMagicDialog<String>(
+                context: context,
+                builder: (_) => const _LeadStatusReasonDialog(),
+              );
+              if (reason == null || !mounted) return;
+            }
             _emitState(() {
               _leadData['status'] = v;
+              _pendingLeadStatusComment = reason;
               _edited = true;
               _draft.leadStatusEdit = _draft.revision;
             });
@@ -1121,4 +1132,50 @@ extension _ClientCardStudent on _ClientCardState {
       ),
     );
   }
+}
+
+class _LeadStatusReasonDialog extends StatefulWidget {
+  const _LeadStatusReasonDialog();
+
+  @override
+  State<_LeadStatusReasonDialog> createState() => _LeadStatusReasonDialogState();
+}
+
+class _LeadStatusReasonDialogState extends State<_LeadStatusReasonDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Причина смены статуса'),
+    content: TextField(
+      key: const ValueKey('lead-status-reason'),
+      controller: _controller,
+      autofocus: true,
+      maxLength: 500,
+      maxLines: 3,
+      onChanged: (_) => setState(() {}),
+      decoration: const InputDecoration(
+        labelText: 'Причина *',
+        hintText: 'Укажите, почему меняется статус',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(
+        onPressed: _controller.text.trim().isEmpty
+            ? null
+            : () => Navigator.pop(context, _controller.text.trim()),
+        child: const Text('Продолжить'),
+      ),
+    ],
+  );
 }

@@ -111,6 +111,8 @@ describe("MergeService", () => {
     expect(query.mock.calls[0][0]).toContain("phone_normalized");
     expect(query.mock.calls[0][0]).toContain("left join app.lead_sources");
     expect(query.mock.calls[0][0]).toContain("source1.display_name");
+    expect(query.mock.calls[0][0]).toContain("app.staff_branch_assignments");
+    expect(query.mock.calls[0][1]).toEqual([actor.userId, 50]);
   });
 
   it("mergeLeads re-points references, soft-deletes the loser, and logs", async () => {
@@ -133,6 +135,8 @@ describe("MergeService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
     expect(sql).toContain("for update");
+    expect(String(query.mock.calls[0][0])).toContain("app.staff_branch_assignments");
+    expect(query.mock.calls[0][1]).toEqual(["l-lo", "l-wi", actor.userId]);
     expect(sql).toContain("version = version + 1");
     expect(sql).toMatch(/update app\.students\s+set lead_id/);
     expect(sql).toContain("app.allow_lead_status_history_repoint");
@@ -166,6 +170,8 @@ describe("MergeService", () => {
     expect(sql).toContain("version = version + 1");
     expect(sql).toContain("set deleted_at = null");
     expect(sql).toContain("update app.merge_log set undone_at = now()");
+    expect(String(query.mock.calls[0][0])).toContain("app.staff_branch_assignments");
+    expect(query.mock.calls[0][1]).toEqual(["ml1", actor.userId]);
     // duplicate_candidates reverse binds [null, ids]; students reverse binds [loser_id, ids]
     const dupCall = query.mock.calls.find((c) => String(c[0]).includes("app.duplicate_candidates"));
     expect((dupCall?.[1] as unknown[])[0]).toBeNull();

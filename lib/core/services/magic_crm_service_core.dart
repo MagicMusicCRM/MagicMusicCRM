@@ -321,6 +321,7 @@ extension MagicCrmCore on MagicCrmService {
     String? firstName,
     String? lastName,
     String? phone,
+    bool clearPhone = false,
     String? email,
     bool clearEmail = false,
     String? status,
@@ -334,6 +335,7 @@ extension MagicCrmCore on MagicCrmService {
     if (firstName != null) data['firstName'] = firstName.trim();
     if (lastName != null) data['lastName'] = lastName.trim();
     if (phone != null) data['phone'] = phone.trim();
+    if (clearPhone) data['clearPhone'] = true;
     if (email != null) data['email'] = email.trim();
     if (clearEmail) data['clearEmail'] = true;
     if (status != null) data['status'] = status.trim();
@@ -800,7 +802,14 @@ extension MagicCrmCore on MagicCrmService {
     addString('lastName', lastName);
     addString('phone', phone);
     addString('email', email);
-    addString('position', position);
+    if (position != null) {
+      final trimmedPosition = position.trim();
+      if (trimmedPosition.isEmpty) {
+        data['clearPosition'] = true;
+      } else {
+        data['position'] = trimmedPosition;
+      }
+    }
     addString('status', status);
     if (branchIds != null) data['branchIds'] = branchIds;
     if (customDataPatch != null && customDataPatch.isNotEmpty) {

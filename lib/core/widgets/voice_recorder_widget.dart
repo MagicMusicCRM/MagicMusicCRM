@@ -31,9 +31,13 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
   bool _isRecording = false;
   bool _isSending = false;
   int _durationSeconds = 0;
+  final Stopwatch _elapsed = Stopwatch();
   Timer? _timer;
   late AnimationController _pulseController;
   String? _recordPath;
+  Uint8List? _recordedBytes;
+  int? _recordedDurationMs;
+  String? _sendError;
 
   @override
   void initState() {
@@ -59,6 +63,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
         );
 
         await _recorder.start(config, path: _recordPath!);
+        _elapsed
+          ..reset()
+          ..start();
 
         if (mounted) {
           setState(() => _isRecording = true);
@@ -98,32 +105,43 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
   }
 
   Future<void> _stopAndSend() async {
-    if (_isSending || !_isRecording) return;
+    if (_isSending || (!_isRecording && _recordedBytes == null)) return;
     setState(() => _isSending = true);
     _timer?.cancel();
 
     try {
-      final path = await _recorder.stop();
-      if (path != null && path.isNotEmpty) {
-        final file = File(path);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          if (mounted) {
-            await widget.onVoiceRecorded(
-              bytes,
-              _durationSeconds * 1000,
-              '.m4a',
-            );
-          }
-          // Clean up temp file
-          try {
-            await file.delete();
-          } catch (_) {}
+      if (_recordedBytes == null) {
+        _elapsed.stop();
+        final path = await _recorder.stop();
+        _isRecording = false;
+        if (path == null || path.isEmpty) {
+          throw StateError('Файл записи не создан');
         }
+        final file = File(path);
+        if (!await file.exists()) throw StateError('Файл записи недоступен');
+        _recordedBytes = await file.readAsBytes();
+        _recordedDurationMs = _elapsed.elapsedMilliseconds.clamp(1, 3600000);
       }
+      await widget.onVoiceRecorded(
+        _recordedBytes!,
+        _recordedDurationMs!,
+        '.m4a',
+      );
+      final path = _recordPath;
+      if (path != null) {
+        try {
+          await File(path).delete();
+        } catch (_) {}
+      }
+      if (mounted) widget.onCancel();
+      return;
     } catch (e) {
       debugPrint('Error stopping recording: $e');
       if (mounted) {
+        setState(() {
+          _isSending = false;
+          _sendError = 'Не удалось отправить. Запись сохранена для повтора.';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -135,12 +153,11 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
         );
       }
     }
-
-    if (mounted) widget.onCancel();
   }
 
   Future<void> _cancel() async {
     _timer?.cancel();
+    _elapsed.stop();
     try {
       final path = await _recorder.stop();
       if (path != null) {
@@ -220,6 +237,14 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
                 'Запись...',
                 style: TextStyle(color: AppTheme.danger, fontSize: 13),
               ),
+            if (_sendError != null)
+              Flexible(
+                child: Text(
+                  _sendError!,
+                  style: const TextStyle(color: AppTheme.danger, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             const Spacer(),
             // Send button
             if (_isSending)
@@ -240,7 +265,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
                 child: IconButton(
                   tooltip: 'Остановить и отправить запись',
                   icon: const Icon(Icons.send_rounded, color: AppColor.onGold),
-                  onPressed: _isRecording ? _stopAndSend : null,
+                  onPressed: (_isRecording || _recordedBytes != null)
+                      ? _stopAndSend
+                      : null,
                 ),
               ),
           ],

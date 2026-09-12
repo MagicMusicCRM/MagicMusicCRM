@@ -288,6 +288,14 @@ class SchedulePlanMutationFlow {
     final validUntil =
         DateTime.tryParse(plan.activeUntil ?? '') ??
         effectiveFrom.add(const Duration(days: 90));
+    final selectedDecisions = [
+      for (final participant in draft.participants)
+        {
+          'clientId': participant['studentId'],
+          'chargeType': 'subscription',
+          'subscriptionId': participant['subscriptionId'],
+        },
+    ];
     final rows = plan.currentRows
         .map(
           (row) => _draftFromPlanRow(
@@ -297,7 +305,7 @@ class SchedulePlanMutationFlow {
             title: plan.title,
             subscriptionId: plan.subscriptionId,
             openEnded: plan.activeUntil == null,
-          ),
+          ).copyWith(clientDecisions: selectedDecisions),
         )
         .toList();
     final review = await showMagicSheet<SchedulePlanRowsReviewResult>(

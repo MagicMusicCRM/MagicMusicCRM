@@ -165,16 +165,19 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       return;
     }
 
-    final decision = await showMagicDialog<_PhoneReviewDecision>(
-      context: context,
-      builder: (_) => _PhoneReviewResolutionDialog(
-        rawPhone: _readString(item, ['rawPhone', 'raw_phone']),
-      ),
-    );
-    if (decision == null || !mounted) return;
-
-    setState(() => _resolvingPhoneId = id);
-    try {
+    _PhoneReviewDecision? draft;
+    while (mounted) {
+      final decision = await showMagicDialog<_PhoneReviewDecision>(
+        context: context,
+        builder: (_) => _PhoneReviewResolutionDialog(
+          rawPhone: _readString(item, ['rawPhone', 'raw_phone']),
+          initialDecision: draft,
+        ),
+      );
+      if (decision == null || !mounted) return;
+      draft = decision;
+      setState(() => _resolvingPhoneId = id);
+      try {
       await ref
           .read(magicCrmServiceProvider)
           .resolvePhoneReview(
@@ -193,15 +196,17 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
             : 'Номер отмечен как проверенный',
         type: MagicToastType.success,
       );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _resolvingPhoneId = null);
-      MagicToast.show(
-        context,
-        'Не удалось разобрать номер',
-        detail: userErrorMessage(e),
-        type: MagicToastType.danger,
-      );
+        return;
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _resolvingPhoneId = null);
+        MagicToast.show(
+          context,
+          'Не удалось разобрать номер',
+          detail: userErrorMessage(e),
+          type: MagicToastType.danger,
+        );
+      }
     }
   }
 

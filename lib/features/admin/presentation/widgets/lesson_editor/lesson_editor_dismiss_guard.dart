@@ -6,11 +6,13 @@ import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
 class LessonEditorDismissGuard extends StatefulWidget {
   const LessonEditorDismissGuard({
     required this.isDirty,
+    this.isBusy = false,
     required this.child,
     super.key,
   });
 
   final bool isDirty;
+  final bool isBusy;
   final Widget child;
 
   @override
@@ -35,9 +37,9 @@ class _LessonEditorDismissGuardState extends State<LessonEditorDismissGuard> {
 
   @override
   Widget build(BuildContext context) => PopScope<bool>(
-    canPop: _allowPop || !widget.isDirty,
+    canPop: !widget.isBusy && (_allowPop || !widget.isDirty),
     onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) _confirmDiscard();
+      if (!didPop && !widget.isBusy) _confirmDiscard();
     },
     child: widget.child,
   );

@@ -304,6 +304,7 @@ extension MagicCrmSchedule on MagicCrmService {
     String? roomId,
     String? teacherId,
     String? studentId,
+    String? groupId,
     String? leadId,
     bool? isTrial,
     String? groupBy,
@@ -385,6 +386,7 @@ extension MagicCrmSchedule on MagicCrmService {
     String? from,
     String? to,
     String? studentId,
+    String? groupId,
     String? teacherId,
     bool? isTrial,
     // 'desc' — новейшие первыми (история: сервер режет limit ПОСЛЕ сортировки,
@@ -397,6 +399,7 @@ extension MagicCrmSchedule on MagicCrmService {
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;
     if (studentId != null) queryParameters['studentId'] = studentId;
+    if (groupId != null) queryParameters['groupId'] = groupId;
     if (teacherId != null) queryParameters['teacherId'] = teacherId;
     if (isTrial != null) queryParameters['isTrial'] = isTrial;
     if (order != null) queryParameters['order'] = order;

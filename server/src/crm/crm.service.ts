@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ActorContext } from "../common/security/actor-context";
+import type { VersionedMutationMetadata } from "../platform/versioned-mutation-metadata";
 import type {
   ValidatedCustomFields,
   ValidatedStudentCreate,
@@ -38,8 +39,9 @@ export class CrmService {
     actor: ActorContext,
     dto: CreateStudentDto,
     validated?: ValidatedStudentCreate,
+    metadata?: VersionedMutationMetadata,
   ) {
-    return this.commands.createStudent(actor, dto, validated);
+    return this.commands.createStudent(actor, dto, validated, metadata);
   }
 
   getStudent(actor: ActorContext, studentId: string) {

@@ -7,6 +7,11 @@ import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { CrmPolicy } from "./crm.policy";
 import { mergeCustomData } from "./appeal-date";
+import {
+  branchIdExpr,
+  currentActorRoleSql,
+  managerBranchScopeSql,
+} from "./branch-scope";
 
 /**
  * Lead merge + undo (app.merge_log). Repoints every lead reference from the
@@ -63,9 +68,19 @@ export class MergeService {
         left join app.branches branch2 on branch2.id = l2.branch_id
         where l1.deleted_at is null and l2.deleted_at is null
           and l1.phone_normalized is not null
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$1"),
+            userIdExpression: "$1",
+            branchExpression: branchIdExpr("l1"),
+          })}
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$1"),
+            userIdExpression: "$1",
+            branchExpression: branchIdExpr("l2"),
+          })}
         order by l2.phone_normalized
-        limit $1`,
-      [capped],
+        limit $2`,
+      [actor.userId, capped],
     );
     return {
       items: result.rows.map((row) => ({
@@ -104,9 +119,14 @@ export class MergeService {
         `select id, custom_data
            from app.leads
           where id in ($1, $2) and deleted_at is null
+            and ${managerBranchScopeSql({
+              roleExpression: currentActorRoleSql("$3"),
+              userIdExpression: "$3",
+              branchExpression: branchIdExpr("app.leads"),
+            })}
           order by id
           for update`,
-        [loserId, winnerId],
+        [loserId, winnerId, actor.userId],
       );
       if (existing.rows.length !== 2) {
         throw new NotFoundException("Один из лидов не найден.");
@@ -246,13 +266,26 @@ export class MergeService {
     return this.database.transaction(async (client) => {
       const logRes = await client.query<{
         loser_id: string;
+        winner_id: string;
         repointed: Record<string, string[]>;
       }>(
-        `select loser_id, repointed
-           from app.merge_log
-          where id = $1 and undone_at is null
-          for update`,
-        [mergeLogId],
+        `select merge_record.loser_id, merge_record.winner_id, merge_record.repointed
+           from app.merge_log merge_record
+           join app.leads loser on loser.id = merge_record.loser_id
+           join app.leads winner on winner.id = merge_record.winner_id
+          where merge_record.id = $1 and merge_record.undone_at is null
+            and ${managerBranchScopeSql({
+              roleExpression: currentActorRoleSql("$2"),
+              userIdExpression: "$2",
+              branchExpression: branchIdExpr("loser"),
+            })}
+            and ${managerBranchScopeSql({
+              roleExpression: currentActorRoleSql("$2"),
+              userIdExpression: "$2",
+              branchExpression: branchIdExpr("winner"),
+            })}
+          for update of merge_record`,
+        [mergeLogId, actor.userId],
       );
       const log = logRes.rows[0];
       if (!log) {

@@ -41,7 +41,7 @@ export class StudentMutationExecutor {
     );
   }
 
-  private async createInTransaction(
+  async createInTransaction(
     client: PoolClient,
     command: PreparedStudentCreate,
   ): Promise<StudentRow> {
@@ -304,7 +304,7 @@ export class StudentMutationExecutor {
           update app.profiles p
           set first_name = coalesce($2, p.first_name),
             last_name = coalesce($3, p.last_name),
-            phone = coalesce($4, p.phone),
+            phone = case when $12::boolean then null else coalesce($4, p.phone) end,
             updated_at = now()
           from target
           where p.id = target.profile_id
@@ -368,6 +368,7 @@ export class StudentMutationExecutor {
         command.clearResponsible,
         command.sourceId,
         command.clearEmail ?? false,
+        command.clearPhone ?? false,
       ],
     );
     return updated.rows[0];

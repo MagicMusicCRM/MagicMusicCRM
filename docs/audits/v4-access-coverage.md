@@ -38,14 +38,14 @@ expand legacy access.
 | `config.crm.edit` | 36 |
 | `config.crm.publish` | 2 |
 | `config.crm.read` | 3 |
-| `crm.client.read.basic` | 111 |
+| `crm.client.read.basic` | 115 |
 | `crm.client.read.contacts` | 2 |
-| `crm.client.write` | 38 |
+| `crm.client.write` | 37 |
 | `crm.comment.read.shared` | 2 |
 | `report.export.xlsx` | 5 |
 | `report.status.read` | 16 |
 | `schedule.lesson.read.assigned` | 25 |
-| `schedule.lesson.write` | 36 |
+| `schedule.lesson.write` | 33 |
 | `system.settings.manage` | 16 |
 | `workflow.task.read` | 4 |
 | `workflow.task.write` | 3 |

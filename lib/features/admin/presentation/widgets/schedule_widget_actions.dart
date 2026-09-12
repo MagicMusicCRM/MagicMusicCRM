@@ -143,10 +143,11 @@ extension _ScheduleActions on _ScheduleWidgetState {
     final branchId = lesson['branch_id']?.toString();
     final branchName = lesson['branch_name']?.toString() ?? 'Филиал';
     final groupName = lesson['group_name']?.toString() ?? 'Группа';
+    final displayDate = scheduleDisplayDate(start);
     final dateFilter = DateTime(
-      start.year,
-      start.month,
-      start.day,
+      displayDate.year,
+      displayDate.month,
+      displayDate.day,
     ).toIso8601String();
     final references = [
       reference(
@@ -385,6 +386,21 @@ extension _ScheduleActions on _ScheduleWidgetState {
       final branches = wave1[0];
       final rooms = wave1[1];
 
+      // A room belongs to exactly one branch. A linked room must therefore
+      // override a branch restored from the previously open schedule tab;
+      // otherwise the room filter and matrix branch can point at different
+      // branches and the linked lesson disappears from the calendar.
+      if (_filterRoomId != null) {
+        final linkedRoom = rooms
+            .where((room) => room['id']?.toString() == _filterRoomId)
+            .firstOrNull;
+        final linkedBranchId = linkedRoom?['branch_id']?.toString();
+        if (linkedBranchId?.isNotEmpty == true) {
+          _selectedBranchId = linkedBranchId;
+          _allBranchesSelected = false;
+        }
+      }
+
       // First open with no branch chosen yet → default to the user's OWN
       // branch (staff assignment), resolved once. Falls back to the first
       // branch only when the user has no assignment or it isn't in the list.
@@ -453,7 +469,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
               ? 500
               : 300,
         ),
-        defaultBranch == null
+        defaultBranch == null || widget.fixedTeacherId != null
             ? Future.value(<String, dynamic>{})
             : crm
                   .listRoomAvailability(
@@ -610,6 +626,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   Future<void> _fetchAvailabilityForSelectedDay() async {
+    if (widget.fixedTeacherId != null) return;
     final branchIds = _allBranchesSelected
         ? _branches
               .map((branch) => branch['id']?.toString())

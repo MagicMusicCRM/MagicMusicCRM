@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
 
 import 'client_card_api.dart';
 
@@ -164,6 +165,7 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
             name: selected.$2,
             raw: sections[selected.$3],
             lessonSection: selected.$3 == 'lessons',
+            homeworkSection: selected.$3 == 'homework',
           ),
         ),
       ],
@@ -177,11 +179,13 @@ class _TeacherSection extends StatelessWidget {
     required this.name,
     required this.raw,
     required this.lessonSection,
+    required this.homeworkSection,
   });
 
   final String name;
   final Object? raw;
   final bool lessonSection;
+  final bool homeworkSection;
 
   @override
   Widget build(BuildContext context) {
@@ -211,11 +215,17 @@ class _TeacherSection extends StatelessWidget {
         final lifecycle = lessonSection
             ? LessonStateProjection.fromMap(item)
             : null;
+        final attachments = homeworkSection
+            ? homeworkAttachments(item['attachments'])
+            : const <Map<String, dynamic>>[];
         return ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(_teacherCardValue(rawTitle)),
-          subtitle: lifecycle != null
-              ? Align(
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (lifecycle != null)
+                Align(
                   alignment: Alignment.centerLeft,
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
@@ -223,9 +233,14 @@ class _TeacherSection extends StatelessWidget {
                     child: LessonStateBadge(projection: lifecycle),
                   ),
                 )
-              : rawSubtitle == null
-              ? null
-              : Text(_teacherCardValue(rawSubtitle, status: true)),
+              else if (rawSubtitle != null)
+                Text(_teacherCardValue(rawSubtitle, status: true)),
+              if (attachments.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.sm),
+                HomeworkAttachmentList(attachments: attachments),
+              ],
+            ],
+          ),
         );
       },
     );

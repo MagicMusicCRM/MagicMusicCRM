@@ -32,7 +32,7 @@ extension _ClientCardCollaborationTabs on _ClientCardState {
         AppSpace.xl,
         AppSpace.lg,
       ),
-      child: _buildCommentInput(cs),
+      child: _canWriteClient ? _buildCommentInput(cs) : const SizedBox.shrink(),
     );
     if (embedded) {
       return Column(children: [comments, input]);
@@ -96,6 +96,7 @@ extension _ClientCardCollaborationTabs on _ClientCardState {
   }
 
   Widget _buildFamilyAddButton(ColorScheme cs) {
+    if (!_canWriteClient) return const SizedBox.shrink();
     return TextButton.icon(
       onPressed: _familyBusy ? null : _openAddFamilyMemberSheet,
       style: TextButton.styleFrom(

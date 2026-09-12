@@ -219,8 +219,10 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
                       expectedPayments: _canSeeFinance
                           ? _asNum(kpis['expected_payments'])
                           : null,
-                      onTasksTap: () => widget.onTabChange?.call(6, null),
-                      onScheduleTap: () => widget.onTabChange?.call(2, null),
+                      onTasksTap: () =>
+                          _focusAndGo('tasks', {'due': 'overdue'}, 6),
+                      onScheduleTap: () =>
+                          _focusAndGo('schedule', {'conflicts': '1'}, 2),
                       onDebtsTap: () => widget.onTabChange?.call(
                         _canSeeFinance ? 5 : 3,
                         null,
@@ -312,7 +314,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         accent: AppTheme.primaryGold,
         sourceLabel: 'Система',
         format: _count,
-        onTap: () => widget.onTabChange?.call(3, null),
+        onTap: () => _focusAndGo('clients', {'segment': 'students'}, 3),
       ),
       _KpiSpec(
         key: 'new_leads',

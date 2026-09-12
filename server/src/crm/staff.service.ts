@@ -546,7 +546,8 @@ export class StaffService {
           ),
           updated_staff as (
             update app.staff_members sm
-            set position = coalesce($5, sm.position),
+            set position = case when $9::boolean then null
+                                else coalesce($5, sm.position) end,
               status = coalesce($6, sm.status),
               custom_data = coalesce(sm.custom_data, '{}'::jsonb) || $7::jsonb,
               updated_at = now()
@@ -620,6 +621,7 @@ export class StaffService {
           trimOptional(dto.status),
           JSON.stringify(customDataPatch),
           dto.branchIds ?? null,
+          dto.clearPosition ?? false,
         ],
       );
       const staff = result.rows[0];

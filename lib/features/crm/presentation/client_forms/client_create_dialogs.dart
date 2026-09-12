@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/student_funnel.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
@@ -50,6 +53,8 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
   String? _submitError;
   bool _loading = true;
   bool _saving = false;
+  MagicMutationIdentity? _createIdentity;
+  String? _createFingerprint;
 
   @override
   void initState() {
@@ -158,16 +163,31 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
       _fieldErrors = const {};
     });
     try {
+      final customFields = _serializedCustomFields(_fields, _customValues);
+      final fingerprint = jsonEncode({
+        'firstName': _firstName.text.trim(),
+        'lastName': _lastName.text.trim(),
+        'phone': _phone.trim(),
+        'sourceId': _sourceId,
+        'branchId': _branchId,
+        'status': _status,
+        'customFields': customFields,
+      });
+      if (_createIdentity == null || _createFingerprint != fingerprint) {
+        _createIdentity = MagicMutationIdentity.create('lead-create');
+        _createFingerprint = fingerprint;
+      }
       final result = await ref
           .read(clientFormsApiProvider)
           .createLead(
+            identity: _createIdentity!,
             firstName: _firstName.text,
             lastName: _lastName.text,
             phone: _phone,
             sourceId: _sourceId!,
             branchId: _branchId!,
             status: _status!,
-            customFields: _serializedCustomFields(_fields, _customValues),
+            customFields: customFields,
           );
       if (!mounted) return;
       Navigator.of(context).pop(result);
@@ -405,6 +425,8 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
   String? _submitError;
   bool _loading = true;
   bool _saving = false;
+  MagicMutationIdentity? _createIdentity;
+  String? _createFingerprint;
 
   @override
   void initState() {
@@ -515,16 +537,31 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
       _fieldErrors = const {};
     });
     try {
+      final customFields = _serializedCustomFields(_fields, _customValues);
+      final fingerprint = jsonEncode({
+        'firstName': _firstName.text.trim(),
+        'lastName': _lastName.text.trim(),
+        'phone': _phone.trim(),
+        'branchId': _branchId,
+        'status': _status,
+        'sourceId': _sourceId,
+        'customFields': customFields,
+      });
+      if (_createIdentity == null || _createFingerprint != fingerprint) {
+        _createIdentity = MagicMutationIdentity.create('student-create');
+        _createFingerprint = fingerprint;
+      }
       final result = await ref
           .read(clientFormsApiProvider)
           .createStudent(
+            identity: _createIdentity!,
             firstName: _firstName.text,
             lastName: _lastName.text,
             phone: _phone,
             branchId: _branchId!,
             status: _status!,
             sourceId: _sourceId!,
-            customFields: _serializedCustomFields(_fields, _customValues),
+            customFields: customFields,
           );
       if (!mounted) return;
       Navigator.of(context).pop(result);

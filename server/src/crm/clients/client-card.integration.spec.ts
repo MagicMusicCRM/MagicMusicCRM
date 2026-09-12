@@ -169,8 +169,8 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     );
     const student = await database.query<{ id: string }>(
       `
-        insert into app.students (profile_id, status, branch_id)
-        values ($1, 'active', $2)
+        insert into app.students (profile_id, status, branch_id, contact_email)
+        values ($1, 'active', $2, 'anna.client@example.test')
         returning id
       `,
       [(client as ActorContext & { profileId: string }).profileId, branchId],
@@ -380,6 +380,10 @@ describe("ClientCardReadService (PostgreSQL)", () => {
         id: studentId,
         displayName: "Анна Клиент",
         branchName: "Центр",
+      },
+      student: {
+        phone: "+79990000000",
+        email: 'anna.client@example.test',
       },
       indicators: {
         activeSubscriptionRemaining: 6,

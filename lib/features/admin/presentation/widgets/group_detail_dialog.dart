@@ -42,6 +42,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
   List<Map<String, dynamic>> _groupStudents = [];
   List<Map<String, dynamic>> _allStudents = [];
   List<GroupScheduleMemberOption> _scheduleMembers = [];
+  List<Map<String, dynamic>> _groupLessons = [];
 
   @override
   void initState() {
@@ -59,6 +60,11 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
       final results = await Future.wait([
         crm.listGroupStudents(widget.group['id'].toString(), limit: 100),
         crm.listStudents(limit: 100),
+        crm.listLessons(
+          groupId: widget.group['id'].toString(),
+          order: 'desc',
+          limit: 100,
+        ),
       ]);
       final groupStudents = results[0];
       final scheduleMembers = await Future.wait([
@@ -70,6 +76,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
       setState(() {
         _groupStudents = groupStudents;
         _allStudents = results[1];
+        _groupLessons = results[2];
         _scheduleMembers = scheduleMembers;
         _loading = false;
       });
@@ -333,7 +340,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
                         ),
                         groupId: widget.group['id']?.toString(),
                         subjectName: groupName.toString(),
-                        fallbackLessons: const [],
+                        fallbackLessons: _groupLessons,
                         branches: _groupBranches(),
                         defaultBranchId: _groupBranchId(),
                         subscriptions: const [],

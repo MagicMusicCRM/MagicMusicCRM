@@ -99,6 +99,7 @@ export class ChatInboxService {
     const targetUserId = userId ?? actor.userId;
     this.policy.assertCanAssign(actor, chat);
 
+    let assignedToName: string | null = null;
     const event = await this.database.transaction(async (client) => {
       // The picker and every authoritative assignment share this exact rule.
       // Locking the linked identity rows prevents a concurrent dismissal or
@@ -106,6 +107,7 @@ export class ChatInboxService {
       const target = await assertEligibleResponsible(client, targetUserId, {
         lock: true,
       });
+      assignedToName = target.displayName;
       // Conditional on the assignee we showed the actor: if someone claimed
       // the chat in between, 0 rows update and we report the conflict instead
       // of silently overwriting their claim (check-then-act race).
@@ -155,7 +157,11 @@ export class ChatInboxService {
       id: event.id,
     });
 
-    return { success: true };
+    return {
+      success: true,
+      id: chatId,
+      assignedTo: { id: targetUserId, name: assignedToName },
+    };
   }
 
   async unassignChat(actor: ActorContext, chatId: string) {

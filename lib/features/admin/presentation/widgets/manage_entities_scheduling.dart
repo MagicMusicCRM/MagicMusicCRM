@@ -264,50 +264,51 @@ class _EmployeesList extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            _StudentMetricChip(
-                              icon: Icons.badge_outlined,
-                              label: roleLabel,
-                              color: roleColor,
-                            ),
-                            if (position.trim().isNotEmpty)
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
                               _StudentMetricChip(
-                                icon: Icons.work_outline_rounded,
-                                label: position.trim(),
-                                color: AppTheme.secondaryGold,
+                                icon: Icons.badge_outlined,
+                                label: roleLabel,
+                                color: roleColor,
                               ),
-                            _StudentMetricChip(
-                              icon: Icons.circle_outlined,
-                              label: _staffStatusLabel(status),
-                              color: status == 'active'
-                                  ? AppTheme.success
-                                  : Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                            ),
-                            if (branches.isNotEmpty)
+                              if (position.trim().isNotEmpty)
+                                _StudentMetricChip(
+                                  icon: Icons.work_outline_rounded,
+                                  label: position.trim(),
+                                  color: AppTheme.secondaryGold,
+                                ),
                               _StudentMetricChip(
-                                icon: Icons.location_on_outlined,
-                                label: branches,
-                                color: AppTheme.primaryGold,
+                                icon: Icons.circle_outlined,
+                                label: _staffStatusLabel(status),
+                                color: status == 'active'
+                                    ? AppTheme.success
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                               ),
-                            _StudentMetricChip(
-                              icon: isAppAccount
-                                  ? Icons.verified_user_rounded
-                                  : Icons.person_off_rounded,
-                              label: isAppAccount
-                                  ? _staffRoleLabel(appRole)
-                                  : 'Без аккаунта',
-                              color: isAppAccount
-                                  ? AppTheme.success
-                                  : Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                            ),
-                          ],
+                              if (branches.isNotEmpty)
+                                _StudentMetricChip(
+                                  icon: Icons.location_on_outlined,
+                                  label: branches,
+                                  color: AppTheme.primaryGold,
+                                ),
+                              _StudentMetricChip(
+                                icon: isAppAccount
+                                    ? Icons.verified_user_rounded
+                                    : Icons.person_off_rounded,
+                                label: isAppAccount
+                                    ? _staffRoleLabel(appRole)
+                                    : 'Без аккаунта',
+                                color: isAppAccount
+                                    ? AppTheme.success
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

@@ -223,7 +223,7 @@ const _snapshot = CapabilitySnapshot(
   accountId: 'account-1',
   role: 'manager',
   accessVersion: 1,
-  capabilities: {'crm.client.read.basic'},
+  capabilities: {'crm.client.read.basic', 'crm.client.write'},
   scopes: {},
 );
 
