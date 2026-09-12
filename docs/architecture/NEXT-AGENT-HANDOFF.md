@@ -1,27 +1,46 @@
-# MagicMusicCRM — актуальная передача 220
+# MagicMusicCRM — актуальная передача 221
+
+> Обновлено: 2026-09-12. Production client/server 1.5.41+221; tag v1.5.41.
+> Source: 0a7b6e1742f9456099e3023298ad84883e51a8e2.
+> Image: magicmusiccrm-server:1.5.41-221-final,
+> ID sha256:08042ab5de8fd328ac91d4276b13760a738f9882cac060a6045d0273fd886408.
+> Schema: 0155_schedule_plan_archive; штатный migrator выполнен, новой миграции нет.
+
+По итогам полного аудита исправлены сохранение форм, переходы из показателей,
+уведомлений и прямых ссылок, контекст филиала в расписании, единые комментарии,
+групповой мессенджер, пагинация, вложения и проверки прав. Комментарий преподавателя
+остаётся типом «Комментарий», содержит автора/роль/время и виден преподавателям и
+административным ролям.
+
+Проверки: Flutter 1777, backend 316/4124 — PASS; analyzer, typecheck/build,
+security, API/deploy/backup contracts и image gate — PASS. Access inventory 356,
+private 344/344 объяснены, unexplained allows 0. Readiness HTTP 200, migration 0155,
+reconciliation issues=[]. Финансовые факты до/после cutover идентичны.
+
+Pre/post backups magicmusiccrm-staging-20260912T192047Z.tgz.enc и
+magicmusiccrm-staging-20260912T192858Z.tgz.enc скопированы вне сервера, сверены и
+восстановлены в изоляции с candidate221 и rollback219. Setup/ZIP/APK/AAB, оба
+канала автообновления, публичные хеши и GitHub Release проверены.
+
+Rollback сервера: magicmusiccrm-server:1.5.39-219-final, revision
+2f37c7aee4633a463ba8fad3e322e0d945e50a23; схему0155 и всю историю сохранять.
+Сохранённые manifests220 останавливают дальнейшие обновления, но не понижают
+установленные клиенты. Предпочтителен forward fix.
+Evidence: dist/release221/; audit: ../audits/release-221-production.md.
+Setup: dist/release221/MagicMusicCRM-1.5.41-221-Setup.exe.
+
+## Историческая передача 220 (не текущий статус)
 
 > Обновлено: 2026-09-10. Production клиент 1.5.40+220, tag v1.5.40.
 > Client source: 7ddb5b2b8fb5fe8e8d823cf4d6fa95c9cdd0c563; snapshot C:/Users/Alinka/mm220publish.
-> Сервер остаётся 1.5.39+219, source 2f37c7aee4633a463ba8fad3e322e0d945e50a23.
+> Сервер оставался 1.5.39+219, source 2f37c7aee4633a463ba8fad3e322e0d945e50a23.
 > Image: magicmusiccrm-server:1.5.39-219-final, ID sha256:f9d80b7831895395376777d83a0b7b1d609140bb0dff0d9614d7673b3bba6bf0.
-> Schema: 0155_schedule_plan_archive. Сервер, БД и финансовые правила не менялись.
+> Schema: 0155_schedule_plan_archive. Сервер и БД в выпуске220 не менялись.
 
-Исправлен серый ErrorWidget при повторном раскрытии индивидуальных серий/архива:
-scroll offset больше не конфликтует с bool раскрытия ExpansionTile в PageStorage.
-Стабильная высота страниц и восстановление серий из архива сохранены.
-
+Исправлен серый ErrorWidget при повторном раскрытии индивидуальных серий/архива.
 Проверки: Flutter 1756, backend 315/4115, native Windows/HTTP/DB 26 — PASS.
-Security, contracts, exact server image, signatures, public hashes/readiness — PASS.
-Setup/ZIP/APK/AAB, оба канала автообновления и GitHub Release опубликованы.
-Pre/post backups magicmusiccrm-staging-20260910T183653Z.tgz.enc и magicmusiccrm-staging-20260910T184624Z.tgz.enc
-скопированы вне сервера и восстановлены с server219/stock218.
-Reconciliation issues=[]; coverage preview без изменений; финансовые факты и .env сохранены.
-
-Recovery: временно остановить дальнейшие обновления сохранёнными manifests219;
-установленный клиент автоматически не понизится. Предпочтителен forward fix.
-Сервер и БД не откатывать ради клиентского дефекта.
+Pre/post backups восстановлены с server219/stock218; reconciliation issues=[].
 Evidence: dist/release220/; audit: ../audits/release-220-production.md.
-Setup: dist/release220/MagicMusicCRM-1.5.40-220-Setup.exe.
 
 ## Историческая передача 219 (не текущий статус)
 
