@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -237,7 +238,7 @@ class _GroupScheduleParticipantsEditorState
           ),
           if (selected) ...[
             const SizedBox(height: AppSpace.xs),
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: ValueKey('group-plan-subscription-${member.studentId}'),
               initialValue: selectedSubscription,

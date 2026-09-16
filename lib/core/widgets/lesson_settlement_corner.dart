@@ -30,7 +30,8 @@ class LessonSettlementCorner extends StatelessWidget {
   };
 
   static Color? colorFor(String? key) => switch (key) {
-    null || '' || 'lesson' => null,
+    null || '' => null,
+    'lesson' => AppColor.text2,
     'trial_lesson' => AppColor.settlementTrial,
     'partially_paid_lesson' ||
     'partially_paid_miss' => AppColor.settlementPartial,

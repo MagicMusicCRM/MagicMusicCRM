@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 
 /// KVA-238: пресеты ставок педагога (₽ за астрономический час) — уровень UI,
@@ -94,7 +95,7 @@ class _TeacherRateSelectorState extends State<TeacherRateSelector> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           key: ValueKey('rate-mode-$_mode'),
           initialValue: _mode,

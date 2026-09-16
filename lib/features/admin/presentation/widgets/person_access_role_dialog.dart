@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -164,7 +165,7 @@ class _PersonAccessRoleDialogState
                   Text(widget.personLabel),
                   const SizedBox(height: 12),
                   if (access != null)
-                    DropdownButtonFormField<String>(
+                    AppDropdownButtonFormField<String>(
                       menuMaxHeight: 256,
                       key: const Key('person-access-role-selector'),
                       initialValue: _selectedRole,

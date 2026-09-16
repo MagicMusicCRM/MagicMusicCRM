@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -203,7 +204,7 @@ class TeacherStatsView extends StatelessWidget {
   }) {
     return SizedBox(
       width: width,
-      child: DropdownButtonFormField<String?>(
+      child: AppDropdownButtonFormField<String?>(
         menuMaxHeight: 256,
         key: key,
         isExpanded: true,

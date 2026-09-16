@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -396,7 +397,7 @@ void main() {
       '6000',
     );
     tester
-        .widget<DropdownButtonFormField<SubscriptionPaymentMethod>>(
+        .widget<AppDropdownButtonFormField<SubscriptionPaymentMethod>>(
           find.byKey(const Key('subscription-payment-method')),
         )
         .onChanged!(SubscriptionPaymentMethod.cash);
@@ -443,7 +444,7 @@ void main() {
     );
 
     final method = tester
-        .widget<DropdownButtonFormField<SubscriptionPaymentMethod>>(
+        .widget<AppDropdownButtonFormField<SubscriptionPaymentMethod>>(
           find.byKey(const Key('subscription-payment-method')),
         );
     method.onChanged!(SubscriptionPaymentMethod.cash);
@@ -754,7 +755,7 @@ void main() {
       find.byKey(const Key('subscription-funding-installment')),
     );
     tester
-        .widget<DropdownButtonFormField<int>>(
+        .widget<AppDropdownButtonFormField<int>>(
           find.byKey(const Key('subscription-installment-count')),
         )
         .onChanged!(3);

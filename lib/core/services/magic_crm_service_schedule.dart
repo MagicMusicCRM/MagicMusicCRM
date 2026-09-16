@@ -297,6 +297,8 @@ extension MagicCrmSchedule on MagicCrmService {
   }
 
   Future<Map<String, dynamic>> getScheduleMatrix({
+    Set<String> settlementTypes = const {},
+    Set<String> compensationRules = const {},
     String? from,
     String? to,
     String? localDate,
@@ -310,7 +312,13 @@ extension MagicCrmSchedule on MagicCrmService {
     String? groupBy,
     int limit = 300,
   }) async {
-    final queryParameters = <String, dynamic>{'limit': limit};
+    final queryParameters = <String, dynamic>{
+      'limit': limit,
+      if (settlementTypes.isNotEmpty)
+        'settlementTypes': settlementTypes.join(','),
+      if (compensationRules.isNotEmpty)
+        'compensationRules': compensationRules.join(','),
+    };
     void addString(String key, String? value) {
       final trimmed = value?.trim();
       if (trimmed != null && trimmed.isNotEmpty) {
@@ -347,11 +355,22 @@ extension MagicCrmSchedule on MagicCrmService {
   /// `{ 'day': 'YYYY-MM-DD', 'count': int, 'room_ids': List<String> }` so the
   /// month view can render counts + room dots without fetching every lesson.
   Future<List<Map<String, dynamic>>> getScheduleMonthSummary({
+    String? teacherId,
+    bool? isTrial,
+    Set<String> settlementTypes = const {},
+    Set<String> compensationRules = const {},
     String? from,
     String? to,
     String? branchId,
   }) async {
-    final queryParameters = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{
+      if (teacherId != null) 'teacherId': teacherId,
+      if (isTrial != null) 'isTrial': isTrial,
+      if (settlementTypes.isNotEmpty)
+        'settlementTypes': settlementTypes.join(','),
+      if (compensationRules.isNotEmpty)
+        'compensationRules': compensationRules.join(','),
+    };
     void addString(String key, String? value) {
       final trimmed = value?.trim();
       if (trimmed != null && trimmed.isNotEmpty) {

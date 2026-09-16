@@ -641,9 +641,33 @@ assert_pre_migration_contract "${pre_migration}" ||
   die "current migration is not a compatible release schema"
 current_health="$(docker inspect "${api_container_id}" \
   --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')"
-[[ "${current_health}" == healthy ]] || die "current API is not healthy"
-wait_public_ready "${pre_migration}" ||
-  die "current public readiness does not match the release baseline"
+if [[ -n "${EXPECTED_TEACHER_RATE_DEAD_LETTERS:-}" ]]; then
+  # The only permitted degraded baseline is the explicitly pinned 0157 incident.
+  # Candidate AND recovery must understand the replay migration. Post-cutover
+  # and rollback health requirements remain unchanged and require full readiness.
+  [[ "${current_health}" == unhealthy ]] || die "recovery baseline health changed"
+  [[ "${candidate_image_migration_head}" == 0157_requeue_teacher_rate_outbox &&
+     "${rollback_image_migration_head}" == 0157_requeue_teacher_rate_outbox ]] ||
+    die "teacher-rate recovery requires compatible candidate and rollback"
+  recovery_parser="$(realpath -e -- "$(dirname -- "${BASH_SOURCE[0]}")/teacher-rate-recovery-baseline.cjs")"
+  recovery_health="$(curl -sS --connect-timeout 3 --max-time 10 "${PUBLIC_READY_URL}")"
+  recovery_rows="$(database_query "select coalesce(jsonb_agg(event), '[]'::jsonb) from
+    (select event_id, event_type, aggregate_type, aggregate_id, payload, attempts,
+      published_at, dead_lettered_at, claimed_at, claimed_by
+     from app.platform_outbox_events where dead_lettered_at is not null) event")"
+  printf '%s\n%s\n' "${recovery_health}" "${recovery_rows}" |
+    docker run --rm -i --pull never --network none --read-only --cap-drop ALL \
+      --security-opt no-new-privileges:true \
+      --mount "type=bind,source=${recovery_parser},target=/recovery.cjs,readonly" \
+      --entrypoint node "${candidate_image_id}" /recovery.cjs \
+      "${pre_migration}" "${EXPECTED_TEACHER_RATE_DEAD_LETTERS}" ||
+    die "approved teacher-rate recovery baseline did not match"
+  unset recovery_health recovery_rows recovery_parser
+else
+  [[ "${current_health}" == healthy ]] || die "current API is not healthy"
+  wait_public_ready "${pre_migration}" ||
+    die "current public readiness does not match the release baseline"
+fi
 current_reconciliation="$(
   "${compose_base[@]}" -f "${rollback_override}" \
     exec -T api node dist/migration/commerce/v7/commerce-data.js

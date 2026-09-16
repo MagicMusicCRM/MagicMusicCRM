@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -393,7 +394,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final field = tester.widget<DropdownButtonFormField<String>>(
+      final field = tester.widget<AppDropdownButtonFormField<String>>(
         find.byKey(const ValueKey('lesson-settlement-type-field')),
       );
       expect(field.onChanged, isNotNull);
@@ -609,13 +610,17 @@ void main() {
       find.byKey(const ValueKey('lesson-branch-field:$_branchAId')),
     );
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Филиал Б').last);
+    await tester.pump();
     await tester.pump();
     await tester.tap(
       find.byKey(const ValueKey('lesson-branch-field:$_branchBId')),
     );
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Филиал А').last);
+    await tester.pump();
     await tester.pump();
 
     expect(
@@ -686,13 +691,17 @@ void main() {
       find.byKey(const ValueKey('lesson-branch-field:$_branchAId')),
     );
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Филиал Б').last);
+    await tester.pump();
     await tester.pump();
     await tester.tap(
       find.byKey(const ValueKey('lesson-branch-field:$_branchBId')),
     );
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Филиал А').last);
+    await tester.pump();
     await tester.pump();
 
     client.roomResponses[_branchAId]!.complete(_roomResponse(_branchAId, 'А'));

@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_date_time_button.dart';
@@ -91,7 +92,7 @@ class SharedTaskEditorView extends StatelessWidget {
       onChanged: contract.setTitle,
     ),
     const SizedBox(height: 10),
-    DropdownButtonFormField<String>(
+    AppDropdownButtonFormField<String>(
       menuMaxHeight: 256,
       key: const Key('shared-task-priority'),
       initialValue: draft.priority,
@@ -174,7 +175,7 @@ class SharedTaskEditorView extends StatelessWidget {
       ),
       if (draft.audienceType != 'allBranches') ...[
         const SizedBox(height: 10),
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           key: const Key('shared-task-audience-target'),
           initialValue: draft.targetId,

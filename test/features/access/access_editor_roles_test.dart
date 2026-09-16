@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -231,7 +232,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const Key('access-role-selector')),
           )
           .initialValue,

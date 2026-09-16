@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -218,7 +219,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
               ),
               if (accessRoles.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
+                AppDropdownButtonFormField<String>(
                   menuMaxHeight: 256,
                   key: const Key('create-teacher-access-role'),
                   initialValue: accessRoles.contains(_accessRole)

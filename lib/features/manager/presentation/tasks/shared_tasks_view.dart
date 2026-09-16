@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -348,7 +349,7 @@ class _FilterDropdown extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   @override
-  Widget build(BuildContext context) => DropdownButton<String>(
+  Widget build(BuildContext context) => AppDropdownButton<String>(
     key: filterKey,
     value: value,
     items: [
@@ -590,7 +591,7 @@ class _MobileTaskFilter extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: DropdownButtonFormField<String>(
+            child: AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               initialValue: value,
               decoration: const InputDecoration(

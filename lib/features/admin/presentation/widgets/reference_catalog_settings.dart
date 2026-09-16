@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -327,7 +328,7 @@ class _CreateReferenceDialogState extends State<_CreateReferenceDialog> {
             ),
             if (widget.lossReason) ...[
               const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
+              AppDropdownButtonFormField<String>(
                 menuMaxHeight: 256,
                 initialValue: _kind,
                 decoration: const InputDecoration(labelText: 'Тип'),

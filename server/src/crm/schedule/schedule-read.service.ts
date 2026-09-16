@@ -109,6 +109,7 @@ export class ScheduleReadService {
             and ($6::uuid is null or l.student_id = $6)
             and ($7::uuid is null or l.lead_id = $7)
             and ($8::boolean is null or l.is_trial = $8)
+            and ${this.financialTypeFiltersSql('$11', '$12', '$13')}
             and (
               $9::date is null
               or timezone(coalesce(b.timezone_name, 'Europe/Moscow'), l.scheduled_at)::date = $9::date
@@ -228,6 +229,8 @@ export class ScheduleReadService {
         query.localDate ?? null,
         limit,
         actor.userId,
+        query.settlementTypes?.length ? query.settlementTypes : null,
+        query.compensationRules?.length ? query.compensationRules : null,
       ],
     );
     const resolvedRows = await resolvePlannedSubscriptionReads(this.database, result.rows);
@@ -345,11 +348,24 @@ export class ScheduleReadService {
          and b.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.lesson_settlement_plans plan on plan.lesson_id = l.id
+        left join lateral (
+          select decision from app.lesson_settlement_corrections
+          where lesson_id = l.id order by version desc limit 1
+        ) correction on true
+        left join lateral (
+          select financial_decision from app.lesson_transitions
+          where lesson_id = l.id and financial_decision <> '{}'::jsonb
+          order by created_at desc, id desc limit 1
+        ) transition on true
         where l.deleted_at is null
           and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           and l.scheduled_at >= $1::timestamptz
           and l.scheduled_at <  $2::timestamptz
           and ($3::uuid is null or coalesce(l.branch_id, g.branch_id, r.branch_id) = $3)
+          and ${this.financialTypeFiltersSql('$4', '$5', '$6')}
+          and ($7::uuid is null or l.teacher_id = $7)
+          and ($8::boolean is null or l.is_trial = $8)
           and (
             ${managerAdminRolesSql(currentActorRoleSql("$4"))}
             or (${currentActorRoleSql("$4")} = 'teacher' and tp.user_id = $4::uuid)
@@ -363,7 +379,10 @@ export class ScheduleReadService {
         group by 1
         order by 1
       `,
-      [bounds.from, bounds.to, query.branchId ?? null, actor.userId],
+      [bounds.from, bounds.to, query.branchId ?? null, actor.userId,
+        query.settlementTypes?.length ? query.settlementTypes : null,
+        query.compensationRules?.length ? query.compensationRules : null,
+        query.teacherId ?? null, query.isTrial ?? null],
     );
     return {
       from: bounds.from,
@@ -374,6 +393,17 @@ export class ScheduleReadService {
         roomIds: row.room_ids ?? [],
       })),
     };
+  }
+
+  private financialTypeFiltersSql(actor: string, settlements: string, compensation: string) {
+    // Gate the predicate as well as the projection: hidden financial fields
+    // must not become a membership oracle for teachers or clients.
+    const decision = 'coalesce(correction.decision, transition.financial_decision, plan.decision)';
+    const allowed = managerAdminRolesSql(currentActorRoleSql(actor));
+    return `(${settlements}::text[] is null or (${allowed} and
+      ${decision}->>'settlementTypeKey' = any(${settlements}::text[])))
+      and (${compensation}::text[] is null or (${allowed} and
+      ${decision}->>'teacherCompensationRuleKey' = any(${compensation}::text[])))`;
   }
 
   async listLessons(actor: ActorContext, query: LessonQuery) {

@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -758,7 +759,7 @@ void main() {
       await tester.tap(find.text('Открыть'));
       await tester.pumpAndSettle();
 
-      final settlement = tester.widget<DropdownButtonFormField<String>>(
+      final settlement = tester.widget<AppDropdownButtonFormField<String>>(
         find.byKey(const Key('lesson-decision-settlement')),
       );
       expect(settlement.initialValue, 'unpaid_miss');
@@ -901,7 +902,7 @@ void main() {
       await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Бесплатное занятие').last);
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(
         find.text('Применить рекомендованные значения для нового типа?'),
@@ -2013,7 +2014,7 @@ void main() {
       );
       expect(
         tester
-            .widget<DropdownButtonFormField<String>>(
+            .widget<AppDropdownButtonFormField<String>>(
               find.byKey(
                 const Key('lesson-decision-charge-type-$_firstGroupStudentId'),
               ),
@@ -2023,7 +2024,7 @@ void main() {
       );
       expect(
         tester
-            .widget<DropdownButtonFormField<String>>(
+            .widget<AppDropdownButtonFormField<String>>(
               find.byKey(
                 const Key('lesson-decision-subscription-$_firstGroupStudentId'),
               ),
@@ -2121,7 +2122,7 @@ void main() {
       );
       expect(
         tester
-            .widget<DropdownButtonFormField<String>>(
+            .widget<AppDropdownButtonFormField<String>>(
               find.byKey(
                 const Key('lesson-decision-charge-type-$_secondGroupStudentId'),
               ),
@@ -2212,7 +2213,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(
               const Key('lesson-decision-subscription-$_firstGroupStudentId'),
             ),

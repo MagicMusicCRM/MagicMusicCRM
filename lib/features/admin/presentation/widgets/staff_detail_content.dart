@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
@@ -404,7 +405,7 @@ class _EmploymentFields extends StatelessWidget {
           onChanged: (value) => draft.position = value,
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           initialValue: draft.status.isEmpty ? null : draft.status,
           decoration: const InputDecoration(labelText: 'Статус'),

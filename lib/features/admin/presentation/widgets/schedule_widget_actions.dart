@@ -1,6 +1,14 @@
 part of 'schedule_widget.dart';
 
 extension _ScheduleActions on _ScheduleWidgetState {
+  bool get _canFilterFinancialTypes => crmHasManagerAccess(
+    ref.read(capabilitySnapshotProvider).asData?.value.role ?? '',
+  );
+
+  Future<Map<String, dynamic>> _loadFinancialFilterCatalog(String? branchId) =>
+      ref
+          .read(magicCrmServiceProvider)
+          .getLessonDecisionCatalog(branchId: branchId);
   bool get _canManageTeacherCompensation {
     final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
     return snapshot != null && crmCanManageTeacherRates(snapshot);
@@ -500,6 +508,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
 
       final wave2 = await Future.wait<Object?>([
         crm.getScheduleMatrix(
+          isTrial: _onlyTrial ? true : null,
+          settlementTypes: _canFilterFinancialTypes
+              ? _settlementTypes
+              : const {},
+          compensationRules: _canFilterFinancialTypes
+              ? _compensationRules
+              : const {},
           from: fromIso,
           to: toIso,
           branchId: defaultBranch,
@@ -527,6 +542,14 @@ extension _ScheduleActions on _ScheduleWidgetState {
             ? Future.value(<Map<String, dynamic>>[])
             : crm
                   .getScheduleMonthSummary(
+                    teacherId: widget.fixedTeacherId ?? _filterTeacherId,
+                    isTrial: _onlyTrial ? true : null,
+                    settlementTypes: _canFilterFinancialTypes
+                        ? _settlementTypes
+                        : const {},
+                    compensationRules: _canFilterFinancialTypes
+                        ? _compensationRules
+                        : const {},
                     from: fromIso,
                     to: toIso,
                     branchId: defaultBranch,
@@ -722,6 +745,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
       final results = await Future.wait([
         for (final day in [date, DateTime(date.year, date.month, date.day + 1)])
           service.getScheduleMatrix(
+            isTrial: _onlyTrial ? true : null,
+            settlementTypes: _canFilterFinancialTypes
+                ? _settlementTypes
+                : const {},
+            compensationRules: _canFilterFinancialTypes
+                ? _compensationRules
+                : const {},
             localDate: dateOnly(day),
             branchId: branchId,
             groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
@@ -820,6 +850,14 @@ extension _ScheduleActions on _ScheduleWidgetState {
         return false;
       }
       // Optional filters — applied over the already-loaded matrix, no refetch.
+      if (_canFilterFinancialTypes &&
+          _settlementTypes.isNotEmpty &&
+          !_settlementTypes.contains(l['settlement_type_key']))
+        return false;
+      if (_canFilterFinancialTypes &&
+          _compensationRules.isNotEmpty &&
+          !_compensationRules.contains(l['teacher_compensation_rule_key']))
+        return false;
       if (_onlyTrial && l['is_trial'] != true) return false;
       if (_onlyConflicts && conflictTypes(l['conflict_types']).isEmpty) {
         return false;
@@ -854,6 +892,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   bool get _hasExtraFilters =>
+      _settlementTypes.isNotEmpty ||
+      _compensationRules.isNotEmpty ||
       _onlyTrial ||
       _onlyConflicts ||
       _filterTeacherId != null ||
@@ -861,6 +901,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
       _filterClientId != null;
 
   int get _activeScheduleFilterCount =>
+      (_settlementTypes.isNotEmpty ? 1 : 0) +
+      (_compensationRules.isNotEmpty ? 1 : 0) +
       (_onlyTrial ? 1 : 0) +
       (_onlyConflicts ? 1 : 0) +
       (_filterTeacherId != null ? 1 : 0);
@@ -1133,6 +1175,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
     final responses = await Future.wait([
       for (final target in targets.values.take(12))
         crm.getScheduleMatrix(
+          isTrial: _onlyTrial ? true : null,
+          settlementTypes: _canFilterFinancialTypes
+              ? _settlementTypes
+              : const {},
+          compensationRules: _canFilterFinancialTypes
+              ? _compensationRules
+              : const {},
           from: range.$1,
           to: range.$2,
           branchId: _selectedBranchId,
@@ -1252,6 +1301,11 @@ extension _ScheduleActions on _ScheduleWidgetState {
       initialOnlyConflicts: _onlyConflicts,
       initialTeacherId: _filterTeacherId,
       teacherOptions: _teacherFilterOptions,
+      initialSettlementTypes: _settlementTypes,
+      initialCompensationRules: _compensationRules,
+      loadFinancialCatalog: _canFilterFinancialTypes
+          ? _loadFinancialFilterCatalog
+          : null,
     );
     if (result == null) return;
     _applyScheduleFilterResult(result);
@@ -1263,12 +1317,21 @@ extension _ScheduleActions on _ScheduleWidgetState {
         result.branchId != _selectedBranchId ||
         allBranchesSelected != _allBranchesSelected;
     final modeChanged = result.mode != _dayViewMode;
+    final scopeChanged =
+        result.teacherId != _filterTeacherId || result.onlyTrial != _onlyTrial;
+    final financialChanged =
+        result.settlementTypes.length != _settlementTypes.length ||
+        !result.settlementTypes.containsAll(_settlementTypes) ||
+        result.compensationRules.length != _compensationRules.length ||
+        !result.compensationRules.containsAll(_compensationRules);
     _emitState(() {
       _clearHighlight();
       _selectedBranchId = result.branchId;
       _allBranchesSelected = allBranchesSelected;
       _dayViewMode = result.mode;
       _onlyTrial = result.onlyTrial;
+      _settlementTypes = result.settlementTypes;
+      _compensationRules = result.compensationRules;
       _onlyConflicts = result.onlyConflicts;
       _filterTeacherId = result.teacherId;
       if (_selectedTeacherId != null &&
@@ -1278,10 +1341,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
         _selectedTeacherId = null;
       }
     });
-    // The trial/conflict/teacher filters are applied client-side over the
-    // loaded matrix, so they need only a rebuild (done by _emitState). Only a
-    // branch or layout change actually needs a refetch.
-    if (branchChanged || modeChanged) _fetchAll();
+    // Financial, teacher and trial scopes must refresh every matrix query;
+    // local predicates also protect the view while the response is in flight.
+    if (branchChanged || modeChanged || financialChanged || scopeChanged)
+      _fetchAll();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

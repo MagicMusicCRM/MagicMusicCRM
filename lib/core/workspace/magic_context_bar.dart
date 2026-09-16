@@ -23,6 +23,7 @@ class MagicContextBar extends StatelessWidget {
     required this.location,
     this.currentTitle,
     this.actions = const [],
+    this.trailing,
     this.onBack,
     this.onNavigate,
     super.key,
@@ -30,7 +31,8 @@ class MagicContextBar extends StatelessWidget {
 
   final WorkspaceController controller;
   final WorkspaceTabState tab;
-  final CanonicalAppLocation location;
+  final CanonicalAppLocation? location;
+  final Widget? trailing;
   final String? currentTitle;
   final List<MagicContextAction> actions;
   final VoidCallback? onBack;
@@ -50,19 +52,39 @@ class MagicContextBar extends StatelessWidget {
           children: [
             Expanded(
               child: LayoutBuilder(
-                builder: (context, constraints) => _BreadcrumbTrail(
-                  location: location,
-                  currentTitle: currentTitle,
-                  availableWidth: constraints.maxWidth,
-                  onNavigate:
-                      onNavigate ??
-                      (node) => controller.push(tab.tabId, node.link),
-                ),
+                builder: (context, constraints) => location == null
+                    ? Text(
+                        currentTitle ?? tab.titleHint,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColor.text,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      )
+                    : _BreadcrumbTrail(
+                        location: location!,
+                        currentTitle: currentTitle,
+                        availableWidth: constraints.maxWidth,
+                        onNavigate:
+                            onNavigate ??
+                            (node) => controller.push(tab.tabId, node.link),
+                      ),
               ),
             ),
             if (actions.isNotEmpty) ...[
               const SizedBox(width: AppSpace.sm),
               _ContextActions(actions: actions),
+            ],
+            if (trailing != null) ...[
+              const SizedBox(width: AppSpace.sm),
+              SizedBox(
+                width: (MediaQuery.sizeOf(context).width * .25).clamp(
+                  220.0,
+                  320.0,
+                ),
+                child: trailing,
+              ),
             ],
           ],
         ),

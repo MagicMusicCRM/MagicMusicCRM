@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1075,7 +1076,7 @@ class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           initialValue: _category,
           dropdownColor: colors.surface,

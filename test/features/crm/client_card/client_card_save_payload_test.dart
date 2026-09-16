@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -814,7 +815,7 @@ void main() {
     );
 
     // Статус-пикер — первый дропдаун вкладки «Инфо».
-    final statusPicker = find.byType(DropdownButtonFormField<String>).first;
+    final statusPicker = find.byType(AppDropdownButtonFormField<String>).first;
     await tester.ensureVisible(statusPicker);
     await tester.tap(statusPicker);
     await tester.pumpAndSettle();
@@ -1273,10 +1274,12 @@ Future<void> _chooseResponsible(WidgetTester tester) async {
 }
 
 Future<void> _chooseDropdownValue(WidgetTester tester, String label) async {
-  final dropdown = find.byType(DropdownButtonFormField<String>).first;
+  final dropdown = find.byType(AppDropdownButtonFormField<String>).first;
   await tester.ensureVisible(dropdown);
   await tester.tap(dropdown);
   await tester.pump(const Duration(milliseconds: 200));
+  // The menu opens after the editable anchor has completed its caret reveal.
+  await tester.pump();
   await tester.tap(find.text(label).last);
   await tester.pump(const Duration(milliseconds: 200));
 }

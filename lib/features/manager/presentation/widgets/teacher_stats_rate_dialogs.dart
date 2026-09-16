@@ -54,6 +54,7 @@ class _TeacherStatsRateDialog extends StatefulWidget {
 }
 
 class _TeacherStatsRateDialogState extends State<_TeacherStatsRateDialog> {
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _reasonController = TextEditingController();
   num? _rate;
   bool _touched = false;
@@ -68,34 +69,45 @@ class _TeacherStatsRateDialogState extends State<_TeacherStatsRateDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.description,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 12.5,
-            ),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.description,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TeacherRateSelector(
+                initialRate: widget.initialRate,
+                allowInherit: true,
+                onChanged: (value) => setState(() {
+                  _rate = value;
+                  _touched = true;
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _reasonController,
+                validator: (value) => (value ?? '').trim().isEmpty
+                    ? 'Укажите причину изменения ставки'
+                    : null,
+                maxLength: 500,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Причина изменения *',
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          TeacherRateSelector(
-            initialRate: widget.initialRate,
-            allowInherit: true,
-            onChanged: (value) => setState(() {
-              _rate = value;
-              _touched = true;
-            }),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _reasonController,
-            maxLength: 500,
-            maxLines: 2,
-            decoration: const InputDecoration(labelText: 'Причина изменения *'),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -106,7 +118,7 @@ class _TeacherStatsRateDialogState extends State<_TeacherStatsRateDialog> {
           onPressed: _touched
               ? () {
                   final reason = _reasonController.text.trim();
-                  if (reason.isEmpty) return;
+                  if (!_formKey.currentState!.validate()) return;
                   Navigator.pop(
                     context,
                     TeacherStatsRateChange(
@@ -140,6 +152,7 @@ class _TeacherStatsGroupRateDialog extends StatefulWidget {
 
 class _TeacherStatsGroupRateDialogState
     extends State<_TeacherStatsGroupRateDialog> {
+  final _formKey = GlobalKey<FormState>();
   late num? _rate = widget.currentRate;
 
   @override
@@ -148,11 +161,15 @@ class _TeacherStatsGroupRateDialogState
       title: Text(widget.groupName),
       content: SizedBox(
         width: 360,
-        child: TeacherRateSelector(
-          initialRate: widget.currentRate,
-          allowInherit: true,
-          label: 'Ставка по данной группе',
-          onChanged: (rate) => _rate = rate,
+        child: Form(
+          key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: TeacherRateSelector(
+            initialRate: widget.currentRate,
+            allowInherit: true,
+            label: 'Ставка по данной группе',
+            onChanged: (rate) => _rate = rate,
+          ),
         ),
       ),
       actions: [
@@ -161,8 +178,10 @@ class _TeacherStatsGroupRateDialogState
           child: const Text('Отмена'),
         ),
         FilledButton(
-          onPressed: () =>
-              Navigator.pop(context, TeacherStatsGroupRateChange(_rate)),
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            Navigator.pop(context, TeacherStatsGroupRateChange(_rate));
+          },
           child: const Text('Сохранить'),
         ),
       ],

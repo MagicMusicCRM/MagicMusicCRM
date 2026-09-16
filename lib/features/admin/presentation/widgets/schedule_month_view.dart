@@ -351,13 +351,14 @@ class ScheduleMonthView extends StatelessWidget {
           final showTrialIcon =
               trial && constraints.maxWidth >= (relationContext ? 38 : 22);
           final showStatusIcon =
-              !trial || constraints.maxWidth >= (relationContext ? 112 : 92);
+              (!trial && constraints.maxWidth >= (relationContext ? 36 : 24)) ||
+              constraints.maxWidth >= (relationContext ? 112 : 92);
           return LessonSettlementCorner(
             settlementTypeKey: lesson['settlement_type_key']?.toString(),
             expand: false,
             child: Row(
               children: [
-                if (relationContext) ...[
+                if (relationContext && constraints.maxWidth >= 36) ...[
                   Icon(
                     related
                         ? Icons.person_pin_circle_outlined

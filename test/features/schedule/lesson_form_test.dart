@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -767,6 +768,7 @@ Future<void> _fillRescheduleDecision(
   );
   await tester.tap(find.byKey(const Key('lesson-settlement-type-field')));
   await tester.pump(const Duration(milliseconds: 400));
+  await tester.pump();
   await tester.tap(find.text('Бесплатное занятие').last);
   await tester.pump(const Duration(milliseconds: 400));
   await tester.ensureVisible(
@@ -774,6 +776,7 @@ Future<void> _fillRescheduleDecision(
   );
   await tester.tap(find.byKey(const Key('lesson-compensation-rule-field')));
   await tester.pump(const Duration(milliseconds: 400));
+  await tester.pump();
   await tester.tap(find.text('Не оплачивать').last);
   await tester.pump(const Duration(milliseconds: 400));
   await _chooseFundingSource(tester, _studentId, 'Без списания');
@@ -1693,7 +1696,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-settlement-type-field')),
           )
           .initialValue,
@@ -1701,7 +1704,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-compensation-rule-field')),
           )
           .initialValue,

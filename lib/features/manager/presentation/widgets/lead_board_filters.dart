@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/models/types.dart';
@@ -34,7 +35,7 @@ Widget filterDropdown({
     padding: const EdgeInsets.only(right: 8),
     child: SizedBox(
       width: width,
-      child: DropdownButtonFormField<String>(
+      child: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: ValueKey('$label:$normalizedValue'),
         initialValue: normalizedValue,

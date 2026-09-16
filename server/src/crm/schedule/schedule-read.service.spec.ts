@@ -3,6 +3,17 @@ import { CrmPolicy } from "../crm.policy";
 import { ScheduleReadService } from "./schedule-read.service";
 
 describe("schedule read contract", () => {
+  it("combines multi-select financial filters before the matrix limit", async () => {
+    const { service, query } = createService([]);
+    await service.getScheduleMatrix({ userId: "admin", role: "admin" }, {
+      settlementTypes: ['lesson', 'trial_lesson'], compensationRules: ['standard'],
+    } as never);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain('any($12::text[])');
+    expect(sql).toContain('any($13::text[])');
+    expect(sql.indexOf('any($13::text[])')).toBeLessThan(sql.indexOf('limit $10'));
+    expect(query.mock.calls[0][1].slice(-2)).toEqual([['lesson', 'trial_lesson'], ['standard']]);
+  });
   it("filters financial keys and branch before pagination using bound parameters", async () => {
     const { service, query } = createService([]);
     await service.listLessons({ userId: "admin", role: "admin" }, {
@@ -361,6 +372,10 @@ describe("schedule read contract", () => {
       "2026-06-30T21:00:00.000Z",
       null,
       "manager-a",
+      null,
+      null,
+      null,
+      null,
     ]);
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(sql).toContain("from app.users scope_actor");
@@ -508,6 +523,8 @@ describe("schedule read contract", () => {
       null,
       30,
       "manager-a",
+      null,
+      null,
     ]);
     expect(String(query.mock.calls[0][0])).toContain("scope_actor.role::text");
     expect(sql).toContain("from app.users scope_actor");

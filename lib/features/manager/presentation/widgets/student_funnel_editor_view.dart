@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/models/student_funnel.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -86,7 +87,7 @@ class StudentFunnelEditorView extends StatelessWidget {
     StudentFunnelEditorSnapshot state,
     StudentFunnelConfiguration configuration,
   ) => [
-    DropdownButtonFormField<String>(
+    AppDropdownButtonFormField<String>(
       menuMaxHeight: 256,
       key: ValueKey('pipeline-type-${state.clientType}'),
       initialValue: state.clientType,
@@ -98,7 +99,7 @@ class StudentFunnelEditorView extends StatelessWidget {
       onChanged: state.saving ? null : onClientTypeChanged,
     ),
     const SizedBox(height: AppSpace.md),
-    DropdownButtonFormField<String>(
+    AppDropdownButtonFormField<String>(
       menuMaxHeight: 256,
       key: ValueKey('funnel-scope-${state.branchId ?? 'school'}'),
       initialValue: state.branchId ?? '__school__',
@@ -275,7 +276,7 @@ class _StageEditor extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpace.sm),
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               initialValue: stage.style,
               isExpanded: true,

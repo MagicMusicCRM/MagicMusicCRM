@@ -40,6 +40,7 @@ typedef ProductionWorkspaceNavigate =
 class ProductionWorkspaceView extends StatelessWidget {
   const ProductionWorkspaceView({
     this.peopleSearchAction,
+    this.desktopPeopleSearch,
     required this.controller,
     required this.tabBuilder,
     required this.navigationFor,
@@ -70,6 +71,7 @@ class ProductionWorkspaceView extends StatelessWidget {
   final DirtyTabSaver saveDirty;
   final DirtyTabDiscarder discardDirty;
   final Widget? peopleSearchAction;
+  final Widget? desktopPeopleSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -122,7 +124,6 @@ class ProductionWorkspaceView extends StatelessWidget {
 
   Widget _desktop() {
     return DesktopWorkspaceShell(
-      actions: peopleSearchAction,
       controller: controller,
       tabBuilder: (context, tab) {
         if (tab.tabId == controller.state.activeTabId) {
@@ -152,11 +153,21 @@ class ProductionWorkspaceView extends StatelessWidget {
                 color: AppColor.surfaceSoft,
                 child: Column(
                   children: [
-                    if (showContextBar)
+                    if (showContextBar || desktopPeopleSearch != null)
                       MagicContextBar(
                         controller: controller,
                         tab: tab,
-                        location: location,
+                        location: showContextBar ? location : null,
+                        trailing:
+                            desktopPeopleSearch != null &&
+                                tab.tabId == controller.state.activeTabId
+                            ? KeyedSubtree(
+                                key: ValueKey(
+                                  tab.currentRoute.link.toJson().toString(),
+                                ),
+                                child: desktopPeopleSearch!,
+                              )
+                            : null,
                         currentTitle: tab.titleHint,
                         onBack: () => unawaited(onBack(tab)),
                         onNavigate: (node) => unawaited(onNavigate(tab, node)),

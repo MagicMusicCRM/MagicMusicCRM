@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -199,7 +200,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                 : null,
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
+          AppDropdownButtonFormField<String>(
             menuMaxHeight: 256,
             key: ValueKey('group-branch-$_branchId'),
             initialValue: _branchId,

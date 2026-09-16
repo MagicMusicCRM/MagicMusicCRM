@@ -162,6 +162,7 @@ class _ProductionWorkspaceHostState
     final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
     return ProductionWorkspaceView(
       peopleSearchAction: const PeopleSearchAction(),
+      desktopPeopleSearch: const PeopleSearchAction(inline: true),
       controller: _controller,
       tabBuilder: widget.tabBuilder,
       navigationFor: (tab, {required isDesktop}) => _workspaceNavigation(

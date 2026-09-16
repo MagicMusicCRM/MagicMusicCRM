@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
+import 'package:magic_music_crm/core/widgets/settlement_type_filter.dart';
 
 typedef SchedulePlanEditIntent =
     void Function(SchedulePlan plan, SchedulePlanRow? row);
@@ -691,6 +692,7 @@ class StudentLessonTimelineView extends StatefulWidget {
 }
 
 class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
+  Set<String> _settlementTypes = {};
   final ScrollController _scroll = ScrollController();
   bool _previousPageRequested = false;
   @override
@@ -751,8 +753,15 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
       );
       final tileWidth = (width - (columns - 1) * 4) / columns;
       final start = widget.page.windowStart;
+      final visibleItems = widget.page.items
+          .where(
+            (item) =>
+                _settlementTypes.isEmpty ||
+                _settlementTypes.contains(item.settlement.settlementTypeKey),
+          )
+          .toList();
       final byDate = <DateTime, List<StudentLessonTimelineItem>>{};
-      for (final item in widget.page.items) {
+      for (final item in visibleItems) {
         final local = item.scheduledAt.toLocal();
         final date = DateTime(local.year, local.month, local.day);
         (byDate[date] ??= []).add(item);
@@ -768,16 +777,11 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                 }),
             ];
       final contentColumns = days == null
-          ? (widget.page.items.length / 2).ceil()
+          ? (visibleItems.length / 2).ceil()
           : days.isEmpty
           ? 0
           : math.max(15, (days.length / 2).ceil());
-      final dailyCount =
-          days?.fold<int>(1, (count, items) => math.max(count, items.length)) ??
-          1;
-      final rowHeight = days == null
-          ? 40 * scale
-          : (24 + 44 * dailyCount) * scale;
+      final rowHeight = 40 * scale;
       final maxOffset = math.max(
         0.0,
         contentColumns * (tileWidth + 4) - 4 - width,
@@ -794,6 +798,7 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
         ),
         padding: const EdgeInsets.all(AppSpace.md),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
@@ -823,15 +828,91 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                 ),
               ],
             ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                key: const Key('timeline-settlement-legend'),
+                width: 360,
+                child: SettlementTypeFilter(
+                  selected: _settlementTypes,
+                  labels: {
+                    ...settlementTypeLabels,
+                    for (final item in widget.page.items)
+                      if (item.settlement.settlementTypeKey != null &&
+                          !settlementTypeLabels.containsKey(
+                            item.settlement.settlementTypeKey,
+                          ))
+                        item.settlement.settlementTypeKey!:
+                            'Другой тип списания',
+                  },
+                  onChanged: (value) =>
+                      setState(() => _settlementTypes = value),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
             if (widget.loading && widget.page.items.isEmpty)
               const LinearProgressIndicator(color: AppColor.gold)
             else if (widget.error != null && widget.page.items.isEmpty)
               _timelineError(context)
             else if (contentColumns == 0)
               Text(
-                start == null
+                _settlementTypes.isNotEmpty
+                    ? 'В этом периоде нет занятий с выбранными типами списания.'
+                    : start == null
                     ? 'Занятий пока нет.'
                     : 'В этом периоде занятий нет.',
+              )
+            else if (days != null)
+              Scrollbar(
+                controller: _scroll,
+                child: SingleChildScrollView(
+                  key: const Key('student-lesson-timeline-grid'),
+                  controller: _scroll,
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: contentColumns * (tileWidth + 4) - 4,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (
+                          var row = 0;
+                          row * contentColumns < days.length;
+                          row++
+                        )
+                          Padding(
+                            padding: EdgeInsets.only(top: row == 0 ? 0 : 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (
+                                  var index = row * contentColumns;
+                                  index <
+                                      math.min(
+                                        (row + 1) * contentColumns,
+                                        days.length,
+                                      );
+                                  index++
+                                ) ...[
+                                  if (index > row * contentColumns)
+                                    const SizedBox(width: 4),
+                                  SizedBox(
+                                    width: tileWidth,
+                                    child: _StudentTimelineDay(
+                                      date: dates[index],
+                                      items: days[index],
+                                      scale: scale,
+                                      onOpen: widget.onOpen,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               )
             else
               SizedBox(
@@ -865,10 +946,10 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                           onOpen: widget.onOpen,
                         );
                       }
-                      if (orderedIndex >= widget.page.items.length) {
+                      if (orderedIndex >= visibleItems.length) {
                         return const SizedBox.shrink();
                       }
-                      final item = widget.page.items[orderedIndex];
+                      final item = visibleItems[orderedIndex];
                       return _StudentTimelineItem(
                         item: item,
                         onTap: () => widget.onOpen(item),
@@ -921,6 +1002,7 @@ class _StudentTimelineDay extends StatelessWidget {
       key: ValueKey(
         'student-timeline-date-${DateFormat('yyyy-MM-dd').format(date)}',
       ),
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(

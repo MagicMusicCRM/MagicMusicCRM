@@ -6,12 +6,14 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_dialog.dart';
 
 class PeopleSearchAction extends ConsumerWidget {
-  const PeopleSearchAction({super.key});
+  const PeopleSearchAction({this.inline = false, super.key});
+  final bool inline;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final access = ref.watch(capabilitySnapshotProvider).asData?.value;
@@ -25,6 +27,7 @@ class PeopleSearchAction extends ConsumerWidget {
         }.contains(access.role)) {
       return const SizedBox.shrink();
     }
+    if (inline) return const _PeopleSearch(inline: true);
     return IconButton(
       key: const ValueKey('global-people-search'),
       tooltip: 'Найти человека',
@@ -35,51 +38,57 @@ class PeopleSearchAction extends ConsumerWidget {
           builder: (_) => const _PeopleSearch(),
         );
         if (person == null || !context.mounted) return;
-        final access = ref.read(capabilitySnapshotProvider).asData?.value;
-        if (access == null || !access.allows('crm.client.read.basic')) return;
-        try {
-          if (person.type == 'teacher') {
-            final fresh = await ref
-                .read(magicCrmServiceProvider)
-                .getTeacher(person.id);
-            if (context.mounted) await TeacherDetailDialog.show(context, fresh);
-          } else if (person.type == 'staff') {
-            await StaffDetailDialog.show(
-              context,
-              person.row,
-              currentRole: access.role,
-            );
-          } else {
-            await openEntityLink(
-              context,
-              ref,
-              EntityLink.fromJson({
-                'entityType': person.type,
-                'entityId': person.id,
-              }),
-            );
-          }
-        } catch (error) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  userErrorMessage(
-                    error,
-                    fallback: 'Не удалось открыть карточку',
-                  ),
-                ),
-              ),
-            );
-          }
-        }
+        await _openPerson(context, ref, person);
       },
     );
+  }
+
+  static Future<void> _openPerson(
+    BuildContext context,
+    WidgetRef ref,
+    _Person person,
+  ) async {
+    final access = ref.read(capabilitySnapshotProvider).asData?.value;
+    if (access == null || !access.allows('crm.client.read.basic')) return;
+    try {
+      if (person.type == 'teacher') {
+        final fresh = await ref
+            .read(magicCrmServiceProvider)
+            .getTeacher(person.id);
+        if (context.mounted) await TeacherDetailDialog.show(context, fresh);
+      } else if (person.type == 'staff') {
+        await StaffDetailDialog.show(
+          context,
+          person.row,
+          currentRole: access.role,
+        );
+      } else {
+        await openEntityLink(
+          context,
+          ref,
+          EntityLink.fromJson({
+            'entityType': person.type,
+            'entityId': person.id,
+          }),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(error, fallback: 'Не удалось открыть карточку'),
+            ),
+          ),
+        );
+      }
+    }
   }
 }
 
 class _PeopleSearch extends ConsumerStatefulWidget {
-  const _PeopleSearch();
+  const _PeopleSearch({this.inline = false});
+  final bool inline;
   @override
   ConsumerState<_PeopleSearch> createState() => _PeopleSearchState();
 }
@@ -94,6 +103,8 @@ typedef _Person = ({
 
 class _PeopleSearchState extends ConsumerState<_PeopleSearch> {
   final _query = TextEditingController();
+  final _focus = FocusNode();
+  final _menu = MenuController();
   Timer? _debounce;
   int _sequence = 0;
   bool _loading = false;
@@ -103,10 +114,12 @@ class _PeopleSearchState extends ConsumerState<_PeopleSearch> {
   void dispose() {
     _debounce?.cancel();
     _query.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
   void _changed(String value) {
+    if (widget.inline && !_menu.isOpen) _menu.open();
     _debounce?.cancel();
     final sequence = ++_sequence;
     setState(() {
@@ -195,88 +208,203 @@ class _PeopleSearchState extends ConsumerState<_PeopleSearch> {
     }
   }
 
-  void _open(_Person person) => Navigator.pop(context, person);
+  void _open(_Person person) {
+    if (!widget.inline) {
+      Navigator.pop(context, person);
+      return;
+    }
+    _menu.close();
+    _focus.unfocus();
+    unawaited(PeopleSearchAction._openPerson(context, ref, person));
+  }
 
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Найти человека'),
-    content: SizedBox(
-      width: 620,
-      height: 480,
-      child: Column(
-        children: [
-          TextField(
-            controller: _query,
-            autofocus: true,
-            onChanged: _changed,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) {
-              if (_items.isNotEmpty) _open(_items.first);
-            },
-            decoration: const InputDecoration(
-              labelText: 'Имя или фамилия',
-              helperText: 'Ученики, лиды, преподаватели и сотрудники',
-            ),
+  Widget _desktopField() => LayoutBuilder(
+    builder: (context, constraints) => MenuAnchor(
+      controller: _menu,
+      childFocusNode: _focus,
+      alignmentOffset: const Offset(0, 6),
+      style: const MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(AppColor.surface),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+        padding: WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      menuChildren: [
+        SizedBox(
+          key: const ValueKey('people-search-results'),
+          width: constraints.maxWidth,
+          height: (_items.isEmpty ? 140.0 : 360.0).clamp(
+            100.0,
+            MediaQuery.sizeOf(context).height * .6,
           ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          userErrorMessage(
-                            _error,
-                            fallback: 'Не удалось выполнить поиск',
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => _changed(_query.text),
-                          child: const Text('Повторить'),
-                        ),
-                      ],
-                    ),
-                  )
-                : _items.isEmpty
-                ? Center(
-                    child: Text(
-                      _query.text.trim().length < 2
-                          ? 'Введите минимум 2 символа'
-                          : 'Ничего не найдено',
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _items.length,
-                    itemBuilder: (context, index) {
-                      final person = _items[index];
-                      return ListTile(
-                        title: Text(person.name),
-                        subtitle: Text(person.context),
-                        leading: Icon(
-                          person.type == 'teacher'
-                              ? Icons.school_outlined
-                              : Icons.person_outline,
-                        ),
-                        onTap: () => _open(person),
-                      );
-                    },
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
+                  child: Text(
+                    'Клиенты, преподаватели и сотрудники',
+                    style: TextStyle(fontSize: 11, color: AppColor.text2),
                   ),
-          ),
-          if (_items.length >= 25)
-            const Text(
-              'Уточните запрос, если нужной записи нет в первых результатах',
+                ),
+                Expanded(child: _results()),
+                if (_items.length >= 25)
+                  const Text(
+                    'Уточните запрос, чтобы сузить поиск',
+                    style: TextStyle(fontSize: 11),
+                  ),
+              ],
             ),
-        ],
+          ),
+        ),
+      ],
+      child: TextField(
+        key: const ValueKey('global-people-search-field'),
+        controller: _query,
+        focusNode: _focus,
+        onTap: () {
+          if (!_menu.isOpen) _menu.open();
+        },
+        onChanged: _changed,
+        onSubmitted: (_) {
+          if (_items.isNotEmpty && _menu.isOpen) _open(_items.first);
+        },
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(fontSize: 13, color: AppColor.text),
+        decoration: InputDecoration(
+          hintText: 'Найти человека',
+          isDense: true,
+          filled: true,
+          fillColor: AppColor.surfaceSoft,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            size: 19,
+            color: AppColor.text2,
+          ),
+          prefixIconConstraints: const BoxConstraints(minWidth: 36),
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 32,
+            maxHeight: 32,
+          ),
+          suffixIcon: _query.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Очистить поиск',
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.close, size: 16),
+                  onPressed: () {
+                    _query.clear();
+                    _changed('');
+                    _focus.requestFocus();
+                  },
+                ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            borderSide: const BorderSide(color: AppColor.borderSoft),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            borderSide: const BorderSide(color: AppColor.borderSoft),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            borderSide: const BorderSide(color: AppColor.brand),
+          ),
+        ),
       ),
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Закрыть'),
-      ),
-    ],
   );
+
+  @override
+  Widget build(BuildContext context) => widget.inline
+      ? _desktopField()
+      : AlertDialog(
+          title: const Text('Найти человека'),
+          content: SizedBox(
+            width: 620,
+            height: 480,
+            child: Column(
+              children: [
+                TextField(
+                  controller: _query,
+                  autofocus: true,
+                  onChanged: _changed,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) {
+                    if (_items.isNotEmpty) _open(_items.first);
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'Имя или фамилия',
+                    helperText: 'Ученики, лиды, преподаватели и сотрудники',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Expanded(child: _results()),
+                if (_items.length >= 25)
+                  const Text(
+                    'Уточните запрос, если нужной записи нет в первых результатах',
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Закрыть'),
+            ),
+          ],
+        );
+
+  Widget _results() => _loading
+      ? const Center(child: CircularProgressIndicator())
+      : _error != null
+      ? Center(
+          child: SingleChildScrollView(
+            primary: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  userErrorMessage(
+                    _error,
+                    fallback: 'Не удалось выполнить поиск',
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _changed(_query.text),
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
+          ),
+        )
+      : _items.isEmpty
+      ? Center(
+          child: Text(
+            _query.text.trim().length < 2
+                ? 'Введите минимум 2 символа'
+                : 'Ничего не найдено',
+          ),
+        )
+      : ListView.builder(
+          primary: false,
+          itemCount: _items.length,
+          itemBuilder: (context, index) {
+            final person = _items[index];
+            return ListTile(
+              title: Text(person.name),
+              subtitle: Text(person.context),
+              leading: Icon(
+                person.type == 'teacher'
+                    ? Icons.school_outlined
+                    : Icons.person_outline,
+              ),
+              onTap: () => _open(person),
+            );
+          },
+        );
 }

@@ -1,6 +1,8 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
+import 'package:magic_music_crm/core/widgets/settlement_type_filter.dart';
 
 import 'schedule_shared.dart';
 
@@ -11,6 +13,8 @@ typedef ScheduleFilterResult = ({
   bool onlyTrial,
   bool onlyConflicts,
   String? teacherId,
+  Set<String> settlementTypes,
+  Set<String> compensationRules,
 });
 
 const _allBranches = '__all_branches__';
@@ -37,6 +41,9 @@ class ScheduleFiltersPanel extends StatefulWidget {
     required this.teacherOptions,
     required this.onApply,
     this.showHeader = false,
+    this.initialSettlementTypes = const {},
+    this.initialCompensationRules = const {},
+    this.loadFinancialCatalog,
   });
 
   final String? initialBranchId;
@@ -49,6 +56,9 @@ class ScheduleFiltersPanel extends StatefulWidget {
   final List<({String id, String name})> teacherOptions;
   final ValueChanged<ScheduleFilterResult> onApply;
   final bool showHeader;
+  final Set<String> initialSettlementTypes, initialCompensationRules;
+  final Future<Map<String, dynamic>> Function(String? branchId)?
+  loadFinancialCatalog;
 
   @override
   State<ScheduleFiltersPanel> createState() => _ScheduleFiltersPanelState();
@@ -60,11 +70,16 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
   late bool _onlyTrial;
   late bool _onlyConflicts;
   late String? _teacherId;
+  late Set<String> _settlementTypes, _compensationRules;
+  Map<String, String> _settlementLabels = {}, _compensationLabels = {};
+  bool _catalogLoading = false, _catalogFailed = false;
+  int _catalogSequence = 0;
 
   @override
   void initState() {
     super.initState();
     _restoreInitialValues();
+    _loadCatalog();
   }
 
   @override
@@ -74,8 +89,11 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
         oldWidget.initialMode != widget.initialMode ||
         oldWidget.initialOnlyTrial != widget.initialOnlyTrial ||
         oldWidget.initialOnlyConflicts != widget.initialOnlyConflicts ||
-        oldWidget.initialTeacherId != widget.initialTeacherId) {
+        oldWidget.initialTeacherId != widget.initialTeacherId ||
+        oldWidget.initialSettlementTypes != widget.initialSettlementTypes ||
+        oldWidget.initialCompensationRules != widget.initialCompensationRules) {
       _restoreInitialValues();
+      _loadCatalog();
     }
   }
 
@@ -85,6 +103,42 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
     _onlyTrial = widget.initialOnlyTrial;
     _onlyConflicts = widget.initialOnlyConflicts;
     _teacherId = widget.initialTeacherId;
+    _settlementTypes = {...widget.initialSettlementTypes};
+    _compensationRules = {...widget.initialCompensationRules};
+  }
+
+  Future<void> _loadCatalog() async {
+    final loader = widget.loadFinancialCatalog;
+    if (loader == null) return;
+    final sequence = ++_catalogSequence;
+    setState(() {
+      _catalogLoading = true;
+      _catalogFailed = false;
+    });
+    try {
+      final catalog = await loader(_branchId);
+      if (!mounted || sequence != _catalogSequence) return;
+      Map<String, String> labels(String field) => {
+        for (final item
+            in (catalog[field] as List? ?? const []).whereType<Map>())
+          if (item['stableKey'] is String && item['label'] is String)
+            item['stableKey'] as String: item['label'] as String,
+      };
+      setState(() {
+        _settlementLabels = {
+          ...settlementTypeLabels,
+          ...labels('settlementTypes'),
+        };
+        _compensationLabels = labels('teacherCompensationRules');
+        _catalogLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || sequence != _catalogSequence) return;
+      setState(() {
+        _catalogLoading = false;
+        _catalogFailed = true;
+      });
+    }
   }
 
   InputDecoration _decoration(String label, IconData icon) => InputDecoration(
@@ -107,7 +161,7 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
   }) {
     return KeyedSubtree(
       key: key,
-      child: DropdownButtonFormField<String>(
+      child: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: ValueKey('$label-$value'),
         initialValue: value,
@@ -124,6 +178,8 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
       _teacherId = null;
       _onlyTrial = false;
       _onlyConflicts = false;
+      _settlementTypes = {};
+      _compensationRules = {};
     });
   }
 
@@ -134,6 +190,8 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
       onlyTrial: _onlyTrial,
       onlyConflicts: _onlyConflicts,
       teacherId: _teacherId,
+      settlementTypes: Set.unmodifiable(_settlementTypes),
+      compensationRules: Set.unmodifiable(_compensationRules),
     ));
   }
 
@@ -171,9 +229,10 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
                   ),
                 ),
             ],
-            onChanged: (value) => setState(
-              () => _branchId = value == _allBranches ? null : value,
-            ),
+            onChanged: (value) {
+              setState(() => _branchId = value == _allBranches ? null : value);
+              _loadCatalog();
+            },
           ),
           _dropdown(
             key: const ValueKey('schedule-filter-teacher'),
@@ -185,6 +244,14 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
                 value: _allTeachers,
                 child: Text('Все преподаватели'),
               ),
+              if (_teacherId != null &&
+                  !widget.teacherOptions.any(
+                    (teacher) => teacher.id == _teacherId,
+                  ))
+                DropdownMenuItem(
+                  value: _teacherId,
+                  child: const Text('Выбранный преподаватель'),
+                ),
               for (final teacher in widget.teacherOptions)
                 DropdownMenuItem(
                   value: teacher.id,
@@ -288,6 +355,47 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
               ],
             ),
             const SizedBox(height: AppSpace.md),
+            if (widget.loadFinancialCatalog != null) ...[
+              const Text(
+                'Внутри фильтра — любой выбранный тип. Между фильтрами — все условия.',
+                style: TextStyle(fontSize: 12),
+              ),
+              if (_catalogLoading) const LinearProgressIndicator(),
+              if (_catalogFailed)
+                TextButton(
+                  onPressed: _loadCatalog,
+                  child: const Text('Не удалось загрузить типы. Повторить'),
+                ),
+              const SizedBox(height: AppSpace.md),
+              SettlementTypeFilter(
+                label: 'Списание клиента',
+                selected: _settlementTypes,
+                labels: {
+                  ..._settlementLabels,
+                  for (final key in _settlementTypes)
+                    if (!_settlementLabels.containsKey(key))
+                      key: 'Ранее выбранный тип',
+                },
+                onChanged: (value) => setState(() {
+                  _settlementTypes = value;
+                }),
+              ),
+              const SizedBox(height: AppSpace.md),
+              SettlementTypeFilter(
+                label: 'Оплата преподавателю',
+                selected: _compensationRules,
+                labels: {
+                  ..._compensationLabels,
+                  for (final key in _compensationRules)
+                    if (!_compensationLabels.containsKey(key))
+                      key: 'Ранее выбранный тип',
+                },
+                showColors: false,
+                onChanged: (value) =>
+                    setState(() => _compensationRules = value),
+              ),
+              const SizedBox(height: AppSpace.md),
+            ],
             Wrap(
               alignment: WrapAlignment.end,
               spacing: AppSpace.sm,
@@ -329,6 +437,9 @@ Future<ScheduleFilterResult?> showScheduleFiltersSheet(
   required bool initialOnlyConflicts,
   required String? initialTeacherId,
   required List<({String id, String name})> teacherOptions,
+  Set<String> initialSettlementTypes = const {},
+  Set<String> initialCompensationRules = const {},
+  Future<Map<String, dynamic>> Function(String? branchId)? loadFinancialCatalog,
 }) {
   return showMagicSheet<ScheduleFilterResult>(
     context,
@@ -343,6 +454,9 @@ Future<ScheduleFilterResult?> showScheduleFiltersSheet(
       initialOnlyConflicts: initialOnlyConflicts,
       initialTeacherId: initialTeacherId,
       teacherOptions: teacherOptions,
+      initialSettlementTypes: initialSettlementTypes,
+      initialCompensationRules: initialCompensationRules,
+      loadFinancialCatalog: loadFinancialCatalog,
       onApply: (result) => Navigator.of(ctx).pop(result),
     ),
   );

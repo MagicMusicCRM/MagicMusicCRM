@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:flutter/services.dart';
@@ -345,7 +346,7 @@ class LessonDecisionOptionsSection extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      DropdownButtonFormField<String>(
+      AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: const Key('lesson-decision-settlement'),
         initialValue: settlementKey,
@@ -388,7 +389,7 @@ class LessonDecisionOptionsSection extends StatelessWidget {
         const SizedBox(height: AppSpace.md),
       ],
       if (canManageTeacherCompensation)
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           key: const Key('lesson-decision-compensation'),
           initialValue: compensationKey,
@@ -564,7 +565,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
         const SizedBox(height: AppSpace.md),
         for (var index = 0; index < participants.length; index++) ...[
           if (showSettlementOverrides) ...[
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: Key('lesson-decision-client-${participants[index].id}'),
               initialValue:
@@ -630,7 +631,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
             const SizedBox(height: AppSpace.sm),
           ],
           if (chargeTypes[participants[index].id] != null) ...[
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: Key('lesson-decision-charge-type-${participants[index].id}'),
               initialValue: chargeTypes[participants[index].id],
@@ -680,7 +681,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
               chargeTypes[participants[index].id] != 'personal_account' &&
               chargeTypes[participants[index].id] != 'none') ...[
             const SizedBox(height: AppSpace.sm),
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: Key(
                 'lesson-decision-subscription-${participants[index].id}',
@@ -1047,6 +1048,14 @@ String _formatMinor(Object? value) {
 }
 
 String _warningLabel(String value) => switch (value) {
+  'CLIENT_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED' =>
+    'У клиента указано 0 часов списания. Можно выбрать тип без списания. Можно подтвердить изменение и с текущим выбором.',
+  'CLIENT_FULL_DURATION_SETTLEMENT_TYPE_RECOMMENDED' =>
+    'У клиента указана полная длительность занятия. Можно выбрать списание за полное занятие. Можно подтвердить изменение и с текущим выбором.',
+  'TEACHER_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED' =>
+    'Преподавателю указано 0 оплачиваемых часов. Можно выбрать тип без оплаты. Можно подтвердить изменение и с текущим выбором.',
+  'TEACHER_FULL_DURATION_SETTLEMENT_TYPE_RECOMMENDED' =>
+    'Преподавателю указана оплата за полную длительность занятия. Можно выбрать тип оплаты за полное занятие. Можно подтвердить изменение и с текущим выбором.',
   'COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED' =>
     'Прежние списание и оплата преподавателю будут отменены без удаления истории. Новое занятие рассчитается отдельно после завершения.',
   'SUCCESSOR_MAY_CHARGE_AGAIN' =>

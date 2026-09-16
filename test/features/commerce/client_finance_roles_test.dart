@@ -736,7 +736,10 @@ void main() {
     expect(find.text('Изменить расход'), findsOneWidget);
     final editFields = find.byType(TextField);
     await tester.enterText(editFields.at(0), '1750');
-    await tester.enterText(editFields.at(1), 'Аренда исправлена');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Например: оплата интернета'),
+      'Аренда исправлена',
+    );
     final saveEdit = find.text('Сохранить изменения');
     await tester.ensureVisible(saveEdit);
     await tester.pumpAndSettle();
@@ -766,7 +769,10 @@ void main() {
     await tester.pumpAndSettle();
     final createFields = find.byType(TextField);
     await tester.enterText(createFields.at(0), '900');
-    await tester.enterText(createFields.at(1), 'Новый расход');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Например: оплата интернета'),
+      'Новый расход',
+    );
     final saveCreate = find.text('Сохранить');
     await tester.ensureVisible(saveCreate);
     await tester.pumpAndSettle();

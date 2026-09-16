@@ -5,6 +5,39 @@ describe("PlatformOutboxWorker", () => {
     query: jest.fn().mockResolvedValue({ rows: [] }),
   });
 
+  it("delivers bulk teacher-rate changes as global lesson invalidations without financial writes", async () => {
+    const event = {
+      eventId: "event-rate", type: "crm.lesson_teacher_rate.changed",
+      occurredAt: new Date(), aggregateType: "schedule:teacher-rate-bulk",
+      aggregateId: "global", aggregateVersion: 4, requestId: "request-rate",
+      payload: { action: "bulk_set" }, attempts: 1,
+    };
+    const integrity = {
+      claimOutbox: jest.fn().mockResolvedValue([event]),
+      markOutboxPublished: jest.fn().mockResolvedValue(true),
+      markOutboxFailed: jest.fn().mockResolvedValue("retry"),
+    };
+    const realtime = {
+      isReady: () => true, emitCrmChanged: jest.fn(), emitFinanceChanged: jest.fn(),
+    };
+    const notifications = { notifyLessonChanged: jest.fn(), notifyInboundLead: jest.fn() };
+    const database = emptyDatabase();
+    const worker = new PlatformOutboxWorker(integrity as never, realtime as never,
+      notifications as never, database as never);
+    await expect(worker.runOnce("worker-rate")).resolves.toEqual({
+      claimed: 1, published: 1, retry: 0, deadLetter: 0,
+    });
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith({
+      entity: "lesson", action: "updated", id: null, branchId: null, affectedUserIds: [],
+    });
+    expect(realtime.emitFinanceChanged).not.toHaveBeenCalled();
+    expect(notifications.notifyLessonChanged).not.toHaveBeenCalled();
+    expect(notifications.notifyInboundLead).not.toHaveBeenCalled();
+    expect(database.query).not.toHaveBeenCalled();
+    expect(integrity.markOutboxFailed).not.toHaveBeenCalled();
+    expect(integrity.markOutboxPublished).toHaveBeenCalledWith("event-rate", "worker-rate");
+  });
+
   it("publishes known invalidations and retries unknown events", async () => {
     const events = [
       {

@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -113,7 +114,7 @@ class LessonScheduleSection extends StatelessWidget {
           key: ValueKey(
             'lesson-duration-selection-${model.draft.durationMinutes}',
           ),
-          child: DropdownButtonFormField<int>(
+          child: AppDropdownButtonFormField<int>(
             menuMaxHeight: 256,
             key: const ValueKey('lesson-duration-field'),
             initialValue: model.draft.durationMinutes,

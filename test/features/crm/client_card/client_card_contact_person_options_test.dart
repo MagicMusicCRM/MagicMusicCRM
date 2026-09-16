@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -67,7 +68,7 @@ Future<void> _openContacts(
 Future<void> _expectConfiguredRelationOptions(WidgetTester tester) async {
   final dropdown = find.descendant(
     of: find.byType(AlertDialog),
-    matching: find.byType(DropdownButtonFormField<String>),
+    matching: find.byType(AppDropdownButtonFormField<String>),
   );
   await tester.tap(dropdown);
   await tester.pumpAndSettle();

@@ -16,6 +16,8 @@ import { TeacherPayrollQueryService } from "./payroll/teacher-payroll-query.serv
 import { TeacherStatsXlsxService } from "./payroll/teacher-stats-xlsx.service";
 import { OoxmlWorkbookBuilder } from "../common/ooxml-workbook.builder";
 import { TeacherStatsReportService } from "./payroll/teacher-stats-report.service";
+import { LessonTeacherRateService } from "./schedule/lesson-teacher-rate.service";
+import { RealtimeBus } from "../realtime/realtime-bus";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -36,6 +38,7 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
   let payroll: PayrollService;
   let actor: ActorContext;
   let teacherId: string;
+  let rateService: LessonTeacherRateService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
@@ -96,6 +99,8 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
     );
     const repository = new PayrollReadRepository(database);
     const policy = new CrmPolicy();
+    rateService = new LessonTeacherRateService(policy,
+      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus, integrity);
     const calculator = new PayrollAccrualCalculator();
     const report = new TeacherStatsReportService(
       repository,
@@ -119,6 +124,59 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
     await client.query("rollback");
     client.release();
     await pool.end();
+  });
+
+  it("restores date-specific inherited rates without rewriting settled facts", async () => {
+    await client.query("savepoint inherited_rate");
+    try {
+      await client.query(`insert into app.teacher_rates (teacher_id, rate, effective_from, created_by)
+        values ($1, 700, '2026-01-01', $2), ($1, 800, '2026-08-01', $2),
+          ($1, 1200, '2027-01-01', $2)`, [teacherId, actor.userId]);
+      const group = await client.query<{id: string}>(
+        `insert into app.groups (name, teacher_id, teacher_rate)
+         values ('Inherited zero rate test', $1, 0) returning id`, [teacherId]);
+      const inheritedGroup = await client.query<{id: string}>(
+        `insert into app.groups (name, teacher_id, teacher_rate)
+         values ('Inherited history rate test', $1, null) returning id`, [teacherId]);
+      const lessons = await client.query<{id: string}>(
+        `insert into app.lessons (teacher_id, scheduled_at, duration_minutes, status, teacher_rate, group_id)
+         values ($1, '2026-07-15 10:00:00+00', 60, 'completed', 900, $3),
+           ($1, '2026-08-15 10:00:00+00', 60, 'completed', 900, $3),
+           ($1, '2026-08-16 10:00:00+00', 60, 'completed', 900, $2)
+         returning id`, [teacherId, group.rows[0]!.id, inheritedGroup.rows[0]!.id]);
+      const ids = lessons.rows.map(row => row.id);
+      await client.query(`insert into app.lesson_teacher_compensation_facts
+        (lesson_id, teacher_id, compensation_type, snapshot_rate, rate_minor,
+         duration_minutes, amount_minor, compensation_source)
+        select id, teacher_id, 'hourly', 900, 90000, 45, 67500, 'manual'
+        from app.lessons where id = any($1::uuid[])`, [ids]);
+      const before = await client.query(`select * from app.lesson_teacher_compensation_facts
+        where lesson_id = any($1::uuid[]) order by id`, [ids]);
+      const dto = { lessonIds: ids, teacherRate: null,
+        reasonText: 'Вернуть ставку по умолчанию', expectedVersion: 0 };
+      const metadata = { idempotencyKey: randomUUID(), requestId: randomUUID() };
+      expect(await rateService.setLessonsTeacherRate(actor, dto, metadata))
+        .toMatchObject({ updated: 3, correctedSettled: 3 });
+      // A repeated request must not create another correction.
+      await rateService.setLessonsTeacherRate(actor, dto, metadata);
+      const effective = await client.query(`select f.snapshot_rate::float as rate,
+        f.amount_minor::int as amount, f.duration_minutes, l.teacher_rate,
+        f.supersedes_fact_id
+        from app.lesson_teacher_compensation_facts_effective f
+        join app.lessons l on l.id = f.lesson_id
+        where l.id = any($1::uuid[]) order by l.scheduled_at`, [ids]);
+      expect(effective.rows.map(row => [row.rate, row.amount, row.duration_minutes, row.teacher_rate]))
+        .toEqual([[700, 52500, 45, null], [800, 60000, 45, null], [0, 0, 45, null]]);
+      expect(effective.rows.every(row => row.supersedes_fact_id)).toBe(true);
+      const original = await client.query(`select * from app.lesson_teacher_compensation_facts
+        where id = any($1::uuid[]) order by id`, [before.rows.map(row => row.id)]);
+      expect(original.rows).toEqual(before.rows);
+      const count = await client.query(`select count(*)::int as count
+        from app.lesson_teacher_compensation_facts where lesson_id = any($1::uuid[])`, [ids]);
+      expect(count.rows[0].count).toBe(6);
+    } finally {
+      await client.query("rollback to savepoint inherited_rate");
+    }
   });
 
   it("reports credited group hours from one effective percent compensation fact", async () => {

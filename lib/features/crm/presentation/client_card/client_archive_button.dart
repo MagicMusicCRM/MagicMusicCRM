@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -151,7 +152,7 @@ class _ArchivePreviewDialogState extends State<_ArchivePreviewDialog> {
               ],
               if (!alreadyArchived) ...[
                 const SizedBox(height: AppSpace.md),
-                DropdownButtonFormField<String>(
+                AppDropdownButtonFormField<String>(
                   menuMaxHeight: 256,
                   key: const ValueKey('client-archive-reason'),
                   initialValue: _reason,

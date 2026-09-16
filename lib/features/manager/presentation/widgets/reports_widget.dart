@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'dart:async';
 
@@ -311,7 +312,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             ),
             SizedBox(
               width: 260,
-              child: DropdownButtonFormField<String?>(
+              child: AppDropdownButtonFormField<String?>(
                 menuMaxHeight: 256,
                 key: const ValueKey('dashboard-scope'),
                 initialValue: _dashboardFilter.branchId,
@@ -392,7 +393,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               alignment: Alignment.centerLeft,
               child: SizedBox(
                 width: 320,
-                child: DropdownButtonFormField<String>(
+                child: AppDropdownButtonFormField<String>(
                   menuMaxHeight: 256,
                   key: ValueKey('analytics-journal-$selected'),
                   initialValue: selected,

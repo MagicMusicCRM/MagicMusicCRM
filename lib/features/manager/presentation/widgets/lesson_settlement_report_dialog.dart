@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -155,7 +156,7 @@ class _ReportState extends ConsumerState<LessonSettlementReportDialog> {
         height: 560,
         child: Column(
           children: [
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: ValueKey(_type),
               initialValue: _type,

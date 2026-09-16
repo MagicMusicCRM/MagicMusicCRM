@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -561,7 +562,7 @@ void main() {
       'phone': 'Телефон',
       'url': 'Ссылка',
     }.entries) {
-      final dropdown = tester.widget<DropdownButtonFormField<String>>(
+      final dropdown = tester.widget<AppDropdownButtonFormField<String>>(
         find.byKey(const ValueKey('field-type')),
       );
       dropdown.onChanged!(entry.key);
@@ -569,13 +570,13 @@ void main() {
       expect(find.text(entry.value), findsWidgets, reason: entry.key);
     }
     tester
-        .widget<DropdownButtonFormField<String>>(
+        .widget<AppDropdownButtonFormField<String>>(
           find.byKey(const ValueKey('field-type')),
         )
         .onChanged!('textarea');
     await tester.pumpAndSettle();
     tester
-        .widget<DropdownButtonFormField<String>>(
+        .widget<AppDropdownButtonFormField<String>>(
           find.byKey(const ValueKey('field-width')),
         )
         .onChanged!('half');
@@ -814,7 +815,7 @@ void main() {
       findsOneWidget,
     );
     tester
-        .widget<DropdownButtonFormField<String>>(
+        .widget<AppDropdownButtonFormField<String>>(
           find.byKey(const ValueKey('field-type')),
         )
         .onChanged!('multi_select');

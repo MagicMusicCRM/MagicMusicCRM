@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/observability/app_performance.dart';
 import 'dart:async';
 
@@ -143,6 +144,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // Extra schedule filters (applied client-side over already-loaded lessons —
   // is_trial / conflict_types / teacher_id all ride along in the matrix).
   bool _onlyTrial = false;
+  Set<String> _settlementTypes = {}, _compensationRules = {};
   bool _onlyConflicts = false;
   bool _fitDayToViewport = true;
   String? _filterTeacherId;
@@ -245,7 +247,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       final offset = rawOffset is num
           ? rawOffset.toInt()
           : int.tryParse(rawOffset?.toString() ?? '') ?? 180;
-      final instant = DateTime.tryParse(lesson['scheduled_at']?.toString() ?? '');
+      final instant = DateTime.tryParse(
+        lesson['scheduled_at']?.toString() ?? '',
+      );
       if (instant != null) {
         final local = instant.toUtc().add(Duration(minutes: offset));
         final date = scheduleDisplayDate(local);
@@ -319,6 +323,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     _desktopSearchController.text = _scheduleSearchQuery;
     _fitDayToViewport = filters['fitDayToViewport'] != false;
     _onlyTrial = filters['trial'] == true || filters['trial'] == '1';
+    _settlementTypes = (filters['settlementTypes'] as List? ?? const [])
+        .whereType<String>()
+        .toSet();
+    _compensationRules = (filters['compensationRules'] as List? ?? const [])
+        .whereType<String>()
+        .toSet();
     _onlyConflicts =
         filters['conflicts'] == true || filters['conflicts'] == '1';
     _currentView = ScheduleView.values.firstWhere(
@@ -372,6 +382,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (_scheduleSearchQuery.isNotEmpty)
         'scheduleQuery': _scheduleSearchQuery,
       if (_onlyTrial) 'trial': true,
+      if (_settlementTypes.isNotEmpty)
+        'settlementTypes': _settlementTypes.toList(),
+      if (_compensationRules.isNotEmpty)
+        'compensationRules': _compensationRules.toList(),
       if (_onlyConflicts) 'conflicts': true,
     },
     date: _selectedDate,

@@ -81,7 +81,7 @@ class _DashboardFilters extends StatelessWidget {
         ),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 280, minWidth: 220),
-          child: DropdownButtonFormField<String>(
+          child: AppDropdownButtonFormField<String>(
             menuMaxHeight: 256,
             key: ValueKey(branchId ?? 'all-branches'),
             initialValue: branchId,

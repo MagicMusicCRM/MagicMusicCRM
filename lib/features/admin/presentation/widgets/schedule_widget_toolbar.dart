@@ -240,7 +240,7 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
         mainAxisSize: MainAxisSize.min,
         children: [
           Expanded(
-            child: DropdownButtonFormField<String>(
+            child: AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: ValueKey('schedule-branch-selector-${value ?? 'none'}'),
               initialValue: value,

@@ -245,7 +245,7 @@ class _CrmConfigurationScopeSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 270,
-      child: DropdownButtonFormField<String?>(
+      child: AppDropdownButtonFormField<String?>(
         menuMaxHeight: 256,
         key: const ValueKey('configuration-scope'),
         initialValue: branchId,

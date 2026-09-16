@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/observability/app_performance.dart';
 import 'client_card_draft_controller.dart';
 import 'client_card_data_controller.dart';

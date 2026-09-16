@@ -62,7 +62,7 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
     final views = SizedBox(width: 240 * textScale, child: _buildViewSwitcher());
     final mode = SizedBox(
       width: 176 * textScale,
-      child: DropdownButtonFormField<DayViewMode>(
+      child: AppDropdownButtonFormField<DayViewMode>(
         menuMaxHeight: 256,
         key: const ValueKey('schedule-day-mode-switcher'),
         initialValue: _dayViewMode,
@@ -192,6 +192,11 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                 initialOnlyConflicts: _onlyConflicts,
                 initialTeacherId: _filterTeacherId,
                 teacherOptions: _teacherFilterOptions,
+                initialSettlementTypes: _settlementTypes,
+                initialCompensationRules: _compensationRules,
+                loadFinancialCatalog: _canFilterFinancialTypes
+                    ? _loadFinancialFilterCatalog
+                    : null,
                 showHeader: true,
                 onApply: (result) {
                   MenuController.maybeOf(menuContext)?.close();

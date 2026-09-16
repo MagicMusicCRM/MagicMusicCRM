@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -150,7 +151,7 @@ class _ContactPersonDialogState extends State<_ContactPersonDialog> {
               ),
             ),
             const SizedBox(height: AppSpace.md),
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               initialValue: widget.relationOptions.contains(_relation)
                   ? _relation
@@ -304,7 +305,7 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
                 ),
               ),
               const SizedBox(height: AppSpace.sm),
-              DropdownButtonFormField<String>(
+              AppDropdownButtonFormField<String>(
                 menuMaxHeight: 256,
                 initialValue: role,
                 isExpanded: true,
@@ -331,7 +332,7 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
                 ),
               ),
               const SizedBox(height: AppSpace.sm),
-              DropdownButtonFormField<String>(
+              AppDropdownButtonFormField<String>(
                 menuMaxHeight: 256,
                 initialValue: entityType,
                 isExpanded: true,

@@ -8,7 +8,12 @@ void main() {
     for (final file in Directory('lib').listSync(recursive: true)) {
       if (file is! File || !file.path.endsWith('.dart')) continue;
       final source = file.readAsStringSync();
-      final pattern = RegExp(r'DropdownButtonFormField<[^>]+>\(\s*');
+      expect(
+        RegExp(r'\bDropdownButton(?:FormField)?\s*(?:<|\()').hasMatch(source),
+        isFalse,
+        reason: '${file.path} must use the anchored application dropdown',
+      );
+      final pattern = RegExp(r'AppDropdownButtonFormField<[^>]+>\(\s*');
       for (final match in pattern.allMatches(source)) {
         if (!source.startsWith('menuMaxHeight: 256,', match.end)) {
           uncapped.add(file.path);

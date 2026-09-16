@@ -1005,7 +1005,7 @@ extension _ClientCardStudent on _ClientCardState {
   Widget _buildStatusPicker(ColorScheme cs, StatusRecord current) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: DropdownButtonFormField<String>(
+      child: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         // Легаси-фолбэк 'new' (лид «Без статуса») и имена статусов в списке
         // UUID-значений не встречаются — такой «статус» показываем как пустой
@@ -1096,7 +1096,7 @@ extension _ClientCardStudent on _ClientCardState {
     );
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: DropdownButtonFormField<String>(
+      child: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: ValueKey('student-funnel-status-${funnel.scopeVersion}-$current'),
         initialValue: current.isEmpty ? null : current,

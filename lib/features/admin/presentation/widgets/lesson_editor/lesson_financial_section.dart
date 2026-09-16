@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../lesson_decision/lesson_decision_models.dart';
@@ -349,7 +350,7 @@ class _DecisionFields extends StatelessWidget {
         model.session.isEdit &&
         draft.settlementTypeKey == 'trial_lesson' &&
         model.canSelectTrialCompensation;
-    final settlement = DropdownButtonFormField<String>(
+    final settlement = AppDropdownButtonFormField<String>(
       menuMaxHeight: 256,
       isExpanded: true,
       key: const ValueKey('lesson-settlement-type-field'),
@@ -380,7 +381,7 @@ class _DecisionFields extends StatelessWidget {
     }
     return _ResponsivePair(
       first: settlement,
-      second: DropdownButtonFormField<String>(
+      second: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         isExpanded: true,
         key: const ValueKey('lesson-compensation-rule-field'),

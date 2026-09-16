@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/models/subscription_purchase.dart';
@@ -347,7 +348,7 @@ class _SubscriptionActualPaymentFields extends StatelessWidget {
   );
 
   Widget _methodField(BuildContext context) =>
-      DropdownButtonFormField<SubscriptionPaymentMethod>(
+      AppDropdownButtonFormField<SubscriptionPaymentMethod>(
         menuMaxHeight: 256,
         key: const Key('subscription-payment-method'),
         initialValue: draft.paymentMethod,

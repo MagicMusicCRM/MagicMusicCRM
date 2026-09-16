@@ -1,18 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/workspace/people_search_action.dart';
 import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lesson_settlement_report_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_dialog.dart';
 
 class _Api extends MagicApiClient {
   _Api()
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
   final calls = <(String, Map<String, dynamic>)>[];
+  Completer<void>? searchGate;
+  bool failSearch = false;
   @override
   Future<T> get<T>(
     String path, {
@@ -20,7 +27,15 @@ class _Api extends MagicApiClient {
     bool authenticated = true,
   }) async {
     calls.add((path, {...?queryParameters}));
-    if (path == '/crm/clients/search')
+    if (const [
+      '/crm/clients/search',
+      '/crm/teachers',
+      '/crm/staff',
+    ].contains(path)) {
+      if (searchGate != null) await searchGate!.future;
+      if (failSearch) throw StateError('Search unavailable');
+    }
+    if (path == '/crm/clients/search') {
       return {
             'items': [
               {
@@ -41,14 +56,16 @@ class _Api extends MagicApiClient {
             ],
           }
           as T;
-    if (path == '/crm/teachers')
+    }
+    if (path == '/crm/teachers') {
       return {
             'items': [
               {'id': 'teacher', 'firstName': 'Андрей', 'lastName': 'Учитель'},
             ],
           }
           as T;
-    if (path == '/crm/staff')
+    }
+    if (path == '/crm/staff') {
       return {
             'items': [
               {
@@ -60,7 +77,8 @@ class _Api extends MagicApiClient {
             ],
           }
           as T;
-    if (path == '/crm/configuration/lesson-decisions')
+    }
+    if (path == '/crm/configuration/lesson-decisions') {
       return {
             'settlementTypes': [
               {
@@ -79,6 +97,7 @@ class _Api extends MagicApiClient {
             ],
           }
           as T;
+    }
     return {'items': []} as T;
   }
 }
@@ -103,10 +122,124 @@ Widget _host(
       ),
     ),
   ],
-  child: MaterialApp(home: Scaffold(body: child)),
+  child: MaterialApp(theme: AppTheme.production, home: Scaffold(body: child)),
 );
 
 void main() {
+  testWidgets(
+    'desktop search opens the existing staff card and dismisses results',
+    (tester) async {
+      final api = _Api();
+      await tester.pumpWidget(
+        _host(
+          api,
+          const Align(
+            alignment: Alignment.topRight,
+            child: SizedBox(
+              width: 300,
+              child: PeopleSearchAction(inline: true),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Ан');
+      await tester.pumpAndSettle(const Duration(milliseconds: 350));
+      await tester.tap(find.text('Антон Администратор'));
+      await tester.pumpAndSettle();
+      expect(find.byType(StaffDetailDialog), findsOneWidget);
+      expect(find.byKey(const ValueKey('people-search-results')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  Widget inlineHost(_Api api, {Set<String>? capabilities}) => _host(
+    api,
+    const Align(
+      alignment: Alignment.topRight,
+      child: SizedBox(width: 300, child: PeopleSearchAction(inline: true)),
+    ),
+    capabilities: capabilities ?? const {'crm.client.read.basic'},
+  );
+
+  testWidgets(
+    'desktop search accepts typing directly and closes on Escape and outside click',
+    (tester) async {
+      final api = _Api();
+      await tester.pumpWidget(inlineHost(api));
+      await tester.pumpAndSettle();
+      final field = find.byKey(const ValueKey('global-people-search-field'));
+      expect(field, findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+      await tester.enterText(field, 'А');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(api.calls, isEmpty);
+      await tester.enterText(field, 'Ан');
+      await tester.pumpAndSettle(const Duration(milliseconds: 350));
+      expect(api.calls, hasLength(3));
+      expect(find.text('Анна'), findsOneWidget);
+      expect(find.text('Андрей Учитель'), findsOneWidget);
+      expect(find.text('Антон Администратор'), findsOneWidget);
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('people-search-results')), findsNothing);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(find.text('Анна'), findsOneWidget);
+      await tester.tapAt(const Offset(30, 450));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('people-search-results')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('clearing desktop query ignores a late response', (tester) async {
+    final api = _Api()..searchGate = Completer<void>();
+    await tester.pumpWidget(inlineHost(api));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Ан');
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(api.calls, hasLength(3));
+    await tester.tap(find.byTooltip('Очистить поиск'));
+    await tester.pump();
+    api.searchGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Анна'), findsNothing);
+    expect(find.text('Введите минимум 2 символа'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop search error can retry without leaving the header', (
+    tester,
+  ) async {
+    final api = _Api()..failSearch = true;
+    await tester.pumpWidget(inlineHost(api));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Ан');
+    await tester.pumpAndSettle(const Duration(milliseconds: 350));
+    expect(find.text('Повторить'), findsOneWidget);
+    api.failSearch = false;
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 350));
+    expect(find.text('Анна'), findsOneWidget);
+    expect(api.calls, hasLength(6));
+  });
+
+  testWidgets(
+    'desktop search without capability is hidden and never requests',
+    (tester) async {
+      final api = _Api();
+      await tester.pumpWidget(inlineHost(api, capabilities: const {}));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(api.calls, isEmpty);
+    },
+  );
+
   testWidgets(
     'search is debounced, includes staff and collapses converted leads',
     (tester) async {
@@ -205,7 +338,7 @@ void main() {
       findsOneWidget,
     );
     expect(LessonSettlementCorner.colorFor(null), isNull);
-    expect(LessonSettlementCorner.colorFor('lesson'), isNull);
+    expect(LessonSettlementCorner.colorFor('lesson'), isNotNull);
     expect(LessonSettlementCorner.colorFor('unknown'), isNotNull);
     final date = tester.getRect(find.text('30.09'));
     final corner = tester.getRect(

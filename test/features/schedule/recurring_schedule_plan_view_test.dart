@@ -8,6 +8,46 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_detai
 
 void main() {
   testWidgets(
+    'timeline does not duplicate the height of a busy day into an empty row',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: StudentLessonTimelineView(
+                page: StudentLessonTimelinePage.fromJson({
+                  'windowStart': '2026-09-12',
+                  'items': [
+                    for (var i = 0; i < 6; i++) _lesson('busy-$i', 'manual'),
+                  ],
+                  'previousCursor': null,
+                  'nextCursor': null,
+                  'hasPrevious': false,
+                  'hasNext': false,
+                }),
+                loading: false,
+                paging: false,
+                error: null,
+                onPrevious: () {},
+                onNext: () {},
+                onRetry: () {},
+                onOpen: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSize(find.byKey(const Key('student-lesson-timeline-grid')))
+            .height,
+        lessThan(350),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'expanded individual rules survive reopening the client card',
     (tester) async {
       final bucket = PageStorageBucket();

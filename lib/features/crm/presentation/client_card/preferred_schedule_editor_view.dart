@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -141,7 +142,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
       ),
       if (requireSubscription) ...[
         const SizedBox(height: AppSpace.md),
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           key: const ValueKey('schedule-plan-subscription'),
           initialValue: state.subscriptionId,
@@ -160,7 +161,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     ];
   }
 
-  Widget _branchField() => DropdownButtonFormField<String>(
+  Widget _branchField() => AppDropdownButtonFormField<String>(
     menuMaxHeight: 256,
     key: const ValueKey('preferred-schedule-branch'),
     initialValue: state.branchId.isEmpty ? null : state.branchId,
@@ -246,7 +247,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required String Function(int) itemLabel,
     required ValueChanged<int>? onChanged,
     String? helperText,
-  }) => DropdownButtonFormField<int>(
+  }) => AppDropdownButtonFormField<int>(
     menuMaxHeight: 256,
     key: key,
     initialValue: value,
@@ -536,7 +537,7 @@ class _DecisionFields extends StatelessWidget {
     required String? value,
     required List<LessonDecisionCatalogItem> items,
     required ValueChanged<String?> onChanged,
-  }) => DropdownButtonFormField<String>(
+  }) => AppDropdownButtonFormField<String>(
     menuMaxHeight: 256,
     isExpanded: true,
     key: key,

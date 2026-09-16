@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -329,7 +330,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                         'В воронке нет активных этапов. Директор должен обновить настройку.',
                   )
                 else
-                  DropdownButtonFormField<String>(
+                  AppDropdownButtonFormField<String>(
                     menuMaxHeight: 256,
                     key: ValueKey(
                       'lead-status-${_branchId ?? 'school'}-${_statuses.map((stage) => stage.key).join('-')}',
@@ -728,7 +729,7 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
                         'В воронке нет активных этапов. Директор должен обновить настройку.',
                   )
                 else
-                  DropdownButtonFormField<String>(
+                  AppDropdownButtonFormField<String>(
                     menuMaxHeight: 256,
                     key: ValueKey(
                       'student-status-${_branchId ?? 'school'}-${_statuses.map((stage) => stage.key).join('-')}',

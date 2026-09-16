@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:intl/intl.dart';
@@ -186,7 +187,7 @@ class _SubscriptionReplacementFormState
               style: const TextStyle(color: AppColor.text2, fontSize: 11.5),
             ),
             const SizedBox(height: AppSpace.lg),
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: const Key('subscription-replace-reason'),
               initialValue: _reasonController.text,

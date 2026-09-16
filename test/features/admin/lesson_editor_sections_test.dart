@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -501,7 +502,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('lesson-time-field')));
 
     tester
-        .widget<DropdownButtonFormField<int>>(
+        .widget<AppDropdownButtonFormField<int>>(
           find.byKey(const ValueKey('lesson-duration-field')),
         )
         .onChanged
@@ -566,7 +567,7 @@ void main() {
     pickers.first.onSelected(pickers.first.items.last);
     pickers.elementAt(1).onSelected(pickers.elementAt(1).items.first);
     pickers.elementAt(2).onSelected(pickers.elementAt(2).items.first);
-    final branchField = tester.widget<DropdownButtonFormField<String>>(
+    final branchField = tester.widget<AppDropdownButtonFormField<String>>(
       find.byKey(const ValueKey('lesson-branch-field:branch-a')),
     );
     branchField.onChanged?.call('branch-a');
@@ -935,13 +936,13 @@ void main() {
     expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
     expect(find.text('Автозавершение'), findsOneWidget);
     tester
-        .widget<DropdownButtonFormField<String>>(
+        .widget<AppDropdownButtonFormField<String>>(
           find.byKey(const ValueKey('lesson-settlement-type-field')),
         )
         .onChanged
         ?.call('paid');
     tester
-        .widget<DropdownButtonFormField<String>>(
+        .widget<AppDropdownButtonFormField<String>>(
           find.byKey(const ValueKey('lesson-compensation-rule-field')),
         )
         .onChanged
@@ -1032,7 +1033,7 @@ void main() {
         );
         expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
         if (allowed) {
-          tester.widget<DropdownButtonFormField<String>>(rule).onChanged!(
+          tester.widget<AppDropdownButtonFormField<String>>(rule).onChanged!(
             'standard',
           );
           expect(actions.compensationRule, 'standard');
@@ -1672,7 +1673,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-branch-field:branch-a')),
           )
           .onChanged,
@@ -1712,7 +1713,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<int>>(
+          .widget<AppDropdownButtonFormField<int>>(
             find.byKey(const ValueKey('lesson-duration-field')),
           )
           .onChanged,
@@ -1730,7 +1731,7 @@ void main() {
     expect(find.text('Автозавершение'), findsOneWidget);
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-settlement-type-field')),
           )
           .onChanged,
@@ -1738,7 +1739,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-compensation-rule-field')),
           )
           .onChanged,
@@ -1801,7 +1802,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-branch-field:branch-a')),
           )
           .onChanged,
@@ -1835,7 +1836,7 @@ void main() {
     }
     expect(
       tester
-          .widget<DropdownButtonFormField<int>>(
+          .widget<AppDropdownButtonFormField<int>>(
             find.byKey(const ValueKey('lesson-duration-field')),
           )
           .onChanged,
@@ -1849,7 +1850,7 @@ void main() {
     ]) {
       expect(
         tester
-            .widget<DropdownButtonFormField<String>>(find.byKey(key))
+            .widget<AppDropdownButtonFormField<String>>(find.byKey(key))
             .onChanged,
         isNull,
       );
@@ -1901,12 +1902,14 @@ void main() {
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_participant_section.dart':
           {
+            'package:magic_music_crm/core/widgets/app_dropdown.dart',
             'package:flutter/material.dart',
             'package:magic_music_crm/core/widgets/searchable_picker_field.dart',
             'lesson_editor_models.dart',
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_schedule_section.dart':
           {
+            'package:magic_music_crm/core/widgets/app_dropdown.dart',
             'dart:async',
             'package:flutter/material.dart',
             'package:magic_music_crm/core/navigation/entity_link_text.dart',
@@ -1915,6 +1918,7 @@ void main() {
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_financial_section.dart':
           {
+            'package:magic_music_crm/core/widgets/app_dropdown.dart',
             'package:flutter/material.dart',
             'package:flutter/services.dart',
             '../lesson_decision/lesson_decision_models.dart',

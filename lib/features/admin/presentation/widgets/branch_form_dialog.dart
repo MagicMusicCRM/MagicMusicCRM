@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
@@ -408,7 +409,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
                 textCapitalization: TextCapitalization.sentences,
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
+              AppDropdownButtonFormField<int>(
                 menuMaxHeight: 256,
                 initialValue: _utcOffsetMinutes,
                 isExpanded: true,
