@@ -8,7 +8,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_notifier/local_notifier.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
@@ -185,15 +184,8 @@ class NotificationService {
       sound: true,
     );
 
-    // Request permissions for Android 13+
-    if (Platform.isAndroid) {
-      final status = await Permission.notification.status;
-      if (status.isDenied) {
-        await Permission.notification.request();
-      }
-    }
-
-    // Request FCM permissions (also handles iOS)
+    // FCM owns the Android 13+ prompt; do not prompt again after a denial.
+    // This also handles iOS authorization.
     NotificationSettings settings = await _firebaseMessaging.requestPermission(
       alert: true,
       announcement: false,

@@ -14,6 +14,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     required this.operation,
     required this.lesson,
     required this.canManageTeacherCompensation,
+    this.canSelectTrialCompensation = false,
     this.successor,
     this.resources,
     String? initialSettlementTypeKey,
@@ -34,6 +35,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   final Map<String, dynamic> lesson;
   @override
   final bool canManageTeacherCompensation;
+  final bool canSelectTrialCompensation;
   @override
   final Map<String, dynamic>? successor;
   final String? _initialSettlementTypeKey;
@@ -377,7 +379,9 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
         'settlementTypeKey': settlementTypeKey,
         if (clientDecisions.isNotEmpty)
           'clientDecisions': lessonClientDecisionsPayload(clientDecisions),
-        if (canManageTeacherCompensation) ...{
+        if (canManageTeacherCompensation ||
+            (canSelectTrialCompensation &&
+                settlementTypeKey == 'trial_lesson')) ...{
           'teacherCompensationRuleKey': compensationRuleKey,
           'teacherCompensationValueMinor': ?compensationValueMinor,
           'teacherCreditedDurationMinutes': ?teacherCreditedDurationMinutes,

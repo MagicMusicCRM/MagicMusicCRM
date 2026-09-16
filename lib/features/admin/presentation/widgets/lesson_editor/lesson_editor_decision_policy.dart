@@ -89,6 +89,9 @@ class LessonEditorDecisionPolicy {
           ? configuredDuration
           : draft.durationMinutes,
       settlementTypeKey: settlement?.key,
+      isTrial: session.isEdit
+          ? draft.isTrial
+          : settlement?.key == 'trial_lesson',
       compensationRuleKey: rule?.key,
       compensationValueMinor: compensationValue,
       teacherCreditedDurationMinutes:
@@ -347,6 +350,9 @@ class LessonEditorDecisionPolicy {
     LessonEditorReferenceState references,
     String? settlementKey,
   ) {
+    if (settlementKey == 'trial_lesson') {
+      draft = _trialFunding(draft);
+    }
     final settlement = _catalogItemByKey(
       references.catalog?.settlementTypes,
       settlementKey,
@@ -357,6 +363,7 @@ class LessonEditorDecisionPolicy {
     if (settlement?.defaultTeacherCompensationRuleKey == null) {
       return draft.copyWith(
         settlementTypeKey: settlementKey,
+        isTrial: settlementKey == 'trial_lesson',
         clientDecisions: clientDecisions,
       );
     }
@@ -373,6 +380,7 @@ class LessonEditorDecisionPolicy {
     );
     return draft.copyWith(
       settlementTypeKey: settlementKey,
+      isTrial: settlementKey == 'trial_lesson',
       compensationRuleKey: recommendation.compensationRuleKey,
       compensationValueMinor: draft.compensationTouched
           ? draft.compensationValueMinor
@@ -516,6 +524,7 @@ class LessonEditorDecisionPolicy {
     required LessonEditorDraft draft,
     required LessonEditorReferenceState references,
   }) {
+    if (draft.settlementTypeKey == 'trial_lesson') return _trialFunding(draft);
     if (draft.clientDecisions.isNotEmpty) return draft;
     final settlement = _catalogItemByKey(
       references.catalog?.settlementTypes,
@@ -539,6 +548,19 @@ class LessonEditorDecisionPolicy {
       subscriptionId: null,
     );
   }
+
+  LessonEditorDraft _trialFunding(LessonEditorDraft draft) => draft.copyWith(
+    clientChargeType: 'none',
+    subscriptionId: null,
+    clientDecisions: [
+      for (final decision in draft.clientDecisions)
+        {
+          'clientId': decision['clientId'],
+          'chargeType': 'none',
+          'chargeDurationMinutes': 0,
+        },
+    ],
+  );
 
   LessonEditorDraft fundingSelection(
     LessonEditorDraft draft,
@@ -707,7 +729,9 @@ class LessonEditorDecisionPolicy {
     'settlementTypeKey': draft.settlementTypeKey,
     if (draft.clientDecisions.isNotEmpty)
       'clientDecisions': lessonClientDecisionsPayload(draft.clientDecisions),
-    if (includeTeacherCompensation) ...{
+    if (includeTeacherCompensation ||
+        (draft.settlementTypeKey == 'trial_lesson' &&
+            draft.compensationTouched)) ...{
       'teacherCompensationRuleKey': draft.compensationRuleKey,
       'teacherCompensationValueMinor': ?draft.compensationValueMinor,
       'teacherCreditedDurationMinutes': ?draft.teacherCreditedDurationMinutes,

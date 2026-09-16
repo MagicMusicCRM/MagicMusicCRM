@@ -653,6 +653,32 @@ Map<String, dynamic> _normalizeCancelDecision(Map<String, dynamic> decision) {
 
 void main() {
   test(
+    'operational trial rule selection reaches the signed preview as manual',
+    () async {
+      final api = _LessonDecisionApi(operationKey: 'planned-settlement');
+      final controller = LessonDecisionController(
+        crm: MagicCrmService(api),
+        operation: LessonDecisionOperation.plannedSettlement,
+        lesson: _lesson,
+        canManageTeacherCompensation: false,
+        canSelectTrialCompensation: true,
+      );
+      await controller.preview(
+        reason: 'Куплен абонемент',
+        settlementTypeKey: 'trial_lesson',
+        compensationRuleKey: 'standard',
+        teacherCompensationSource: 'manual',
+        teacherCreditedDurationMinutes: 60,
+      );
+      expect(api.previews.single['financialDecision'], {
+        'settlementTypeKey': 'trial_lesson',
+        'teacherCompensationRuleKey': 'standard',
+        'teacherCompensationSource': 'manual',
+        'teacherCreditedDurationMinutes': 60,
+      });
+    },
+  );
+  test(
     'editing a lesson uses the planned-settlement wire contract with a reason',
     () async {
       final api = _LessonDecisionApi(operationKey: 'planned-settlement');

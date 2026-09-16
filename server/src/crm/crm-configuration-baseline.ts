@@ -169,6 +169,19 @@ export function buildCrmConfigurationBaseline(
         active: false,
         order: 6,
       },
+      {
+        stableKey: "trial_lesson",
+        label: "Пробный урок",
+        colorToken: "violet",
+        hourShareBasisPoints: 0,
+        clientDurationMode: "zero",
+        teacherDurationMode: "full",
+        defaultTeacherCompensationRuleKey: "trial_lesson",
+        fixedPenaltyMinor: "0",
+        allowedContexts: ["settle"],
+        active: true,
+        order: 7,
+      },
     ],
     teacherCompensationRules: [
       {
@@ -210,6 +223,14 @@ export function buildCrmConfigurationBaseline(
         value: "0",
         active: true,
         order: 4,
+      },
+      {
+        stableKey: "trial_lesson",
+        label: "Пробный урок — без оплаты",
+        mode: "none",
+        value: "0",
+        active: true,
+        order: 5,
       },
     ],
   };

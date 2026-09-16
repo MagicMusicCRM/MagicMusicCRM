@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'people_search_action.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -160,6 +161,7 @@ class _ProductionWorkspaceHostState
     );
     final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
     return ProductionWorkspaceView(
+      peopleSearchAction: const PeopleSearchAction(),
       controller: _controller,
       tabBuilder: widget.tabBuilder,
       navigationFor: (tab, {required isDesktop}) => _workspaceNavigation(

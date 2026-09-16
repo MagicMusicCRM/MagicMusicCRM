@@ -336,11 +336,11 @@ void main() {
 
       await tester.tap(find.byTooltip('Обозначения и занятость'));
       await tester.pumpAndSettle();
-      // The legend has exactly three color statuses and one independent type badge.
+      // Lifecycle statuses stay separate from the compact settlement legend.
       expect(find.text('Забронировано'), findsOneWidget);
       expect(find.text('Завершено'), findsOneWidget);
       expect(find.text('Конфликт'), findsOneWidget);
-      expect(find.text('Пробное'), findsOneWidget);
+      expect(find.text('Уголки — тип списания'), findsOneWidget);
       expect(find.textContaining('Бесплат'), findsNothing);
       // …and the old per-cell instruction is gone (owner rule #10).
       expect(find.text('Нажмите,\nчтобы назначить'), findsNothing);

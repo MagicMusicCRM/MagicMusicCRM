@@ -146,8 +146,8 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
         ]),
       );
       expect(snapshot.businessSettings).toHaveLength(2);
-      expect(snapshot.lessonSettlementTypes).toHaveLength(7);
-      expect(snapshot.teacherCompensationRules).toHaveLength(5);
+      expect(snapshot.lessonSettlementTypes).toHaveLength(8);
+      expect(snapshot.teacherCompensationRules).toHaveLength(6);
       await expect(service.listRevisions(director)).resolves.toMatchObject({
         items: [],
       });
@@ -178,6 +178,7 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       "Частично оплачиваемый пропуск",
       "Неоплачиваемый пропуск",
       "Занятие со штрафом",
+      "Пробный урок",
     ]);
     expect(snapshot.teacherCompensationRules.map((rule) => rule.label)).toEqual(
       [
@@ -186,6 +187,7 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
         "Процент ставки",
         "Фиксированная сумма",
         "Почасовая сумма",
+        "Пробный урок — без оплаты",
       ],
     );
     snapshot.categories.push({

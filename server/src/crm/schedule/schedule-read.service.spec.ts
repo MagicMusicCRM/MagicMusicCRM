@@ -3,6 +3,18 @@ import { CrmPolicy } from "../crm.policy";
 import { ScheduleReadService } from "./schedule-read.service";
 
 describe("schedule read contract", () => {
+  it("filters financial keys and branch before pagination using bound parameters", async () => {
+    const { service, query } = createService([]);
+    await service.listLessons({ userId: "admin", role: "admin" }, {
+      settlementTypeKey: "trial_lesson", compensationRuleKey: "trial_lesson",
+      branchId: "branch-a", offset: 100, includeClosed: true,
+    });
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("offset $13::integer");
+    expect(sql).toContain("l.branch_id = $12::uuid");
+    expect(sql).not.toContain("= 'trial_lesson'");
+    expect(query.mock.calls[0][1]).toEqual(expect.arrayContaining(["trial_lesson", "branch-a", 100]));
+  });
   const actor = { userId: "manager-a", role: "manager" as const };
 
   const createService = (rows: Record<string, unknown>[] = []) => {

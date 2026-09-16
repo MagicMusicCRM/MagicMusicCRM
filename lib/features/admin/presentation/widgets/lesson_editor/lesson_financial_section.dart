@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import '../lesson_decision/lesson_decision_models.dart';
 import '../lesson_decision/lesson_decision_sections.dart';
 import '../lesson_form_rules.dart';
@@ -18,6 +17,7 @@ class LessonFinancialSectionModel {
     required this.requiresCompensationValue,
     required this.compensationNeedsReason,
     required this.canManageTeacherCompensation,
+    this.canSelectTrialCompensation = false,
     this.allowsNoFunding = false,
     this.requiresChangeReason = false,
   });
@@ -29,6 +29,7 @@ class LessonFinancialSectionModel {
   final bool requiresCompensationValue;
   final bool compensationNeedsReason;
   final bool canManageTeacherCompensation;
+  final bool canSelectTrialCompensation;
   final bool allowsNoFunding;
   final bool requiresChangeReason;
 }
@@ -128,14 +129,18 @@ class LessonFinancialSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 8),
-        _TrialControl(model: model, actions: actions),
         _CompletionControl(model: model, actions: actions),
         const SizedBox(height: 16),
         _DecisionFields(model: model, actions: actions),
         if (model.canManageTeacherCompensation)
           _CompensationOverride(model: model, actions: actions),
         const SizedBox(height: 16),
-        ?fundingFields ?? _fundingFields(),
+        if (model.draft.settlementTypeKey == 'trial_lesson')
+          const Text(
+            'Пробный урок бесплатен для клиента. Абонемент и личный счёт не расходуются.',
+          )
+        else
+          ?fundingFields ?? _fundingFields(),
         _PartialDurationControls(
           model: model,
           participants: _participants(),
@@ -280,7 +285,8 @@ class _PartialDurationControls extends StatelessWidget {
             ),
           ),
         ],
-        if (draft.compensationTouched) ...[
+        if (draft.compensationTouched &&
+            draft.settlementTypeKey != 'trial_lesson') ...[
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
@@ -295,33 +301,6 @@ class _PartialDurationControls extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _TrialControl extends StatelessWidget {
-  const _TrialControl({required this.model, required this.actions});
-
-  final LessonFinancialSectionModel model;
-  final LessonEditorActions actions;
-
-  @override
-  Widget build(BuildContext context) {
-    final locked = model.session.isEdit;
-    return SwitchListTile(
-      key: const ValueKey('lesson-trial-toggle'),
-      value: model.draft.isTrial,
-      activeThumbColor: AppTheme.primaryGold,
-      contentPadding: EdgeInsets.zero,
-      title: const Text('Пробное занятие'),
-      subtitle: Text(
-        locked
-            ? 'Маркер зафиксирован при создании'
-            : 'Не зависит от типа клиента и способа списания',
-      ),
-      onChanged: locked
-          ? null
-          : (value) => actions.edit(LessonTrialEdit(value)),
     );
   }
 }
@@ -366,6 +345,10 @@ class _DecisionFields extends StatelessWidget {
   Widget build(BuildContext context) {
     final draft = model.draft;
     final catalog = model.references.catalog;
+    final canSelectTrialRule =
+        model.session.isEdit &&
+        draft.settlementTypeKey == 'trial_lesson' &&
+        model.canSelectTrialCompensation;
     final settlement = DropdownButtonFormField<String>(
       menuMaxHeight: 256,
       isExpanded: true,
@@ -386,13 +369,15 @@ class _DecisionFields extends StatelessWidget {
             ),
           ),
       ],
-      onChanged: model.session.isEdit && model.isSaving
+      onChanged: model.isSaving
           ? null
           : (value) => actions.edit(
               LessonReferenceEdit(LessonReferenceTarget.settlement, value),
             ),
     );
-    if (!model.canManageTeacherCompensation) return settlement;
+    if (!model.canManageTeacherCompensation && !canSelectTrialRule) {
+      return settlement;
+    }
     return _ResponsivePair(
       first: settlement,
       second: DropdownButtonFormField<String>(
@@ -400,9 +385,11 @@ class _DecisionFields extends StatelessWidget {
         isExpanded: true,
         key: const ValueKey('lesson-compensation-rule-field'),
         initialValue: draft.compensationRuleKey,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Правило оплаты преподавателю *',
-          helperText: 'Значение можно задать отдельно для этого занятия',
+          helperText: canSelectTrialRule && !model.canManageTeacherCompensation
+              ? 'Ручной выбор сохранится для этого занятия'
+              : 'Значение можно задать отдельно для этого занятия',
         ),
         items: [
           for (final item in catalog?.compensationRules ?? const [])

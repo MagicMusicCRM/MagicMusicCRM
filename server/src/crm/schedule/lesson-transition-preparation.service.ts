@@ -313,6 +313,10 @@ export class LessonTransitionPreparationService {
   ): void {
     if (!isCompletedReschedule(source, operation) ||
       dto.operation !== "reschedule") return;
+    // Trial rule selection is authorized and value-validated by the settlement
+    // resolver; this does not grant permission to supply arbitrary rates.
+    if (actor.role === "admin" &&
+      dto.successorFinancialDecision.settlementTypeKey === "trial_lesson") return;
     this.policy.assertCanSupplyTeacherCompensation(
       actor,
       dto.successorFinancialDecision,

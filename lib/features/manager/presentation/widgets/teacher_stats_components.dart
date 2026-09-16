@@ -1,5 +1,11 @@
 part of 'teacher_stats_view.dart';
 
+String _teacherName(Map<String, dynamic> teacher) {
+  final value = '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
+      .trim();
+  return value.isEmpty ? 'Без имени' : value;
+}
+
 extension _TeacherStatsViewSections on TeacherStatsView {
   Widget _unitRow(BuildContext context, Map<String, dynamic> unit) {
     final meta = _unitMeta(unit);

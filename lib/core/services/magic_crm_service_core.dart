@@ -638,6 +638,7 @@ extension MagicCrmCore on MagicCrmService {
   /// ставка, начислено/оплачено.
   /// unitType: individual | group | trial | individual_trial | group_trial.
   Future<Map<String, dynamic>> getTeacherStatsReport({
+    String? compensationRuleKey,
     String? from,
     String? to,
     String? branchId,
@@ -650,6 +651,7 @@ extension MagicCrmCore on MagicCrmService {
     return _api.get<Map<String, dynamic>>(
       '/crm/reports/teacher-stats',
       queryParameters: _teacherStatsQuery(
+        compensationRuleKey: compensationRuleKey,
         from: from,
         to: to,
         branchId: branchId,
@@ -664,6 +666,7 @@ extension MagicCrmCore on MagicCrmService {
 
   /// The XLSX report; the caller validates and saves the bytes.
   Future<List<int>> exportTeacherStatsReport({
+    String? compensationRuleKey,
     String? from,
     String? to,
     String? branchId,
@@ -676,6 +679,7 @@ extension MagicCrmCore on MagicCrmService {
     return _api.downloadBytes(
       '/crm/reports/teacher-stats/export',
       queryParameters: _teacherStatsQuery(
+        compensationRuleKey: compensationRuleKey,
         from: from,
         to: to,
         branchId: branchId,
@@ -689,6 +693,7 @@ extension MagicCrmCore on MagicCrmService {
   }
 
   Map<String, dynamic> _teacherStatsQuery({
+    String? compensationRuleKey,
     String? from,
     String? to,
     String? branchId,
@@ -699,6 +704,9 @@ extension MagicCrmCore on MagicCrmService {
     String? category,
   }) {
     final queryParameters = <String, dynamic>{};
+    if (compensationRuleKey != null) {
+      queryParameters['compensationRuleKey'] = compensationRuleKey;
+    }
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;
     if (branchId != null) queryParameters['branchId'] = branchId;

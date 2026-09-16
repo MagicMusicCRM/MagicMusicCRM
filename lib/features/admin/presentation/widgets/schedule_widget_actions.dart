@@ -295,6 +295,46 @@ extension _ScheduleActions on _ScheduleWidgetState {
     if (changed == true && mounted) await _fetchAll();
   }
 
+  Future<void> _proposeDayMove(
+    ScheduleEntry entry,
+    String roomId,
+    DateTime start,
+  ) async {
+    if (!widget.canWrite) return;
+    final actionable = await _reloadActionableLesson(entry.lesson);
+    if (!mounted || actionable == null) return;
+    if (actionable['id']?.toString() != entry.id ||
+        actionable['version'] != entry.lesson['version']) {
+      MagicToast.show(
+        context,
+        'Занятие уже изменено. Расписание обновлено — повторите перенос.',
+        type: MagicToastType.danger,
+      );
+      await _fetchAll();
+      return;
+    }
+    final targetRoom = _rooms
+        .where((room) => room['id']?.toString() == roomId)
+        .firstOrNull;
+    if (targetRoom == null ||
+        targetRoom['branch_id'] != actionable['branch_id']) {
+      MagicToast.show(
+        context,
+        'Для переноса в другой филиал откройте редактор занятия.',
+        type: MagicToastType.danger,
+      );
+      return;
+    }
+    final changed = await CreateLessonDialog.show(
+      context,
+      lesson: actionable,
+      focusDateTime: true,
+      initialDate: start,
+      initialRoomId: roomId,
+    );
+    if (changed == true && mounted) await _fetchAll();
+  }
+
   Future<void> _cancelLesson(Map<String, dynamic> lesson) async {
     if (!widget.canWrite) return;
     final actionable = await _reloadActionableLesson(lesson);

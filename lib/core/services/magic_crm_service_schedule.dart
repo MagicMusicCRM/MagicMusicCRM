@@ -382,6 +382,11 @@ extension MagicCrmSchedule on MagicCrmService {
   }
 
   Future<List<Map<String, dynamic>>> listLessons({
+    String? settlementTypeKey,
+    String? compensationRuleKey,
+    String? branchId,
+    int? offset,
+    bool? includeClosed,
     String? lessonId,
     String? from,
     String? to,
@@ -395,6 +400,15 @@ extension MagicCrmSchedule on MagicCrmService {
     int limit = 100,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
+    if (settlementTypeKey != null) {
+      queryParameters['settlementTypeKey'] = settlementTypeKey;
+    }
+    if (compensationRuleKey != null) {
+      queryParameters['compensationRuleKey'] = compensationRuleKey;
+    }
+    if (branchId != null) queryParameters['branchId'] = branchId;
+    if (offset != null) queryParameters['offset'] = offset;
+    if (includeClosed != null) queryParameters['includeClosed'] = includeClosed;
     if (lessonId != null) queryParameters['lessonId'] = lessonId;
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;

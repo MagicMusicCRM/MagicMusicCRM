@@ -153,6 +153,11 @@ export interface LessonSettlementPreview {
 }
 
 export interface LessonSettlementPort {
+  reuseStoredTeacherCompensation(
+    client: PoolClient,
+    lessonId: string,
+    decision: LessonFinancialDecision,
+  ): Promise<LessonFinancialDecision>;
   resolvePlannedPlan(
     client: PoolClient,
     input: ResolvePlannedLessonSettlementInput,

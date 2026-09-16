@@ -172,6 +172,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       plannedSubscriptionAllocations:
         settlement.plannedSubscriptionAllocations.bind(settlement),
       resolvePlannedPlan: settlement.resolvePlannedPlan.bind(settlement),
+      reuseStoredTeacherCompensation: settlement.reuseStoredTeacherCompensation.bind(settlement),
     } satisfies LessonSettlementPort);
     const completionRepository = new LessonCompletionWorkerRepository(database);
     completionWorker = new LessonCompletionWorker(

@@ -222,6 +222,8 @@ class LessonEditorSaveFlow {
         _decisionController = _controllerFor(
           outcome,
           canManageTeacherCompensation,
+          draft.settlementTypeKey == 'trial_lesson' &&
+              draft.compensationTouched,
         );
       } else if (_financialPreview?.canConfirm == true) {
         final lesson = await _decisionController!.commit(_financialPreview!);
@@ -233,6 +235,8 @@ class LessonEditorSaveFlow {
         settlementTypeKey: draft.settlementTypeKey!,
         compensationRuleKey: draft.compensationRuleKey ?? '',
         compensationValueMinor: draft.compensationValueMinor,
+        teacherCreditedDurationMinutes: draft.teacherCreditedDurationMinutes,
+        teacherCompensationSource: draft.teacherCompensationSource,
         clientDecisions: draft.clientDecisions,
       );
       _financialPreview = preview;
@@ -265,6 +269,7 @@ class LessonEditorSaveFlow {
   LessonDecisionController _controllerFor(
     LessonSaveDecision decision,
     bool canManageTeacherCompensation,
+    bool canSelectTrialCompensation,
   ) {
     final request = decision.request;
     return LessonDecisionController(
@@ -274,6 +279,7 @@ class LessonEditorSaveFlow {
       successor: request.successor,
       resources: request.resources,
       canManageTeacherCompensation: canManageTeacherCompensation,
+      canSelectTrialCompensation: canSelectTrialCompensation,
       reloadStaleLesson: false,
       afterCommit: decision.noteUpdate == null
           ? null

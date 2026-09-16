@@ -130,7 +130,12 @@ export class LessonSettlementService implements LessonSettlementPort {
           `clientDecisions.${decision.clientId}.chargeDurationMinutes`,
         );
       }
-      const chargeDurationMinutes = decision.chargeDurationMinutes ??
+      const isTrial = (decision.settlementTypeKey ?? input.decision.settlementTypeKey) === "trial_lesson";
+      if (input.decision.settlementTypeKey === "trial_lesson" &&
+          decision.settlementTypeKey && decision.settlementTypeKey !== "trial_lesson") {
+        invalidLessonSettlementDecision("TRIAL_CLIENT_OVERRIDE_NOT_ALLOWED", "clientDecisions");
+      }
+      const chargeDurationMinutes = isTrial ? 0 : decision.chargeDurationMinutes ??
         resolveDurationMinutes(
           policy.clientDurationMode,
           input.durationMinutes,
@@ -141,13 +146,25 @@ export class LessonSettlementService implements LessonSettlementPort {
         input.durationMinutes,
         `clientDecisions.${decision.clientId}.chargeDurationMinutes`,
       );
-      return { ...decision, chargeDurationMinutes };
+      return {
+        ...decision, chargeDurationMinutes,
+        ...(isTrial ? { chargeType: "none" as const, subscriptionId: undefined,
+          payerStudentId: undefined, basePriceMinor: undefined,
+          discount: undefined, surcharge: undefined } : {}),
+      };
     });
     const decision = {
       ...input.decision,
       ...(clientDecisions ? { clientDecisions } : {}),
     };
     if (input.preservedTeacherDecision) {
+      // An explicit operational rule selection on a trial supersedes the old
+      // selection. Omitted/automatic fields still preserve a saved manual choice.
+      if (decision.settlementTypeKey === "trial_lesson" &&
+          input.authorization.actor.role === "admin" &&
+          decision.teacherCompensationSource === "manual") {
+        return this.resolveTeacherDecision(catalog, input, decision);
+      }
       if (
         input.preservedTeacherDecision.teacherCompensationSource ===
         "automatic"
@@ -318,7 +335,14 @@ export class LessonSettlementService implements LessonSettlementPort {
         teacherCompensationSource: "automatic",
       };
     }
-    if (input.authorization.capabilityKey !== "config.commerce.manage") {
+    const operationalTrialSelection =
+      input.authorization.actor.role === "admin" &&
+      decision.settlementTypeKey === "trial_lesson" &&
+      (decision.teacherCompensationValueMinor === undefined ||
+        decision.teacherCompensationValueMinor === selectedRule.value) &&
+      (decision.teacherCreditedDurationMinutes === undefined ||
+        decision.teacherCreditedDurationMinutes === recommendedMinutes);
+    if (input.authorization.capabilityKey !== "config.commerce.manage" && !operationalTrialSelection) {
       throw new ForbiddenException({
         code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED",
       });

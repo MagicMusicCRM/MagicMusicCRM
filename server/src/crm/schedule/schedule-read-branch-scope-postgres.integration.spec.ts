@@ -368,6 +368,13 @@ describe("schedule read branch scope (PostgreSQL)", () => {
         expect(item.settlementTypeKey).toBe("free_lesson");
         expect(item.teacherCompensationRuleKey).toBe("none");
       }
+      const filter = { lessonId: assignedLessonId, settlementTypeKey: "free_lesson",
+        compensationRuleKey: "none", branchId: assignedBranchId, includeClosed: true };
+      expect((await schedule.listLessons(manager, filter)).items).toHaveLength(1);
+      expect((await schedule.listLessons(manager, { ...filter, offset: 1 })).items).toHaveLength(0);
+      expect((await schedule.listLessons(manager, { ...filter, settlementTypeKey: "lesson" })).items).toHaveLength(0);
+      expect((await schedule.listLessons(manager, { ...filter, branchId: outsideBranchId })).items).toHaveLength(0);
+      expect((await schedule.listLessons(teacher, filter)).items).toHaveLength(0);
     } finally {
       await client.query("rollback to savepoint financial_read_correction");
     }

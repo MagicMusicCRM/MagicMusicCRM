@@ -32,20 +32,26 @@ class LiveAuditHarness {
   final pending = <RequestOptions>{};
   String currentStep = 'setup';
   late Map<String, dynamic> access;
+  bool completed = false;
 
   Future<void> initialize({
-    Size size = const Size(1280, 900),
+    Size? size = const Size(1280, 900),
     AccountWorkspaceStore? workspaceStore,
   }) async {
-    final raw = Platform.environment['HTTP_JOURNEY_FIXTURE'];
+    const embeddedFixture = String.fromEnvironment('HTTP_JOURNEY_FIXTURE');
+    final raw =
+        Platform.environment['HTTP_JOURNEY_FIXTURE'] ??
+        (embeddedFixture.isEmpty ? null : embeddedFixture);
     expect(raw, isNotNull, reason: 'Use the isolated HTTP journey runner');
     fixture = jsonDecode(raw!) as Map<String, dynamic>;
     final uri = Uri.parse(fixture['baseUrl'] as String);
     expect(uri.host, '127.0.0.1');
     expect(uri.scheme, 'http');
-    tester.view.physicalSize = size;
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+    if (size != null) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
     api = MagicApiClient(
       baseUrl: uri.toString(),
       tokenStore: MemoryMagicTokenStore(),
@@ -269,12 +275,16 @@ class LiveAuditHarness {
   }
 
   void save() {
-    File(
-      '${Platform.environment['EVIDENCE_SCREENSHOT_DIR']}/$suite-$role.json',
-    ).writeAsStringSync(
+    final directory = Directory(
+      Platform.environment['EVIDENCE_SCREENSHOT_DIR'] ??
+          '${Directory.systemTemp.path}/magic-evidence',
+    )..createSync(recursive: true);
+    File('${directory.path}/$suite-$role.json').writeAsStringSync(
       jsonEncode({
         'role': role,
         'suite': suite,
+        'completed': completed,
+        'fixtureLessonId': fixture['lessonId'],
         'access': access,
         'steps': steps,
         'requests': requests,
@@ -298,6 +308,7 @@ class LiveAuditHarness {
   Future<void> finish() async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
+    completed = true;
     save();
     expect(
       steps

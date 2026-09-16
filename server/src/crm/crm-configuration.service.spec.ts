@@ -338,9 +338,10 @@ describe("CrmConfigurationService", () => {
       "free_lesson",
       "paid_miss",
       "unpaid_miss",
+      "trial_lesson",
     ]);
     expect(
       result.teacherCompensationRules.map((rule) => rule.stableKey),
-    ).toEqual(["none", "percent", "fixed", "hourly"]);
+    ).toEqual(["none", "percent", "fixed", "hourly", "trial_lesson"]);
   });
 });

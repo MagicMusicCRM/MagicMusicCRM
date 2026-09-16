@@ -9,6 +9,76 @@ void main() {
   const policy = LessonEditorDecisionPolicy();
 
   test(
+    'trial selection clears funding and preserves a manual teacher rule',
+    () {
+      final references = _references(
+        settlements: [
+          _catalogItem(
+            key: 'trial_lesson',
+            hourShareBasisPoints: 0,
+            clientDurationMode: 'zero',
+            teacherDurationMode: 'full',
+            defaultTeacherCompensationRuleKey: 'trial_lesson',
+          ),
+        ],
+        compensationRules: [
+          _catalogItem(key: 'trial_lesson', mode: 'none'),
+          _catalogItem(key: 'standard', mode: 'standard'),
+        ],
+      );
+      final funded =
+          _draft(
+            clientChargeType: 'subscription',
+            subscriptionId: 'sub',
+          ).copyWith(
+            clientDecisions: [
+              {
+                'clientId': 'student-a',
+                'payerStudentId': 'student-a',
+                'chargeType': 'subscription',
+                'subscriptionId': 'sub',
+                'chargeDurationMinutes': 60,
+              },
+            ],
+          );
+      final trial = policy.settlementSelection(
+        funded,
+        references,
+        'trial_lesson',
+      );
+      expect(trial.isTrial, isTrue);
+      expect(trial.clientChargeType, 'none');
+      expect(trial.subscriptionId, isNull);
+      expect(trial.clientDecisions.single, {
+        'clientId': 'student-a',
+        'chargeType': 'none',
+        'chargeDurationMinutes': 0,
+      });
+      expect(trial.compensationRuleKey, 'trial_lesson');
+      expect(trial.teacherCreditedDurationMinutes, 60);
+      final manual = policy.compensationRuleSelection(
+        trial,
+        references,
+        'standard',
+      );
+      final reselected = policy.settlementSelection(
+        manual,
+        references,
+        'trial_lesson',
+      );
+      expect(reselected.compensationRuleKey, 'standard');
+      expect(reselected.teacherCompensationSource, 'manual');
+      expect(
+        policy.financialDecisionPayload(
+          reselected,
+          includeTeacherCompensation: false,
+        )['teacherCompensationRuleKey'],
+        'standard',
+      );
+    },
+  );
+
+  test(
     'payer and personal account pricing survive catalog and create payload',
     () {
       const decisions = [

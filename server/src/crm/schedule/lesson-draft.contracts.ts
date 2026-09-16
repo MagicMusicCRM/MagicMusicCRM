@@ -1,6 +1,7 @@
 export type LessonClientRefType = "lead" | "student";
 
 export interface LessonDraftInput {
+  financialDecision?: { settlementTypeKey?: string };
   studentId?: string;
   leadId?: string;
   groupId?: string;

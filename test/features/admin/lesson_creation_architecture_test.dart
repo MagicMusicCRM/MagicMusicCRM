@@ -50,7 +50,9 @@ void main() {
     expect(shell, contains('LessonEditorDataController'));
     expect(shell, contains('LessonEditorScheduleController'));
     expect(shell, contains('LessonEditorSaveFlow'));
-    expect(shell.split('\n').length, lessThan(320));
+    // Day-move seeding and the narrow trial permission add composition only.
+    // Keep the shell bounded; financial logic still belongs to the policy/flow.
+    expect(shell.split('\n').length, lessThan(340));
     expect(removedView.existsSync(), isFalse);
     for (final duplicateWrapper in [
       'LessonBranchEdit',

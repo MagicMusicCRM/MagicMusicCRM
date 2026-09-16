@@ -17,7 +17,8 @@ import 'lesson_editor/lesson_editor_save_presenter.dart';
 import 'lesson_editor/lesson_editor_schedule_controller.dart';
 import 'lesson_editor/lesson_editor_view.dart';
 
-class CreateLessonDialog extends ConsumerStatefulWidget implements LessonEditorInitialSource {
+class CreateLessonDialog extends ConsumerStatefulWidget
+    implements LessonEditorInitialSource {
   final DateTime? initialDate;
   final String? initialRoomId, initialBranchId, leadId, leadName;
   final String? clientType, clientId, clientName;
@@ -147,6 +148,12 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       _flow.invalidateDecision();
       _session = defaults.session;
       _draft = defaults.draft;
+      if (loaded && widget.lesson != null && widget.focusDateTime) {
+        _draft = _draft.copyWith(
+          localStart: widget.initialDate ?? _draft.localStart,
+          roomId: widget.initialRoomId ?? _draft.roomId,
+        );
+      }
       _refs = references;
       if (loaded) _loadState = (false, _loadState.$2);
     });
@@ -173,6 +180,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       actions: this,
       formKey: _formKey,
       canManageTeacherCompensation: _canManageTeacherCompensation,
+      canSelectTrialCompensation:
+          ref.watch(capabilitySnapshotProvider).asData?.value.role == 'admin',
       pageMode: widget.pageMode,
       embeddedSurface: widget.embeddedSurface,
       focusDateTime: widget.focusDateTime,

@@ -16,6 +16,14 @@ type ValidLessonSnapshot = NonNullable<ExistingLessonDraft["snapshot"]>;
 @Injectable()
 export class LessonRequiredFieldValidator {
   create(dto: LessonDraftInput): CompleteLessonDraft {
+    if (dto.financialDecision?.settlementTypeKey) {
+      const isTrial = dto.financialDecision.settlementTypeKey === "trial_lesson";
+      // Legacy clients still send a trial marker with their original paid/free
+      // decision. Preserve that marker without reinterpreting their finances.
+      dto = { ...dto, isTrial: isTrial || dto.isTrial === true,
+        ...(isTrial ? { clientChargeType: "none", clientChargeValue: 0, subscriptionId: undefined } : {}),
+      };
+    }
     if (dto.force === true) {
       this.fail(
         "CONSTRAINT_OVERRIDE_NOT_ALLOWED",

@@ -932,12 +932,7 @@ void main() {
       ),
     );
 
-    tester
-        .widget<SwitchListTile>(
-          find.byKey(const ValueKey('lesson-trial-toggle')),
-        )
-        .onChanged
-        ?.call(true);
+    expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
     expect(find.text('Автозавершение'), findsOneWidget);
     tester
         .widget<DropdownButtonFormField<String>>(
@@ -959,7 +954,7 @@ void main() {
       find.byKey(const ValueKey('lesson-compensation-override-reason-field')),
       'Причина',
     );
-    expect(actions.trial, isTrue);
+    expect(actions.trial, isNull);
     expect(actions.completion, isNull);
     expect(actions.settlement, 'paid');
     expect(actions.compensationRule, 'fixed');
@@ -968,6 +963,84 @@ void main() {
     expect(find.text('Оплата ученика'), findsOneWidget);
     expect(find.text('Результат и расчёты'), findsOneWidget);
   });
+
+  testWidgets(
+    'admin trial permission exposes rule selection without arbitrary rate fields',
+    (tester) async {
+      final draft = _draft().copyWith(
+        settlementTypeKey: 'trial_lesson',
+        compensationRuleKey: 'trial_lesson',
+      );
+      final references = LessonEditorReferenceState(
+        teachers: const [],
+        clients: const [],
+        branches: const [],
+        rooms: const [],
+        subscriptions: const [],
+        catalog: const LessonDecisionCatalog(
+          settlementTypes: [
+            LessonDecisionCatalogItem(
+              key: 'trial_lesson',
+              label: 'Пробный урок',
+              order: 7,
+            ),
+          ],
+          compensationRules: [
+            LessonDecisionCatalogItem(
+              key: 'trial_lesson',
+              label: 'Пробный урок — без оплаты',
+              mode: 'none',
+              order: 5,
+            ),
+            LessonDecisionCatalogItem(
+              key: 'standard',
+              label: 'Стандартная ставка',
+              mode: 'standard',
+              order: 1,
+            ),
+          ],
+        ),
+      );
+      final actions = _RecordingActions();
+      for (final allowed in [false, true]) {
+        await tester.pumpWidget(
+          _host(
+            SingleChildScrollView(
+              child: LessonFinancialSection(
+                model: LessonFinancialSectionModel(
+                  session: _session(isEdit: true, draft: draft),
+                  draft: draft,
+                  references: references,
+                  isSaving: false,
+                  requiresCompensationValue: false,
+                  compensationNeedsReason: false,
+                  canManageTeacherCompensation: false,
+                  canSelectTrialCompensation: allowed,
+                ),
+                actions: actions,
+              ),
+            ),
+          ),
+        );
+        final rule = find.byKey(
+          const ValueKey('lesson-compensation-rule-field'),
+        );
+        expect(rule, allowed ? findsOneWidget : findsNothing);
+        expect(
+          find.byKey(const ValueKey('lesson-compensation-value-field')),
+          findsNothing,
+        );
+        expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
+        if (allowed) {
+          tester.widget<DropdownButtonFormField<String>>(rule).onChanged!(
+            'standard',
+          );
+          expect(actions.compensationRule, 'standard');
+        }
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
 
   for (final size in const [Size(320, 900), Size(1200, 900)]) {
     testWidgets('partial duration controls fit ${size.width} and emit edits', (
@@ -1526,11 +1599,19 @@ void main() {
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('lesson-date-field'))).dy,
       lessThan(
-        tester.getTopLeft(find.byKey(const ValueKey('lesson-trial-toggle'))).dy,
+        tester
+            .getTopLeft(
+              find.byKey(const ValueKey('lesson-settlement-type-field')),
+            )
+            .dy,
       ),
     );
     expect(
-      tester.getTopLeft(find.byKey(const ValueKey('lesson-trial-toggle'))).dy,
+      tester
+          .getTopLeft(
+            find.byKey(const ValueKey('lesson-settlement-type-field')),
+          )
+          .dy,
       lessThan(
         tester
             .getTopLeft(find.byKey(const ValueKey('lesson-snapshot-preview')))
@@ -1645,14 +1726,7 @@ void main() {
           .onPressed,
       isNotNull,
     );
-    expect(
-      tester
-          .widget<SwitchListTile>(
-            find.byKey(const ValueKey('lesson-trial-toggle')),
-          )
-          .onChanged,
-      isNotNull,
-    );
+    expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
     expect(find.text('Автозавершение'), findsOneWidget);
     expect(
       tester
@@ -1660,7 +1734,7 @@ void main() {
             find.byKey(const ValueKey('lesson-settlement-type-field')),
           )
           .onChanged,
-      isNotNull,
+      isNull,
     );
     expect(
       tester
@@ -1767,14 +1841,7 @@ void main() {
           .onChanged,
       isNotNull,
     );
-    expect(
-      tester
-          .widget<SwitchListTile>(
-            find.byKey(const ValueKey('lesson-trial-toggle')),
-          )
-          .onChanged,
-      isNull,
-    );
+    expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
     expect(find.text('Автозавершение'), findsOneWidget);
     for (final key in const [
       ValueKey('lesson-settlement-type-field'),
@@ -1850,7 +1917,6 @@ void main() {
           {
             'package:flutter/material.dart',
             'package:flutter/services.dart',
-            'package:magic_music_crm/core/theme/app_theme.dart',
             '../lesson_decision/lesson_decision_models.dart',
             '../lesson_decision/lesson_decision_sections.dart',
             '../lesson_form_rules.dart',

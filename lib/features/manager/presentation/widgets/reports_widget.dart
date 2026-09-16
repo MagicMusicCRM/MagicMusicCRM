@@ -21,6 +21,7 @@ import 'package:magic_music_crm/features/manager/presentation/reporting/reportin
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
+import 'lesson_settlement_report_dialog.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/shared/widgets/audit_event_card.dart';
 
@@ -288,6 +289,17 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(title, style: Theme.of(context).textTheme.titleLarge),
+            if (_canSeeTeacherRates)
+              OutlinedButton.icon(
+                onPressed: () => showLessonSettlementReport(
+                  context,
+                  from: _dashboardFilter.from,
+                  to: _dashboardFilter.to.add(const Duration(days: 1)),
+                  branchId: _dashboardFilter.branchId,
+                ),
+                icon: const Icon(Icons.filter_alt_outlined, size: 18),
+                label: const Text('Списания с клиентов'),
+              ),
             OutlinedButton.icon(
               key: const ValueKey('dashboard-period'),
               onPressed: _pickDashboardPeriod,

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
@@ -680,89 +681,102 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final showTrailingMetadata = constraints.maxWidth >= 96;
-                    return Row(
-                      children: [
-                        if (widget.entry.clientContext ||
-                            widget.entry.searchContext) ...[
-                          Tooltip(
-                            message: widget.entry.relatedClient
-                                ? 'Связанное занятие'
-                                : 'Другое занятие',
-                            child: Icon(
-                              widget.entry.relatedClient
-                                  ? Icons.person_pin_circle_outlined
-                                  : Icons.people_outline_rounded,
-                              color: accent,
-                              size: 12,
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                        ],
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.entry.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: cs.onSurface,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                    return LessonSettlementCorner(
+                      settlementTypeKey: widget
+                          .entry
+                          .lesson['settlement_type_key']
+                          ?.toString(),
+                      child: Row(
+                        children: [
+                          if (widget.entry.clientContext ||
+                              widget.entry.searchContext) ...[
+                            Tooltip(
+                              message: widget.entry.relatedClient
+                                  ? 'Связанное занятие'
+                                  : 'Другое занятие',
+                              child: Icon(
+                                widget.entry.relatedClient
+                                    ? Icons.person_pin_circle_outlined
+                                    : Icons.people_outline_rounded,
+                                color: accent,
+                                size: 12,
                               ),
-                              if (constraints.maxHeight >=
-                                  30 *
-                                      MediaQuery.textScalerOf(context).scale(1))
+                            ),
+                            const SizedBox(width: 3),
+                          ],
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  '${widget.entry.subtitle} · $time',
+                                  widget.entry.title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: cs.onSurfaceVariant,
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w500,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures(),
-                                    ],
+                                    color: cs.onSurface,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                            ],
+                                if (constraints.maxHeight >=
+                                    30 *
+                                        MediaQuery.textScalerOf(
+                                          context,
+                                        ).scale(1))
+                                  Text(
+                                    '${widget.entry.subtitle} · $time',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: cs.onSurfaceVariant,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w500,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                        if (showTrailingMetadata)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 3),
-                            child: Tooltip(
-                              message: projection.label,
-                              child: Icon(
-                                projection.token.icon,
-                                color: accent,
-                                size: 13,
+                          if (showTrailingMetadata)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 3),
+                              child: Tooltip(
+                                message: projection.label,
+                                child: Icon(
+                                  projection.token.icon,
+                                  color: accent,
+                                  size: 13,
+                                ),
                               ),
                             ),
-                          ),
-                        if (showTrailingMetadata && widget.entry.isTrial)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 3),
-                            child: LessonTrialBadge(compact: true),
-                          ),
-                        if (constraints.maxWidth >=
-                                (widget.entry.clientContext ||
-                                        widget.entry.searchContext
-                                    ? 36
-                                    : 20) &&
-                            lessonHasSubscriptionCoverage(widget.entry.lesson))
-                          const Padding(
-                            padding: EdgeInsets.only(left: 3),
-                            child: LessonSubscriptionBadge(
-                              compact: true,
-                              iconOnly: true,
+                          if (showTrailingMetadata &&
+                              widget.entry.isTrial &&
+                              widget.entry.lesson['settlement_type_key'] ==
+                                  null)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 3),
+                              child: LessonTrialBadge(compact: true),
                             ),
-                          ),
-                      ],
+                          if (constraints.maxWidth >=
+                                  (widget.entry.clientContext ||
+                                          widget.entry.searchContext
+                                      ? 36
+                                      : 20) &&
+                              lessonHasSubscriptionCoverage(
+                                widget.entry.lesson,
+                              ))
+                            const Padding(
+                              padding: EdgeInsets.only(left: 3),
+                              child: LessonSubscriptionBadge(
+                                compact: true,
+                                iconOnly: true,
+                              ),
+                            ),
+                        ],
+                      ),
                     );
                   },
                 ),

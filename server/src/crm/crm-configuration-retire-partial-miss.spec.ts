@@ -44,5 +44,7 @@ describe('retire partial miss', () => {
       expect(() => assertPlannedLessonSettlementDecision(current, { ...decision, settlementTypeKey: 'partially_paid_lesson' })).not.toThrow();
       await expect(db.exec(migration('down'))).rejects.toThrow('immutable');
     } finally { await db.close(); }
-  });
+  // Cold WASM/PostgreSQL startup is not a five-second product latency contract.
+  // Keep every migration/immutability assertion and bound the whole integration case.
+  }, 30_000);
 });

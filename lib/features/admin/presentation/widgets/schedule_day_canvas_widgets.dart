@@ -122,6 +122,9 @@ class _LessonCard extends StatelessWidget {
         timeStr,
         entry.subtitle,
         projection.label,
+        ?LessonSettlementCorner.labelFor(
+          entry.lesson['settlement_type_key']?.toString(),
+        ),
         if (entry.isTrial) 'Пробное',
         if (lessonHasSubscriptionCoverage(entry.lesson)) 'Абонемент',
         if (entry.conflicts.isNotEmpty) 'Конфликт расписания',
@@ -144,82 +147,91 @@ class _LessonCard extends StatelessWidget {
                 width: entry.highlighted ? 2 : 1,
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Flexible(
-                  child: Row(
-                    children: [
-                      if (entry.clientContext || entry.searchContext) ...[
-                        Icon(
-                          entry.relatedClient
-                              ? Icons.person_pin_circle_outlined
-                              : Icons.people_outline_rounded,
-                          color: accent,
-                          size: 12,
-                        ),
-                        const SizedBox(width: 3),
-                      ],
-                      Expanded(
-                        child: Text(
-                          entry.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: cs.onSurface,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
+            child: LessonSettlementCorner(
+              settlementTypeKey:
+                  (entry.lesson['settlement_type_key'] ??
+                          entry.lesson['settlementTypeKey'])
+                      ?.toString(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Flexible(
+                    child: Row(
+                      children: [
+                        if (entry.clientContext || entry.searchContext) ...[
+                          Icon(
+                            entry.relatedClient
+                                ? Icons.person_pin_circle_outlined
+                                : Icons.people_outline_rounded,
+                            color: accent,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 3),
+                        ],
+                        Expanded(
+                          child: Text(
+                            entry.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: cs.onSurface,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                      Tooltip(
-                        message: projection.label,
-                        child: Icon(
-                          projection.token.icon,
-                          color: accent,
-                          size: 12,
+                        Tooltip(
+                          message: projection.label,
+                          child: Icon(
+                            projection.token.icon,
+                            color: accent,
+                            size: 12,
+                          ),
                         ),
-                      ),
-                      if (showBadges &&
-                          lessonHasSubscriptionCoverage(entry.lesson)) ...[
-                        const SizedBox(width: 3),
-                        const LessonSubscriptionBadge(
-                          compact: true,
-                          iconOnly: true,
-                        ),
+                        if (showBadges &&
+                            lessonHasSubscriptionCoverage(entry.lesson)) ...[
+                          const SizedBox(width: 3),
+                          const LessonSubscriptionBadge(
+                            compact: true,
+                            iconOnly: true,
+                          ),
+                        ],
+                        if (showBadges &&
+                            entry.isTrial &&
+                            showSubtitle &&
+                            entry.lesson['settlement_type_key'] == null) ...[
+                          const SizedBox(width: 3),
+                          const LessonTrialBadge(compact: true),
+                        ],
                       ],
-                      if (showBadges && entry.isTrial && showSubtitle) ...[
-                        const SizedBox(width: 3),
-                        const LessonTrialBadge(compact: true),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
-                if (showSubtitle && entry.subtitle.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text(
-                      entry.subtitle,
+                  if (showSubtitle && entry.subtitle.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Text(
+                        entry.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  if (showTime)
+                    Text(
+                      timeStr,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: cs.onSurfaceVariant,
-                        fontSize: 10,
+                        color: accent,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ),
-                if (showTime)
-                  Text(
-                    timeStr,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
           );
         },

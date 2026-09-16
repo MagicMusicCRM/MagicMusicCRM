@@ -39,6 +39,7 @@ typedef ProductionWorkspaceNavigate =
 /// Pure responsive shell for a prepared workspace controller and callbacks.
 class ProductionWorkspaceView extends StatelessWidget {
   const ProductionWorkspaceView({
+    this.peopleSearchAction,
     required this.controller,
     required this.tabBuilder,
     required this.navigationFor,
@@ -68,6 +69,7 @@ class ProductionWorkspaceView extends StatelessWidget {
   final DirtyCloseResolver resolveDirty;
   final DirtyTabSaver saveDirty;
   final DirtyTabDiscarder discardDirty;
+  final Widget? peopleSearchAction;
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +105,7 @@ class ProductionWorkspaceView extends StatelessWidget {
             }
           },
           child: Scaffold(
+            floatingActionButton: peopleSearchAction,
             body: SafeArea(child: tabBuilder(context, tab)),
             bottomNavigationBar: ResponsiveNavigationShell(
               isDesktop: false,
@@ -119,6 +122,7 @@ class ProductionWorkspaceView extends StatelessWidget {
 
   Widget _desktop() {
     return DesktopWorkspaceShell(
+      actions: peopleSearchAction,
       controller: controller,
       tabBuilder: (context, tab) {
         if (tab.tabId == controller.state.activeTabId) {

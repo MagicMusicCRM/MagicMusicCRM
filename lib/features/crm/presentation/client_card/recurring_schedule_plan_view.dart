@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 
 typedef SchedulePlanEditIntent =
     void Function(SchedulePlan plan, SchedulePlanRow? row);
@@ -973,6 +974,7 @@ class _StudentTimelineItem extends StatelessWidget {
       _originLabel(item.origin.kind),
       '${DateFormat('dd.MM.yyyy HH:mm').format(local)} · ${item.durationMinutes} мин',
       state.label,
+      ?LessonSettlementCorner.labelFor(item.settlement.settlementTypeKey),
       if (state.coveredBySubscription) 'Абонемент',
       if (!state.coveredBySubscription && noChargeReason != null)
         noChargeReason,
@@ -999,64 +1001,68 @@ class _StudentTimelineItem extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(4),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  DateFormat('dd.MM').format(local),
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: state.token.accent,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
+            child: LessonSettlementCorner(
+              settlementTypeKey: item.settlement.settlementTypeKey,
+              timeline: true,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    DateFormat('dd.MM').format(local),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: state.token.accent,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        state.token.icon,
-                        size: 10,
-                        color: state.token.accent,
-                      ),
-                      if (state.coveredBySubscription) ...[
-                        const SizedBox(width: 4),
-                        const LessonSubscriptionBadge(
-                          compact: true,
-                          iconOnly: true,
-                        ),
-                      ],
-                      if (!state.coveredBySubscription &&
-                          noChargeReason != null) ...[
-                        const SizedBox(width: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         Icon(
-                          Icons.money_off_rounded,
-                          key: ValueKey(
-                            'student-timeline-no-charge-${item.id}',
-                          ),
+                          state.token.icon,
                           size: 10,
                           color: state.token.accent,
                         ),
-                      ],
-                      if (successor) ...[
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.redo_rounded,
-                          key: ValueKey(
-                            'student-timeline-successor-${item.id}',
+                        if (state.coveredBySubscription) ...[
+                          const SizedBox(width: 4),
+                          const LessonSubscriptionBadge(
+                            compact: true,
+                            iconOnly: true,
                           ),
-                          size: 10,
-                          color: state.token.accent,
-                        ),
+                        ],
+                        if (!state.coveredBySubscription &&
+                            noChargeReason != null) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.money_off_rounded,
+                            key: ValueKey(
+                              'student-timeline-no-charge-${item.id}',
+                            ),
+                            size: 10,
+                            color: state.token.accent,
+                          ),
+                        ],
+                        if (successor) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.redo_rounded,
+                            key: ValueKey(
+                              'student-timeline-successor-${item.id}',
+                            ),
+                            size: 10,
+                            color: state.token.accent,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

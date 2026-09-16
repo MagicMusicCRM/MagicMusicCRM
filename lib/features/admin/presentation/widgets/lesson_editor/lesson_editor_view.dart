@@ -46,6 +46,7 @@ class LessonEditorViewModel {
     required this.isAnalyzing,
     required this.validationMessage,
     required this.canManageTeacherCompensation,
+    this.canSelectTrialCompensation = false,
     this.loadErrorMessage,
     this.scheduleAnalysisError,
     this.canSave = true,
@@ -56,6 +57,7 @@ class LessonEditorViewModel {
     LessonEditorProgressViewState progress,
     LessonEditorFeedbackViewState feedback,
     bool canManageTeacherCompensation, {
+    bool canSelectTrialCompensation = false,
     bool canSave = true,
   }) => LessonEditorViewModel(
     session: editor.$1,
@@ -68,6 +70,7 @@ class LessonEditorViewModel {
     isAnalyzing: progress.$4,
     validationMessage: feedback.$1,
     canManageTeacherCompensation: canManageTeacherCompensation,
+    canSelectTrialCompensation: canSelectTrialCompensation,
     loadErrorMessage: feedback.$2,
     scheduleAnalysisError: feedback.$3,
   );
@@ -84,6 +87,7 @@ class LessonEditorViewModel {
   final String? loadErrorMessage;
   final String? scheduleAnalysisError;
   final bool canManageTeacherCompensation;
+  final bool canSelectTrialCompensation;
 }
 
 class LessonEditorView extends StatelessWidget {
@@ -112,6 +116,7 @@ class LessonEditorView extends StatelessWidget {
     LessonEditorFeedbackViewState feedback, {
     required LessonEditorActions actions,
     required bool canManageTeacherCompensation,
+    bool canSelectTrialCompensation = false,
     GlobalKey<FormState>? formKey,
     bool pageMode = false,
     bool embeddedSurface = false,
@@ -133,6 +138,7 @@ class LessonEditorView extends StatelessWidget {
       progress,
       feedback,
       canManageTeacherCompensation,
+      canSelectTrialCompensation: canSelectTrialCompensation,
       canSave: canSave,
     ),
     actions: actions,
@@ -353,6 +359,7 @@ class LessonEditorView extends StatelessWidget {
               rule: selectedRule,
             ),
             canManageTeacherCompensation: model.canManageTeacherCompensation,
+            canSelectTrialCompensation: model.canSelectTrialCompensation,
             allowsNoFunding: policy.isNoCharge(selectedSettlement),
             requiresChangeReason:
                 model.session.isEdit &&

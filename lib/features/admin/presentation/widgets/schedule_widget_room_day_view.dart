@@ -134,6 +134,7 @@ extension _ScheduleRoomDayView on _ScheduleWidgetState {
       columns: columns,
       entries: entries,
       allowCreate: widget.canWrite,
+      onProposeMove: widget.canWrite ? _proposeDayMove : null,
       onCreateSlot: _openQuickCreate,
       onOpenLesson: _showLessonDetails,
       initialVerticalOffset: _dayScrollOffset,

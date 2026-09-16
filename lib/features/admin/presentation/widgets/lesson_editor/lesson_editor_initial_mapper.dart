@@ -95,7 +95,8 @@ class LessonEditorInitialMapper {
       clientDecisions: clientDecisions,
       settlementTypeKey:
           _text(decision, 'settlementTypeKey') ??
-          _text(lesson, 'settlement_type_key', 'settlementTypeKey'),
+          _text(lesson, 'settlement_type_key', 'settlementTypeKey') ??
+          (lesson == null && input.initialIsTrial ? 'trial_lesson' : null),
       compensationRuleKey: compensationRuleKey,
       compensationValueMinor: compensationValueMinor,
       notes: _text(lesson, 'notes') ?? '',

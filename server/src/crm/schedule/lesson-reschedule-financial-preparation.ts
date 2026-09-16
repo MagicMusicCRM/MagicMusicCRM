@@ -139,6 +139,25 @@ export async function prepareResolvedRescheduleTransition(
     LessonSettlementPort["resolvePlannedPlan"]
   >[1]["preservedTeacherDecision"],
 ): Promise<ResolvedRescheduleTransitionDto> {
+  if (!preservedTeacherDecision &&
+    dto.successorFinancialDecision.settlementTypeKey === "trial_lesson" &&
+    dto.successorFinancialDecision.teacherCompensationSource !== "manual" &&
+    successor.teacherId === source.teacherId) {
+    const current = await settlement.loadPlan(client, source.id, true);
+    if (current?.decision.settlementTypeKey === "trial_lesson") {
+      const stored = await settlement.reuseStoredTeacherCompensation(
+        client, source.id, dto.successorFinancialDecision,
+      );
+      if (stored.teacherCompensationSource === "manual") {
+        preservedTeacherDecision = {
+          teacherCompensationRuleKey: stored.teacherCompensationRuleKey,
+          teacherCompensationValueMinor: stored.teacherCompensationValueMinor,
+          teacherCreditedDurationMinutes: stored.teacherCreditedDurationMinutes,
+          teacherCompensationSource: stored.teacherCompensationSource,
+        };
+      }
+    }
+  }
   const prepared = await prepareRescheduleFinancialPlans(
     client,
     actor,

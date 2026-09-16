@@ -8,6 +8,7 @@ import type {
 import type { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import type { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
+import { buildCrmConfigurationBaseline } from "../crm-configuration-baseline";
 import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import type { LessonCommandRepository } from "./lesson-command.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
@@ -134,6 +135,57 @@ const preparationWith = (
 );
 
 describe("lesson transition exact frozen clients", () => {
+  it("keeps the effective manual trial rule on a move with omitted teacher fields", async () => {
+    const stored = { settlementTypeKey: "trial_lesson",
+      teacherCompensationRuleKey: "standard", teacherCompensationSource: "manual" as const,
+      teacherCreditedDurationMinutes: 60 };
+    const settlement = {
+      loadPlan: jest.fn(async () => ({ decision: { ...stored, teacherCompensationSource: "automatic" } })),
+      reuseStoredTeacherCompensation: jest.fn(async () => stored),
+      resolvePlannedPlan: jest.fn(async (_client, input) => ({
+        decision: { ...input.decision, teacherCompensationSource: "automatic",
+          ...input.preservedTeacherDecision },
+        settlementRevisionId: "revision", compensationRevisionId: "revision",
+      })),
+    } as unknown as LessonSettlementPort;
+    const resolved = await preparationWith(settlement).resolvedEffectiveTransitionDto(
+      {} as PoolClient, { userId: "admin", role: "admin" },
+      individualSource("student", studentA), "reschedule",
+      rescheduleDto({ settlementTypeKey: "trial_lesson",
+        clientDecisions: [{ clientId: studentA }] } as LessonFinancialDecision),
+    );
+    expect(resolved.successorFinancialDecision).toMatchObject(stored);
+    expect(settlement.reuseStoredTeacherCompensation).toHaveBeenCalledTimes(1);
+  });
+  it("validates admin trial rule selection on completed reschedule without granting arbitrary rates", async () => {
+    const baseline = buildCrmConfigurationBaseline([]);
+    const client = { query: jest.fn(async () => ({ rows: [{
+      settlement_revision_id: "revision", compensation_revision_id: "revision",
+      settlement_types: baseline.lessonSettlementTypes,
+      compensation_rules: baseline.teacherCompensationRules,
+    }] })) } as unknown as PoolClient;
+    const settlement = new LessonSettlementService({} as DatabaseService);
+    const preparation = preparationWith(settlement);
+    const admin = { userId: "admin", role: "admin" as const };
+    const source = { ...individualSource("student", studentA),
+      lifecycleState: "successfully_completed" as const };
+    const financialDecision = {
+      settlementTypeKey: "trial_lesson", teacherCompensationRuleKey: "standard",
+      teacherCompensationSource: "manual" as const,
+      clientDecisions: [{ clientId: studentA, chargeType: "none" as const }],
+    };
+    const resolved = await preparation.resolvedEffectiveTransitionDto(
+      client, admin, source, "reschedule", rescheduleDto(financialDecision));
+    expect(resolved.successorFinancialDecision).toMatchObject({
+      teacherCompensationRuleKey: "standard", teacherCompensationSource: "manual",
+      clientDecisions: [{ chargeType: "none", chargeDurationMinutes: 0 }],
+    });
+    await expect(preparation.resolvedEffectiveTransitionDto(client, admin, source,
+      "reschedule", rescheduleDto({ ...financialDecision,
+        teacherCompensationValueMinor: "999999" }))).rejects.toMatchObject({
+      status: 403, response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+    });
+  });
   it.each([
     ["student cancel", individualSource("student", studentA), "cancel", [studentA]],
     ["lead reschedule", individualSource("lead", leadA), "reschedule", [leadA]],

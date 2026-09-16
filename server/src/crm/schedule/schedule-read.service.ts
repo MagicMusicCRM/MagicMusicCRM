@@ -452,6 +452,13 @@ export class ScheduleReadService {
       then coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'teacherCompensationRuleKey' else null::text end`;
     const compensationValueMinorSql = `case when ${canSeeRatesSql}
       then coalesce(correction.decision, transition.financial_decision, plan.decision) ->> 'teacherCompensationValueMinor' else null::text end`;
+    const extraValues: unknown[] = [];
+    const bind = (value: unknown) => { extraValues.push(value); return `$${9 + extraValues.length}`; };
+    const filters: string[] = [];
+    if (query.settlementTypeKey) filters.push(`${settlementTypeKeySql} = ${bind(query.settlementTypeKey)}::text`);
+    if (query.compensationRuleKey) filters.push(`${compensationRuleKeySql} = ${bind(query.compensationRuleKey)}::text`);
+    if (query.branchId) filters.push(`l.branch_id = ${bind(query.branchId)}::uuid`);
+    const offsetSql = query.offset ? `offset ${bind(query.offset)}::integer` : "";
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.version, l.lifecycle_state,
@@ -524,6 +531,7 @@ export class ScheduleReadService {
         where l.deleted_at is null
           and (
             $2::uuid is not null
+            ${query.includeClosed ? `or (${canSeeRatesSql})` : ""}
             or l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           )
           and ($2::uuid is null or l.id = $2)
@@ -539,6 +547,7 @@ export class ScheduleReadService {
           )
           and ($4::uuid is null or l.teacher_id = $4)
           and ($9::uuid is null or l.group_id = $9)
+          ${filters.length ? `and ${filters.join(" and ")}` : ""}
           and ($5::timestamptz is null or l.scheduled_at >= $5)
           and ($6::timestamptz is null or l.scheduled_at <= $6)
           and ($7::boolean is null or l.is_trial = $7)
@@ -555,6 +564,7 @@ export class ScheduleReadService {
           })}
         order by l.scheduled_at ${sortDir}, l.id ${sortDir}
         limit $8
+        ${offsetSql}
       `,
       [
         actor.userId,
@@ -566,6 +576,7 @@ export class ScheduleReadService {
         query.isTrial ?? null,
         limit,
         query.groupId ?? null,
+        ...extraValues,
       ],
     );
 

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 part 'schedule_day_canvas_logic.dart';
 part 'schedule_day_canvas_widgets.dart';
@@ -155,15 +157,19 @@ Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
   return result;
 }
 
-/// The day-view canvas: a read-first 2-axis time grid. Empty-slot taps create a
-/// lesson; existing cards open the explicit edit/transfer actions. Direct
-/// drag/drop mutations are intentionally absent.
+/// The day grid emits move proposals; persistence belongs to the editor flow.
 class ScheduleDayCanvas extends StatefulWidget {
   final bool fitToViewport;
   final DateTime date; // branch-local selected day (date only)
   final List<ScheduleColumn> columns;
   final List<ScheduleEntry> entries;
   final bool allowCreate;
+  final Future<void> Function(
+    ScheduleEntry entry,
+    String roomId,
+    DateTime start,
+  )?
+  onProposeMove;
 
   /// Tap an empty hour → one-hour create.
   final void Function(String columnId, DateTime startLocal, int durationMinutes)
@@ -179,6 +185,7 @@ class ScheduleDayCanvas extends StatefulWidget {
     required this.columns,
     required this.entries,
     this.allowCreate = true,
+    this.onProposeMove,
     required this.onCreateSlot,
     required this.onOpenLesson,
     this.initialVerticalOffset = 0,
@@ -196,6 +203,13 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
   final ScrollController _bodyH = ScrollController();
   final ScrollController _headerH = ScrollController();
   final ScrollController _gutterV = ScrollController();
+  final _gridKey = GlobalKey();
+  final _viewportKey = GlobalKey();
+  Offset? _dragStart;
+  Offset? _dragEnd;
+  bool _movePending = false;
+  ScheduleEntry? _dragEntry;
+  void _updateCanvas(VoidCallback change) => setState(change);
 
   double _hourHeight = kHourHeight;
   int _startHour = kDayStartHour;
@@ -356,6 +370,7 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
                     // Grid body.
                     Expanded(
                       child: MagicDesktopScrollbar(
+                        key: _viewportKey,
                         axis: Axis.vertical,
                         controller: _bodyV,
                         builder: (context, verticalController) =>
@@ -372,6 +387,7 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
                                         width: contentWidth,
                                         height: _gridHeight,
                                         child: Stack(
+                                          key: _gridKey,
                                           children: [
                                             for (
                                               int i = 0;
@@ -405,6 +421,8 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
                                                   colWidth,
                                                 ),
                                               ),
+                                            if (_dragEntry != null)
+                                              _movePreview(colWidth),
                                           ],
                                         ),
                                       ),

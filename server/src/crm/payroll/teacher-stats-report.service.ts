@@ -99,6 +99,11 @@ export class TeacherStatsReportService {
     lessons: PayrollLessonRow[],
     query: TeacherStatsQuery,
   ): PayrollLessonRow[] {
+    if (query.compensationRuleKey) {
+      lessons = lessons.filter((lesson) =>
+        (lesson.compensation_rule_key ?? lesson.compensation_type ?? "hourly") ===
+          query.compensationRuleKey);
+    }
     if (!query.unitType) return lessons;
     if (query.unitType === "trial") {
       return lessons.filter((lesson) => lesson.is_trial);

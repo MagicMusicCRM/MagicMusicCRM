@@ -475,7 +475,7 @@ void main() {
       const ValueKey('lesson-date-field'),
       const ValueKey('lesson-time-field'),
       const ValueKey('lesson-duration-field'),
-      const ValueKey('lesson-trial-toggle'),
+      const ValueKey('lesson-settlement-type-field'),
       const ValueKey('lesson-snapshot-preview'),
       const ValueKey('lesson-run-schedule-analyzer'),
     ]) {

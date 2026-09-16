@@ -243,6 +243,22 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     ]);
   });
 
+  it("filters by effective teacher rule before aggregating totals", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [
+        lessonRow({ id: "trial", compensation_rule_key: "trial_lesson", compensation_type: "none", settlement_fact_id: "trial-fact", settled_amount_minor: 0 }),
+        lessonRow({ id: "paid", compensation_rule_key: "standard", compensation_type: "standard", settlement_fact_id: "paid-fact", settled_amount_minor: 90000 }),
+      ] },
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+    const report = await service.getTeacherStatsReport(directorActor, {
+      from: "2026-01-01", to: "2027-01-01", compensationRuleKey: "trial_lesson",
+    });
+    expect(report.totals).toMatchObject({ completedLessons: 1, accruedTotal: 0 });
+    expect(report.items[0].units[0].lessonIds).toEqual(["trial"]);
+  });
+
   it("keeps explicit same-value sources separate and falls back only for legacy facts", async () => {
     const { service } = createServiceWithQueryResults([
       {
