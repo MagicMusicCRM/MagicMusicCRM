@@ -1,4 +1,122 @@
-# MagicMusicCRM — актуальная передача 221
+# MagicMusicCRM — актуальная передача 222
+
+## Production 1.5.42+222 — выпущен 2026-09-16
+
+Сетевой блокер устранён владельцем (оплата сервера). Выпуск выполнен по его
+прямому разрешению. Source/tag: `e8cbb20fd609716ff6b585c765adb19db397cd1c` /
+`v1.5.42`. Сервер `magicmusiccrm-server:1.5.42-222-final`, ID
+`sha256:750a0114d7f446b8f94bfeb84218d88574dfbcab6573a5af2ce4be65330e08fe`.
+Схема `0156_trial_lesson_catalog`. Public readiness — OK, reconciliation —
+`issues=[]`; прежние факты списаний и начислений не изменились.
+
+Новые Windows Setup/ZIP, Android APK/AAB опубликованы; все публичные SHA256 и
+размеры совпали. `latest.json` и `latest-v2.json` выдают build222. GitHub Release
+`v1.5.42` опубликован, четыре digest совпали. Evidence: `dist/release222-final/`.
+Свежие pre/post encrypted backups `20260916T095740Z` и `20260916T100523Z` скопированы
+на этот ПК и восстановлены в изоляции с точными candidate/recovery images — PASS.
+
+Совместимый резерв: `magicmusiccrm-server:221-recovery-0156-c59fd72bb33e`,
+ID `sha256:bd341e0bb67564d3cb4c466addb496ca517570628c0972a2e51cc6a8396e919d`.
+Stock221 после0156 не применять. Миграции/историю не откатывать и не удалять.
+Remote release directory: `/opt/magicmusiccrm/releases/1.5.42-222-e8cbb20f`;
+в `rollback-manifests/` сохранены каналы221. Их возврат не понижает установленные
+клиенты. Подробности: [release222 audit](../audits/release-222-production.md).
+
+Windows clean-install/upgrade UAT пропущен по решению владельца, не PASS.
+Android login/navigation/move-save проверены на локальном Debug main;
+authenticated signed-release/physical-device проверки не заявляются.
+Недельный drag-and-drop в этот выпуск не включён. Ниже — исторические этапы.
+
+## Выпуск 222, 2026-09-16 — заблокирован доступ к серверу
+
+Владелец прямо разрешил deploy. Новые Windows Setup/ZIP и подписанные Android
+APK/AAB 1.5.42+222 собраны в `dist/release222-final/`; хеши и размеры записаны в
+`artifact-manifest.json`. ZIP совпадает с 31/31 файлами Windows Release, Android
+сертификат совпадает с production, встроенная история APK/AAB содержит build222.
+Windows Setup не подписан, как и прежде. Снимок исходников: 2137 файлов,
+SHA256 `7d917924a5c8c286c9ce4f40b6c1c67161aa7738ca59e052e05be5ae9ab0f03c`.
+Это проверка сборки/упаковки, не новый полный функциональный прогон.
+
+SSH к `161.104.49.153` закрывается до key exchange; HTTPS readiness обрывается
+до TLS-соединения (curl и Node). DNS ожидаемый, GitHub HTTPS доступен, локальный
+SSH-ключ читается. Причина сетевого обрыва не установлена; у владельца запрошена
+проверка VPN/подключения. Свежий backup, upload, cutover и публикация каналов
+НЕ выполнялись. Production-состояние ниже — последнее подтверждённое 12 сентября,
+не свежая проверка. Серверный кандидат пока имеет прежний local image tag;
+окончательная release-идентичность сервера также ещё не оформлена.
+
+После восстановления доступа: свежий preflight, фиксация server candidate,
+новый encrypted backup с off-host проверкой/restore, deploy с совместимым резервом,
+post-deploy reconciliation и только затем публикация клиентов. Не использовать
+старый backup как замену свежему. Не повторять неизменённые сетевые попытки циклом.
+
+## Подготовка 2026-09-16 — совместимый резерв, НЕ deploy
+
+Дополнение владельца: разрешён выпуск без Windows Sandbox UAT. Это принятый
+пропуск clean-install/upgrade проверки, НЕ результат PASS. Sandbox уже включён
+с `-NoRestart`; Windows сообщил RestartNeeded=true, перезагрузка не выполнялась.
+Команда на выпуск получена, но новые подписанные артефакты, свежий backup и
+post-deploy reconciliation по-прежнему обязательны. Владелец потребовал проверить
+Android login/navigation и mobile move-save, а не исключать их.
+
+Android acceptance выполнен 2026-09-16: обычный `main.dart`, ADB-вход администратора,
+onboarding, чат/клиенты/задачи/расписание, перенос Room 0 11:15 → Room 1 12:30,
+45 минут и бесплатный trial сохранены. Force-stop/relaunch сохранил сессию;
+занятие повторно открыто с новыми параметрами, API подтвердил successor и расчёт.
+Evidence: `dist/http-journeys/cbb2678c0b4e483dbd86ef5f6c7940f5/`.
+Сводный runner: 22 PASS/1 FAIL из-за snake_case в новом проверочном скрипте
+(API — camelCase), НЕ из-за приложения. Проверка исправлена, 3 unit PASS;
+повторная проверка записанного реального ответа и UI evidence — PASS в
+`android-main-revalidation.json`. Сводный FAIL не переписан, нового полного
+live-прогона после исправления verifier не было. Debug APK с локальным API,
+не подписанный production-артефакт; тестовая БД/API удалены штатным runner.
+
+Владелец выбрал полную совместимость. Новый резерв
+`magicmusiccrm-server:221-recovery-0156-c59fd72bb33e` включает фильтр оплаты
+преподавателей (DTO и отчёт). Image-switch gate: **27 PASS, 0 FAIL**, 58 HTTP,
+0 серверных ошибок; ненулевые начисления, состав занятий и XLSX совпали до/после
+переключения, история не изменилась. Evidence:
+`dist/http-journeys/a31426557ce8489287b37f4138ceb4b5/`.
+Encrypted restore/migrate/reconciliation и image health/degraded gate также PASS.
+Прежнее ограничение фильтра относится только к старому резерву ниже.
+
+В клиенте исправлены повторный Android permission request и вводящий в заблуждение
+текст ошибки офлайн-входа. 14 focused tests PASS; полный Flutter: 1797 PASS, 0 FAIL,
+4 штатных updater skips (отдельный PASS остаётся применимым). Android Debug с
+обычным main и изолированным offline API подтвердил один permission prompt после
+отказа и корректную ошибку входа; crash log пуст. Authenticated login/navigation
+и mobile move-save проверены отдельно (см. дополнение выше).
+Старые замороженные APK/Setup 222 этих исправлений НЕ содержат;
+новые артефакты собраны в `dist/release222-final/` (см. дополнение выше).
+Windows clean-install/upgrade ещё не
+подтверждены; после включения Sandbox требуется перезагрузка, от этого UAT владелец
+отказался (см. дополнение выше). Перед deploy обязательны свежий backup и
+согласованный rollback; после deploy — reconciliation.
+
+## Локальная подготовка 2026-09-13 — НЕ production
+
+Правки заказчика проверены локально; production по-прежнему 221.
+Отчёт: [pre-production проверки](../audits/customer-revisions-preproduction-2026-09-13.md).
+**Блокер:** после миграции 0156 неизменённый образ 221 не проходит штатный
+migrator (в образе отсутствует уже применённая миграция). Это подтверждено
+на изолированно восстановленной production-копии. Не использовать 221 как
+готовый rollback для нового кандидата, не удалять историю/запись миграции.
+Нужен отдельно проверенный совместимый резервный образ или согласованный
+план восстановления. Ни deploy, ни публикация клиента не выполнялись.
+
+Дополнение 2026-09-13: экспериментальный резерв
+`magicmusiccrm-server:221-recovery-0156-b8c049ee2b8c` собран; повторный
+изолированный restore/migrate/reconciliation/rollback drill прошёл. После
+удаления кэша владельцем image-switch тест тоже прошёл: 26 проверок, 50 API
+запросов, 0 HTTP 5xx; native UI, ручная оплата после смены сервера, перенос,
+неизменность истории, защита ставок и идемпотентность. Evidence:
+`dist/http-journeys/5787c34d58c944b58589925f62224754/`.
+Новая фильтрация оплаты в отчёте преподавателей в резерв не включена;
+реальный DTO резерва отклоняет этот параметр с HTTP 400. Ограничение ещё
+не согласовано; резерв не считать полным откатом всех новых функций.
+Точные image ID, allowlist и evidence — в указанном выше отчёте.
+
+## Предыдущий production 221 (историческая запись)
 
 > Обновлено: 2026-09-12. Production client/server 1.5.41+221; tag v1.5.41.
 > Source: 0a7b6e1742f9456099e3023298ad84883e51a8e2.
