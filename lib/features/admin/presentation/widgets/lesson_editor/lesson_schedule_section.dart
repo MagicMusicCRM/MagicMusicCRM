@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -113,7 +114,7 @@ class LessonScheduleSection extends StatelessWidget {
           key: ValueKey(
             'lesson-duration-selection-${model.draft.durationMinutes}',
           ),
-          child: DropdownButtonFormField<int>(
+          child: AppDropdownButtonFormField<int>(
             menuMaxHeight: 256,
             key: const ValueKey('lesson-duration-field'),
             initialValue: model.draft.durationMinutes,
@@ -317,8 +318,12 @@ class _ResponsivePair extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 520) {
-          return Column(children: [first, const SizedBox(height: 12), second]);
+        final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        if (constraints.maxWidth < 520 * textScale) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [first, const SizedBox(height: 12), second],
+          );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,

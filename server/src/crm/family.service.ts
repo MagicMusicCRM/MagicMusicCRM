@@ -2,6 +2,11 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
+import {
+  branchIdExpr,
+  currentActorRoleSql,
+  managerBranchScopeSql,
+} from "./branch-scope";
 import { CrmPolicy } from "./crm.policy";
 
 /**
@@ -21,10 +26,18 @@ export class FamilyService {
   async createFamily(actor: ActorContext, dto: { name?: string; branchId?: string }) {
     this.policy.assertCanWriteCrm(actor);
     const result = await this.database.query<{ id: string; name: string | null; branch_id: string | null }>(
-      `insert into app.families (name, branch_id) values ($1, $2) returning id, name, branch_id`,
-      [dto.name ?? null, dto.branchId ?? null],
+      `insert into app.families (name, branch_id)
+       select $1, $2::uuid
+       where ${managerBranchScopeSql({
+         roleExpression: currentActorRoleSql("$3"),
+         userIdExpression: "$3",
+         branchExpression: "$2::text",
+       })}
+       returning id, name, branch_id`,
+      [dto.name ?? null, dto.branchId ?? null, actor.userId],
     );
     const row = result.rows[0];
+    if (!row) throw new NotFoundException("Филиал недоступен.");
     return { id: row.id, name: row.name, branchId: row.branch_id };
   }
 
@@ -42,13 +55,50 @@ export class FamilyService {
       role: string;
     }>(
       `insert into app.family_members (family_id, entity_type, entity_id, role, is_primary_contact)
-       values ($1, $2, $3, $4, $5)
+       select family.id, $2, $3, $4, $5
+       from app.families family
+       where family.id = $1 and family.deleted_at is null
+         and ${managerBranchScopeSql({
+           roleExpression: currentActorRoleSql("$6"),
+           userIdExpression: "$6",
+           branchExpression: "family.branch_id::text",
+         })}
+         and (
+           ($2 = 'lead' and exists (
+             select 1 from app.leads target
+             where target.id = $3 and target.deleted_at is null
+               and ${branchIdExpr("target")} = family.branch_id::text
+           ))
+           or ($2 = 'student' and exists (
+             select 1 from app.students target
+             where target.id = $3 and target.deleted_at is null
+               and ${branchIdExpr("target")} = family.branch_id::text
+           ))
+           or ($2 = 'profile' and exists (
+             select 1 from app.profiles target
+             where target.id = $3 and target.deleted_at is null
+               and (
+                 ${currentActorRoleSql("$6")}::text <> all(array['admin', 'manager']::text[])
+                 or exists (
+                   select 1 from app.students target_student
+                   where target_student.profile_id = target.id
+                     and target_student.deleted_at is null
+                     and ${branchIdExpr("target_student")} = family.branch_id::text
+                 )
+               )
+           ))
+         )
        on conflict (family_id, entity_type, entity_id)
        do update set role = excluded.role, is_primary_contact = excluded.is_primary_contact, deleted_at = null
        returning id, family_id, entity_type, entity_id, role`,
-      [familyId, dto.entityType, dto.entityId, dto.role, dto.isPrimaryContact ?? false],
+      [familyId, dto.entityType, dto.entityId, dto.role, dto.isPrimaryContact ?? false, actor.userId],
     );
     const row = result.rows[0];
+    if (!row) {
+      throw new NotFoundException(
+        "Семья или участник не найдены в доступном филиале.",
+      );
+    }
     await this.audit.record({
       actor,
       action: "crm.family_member_added",
@@ -76,11 +126,33 @@ export class FamilyService {
          from app.family_members m
          join app.families f on f.id = m.family_id and f.deleted_at is null
         where m.entity_type = $1 and m.entity_id = $2 and m.deleted_at is null
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$3"),
+            userIdExpression: "$3",
+            branchExpression: "f.branch_id::text",
+          })}
         limit 1`,
-      [entityType, entityId],
+      [entityType, entityId, actor.userId],
     );
     const fam = famRes.rows[0];
-    if (!fam) return { family: null, members: [] };
+    if (!fam) {
+      const hiddenFamily = await this.database.query<{ exists: boolean }>(
+        `select exists (
+           select 1
+           from app.family_members member
+           join app.families family
+             on family.id = member.family_id and family.deleted_at is null
+           where member.entity_type = $1
+             and member.entity_id = $2
+             and member.deleted_at is null
+         ) as exists`,
+        [entityType, entityId],
+      );
+      if (hiddenFamily.rows[0]?.exists) {
+        throw new NotFoundException('Семья не найдена.');
+      }
+      return { family: null, members: [] };
+    }
     const memRes = await this.database.query<{
       id: string;
       entity_type: string;
@@ -101,8 +173,18 @@ export class FamilyService {
          left join app.profiles sp on sp.id = st.profile_id and sp.deleted_at is null
          left join app.profiles pr on m.entity_type = 'profile' and pr.id = m.entity_id and pr.deleted_at is null
         where m.family_id = $1 and m.deleted_at is null
+          and exists (
+            select 1 from app.families scoped_family
+            where scoped_family.id = m.family_id
+              and scoped_family.deleted_at is null
+              and ${managerBranchScopeSql({
+                roleExpression: currentActorRoleSql("$2"),
+                userIdExpression: "$2",
+                branchExpression: "scoped_family.branch_id::text",
+              })}
+          )
         order by m.role, member_name`,
-      [fam.family_id],
+      [fam.family_id, actor.userId],
     );
     return {
       family: {
@@ -124,11 +206,50 @@ export class FamilyService {
 
   async removeFamilyMember(actor: ActorContext, memberId: string) {
     this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.query(
-      `update app.family_members set deleted_at = now() where id = $1 and deleted_at is null`,
-      [memberId],
+    const result = await this.database.query<{
+      member_id: string;
+      is_primary_payer: boolean;
+      removed_id: string | null;
+    }>(
+      `with candidate as (
+         select member.id as member_id,
+                coalesce(family.primary_payer_member_id = member.id, false) as is_primary_payer
+         from app.family_members member
+         join app.families family on family.id = member.family_id
+         where member.id = $1
+           and member.deleted_at is null
+           and family.deleted_at is null
+           and ${managerBranchScopeSql({
+             roleExpression: currentActorRoleSql("$2"),
+             userIdExpression: "$2",
+             branchExpression: "family.branch_id::text",
+           })}
+       ), cleared_primary as (
+         update app.families family
+         set primary_payer_member_id = null,
+             updated_at = now()
+         from candidate
+         where family.primary_payer_member_id = candidate.member_id
+         returning family.id
+       ), removed as (
+         update app.family_members member
+         set deleted_at = now()
+         from candidate
+         where member.id = candidate.member_id
+           and (
+             not candidate.is_primary_payer
+             or exists (select 1 from cleared_primary)
+           )
+         returning member.id
+       )
+       select candidate.member_id, candidate.is_primary_payer,
+              removed.id as removed_id
+       from candidate
+       left join removed on removed.id = candidate.member_id`,
+      [memberId, actor.userId],
     );
-    if (!result.rowCount) {
+    const status = result.rows[0];
+    if (!status) {
       throw new NotFoundException("Участник семьи не найден.");
     }
     await this.audit.record({
@@ -143,14 +264,19 @@ export class FamilyService {
   async setPrimaryPayer(actor: ActorContext, familyId: string, memberId: string) {
     this.policy.assertCanWriteCrm(actor);
     const result = await this.database.query(
-      `update app.families
+      `update app.families family
           set primary_payer_member_id = $2, updated_at = now()
-        where id = $1 and deleted_at is null
+        where family.id = $1 and family.deleted_at is null
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$3"),
+            userIdExpression: "$3",
+            branchExpression: "family.branch_id::text",
+          })}
           and exists (
             select 1 from app.family_members m
             where m.id = $2 and m.family_id = $1 and m.deleted_at is null
           )`,
-      [familyId, memberId],
+      [familyId, memberId, actor.userId],
     );
     if (!result.rowCount) {
       throw new NotFoundException("Семья или участник не найдены.");

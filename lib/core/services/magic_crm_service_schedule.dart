@@ -3,6 +3,29 @@ part of 'magic_crm_service.dart';
 /// Schedule & lessons: matrix, lessons, tasks, comments,
 /// timeline, progress notes, subscriptions, ledger, schedule series.
 extension MagicCrmSchedule on MagicCrmService {
+  Future<StudentLessonTimelinePage> listStudentLessonTimeline({
+    required String studentId,
+    String? cursor,
+    String direction = 'next',
+    int limit = 24,
+    DateTime? from,
+    DateTime? to,
+    DateTime? anchor,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/students/${Uri.encodeComponent(studentId)}/lesson-timeline',
+      queryParameters: {
+        'cursor': ?cursor,
+        'direction': direction,
+        'limit': limit,
+        if (from != null) 'from': from.toUtc().toIso8601String(),
+        if (to != null) 'to': to.toUtc().toIso8601String(),
+        if (anchor != null) 'anchor': anchor.toUtc().toIso8601String(),
+      },
+    );
+    return StudentLessonTimelinePage.fromJson(response);
+  }
+
   Future<Map<String, dynamic>> getLessonDecisionCatalog({String? branchId}) =>
       _api.get<Map<String, dynamic>>(
         '/crm/configuration/lesson-decisions',
@@ -274,6 +297,8 @@ extension MagicCrmSchedule on MagicCrmService {
   }
 
   Future<Map<String, dynamic>> getScheduleMatrix({
+    Set<String> settlementTypes = const {},
+    Set<String> compensationRules = const {},
     String? from,
     String? to,
     String? localDate,
@@ -281,12 +306,19 @@ extension MagicCrmSchedule on MagicCrmService {
     String? roomId,
     String? teacherId,
     String? studentId,
+    String? groupId,
     String? leadId,
     bool? isTrial,
     String? groupBy,
     int limit = 300,
   }) async {
-    final queryParameters = <String, dynamic>{'limit': limit};
+    final queryParameters = <String, dynamic>{
+      'limit': limit,
+      if (settlementTypes.isNotEmpty)
+        'settlementTypes': settlementTypes.join(','),
+      if (compensationRules.isNotEmpty)
+        'compensationRules': compensationRules.join(','),
+    };
     void addString(String key, String? value) {
       final trimmed = value?.trim();
       if (trimmed != null && trimmed.isNotEmpty) {
@@ -323,11 +355,22 @@ extension MagicCrmSchedule on MagicCrmService {
   /// `{ 'day': 'YYYY-MM-DD', 'count': int, 'room_ids': List<String> }` so the
   /// month view can render counts + room dots without fetching every lesson.
   Future<List<Map<String, dynamic>>> getScheduleMonthSummary({
+    String? teacherId,
+    bool? isTrial,
+    Set<String> settlementTypes = const {},
+    Set<String> compensationRules = const {},
     String? from,
     String? to,
     String? branchId,
   }) async {
-    final queryParameters = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{
+      if (teacherId != null) 'teacherId': teacherId,
+      if (isTrial != null) 'isTrial': isTrial,
+      if (settlementTypes.isNotEmpty)
+        'settlementTypes': settlementTypes.join(','),
+      if (compensationRules.isNotEmpty)
+        'compensationRules': compensationRules.join(','),
+    };
     void addString(String key, String? value) {
       final trimmed = value?.trim();
       if (trimmed != null && trimmed.isNotEmpty) {
@@ -358,10 +401,16 @@ extension MagicCrmSchedule on MagicCrmService {
   }
 
   Future<List<Map<String, dynamic>>> listLessons({
+    String? settlementTypeKey,
+    String? compensationRuleKey,
+    String? branchId,
+    int? offset,
+    bool? includeClosed,
     String? lessonId,
     String? from,
     String? to,
     String? studentId,
+    String? groupId,
     String? teacherId,
     bool? isTrial,
     // 'desc' — новейшие первыми (история: сервер режет limit ПОСЛЕ сортировки,
@@ -370,10 +419,20 @@ extension MagicCrmSchedule on MagicCrmService {
     int limit = 100,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
+    if (settlementTypeKey != null) {
+      queryParameters['settlementTypeKey'] = settlementTypeKey;
+    }
+    if (compensationRuleKey != null) {
+      queryParameters['compensationRuleKey'] = compensationRuleKey;
+    }
+    if (branchId != null) queryParameters['branchId'] = branchId;
+    if (offset != null) queryParameters['offset'] = offset;
+    if (includeClosed != null) queryParameters['includeClosed'] = includeClosed;
     if (lessonId != null) queryParameters['lessonId'] = lessonId;
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;
     if (studentId != null) queryParameters['studentId'] = studentId;
+    if (groupId != null) queryParameters['groupId'] = groupId;
     if (teacherId != null) queryParameters['teacherId'] = teacherId;
     if (isTrial != null) queryParameters['isTrial'] = isTrial;
     if (order != null) queryParameters['order'] = order;
@@ -383,6 +442,37 @@ extension MagicCrmSchedule on MagicCrmService {
       queryParameters: queryParameters,
     );
     return _items(response).map(_legacyLesson).toList();
+  }
+
+  /// Reloads the terminal lesson that mutations must target.
+  ///
+  /// Student timeline rows and transition errors expose the actionable id;
+  /// calendar rows fall back to their own id. In both cases the editor receives
+  /// the server's latest version instead of the projection that opened it.
+  Future<Map<String, dynamic>> reloadActionableLesson(
+    Map<String, dynamic> lesson, {
+    String? actionableLessonId,
+  }) async {
+    final reschedule = lesson['reschedule'];
+    final id =
+        actionableLessonId ??
+        lesson['actionable_lesson_id']?.toString() ??
+        lesson['actionableLessonId']?.toString() ??
+        (reschedule is Map
+            ? (reschedule['actionableLessonId'] ??
+                      reschedule['actionable_lesson_id'])
+                  ?.toString()
+            : null) ??
+        lesson['id']?.toString();
+    if (id == null || id.isEmpty) {
+      throw StateError('Занятие недоступно. Обновите расписание.');
+    }
+    final rows = await listLessons(lessonId: id, limit: 1);
+    final exact = rows.where((row) => row['id']?.toString() == id).firstOrNull;
+    if (exact == null) {
+      throw StateError('Занятие недоступно. Обновите расписание.');
+    }
+    return exact;
   }
 
   /// Actor-scoped, typed Lead/Student lookup used by every v4 lesson form.
@@ -642,6 +732,7 @@ extension MagicCrmSchedule on MagicCrmService {
     String? studentId,
     String? groupId,
     bool includeEnded = true,
+    bool includeArchived = false,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/schedule-plans',
@@ -649,6 +740,7 @@ extension MagicCrmSchedule on MagicCrmService {
         'studentId': ?studentId,
         'groupId': ?groupId,
         if (includeEnded) 'includeEnded': 'true',
+        if (includeArchived) 'includeArchived': 'true',
       },
     );
     return _items(response).map(SchedulePlan.fromMap).toList(growable: false);
@@ -824,6 +916,45 @@ extension MagicCrmSchedule on MagicCrmService {
     return SchedulePlanEndPreview.fromMap(response);
   }
 
+  Future<Map<String, dynamic>> previewSchedulePlanRowRemoval(
+    String planId,
+    String seriesId, {
+    required int expectedVersion,
+    String? effectiveFrom,
+    required String reasonText,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId/rows/$seriesId/remove/preview',
+      data: {
+        'expectedVersion': expectedVersion,
+        'effectiveFrom': ?effectiveFrom,
+        'reasonText': reasonText.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> removeSchedulePlanRow(
+    String planId,
+    String seriesId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String effectiveFrom,
+    required String reasonText,
+    required String previewToken,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId/rows/$seriesId/remove',
+      identity: identity,
+      data: {
+        'expectedVersion': expectedVersion,
+        'effectiveFrom': effectiveFrom,
+        'reasonText': reasonText.trim(),
+        'previewToken': previewToken,
+        'confirm': true,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> endSchedulePlan(
     String planId, {
     required MagicMutationIdentity identity,
@@ -844,6 +975,52 @@ extension MagicCrmSchedule on MagicCrmService {
       },
     );
   }
+
+  Future<Map<String, dynamic>> previewSchedulePlanArchive(String planId) =>
+      _api.post<Map<String, dynamic>>(
+        '/crm/schedule-plans/$planId/archive/preview',
+        data: const {},
+      );
+
+  Future<Map<String, dynamic>> previewSchedulePlanRestore(String planId) =>
+      _api.post<Map<String, dynamic>>(
+        '/crm/schedule-plans/$planId/restore/preview',
+        data: const {},
+      );
+
+  Future<Map<String, dynamic>> restoreSchedulePlan(
+    String planId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String impactFingerprint,
+    required String reasonText,
+  }) => _api.postIdempotent<Map<String, dynamic>>(
+    '/crm/schedule-plans/$planId/restore',
+    identity: identity,
+    data: {
+      'expectedVersion': expectedVersion,
+      'impactFingerprint': impactFingerprint,
+      'reasonText': reasonText.trim(),
+      'confirm': true,
+    },
+  );
+
+  Future<Map<String, dynamic>> archiveSchedulePlan(
+    String planId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String impactFingerprint,
+    required String reasonText,
+  }) => _api.postIdempotent<Map<String, dynamic>>(
+    '/crm/schedule-plans/$planId/archive',
+    identity: identity,
+    data: {
+      'expectedVersion': expectedVersion,
+      'impactFingerprint': impactFingerprint,
+      'reasonText': reasonText.trim(),
+      'confirm': true,
+    },
+  );
 
   /// KVA-236: серии постоянного расписания.
   Future<List<Map<String, dynamic>>> listScheduleSeries({

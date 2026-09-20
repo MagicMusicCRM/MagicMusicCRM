@@ -7,6 +7,7 @@ import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { ClientReferenceService } from "../clients/client-reference.service";
+import { ClientArchiveService } from "../clients/client-archive.service";
 import { CrmPolicy } from "../crm.policy";
 import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
@@ -25,6 +26,7 @@ import { SubscriptionPreviewTokenService } from "../commerce/subscription-previe
 import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 import { LessonSettlementCorrectionService } from "./lesson-settlement-correction.service";
 import { ScheduleReadService } from "./schedule-read.service";
+import { stableLessonCreateId } from "./lesson-command-integrity";
 
 const defaultTestDatabaseUrl =
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
@@ -46,6 +48,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
   let commands: LessonCommandService;
   let settlement: LessonSettlementService;
   let corrections: LessonSettlementCorrectionService;
+  let archives: ClientArchiveService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: testDatabaseUrl });
@@ -59,6 +62,12 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       new PlatformIntegrityRepository(),
     );
     const policy = new CrmPolicy();
+    archives = new ClientArchiveService(
+      database,
+      platform,
+      policy,
+      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+    );
     const constraints = new ScheduleConstraintEngine(
       new ConstraintEngineRepository(database, availability),
     );
@@ -106,6 +115,464 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     await database.onModuleDestroy();
     await pool.end();
   });
+
+  it.each([
+    { type: "student" as const, fixtureKey: "studentId" as const },
+    { type: "lead" as const, fixtureKey: "leadId" as const },
+  ])(
+    "rejects archive-first $type create after the client barrier without any create write",
+    async ({ type, fixtureKey }) => {
+      const fixture = await createFixture(pool);
+      const actor = { userId: fixture.managerId, role: "director" as const };
+      const idempotencyKey = `archive-first-${type}-${randomUUID()}`;
+      const requestId = `archive-first-${type}-${randomUUID()}`;
+      const lessonId = stableLessonCreateId(actor.userId, idempotencyKey);
+      const clientId = fixture[fixtureKey];
+      const blocker = await pool.connect();
+      let createPromise: Promise<unknown> | undefined;
+      try {
+        await pool.query("update app.users set role = 'director' where id = $1", [
+          actor.userId,
+        ]);
+        await blocker.query("begin");
+        await blocker.query(
+          "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+          [`branch:${fixture.branchId}`],
+        );
+        createPromise = commands.create(
+          actor,
+          archiveRaceDraft(fixture, type, clientId),
+          { idempotencyKey, requestId },
+        );
+        await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+
+        await expect(
+          archives.archive(actor, {
+            type,
+            id: clientId,
+            expectedVersion: 1,
+            reason: `test.archive-first-create.${type}`,
+            confirm: true,
+          }),
+        ).resolves.toMatchObject({
+          tombstone: { ref: { type, id: clientId }, tombstone: true, version: 2 },
+        });
+        const rejected = expect(createPromise).rejects.toMatchObject({
+          status: 422,
+          response: { code: "ARCHIVED_CLIENT_REFERENCE" },
+        });
+        await blocker.query("commit");
+        await rejected;
+
+        await expect(
+          lessonCreateWriteShape(
+            pool,
+            lessonId,
+            requestId,
+            actor.userId,
+            idempotencyKey,
+          ),
+        ).resolves.toEqual({
+          lessons: 0,
+          snapshots: 0,
+          plans: 0,
+          reservations: 0,
+          clientFacts: 0,
+          teacherFacts: 0,
+          audits: 0,
+          outbox: 0,
+          idempotency: 0,
+          aggregateVersions: 0,
+        });
+      } finally {
+        await blocker.query("rollback").catch(() => undefined);
+        blocker.release();
+        await Promise.allSettled([createPromise ?? Promise.resolve()]);
+        await cleanupArchiveArtifacts(pool, type, clientId);
+        await cleanupFixture(pool, {
+          ...fixture,
+          actorKey: `user:${fixture.managerId}`,
+          extraActorKeys: [fixture.managerId],
+          lessonIds: [lessonId],
+        });
+      }
+    },
+  );
+
+  it("lets barrier-first create commit before archive cancels its future lesson", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const idempotencyKey = `create-first-${randomUUID()}`;
+    const requestId = `create-first-${randomUUID()}`;
+    const lessonId = stableLessonCreateId(actor.userId, idempotencyKey);
+    const blocker = await pool.connect();
+    let createPromise: Promise<Awaited<ReturnType<LessonCommandService["create"]>>> | undefined;
+    let archivePromise: Promise<unknown> | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        actor.userId,
+      ]);
+      await blocker.query("begin");
+      await blocker.query(
+        "lock table app.lesson_settlement_plans in access exclusive mode",
+      );
+      createPromise = commands.create(
+        actor,
+        archiveRaceDraft(fixture, "student", fixture.studentId),
+        { idempotencyKey, requestId },
+      );
+      await waitForBlockedSessionCount(pool, 1);
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentId,
+        expectedVersion: 1,
+        reason: "test.create-first-archive",
+        confirm: true,
+      });
+      await waitForBlockedSessionCount(pool, 2);
+      await blocker.query("commit");
+
+      await expect(createPromise).resolves.toMatchObject({ id: lessonId, version: 1 });
+      await expect(archivePromise).resolves.toMatchObject({
+        tombstone: { tombstone: true, version: 2 },
+      });
+      await expect(
+        pool.query<{
+          lifecycle_state: string;
+          snapshot_count: number;
+          plan_state: string;
+        }>(
+          `select lesson.lifecycle_state,
+             (select count(*)::int from app.lesson_snapshots where lesson_id = lesson.id)
+               as snapshot_count,
+             (select state from app.lesson_settlement_plans where lesson_id = lesson.id)
+               as plan_state
+           from app.lessons lesson where lesson.id = $1`,
+          [lessonId],
+        ),
+      ).resolves.toMatchObject({
+        rows: [{
+          lifecycle_state: "cancelled",
+          snapshot_count: 1,
+          plan_state: "cancelled",
+        }],
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        createPromise ?? Promise.resolve(),
+        archivePromise ?? Promise.resolve(),
+      ]);
+      await cleanupArchiveArtifacts(pool, "student", fixture.studentId);
+      await cleanupFixture(pool, {
+        ...fixture,
+        actorKey: `user:${fixture.managerId}`,
+        extraActorKeys: [fixture.managerId],
+        lessonIds: [lessonId],
+      });
+    }
+  });
+
+  it("creates a sparse operational settlement and rejects missing clients or a teacher override", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const lessonIds: string[] = [];
+    const metadata = () => ({
+      idempotencyKey: `sparse-settlement-${randomUUID()}`,
+      requestId: randomUUID(),
+    });
+    const draft = {
+      clientRef: { type: "student" as const, id: fixture.studentId },
+      teacherId: fixture.teacherId,
+      branchId: fixture.branchId,
+      roomId: fixture.roomId,
+      scheduledAt: nextMondayAtTenMoscow(),
+      durationMinutes: 60,
+      isTrial: false,
+      completionType: "standard.success",
+      clientChargeType: "personal_account" as const,
+      clientChargeValue: 0,
+      teacherCompensationType: "none" as const,
+      teacherCompensationValue: 0,
+    };
+    try {
+      const created = await commands.create(actor, {
+        ...draft,
+        financialDecision: {
+          settlementTypeKey: "lesson",
+          clientDecisions: [{ clientId: fixture.studentId }],
+        } as never,
+      }, metadata());
+      lessonIds.push(created.id);
+
+      const plan = await database.transaction((client) =>
+        settlement.loadPlan(client, created.id)
+      );
+      expect(plan).toMatchObject({
+        decision: {
+          teacherCompensationRuleKey: "standard",
+          teacherCreditedDurationMinutes: 60,
+          teacherCompensationSource: "automatic",
+          clientDecisions: [{
+            clientId: fixture.studentId,
+            chargeDurationMinutes: 60,
+          }],
+        },
+      });
+
+      await expect(commands.create(actor, {
+        ...draft,
+        financialDecision: {
+          settlementTypeKey: "partially_paid_lesson",
+          teacherCompensationRuleKey: "percent",
+          teacherCreditedDurationMinutes: 30,
+        },
+      }, metadata())).rejects.toMatchObject({
+        status: 422,
+        response: { code: "CLIENT_DECISION_MISSING" },
+      });
+
+      await expect(commands.create(actor, {
+        ...draft,
+        financialDecision: {
+          settlementTypeKey: "lesson",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationSource: "manual",
+          clientDecisions: [{ clientId: fixture.studentId }],
+        },
+        plannedSettlementReason: "Ручное изменение оплаты",
+      }, metadata())).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+    } finally {
+      await cleanupFixture(pool, {
+        ...fixture,
+        actorKey: `user:${fixture.managerId}`,
+        lessonIds,
+      });
+    }
+  });
+
+  it("rejects omitted manual-duration minutes with typed 422 and no writes", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const requestId = `manual-duration-request-${randomUUID()}`;
+    const idempotencyKey = `manual-duration-${randomUUID()}`;
+    const writeShape = () => pool.query<{
+      lessons: string;
+      plans: string;
+      corrections: string;
+      client_facts: string;
+      teacher_facts: string;
+      reservations: string;
+      audits: string;
+      outbox: string;
+      idempotency: string;
+      versions: string;
+    }>(
+      `select
+        (select count(*)::text from app.lessons) as lessons,
+        (select count(*)::text from app.lesson_settlement_plans) as plans,
+        (select count(*)::text from app.lesson_settlement_corrections) as corrections,
+        (select count(*)::text from app.lesson_client_charge_facts) as client_facts,
+        (select count(*)::text from app.lesson_teacher_compensation_facts) as teacher_facts,
+        (select count(*)::text from app.lesson_reservations) as reservations,
+        (select count(*)::text from app.audit_events where request_id = $1) as audits,
+        (select count(*)::text from app.platform_outbox_events where request_id = $1) as outbox,
+        (select count(*)::text from app.idempotency_records
+           where actor_key = $2 and idempotency_key = $3) as idempotency,
+        (select count(*)::text from app.aggregate_versions) as versions`,
+      [requestId, `user:${actor.userId}`, idempotencyKey],
+    );
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        actor.userId,
+      ]);
+      const before = (await writeShape()).rows[0];
+      const request = commands.create(actor, {
+        clientRef: { type: "student", id: fixture.studentId },
+        teacherId: fixture.teacherId,
+        branchId: fixture.branchId,
+        roomId: fixture.roomId,
+        scheduledAt: nextMondayAtTenMoscow(),
+        durationMinutes: 60,
+        isTrial: false,
+        completionType: "standard.success",
+        clientChargeType: "personal_account",
+        clientChargeValue: 1000,
+        teacherCompensationType: "fixed",
+        teacherCompensationValue: 700,
+        plannedSettlementReason: "Частичная оплата согласована директором",
+        financialDecision: {
+          settlementTypeKey: "partially_paid_lesson",
+          teacherCompensationRuleKey: "percent",
+          teacherCompensationSource: "manual",
+          clientDecisions: [{
+            clientId: fixture.studentId,
+            chargeDurationMinutes: 30,
+          }],
+        },
+      }, { idempotencyKey, requestId });
+
+      await expect(request).rejects.toMatchObject({
+        status: 422,
+        response: {
+          code: "TEACHER_PARTIAL_DURATION_REQUIRED",
+          field: "teacherCreditedDurationMinutes",
+        },
+      });
+      await expect(request).rejects.toBeInstanceOf(HttpException);
+      expect((await writeShape()).rows[0]).toEqual(before);
+    } finally {
+      await cleanupFixture(pool, {
+        ...fixture,
+        actorKey: `user:${fixture.managerId}`,
+        lessonIds: [],
+      });
+    }
+  });
+
+  it.each([
+    {
+      boundary: "planned edit",
+      completed: false,
+      nextRule: "hourly" as const,
+      nextValue: "140000",
+    },
+    {
+      boundary: "settlement correction",
+      completed: true,
+      nextRule: "standard" as const,
+      nextValue: undefined,
+    },
+  ])(
+    "preserves omitted manual teacher minutes through create and $boundary",
+    async ({ completed, nextRule, nextValue }) => {
+      const fixture = await createFixture(pool);
+      const actor = { userId: fixture.managerId, role: "director" as const };
+      const lessonIds: string[] = [];
+      const metadata = () => ({
+        idempotencyKey: `manual-minutes-${randomUUID()}`,
+        requestId: randomUUID(),
+      });
+      try {
+        await pool.query("update app.users set role = 'director' where id = $1", [
+          actor.userId,
+        ]);
+        const created = await commands.create(actor, {
+          clientRef: { type: "student", id: fixture.studentId },
+          teacherId: fixture.teacherId,
+          branchId: fixture.branchId,
+          roomId: fixture.roomId,
+          scheduledAt: completed
+            ? "2026-08-31T07:00:00.000Z"
+            : nextMondayAtTenMoscow(),
+          durationMinutes: 60,
+          isTrial: false,
+          completionType: "standard.success",
+          clientChargeType: "personal_account",
+          clientChargeValue: 1000,
+          teacherCompensationType: "fixed",
+          teacherCompensationValue: 700,
+          plannedSettlementReason: "Ручная фиксированная оплата",
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "fixed",
+            teacherCompensationValueMinor: "125000",
+            teacherCompensationSource: "manual",
+            clientDecisions: [{ clientId: fixture.studentId }],
+          },
+        }, metadata());
+        lessonIds.push(created.id);
+
+        const initial = await database.transaction((client) =>
+          settlement.loadPlan(client, created.id)
+        );
+        expect(initial?.decision).toMatchObject({
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "125000",
+          teacherCreditedDurationMinutes: 60,
+          teacherCompensationSource: "manual",
+        });
+        if (completed) {
+          await database.transaction(async (client) => {
+            await client.query(
+              "update app.lessons set lifecycle_state = 'successfully_completed' where id = $1",
+              [created.id],
+            );
+            await settlement.settle(client, created.id, {
+              context: "settle",
+              decision: initial!.decision,
+              reasonText: "Ручная фиксированная оплата",
+              configurationRevisionIds: {
+                settlementRevisionId: initial!.settlementRevisionId,
+                compensationRevisionId: initial!.compensationRevisionId,
+              },
+            });
+          });
+        }
+        const version = Number((await pool.query(
+          "select version from app.lessons where id = $1",
+          [created.id],
+        )).rows[0]!.version);
+        const change = {
+          expectedVersion: version,
+          reasonText: "Ручная оплата без изменения длительности",
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: nextRule,
+            ...(nextValue === undefined
+              ? {}
+              : { teacherCompensationValueMinor: nextValue }),
+            teacherCompensationSource: "manual" as const,
+            clientDecisions: [{ clientId: fixture.studentId }],
+          },
+        };
+        const preview = completed
+          ? await corrections.preview(actor, created.id, change)
+          : await commands.previewSettlementPlan(actor, created.id, change);
+        const command = {
+          ...change,
+          confirm: true as const,
+          previewToken: preview.previewToken,
+        };
+        if (completed) {
+          await corrections.commit(actor, created.id, command, metadata());
+        } else {
+          await commands.updateSettlementPlan(
+            actor,
+            created.id,
+            command,
+            metadata(),
+          );
+        }
+
+        const persisted = completed
+          ? (await pool.query<{ decision: Record<string, unknown> }>(
+              `select decision from app.lesson_settlement_corrections
+               where lesson_id = $1 order by version desc limit 1`,
+              [created.id],
+            )).rows[0]!.decision
+          : (await database.transaction((client) =>
+              settlement.loadPlan(client, created.id)
+            ))!.decision;
+        expect(persisted).toMatchObject({
+          teacherCompensationRuleKey: nextRule,
+          teacherCreditedDurationMinutes: 60,
+          teacherCompensationSource: "manual",
+        });
+        expect(persisted.teacherCompensationValueMinor).toBe(nextValue);
+      } finally {
+        await cleanupFixture(pool, {
+          ...fixture,
+          actorKey: `user:${fixture.managerId}`,
+          lessonIds,
+        });
+      }
+    },
+  );
 
   it("creates and edits personal-account lesson funding through signed previews and rejects an out-of-scope payer", async () => {
     const fixture = await createFixture(pool);
@@ -221,6 +688,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       financialDecision: {
         settlementTypeKey: "free_lesson",
         teacherCompensationRuleKey: "none",
+        clientDecisions: [{ clientId: fixture.studentId }],
       },
     };
     const createdIds: string[] = [];
@@ -378,7 +846,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       teacherCompensationValue: 0,
       financialDecision: {
         settlementTypeKey: "lesson",
-        teacherCompensationRuleKey: "none",
+        teacherCompensationRuleKey: "standard",
+        clientDecisions: [{ clientId: fixture.studentId }],
       },
     };
     try {
@@ -414,6 +883,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
               ...complete,
               financialDecision: {
                 teacherCompensationRuleKey: "none",
+                clientDecisions: [{ clientId: fixture.studentId }],
               },
             } as UpsertLessonDto,
             metadata("missing-settlement"),
@@ -429,7 +899,11 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
             director,
             {
               ...complete,
-              financialDecision: { settlementTypeKey: "lesson" },
+              financialDecision: {
+                settlementTypeKey: "lesson",
+                teacherCompensationRuleKey: "missing-rule",
+                clientDecisions: [{ clientId: fixture.studentId }],
+              },
             } as UpsertLessonDto,
             metadata("missing-pay-rule"),
           ),
@@ -556,6 +1030,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       financialDecision: {
         settlementTypeKey: "free_lesson",
         teacherCompensationRuleKey: "standard",
+        clientDecisions: [{ clientId: fixture.leadId }],
       },
     };
     try {
@@ -644,7 +1119,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         compensation_value: "900.00",
         validation_state: "valid",
         settlement_key: "free_lesson",
-        pay_rule_key: "standard",
+        pay_rule_key: "none",
         plan_revisions: "1",
       });
     } finally {
@@ -658,6 +1133,89 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       });
     }
   });
+
+  it.each([
+    ["lesson", "standard", "standard", 60],
+    ["paid_miss", "standard", "standard", 60],
+    ["free_lesson", "standard", "none", 0],
+    ["unpaid_miss", "standard", "none", 0],
+  ] as const)(
+    "normalizes stale automatic defaults on %s creation and edit",
+    async (settlementTypeKey, staleRule, expectedRule, expectedMinutes) => {
+      const fixture = await createFixture(pool);
+      const actor = { userId: fixture.managerId, role: "manager" as const };
+      const lessonIds: string[] = [];
+      const metadata = (phase: string) => ({
+        idempotencyKey: `automatic-policy-${settlementTypeKey}-${phase}-${randomUUID()}`,
+        requestId: randomUUID(),
+      });
+      try {
+        const lesson = await commands.create(actor, {
+          clientRef: { type: "student", id: fixture.studentId },
+          teacherId: fixture.teacherId,
+          branchId: fixture.branchId,
+          roomId: fixture.roomId,
+          scheduledAt: nextMondayAtTenMoscow(),
+          durationMinutes: 60,
+          isTrial: false,
+          completionType: "standard.success",
+          clientChargeType: "personal_account",
+          clientChargeValue: 1000,
+          teacherCompensationType: "fixed",
+          teacherCompensationValue: 700,
+          financialDecision: {
+            settlementTypeKey,
+            teacherCompensationRuleKey: staleRule,
+            clientDecisions: [{ clientId: fixture.studentId }],
+          },
+        }, metadata("create"));
+        lessonIds.push(lesson.id);
+
+        const createdPlan = await database.transaction((client) =>
+          settlement.loadPlan(client, lesson.id)
+        );
+        expect(createdPlan?.decision).toMatchObject({
+          teacherCompensationRuleKey: expectedRule,
+          teacherCreditedDurationMinutes: expectedMinutes,
+          teacherCompensationSource: "automatic",
+        });
+
+        const change = {
+          expectedVersion: lesson.version,
+          reasonText: "Проверка автоматического правила расчёта",
+          financialDecision: {
+            settlementTypeKey,
+            teacherCompensationRuleKey: staleRule,
+            clientDecisions: [{ clientId: fixture.studentId }],
+          },
+        };
+        const preview = await commands.previewSettlementPlan(
+          actor,
+          lesson.id,
+          change,
+        );
+        await commands.updateSettlementPlan(actor, lesson.id, {
+          ...change,
+          confirm: true,
+          previewToken: preview.previewToken,
+        }, metadata("edit"));
+        const editedPlan = await database.transaction((client) =>
+          settlement.loadPlan(client, lesson.id)
+        );
+        expect(editedPlan?.decision).toMatchObject({
+          teacherCompensationRuleKey: expectedRule,
+          teacherCreditedDurationMinutes: expectedMinutes,
+          teacherCompensationSource: "automatic",
+        });
+      } finally {
+        await cleanupFixture(pool, {
+          ...fixture,
+          actorKey: `user:${fixture.managerId}`,
+          lessonIds,
+        });
+      }
+    },
+  );
 
   it("clears a null notes-only PATCH through the canonical command path", async () => {
     const fixture = await createFixture(pool);
@@ -687,6 +1245,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
           financialDecision: {
             settlementTypeKey: "free_lesson",
             teacherCompensationRuleKey: "none",
+            clientDecisions: [{ clientId: fixture.studentId }],
           },
         },
         metadata("create"),
@@ -759,6 +1318,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       financialDecision: {
         settlementTypeKey: "free_lesson",
         teacherCompensationRuleKey: "none",
+        clientDecisions: [{ clientId: fixture.studentId }],
       },
     });
     try {
@@ -921,6 +1481,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
           financialDecision: {
             settlementTypeKey: "free_lesson",
             teacherCompensationRuleKey: "none",
+            clientDecisions: [{ clientId: fixture.studentId }],
           },
         },
         metadata("create"),
@@ -1018,6 +1579,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       financialDecision: {
         settlementTypeKey: "free_lesson",
         teacherCompensationRuleKey: "none",
+        clientDecisions: [{ clientId: fixture.studentId }],
       },
     };
     const leftMetadata = metadata("create-left");
@@ -1221,7 +1783,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         durationMinutes: 45, isTrial: false, completionType: "standard.success",
         clientChargeType: "personal_account", clientChargeValue: 1000,
         teacherCompensationType: "fixed", teacherCompensationValue: 700,
-        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard" },
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+          clientDecisions: [{ clientId: fixture.studentId }] },
       }, metadata());
       lessonIds.push(created.id);
       if (completed) await database.transaction(async (client) => {
@@ -1233,7 +1796,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       const change = {
         expectedVersion: version, reasonText: "Исправление преподавателя и филиала",
         resources: { teacherId: replacement.teacherId, branchId: replacement.branchId, roomId: replacement.roomId },
-        financialDecision: { settlementTypeKey: "free_lesson", teacherCompensationRuleKey: "standard" },
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+          clientDecisions: [{ clientId: fixture.studentId }] },
       };
       // An assigned manager cannot move this lesson to an unassigned branch.
       await pool.query("update app.users set role = 'manager' where id = $1", [actor.userId]);
@@ -1255,7 +1819,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         room_id: replacement.roomId, lifecycle_state: completed ? "successfully_completed" : "scheduled" });
       const reopened = await new ScheduleReadService(database, new CrmPolicy()).listLessons(actor, { lessonId: created.id });
       expect(reopened.items[0]).toMatchObject({ teacherId: replacement.teacherId,
-        branchId: replacement.branchId, settlementTypeKey: "free_lesson" });
+        branchId: replacement.branchId, settlementTypeKey: "lesson" });
       expect((await pool.query("select count(*)::int as count from app.lesson_transitions where lesson_id = $1", [created.id])).rows[0].count).toBe(0);
       if (completed) {
         const facts = await pool.query("select teacher_id, amount_minor::text, supersedes_fact_id from app.lesson_teacher_compensation_facts where lesson_id = $1 order by created_at, id", [created.id]);
@@ -1307,10 +1871,11 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         completionType: "standard.success", clientChargeType: "subscription",
         clientChargeValue: 1, subscriptionId: first,
         teacherCompensationType: "fixed", teacherCompensationValue: 700,
-        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "none" },
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+          clientDecisions: [{ clientId: fixture.studentId }] },
       }, metadata());
       lessonIds.push(lesson.id);
-      expect((await database.transaction((client) => settlement.loadPlan(client, lesson.id)))?.decision.teacherCompensationRuleKey).toBe("none");
+      expect((await database.transaction((client) => settlement.loadPlan(client, lesson.id)))?.decision.teacherCompensationRuleKey).toBe("standard");
       const history = async () => (await pool.query(
         "select id, state, units::text, version::text from app.lesson_reservations where lesson_id=$1 order by id",
         [lesson.id],
@@ -1383,6 +1948,82 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     }
   });
 
+  it("reserves the nearest manual lessons under concurrent creation and refills after a funding edit", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const lessonIds: string[] = [];
+    const metadata = () => ({ idempotencyKey: randomUUID(), requestId: randomUUID() });
+    try {
+      await pool.query("update app.users set role='director' where id=$1", [actor.userId]);
+      const subscriptionId = (await pool.query<{ id: string }>(
+        "insert into app.subscriptions (student_id, lessons_total, lessons_used, status) values ($1, 2, 0, 'active') returning id",
+        [fixture.studentId])).rows[0]!.id;
+      const start = new Date(nextMondayAtTenMoscow()).getTime();
+      const create = async (days: number) => {
+        const dto = {
+          clientRef: { type: "student" as const, id: fixture.studentId },
+          teacherId: fixture.teacherId, branchId: fixture.branchId, roomId: fixture.roomId,
+          scheduledAt: new Date(start + days * 86400000).toISOString(), durationMinutes: 60, isTrial: false,
+          completionType: "standard.success", clientChargeType: "subscription" as const,
+          clientChargeValue: 1, subscriptionId,
+          teacherCompensationType: "fixed" as const, teacherCompensationValue: 700,
+          financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+            clientDecisions: [{ clientId: fixture.studentId }] },
+        };
+        const key = metadata();
+        const result = await commands.create(actor, dto, key);
+        lessonIds.push(result.id);
+        expect(await commands.create(actor, dto, key)).toMatchObject({ id: result.id, replayed: true });
+        return result;
+      };
+      const far = await create(21);
+      const middle = await create(14);
+      const [near, nearest] = await Promise.all([create(7), create(0)]);
+      const covered = async () => (await pool.query<{ lesson_id: string }>(
+        "select lesson_id from app.lesson_reservations where subscription_id=$1 and state='reserved' order by lesson_id",
+        [subscriptionId])).rows.map((row) => row.lesson_id).sort();
+      expect(await covered()).toEqual([near.id, nearest.id].sort());
+      const dto = {
+        expectedVersion: nearest.version, reasonText: "Оплатить ближайшее занятие с личного счёта",
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+          clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId,
+            chargeType: "personal_account" as const, basePriceMinor: "150000" }] },
+      };
+      const preview = await commands.previewSettlementPlan(actor, nearest.id, dto);
+      // Preview must not move anyone else's persisted reservation.
+      expect(await covered()).toEqual([near.id, nearest.id].sort());
+      await commands.updateSettlementPlan(actor, nearest.id, { ...dto, previewToken: preview.previewToken, confirm: true }, metadata());
+      expect(await covered()).toEqual([near.id, middle.id].sort());
+      expect((await pool.query("select state from app.lesson_reservations where lesson_id=$1", [far.id])).rows)
+        .toEqual([{ state: "released" }]);
+      expect((await pool.query("select count(*)::int as count from app.lesson_client_charge_facts where lesson_id=any($1::uuid[])", [lessonIds])).rows[0].count).toBe(0);
+      const reservations = new SubscriptionReservationService(database, {} as RealtimeBus);
+      await pool.query("update app.subscriptions set lessons_total=1 where id=$1", [subscriptionId]);
+      await database.transaction((client) => reservations.reconcile(client, [subscriptionId]));
+      expect(await covered()).toEqual([near.id]);
+      const cancel = (lessonId: string, settlementTypeKey: string) => database.transaction(async (client) => {
+        await client.query("update app.lessons set lifecycle_state='cancelled' where id=$1", [lessonId]);
+        const result = await settlement.settle(client, lessonId, { context: "cancel",
+          decision: { settlementTypeKey, teacherCompensationRuleKey: "none",
+            clientDecisions: [{ clientId: fixture.studentId }] }, reasonText: "Проверка освобождения лимита" });
+        await reservations.terminalize(client, result);
+        return result;
+      });
+      const unpaid = await cancel(near.id, "unpaid_miss");
+      expect(unpaid.clientFacts[0]!.units).toBe("0.00");
+      expect(await covered()).toEqual([middle.id]);
+      const paid = await cancel(middle.id, "paid_miss");
+      expect(paid.clientFacts[0]!.units).toBe("1.00");
+      expect(await covered()).toEqual([]);
+      const totals = (await pool.query(`select
+        (select sum(units)::text from app.lesson_client_charge_facts_effective where subscription_id=$1) used,
+        (select count(*)::int from app.lesson_reservations where subscription_id=$1 and state='consumed') consumed`, [subscriptionId])).rows[0];
+      expect(totals).toEqual({ used: "1.00", consumed: 1 });
+    } finally {
+      await cleanupFixture(pool, { ...fixture, actorKey: `user:${fixture.managerId}`, lessonIds });
+    }
+  });
+
   it("edits an uncovered lesson without claiming subscription coverage or bypassing settlement capacity", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "director" as const };
@@ -1401,7 +2042,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         completionType: "standard.success", clientChargeType: "subscription",
         clientChargeValue: 1, subscriptionId,
         teacherCompensationType: "fixed", teacherCompensationValue: 700,
-        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "none" },
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+          clientDecisions: [{ clientId: fixture.studentId }] },
       }, metadata());
       lessonIds.push(lesson.id);
       // The materializer can leave future occurrences uncovered after capacity runs out.
@@ -1409,7 +2051,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       await pool.query("update app.subscriptions set lessons_used=1 where id=$1", [subscriptionId]);
       const history = (await pool.query("select * from app.lesson_reservations where lesson_id=$1", [lesson.id])).rows;
       const dto = { expectedVersion: lesson.version, reasonText: "Исправление старого правила преподавателя",
-        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard" } };
+        financialDecision: { settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+          clientDecisions: [{ clientId: fixture.studentId }] } };
       const preview = await commands.previewSettlementPlan(actor, lesson.id, dto);
       expect(preview).toMatchObject({ canConfirm: true,
         reservationPreview: { before: [], after: [] },
@@ -1463,7 +2106,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
           teacherCompensationValue: 700,
           financialDecision: {
             settlementTypeKey: "lesson",
-            teacherCompensationRuleKey: "none",
+            teacherCompensationRuleKey: "standard",
+            clientDecisions: [{ clientId: fixture.studentId }],
           },
         },
         metadata("create"),
@@ -1474,6 +2118,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         financialDecision: {
           settlementTypeKey: "free_lesson",
           teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: fixture.studentId }],
         },
         reasonText: "Бесплатное занятие согласовано управляющим",
       };
@@ -1597,6 +2242,144 @@ async function expectCommandError(
       ...(response.field ? { field: response.field } : {}),
     }).toEqual(expected);
   }
+}
+
+function archiveRaceDraft(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  type: "student" | "lead",
+  clientId: string,
+): UpsertLessonDto {
+  return {
+    clientRef: { type, id: clientId },
+    teacherId: fixture.teacherId,
+    branchId: fixture.branchId,
+    roomId: fixture.roomId,
+    scheduledAt: nextMondayAtTenMoscow(),
+    durationMinutes: 60,
+    isTrial: false,
+    completionType: "standard.success",
+    clientChargeType: "none",
+    clientChargeValue: 0,
+    teacherCompensationType: "none",
+    teacherCompensationValue: 0,
+    financialDecision: {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      clientDecisions: [{ clientId, chargeType: "none" }],
+    },
+  };
+}
+
+async function lessonCreateWriteShape(
+  pool: Pool,
+  lessonId: string,
+  requestId: string,
+  actorUserId: string,
+  idempotencyKey: string,
+) {
+  const result = await pool.query<{
+    lessons: number;
+    snapshots: number;
+    plans: number;
+    reservations: number;
+    client_facts: number;
+    teacher_facts: number;
+    audits: number;
+    outbox: number;
+    idempotency: number;
+    aggregate_versions: number;
+  }>(
+    `select
+       (select count(*)::int from app.lessons where id = $1) as lessons,
+       (select count(*)::int from app.lesson_snapshots where lesson_id = $1)
+         as snapshots,
+       (select count(*)::int from app.lesson_settlement_plans where lesson_id = $1)
+         as plans,
+       (select count(*)::int from app.lesson_reservations where lesson_id = $1)
+         as reservations,
+       (select count(*)::int from app.lesson_client_charge_facts where lesson_id = $1)
+         as client_facts,
+       (select count(*)::int from app.lesson_teacher_compensation_facts where lesson_id = $1)
+         as teacher_facts,
+       (select count(*)::int from app.audit_events where request_id = $2) as audits,
+       (select count(*)::int from app.platform_outbox_events where request_id = $2)
+         as outbox,
+       (select count(*)::int from app.idempotency_records
+         where actor_key = $3 and operation = 'schedule.lesson.create'
+           and idempotency_key = $4) as idempotency,
+       (select count(*)::int from app.aggregate_versions
+         where aggregate_type = 'schedule:lesson' and aggregate_id = $1::text)
+         as aggregate_versions`,
+    [lessonId, requestId, `user:${actorUserId}`, idempotencyKey],
+  );
+  const row = result.rows[0]!;
+  return {
+    lessons: row.lessons,
+    snapshots: row.snapshots,
+    plans: row.plans,
+    reservations: row.reservations,
+    clientFacts: row.client_facts,
+    teacherFacts: row.teacher_facts,
+    audits: row.audits,
+    outbox: row.outbox,
+    idempotency: row.idempotency,
+    aggregateVersions: row.aggregate_versions,
+  };
+}
+
+async function cleanupArchiveArtifacts(
+  pool: Pool,
+  type: "student" | "lead",
+  id: string,
+) {
+  await pool.query(
+    "delete from app.idempotency_records where operation = 'crm.client.archive' and idempotency_key = $1",
+    [`${type}:${id}:v1`],
+  );
+  await pool.query(
+    "delete from app.platform_outbox_events where aggregate_type = $1 and aggregate_id = $2",
+    [`crm:${type}`, id],
+  );
+  await pool.query(
+    "delete from app.aggregate_versions where aggregate_type = $1 and aggregate_id = $2",
+    [`crm:${type}`, id],
+  );
+}
+
+async function waitForBlockedQuery(pool: Pool, fragment: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ blocked: boolean }>(
+      `select exists (
+         select 1 from pg_stat_activity
+         where datname = current_database()
+           and pid <> pg_backend_pid()
+           and state = 'active'
+           and wait_event_type = 'Lock'
+           and query ilike '%' || $1 || '%'
+       ) as blocked`,
+      [fragment],
+    );
+    if (result.rows[0]?.blocked) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for blocked query: ${fragment}`);
+}
+
+async function waitForBlockedSessionCount(pool: Pool, expected: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ count: number }>(
+      `select count(*)::int as count from pg_stat_activity
+       where datname = current_database()
+         and pid <> pg_backend_pid()
+         and state = 'active'
+         and wait_event_type = 'Lock'`,
+    );
+    if ((result.rows[0]?.count ?? 0) >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for ${expected} blocked sessions.`);
 }
 
 async function createFixture(

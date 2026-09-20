@@ -47,6 +47,10 @@ export class UpsertLeadDto {
   phone?: string;
 
   @IsOptional()
+  @IsBoolean()
+  clearPhone?: boolean;
+
+  @IsOptional()
   @IsEmail()
   email?: string;
 

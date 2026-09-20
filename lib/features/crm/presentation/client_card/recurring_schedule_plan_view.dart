@@ -1,16 +1,19 @@
-import 'dart:math' show max;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
+import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
+import 'package:magic_music_crm/core/widgets/settlement_type_filter.dart';
 
-typedef SchedulePlanPageIntent =
-    void Function(SchedulePlan plan, String direction);
 typedef SchedulePlanEditIntent =
     void Function(SchedulePlan plan, SchedulePlanRow? row);
+typedef SchedulePlanRemoveRowIntent =
+    void Function(SchedulePlan plan, SchedulePlanRow row);
 
 class RecurringSchedulePlanView extends StatefulWidget {
   const RecurringSchedulePlanView({
@@ -23,18 +26,22 @@ class RecurringSchedulePlanView extends StatefulWidget {
     required this.groupMode,
     required this.hasGroupMembers,
     required this.fallbackLessons,
-    required this.trays,
-    required this.loadingTrayIds,
-    required this.trayErrors,
+    required this.timelinePage,
+    required this.timelineLoading,
+    required this.timelinePaging,
+    required this.timelineError,
     required this.onCreate,
     required this.onRetryPlans,
-    required this.onEnsureTray,
-    required this.onPageTray,
-    required this.onRetryTray,
+    required this.onPreviousTimeline,
+    required this.onNextTimeline,
+    required this.onRetryTimeline,
     required this.onEditPlan,
+    required this.onRemoveRow,
     required this.onEditParticipants,
     required this.onEndPlan,
-    required this.onOpenTrayItem,
+    this.onArchivePlan,
+    this.onRestorePlan,
+    required this.onOpenTimelineItem,
     this.emptyState,
     this.onOpenFallbackLesson,
   });
@@ -47,18 +54,22 @@ class RecurringSchedulePlanView extends StatefulWidget {
   final bool groupMode;
   final bool hasGroupMembers;
   final List<Map<String, dynamic>> fallbackLessons;
-  final Map<String, SchedulePlanTrayPage> trays;
-  final Set<String> loadingTrayIds;
-  final Map<String, String> trayErrors;
+  final StudentLessonTimelinePage? timelinePage;
+  final bool timelineLoading;
+  final bool timelinePaging;
+  final String? timelineError;
   final VoidCallback onCreate;
   final VoidCallback onRetryPlans;
-  final ValueChanged<SchedulePlan> onEnsureTray;
-  final SchedulePlanPageIntent onPageTray;
-  final ValueChanged<SchedulePlan> onRetryTray;
+  final VoidCallback onPreviousTimeline;
+  final VoidCallback onNextTimeline;
+  final VoidCallback onRetryTimeline;
   final SchedulePlanEditIntent onEditPlan;
+  final SchedulePlanRemoveRowIntent onRemoveRow;
   final ValueChanged<SchedulePlan> onEditParticipants;
   final ValueChanged<SchedulePlan> onEndPlan;
-  final Future<void> Function(SchedulePlanTrayItem item) onOpenTrayItem;
+  final ValueChanged<SchedulePlan>? onArchivePlan;
+  final ValueChanged<SchedulePlan>? onRestorePlan;
+  final Future<void> Function(String lessonId) onOpenTimelineItem;
   final Widget? emptyState;
   final ValueChanged<Map<String, dynamic>>? onOpenFallbackLesson;
 
@@ -73,128 +84,158 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
   @override
   Widget build(BuildContext context) {
     final active = widget.plans.where((plan) => plan.isActive).toList();
-    final ended = widget.plans.where((plan) => !plan.isActive).toList();
-    return Column(
-      key: const Key('recurring-schedule-plan-section'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) => Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Постоянные расписания',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-                ),
+    final ended = widget.plans
+        .where((plan) => !plan.isActive && !plan.isArchived)
+        .toList();
+    final archived = widget.plans.where((plan) => plan.isArchived).toList();
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        key: const Key('recurring-schedule-plan-section'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _sectionHeader(),
+          if (widget.canWrite && !widget.canCreatePlan)
+            Text(
+              widget.groupMode
+                  ? 'Для группового расписания нужен хотя бы один участник с активным абонементом.'
+                  : 'Для нового индивидуального расписания нужен активный абонемент.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
               ),
-              if (widget.canWrite)
-                constraints.maxWidth < 430
-                    ? IconButton(
-                        key: const Key('schedule-plan-add'),
-                        onPressed: widget.canCreatePlan
-                            ? widget.onCreate
-                            : null,
-                        tooltip: 'Добавить расписание',
-                        icon: const Icon(Icons.add_rounded),
-                      )
-                    : TextButton.icon(
-                        key: const Key('schedule-plan-add'),
-                        onPressed: widget.canCreatePlan
-                            ? widget.onCreate
-                            : null,
-                        icon: const Icon(Icons.add_rounded, size: 17),
-                        label: const Text('Добавить расписание'),
-                      ),
-            ],
-          ),
-        ),
-        if (widget.canWrite && !widget.canCreatePlan)
-          Text(
-            widget.groupMode
-                ? 'Для группового расписания нужен хотя бы один участник с активным абонементом.'
-                : 'Для нового индивидуального расписания нужен активный абонемент.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 12,
             ),
-          ),
-        const SizedBox(height: AppSpace.sm),
-        if (widget.loading && widget.plans.isEmpty)
-          const LinearProgressIndicator(color: AppColor.gold)
-        else if (widget.error != null && widget.plans.isEmpty)
-          _errorState(widget.onRetryPlans)
-        else if (widget.plans.isEmpty)
-          _emptyPlans()
-        else ...[
-          for (final plan in active) ...[
-            _planCard(plan, initiallyExpanded: true),
-            const SizedBox(height: AppSpace.sm),
+          const SizedBox(height: AppSpace.sm),
+          if (widget.loading && widget.plans.isEmpty)
+            const LinearProgressIndicator(color: AppColor.gold)
+          else if (widget.error != null && widget.plans.isEmpty)
+            _errorState(widget.onRetryPlans, 'Не удалось загрузить расписание')
+          else if (active.isEmpty && ended.isEmpty)
+            _emptyPlans()
+          else if (!widget.groupMode)
+            _ThreeRecordPager(
+              key: const ValueKey('individual-schedule-plans'),
+              count: active.length + ended.length,
+              itemBuilder: (index) => _planCard(
+                [...active, ...ended][index],
+                initiallyExpanded: false,
+              ),
+            )
+          else ...[
+            for (final plan in active) ...[
+              _planCard(plan, initiallyExpanded: true),
+              const SizedBox(height: AppSpace.sm),
+            ],
+            if (ended.isNotEmpty) _endedPlans(ended),
           ],
-          if (ended.isNotEmpty) _endedPlans(ended),
-        ],
-      ],
-    );
-  }
-
-  Widget _emptyPlans() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        widget.emptyState ??
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: AppSpace.md),
+          if (archived.isNotEmpty) ...[
+            ExpansionTile(
+              key: const PageStorageKey('archived-schedule-plans'),
+              title: Text('Архив (${archived.length})'),
               children: [
-                Text(
-                  'Постоянных расписаний пока нет',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                Text(
-                  'Разовые и ранее созданные занятия всё равно показаны ниже.',
+                _ThreeRecordPager(
+                  count: archived.length,
+                  itemBuilder: (index) =>
+                      _planCard(archived[index], initiallyExpanded: false),
                 ),
               ],
             ),
-        if (widget.fallbackLessons.isNotEmpty) ...[
-          const SizedBox(height: AppSpace.sm),
-          _FallbackLessonTray(
-            lessons: widget.fallbackLessons,
-            onOpenLesson: widget.onOpenFallbackLesson,
-          ),
+            const SizedBox(height: AppSpace.md),
+          ],
+          if (widget.groupMode)
+            _GroupLessonList(
+              lessons: widget.fallbackLessons,
+              onOpen: widget.onOpenFallbackLesson,
+            )
+          else
+            StudentLessonTimelineView(
+              page:
+                  widget.timelinePage ??
+                  const StudentLessonTimelinePage.empty(),
+              loading: widget.timelineLoading,
+              paging: widget.timelinePaging,
+              error: widget.timelineError,
+              onPrevious: widget.onPreviousTimeline,
+              onNext: widget.onNextTimeline,
+              onRetry: widget.onRetryTimeline,
+              onOpen: _openTimelineItem,
+            ),
         ],
-      ],
+      ),
     );
   }
 
-  Widget _endedPlans(List<SchedulePlan> plans) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(AppRadius.control),
-      ),
-      child: ExpansionTile(
-        key: const PageStorageKey('ended-schedule-plans'),
-        initiallyExpanded: false,
-        title: Text(
-          'Завершённые (${plans.length})',
-          style: const TextStyle(fontWeight: FontWeight.w800),
+  Widget _sectionHeader() => LayoutBuilder(
+    builder: (context, constraints) => Row(
+      children: [
+        const Expanded(
+          child: Text(
+            'Постоянные расписания',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+          ),
         ),
-        childrenPadding: const EdgeInsets.fromLTRB(
-          AppSpace.sm,
-          0,
-          AppSpace.sm,
-          AppSpace.sm,
-        ),
+        if (widget.canWrite)
+          constraints.maxWidth < 430
+              ? IconButton(
+                  key: const Key('schedule-plan-add'),
+                  onPressed: widget.canCreatePlan ? widget.onCreate : null,
+                  tooltip: 'Добавить расписание',
+                  icon: const Icon(Icons.add_rounded),
+                )
+              : TextButton.icon(
+                  key: const Key('schedule-plan-add'),
+                  onPressed: widget.canCreatePlan ? widget.onCreate : null,
+                  icon: const Icon(Icons.add_rounded, size: 17),
+                  label: const Text('Добавить расписание'),
+                ),
+      ],
+    ),
+  );
+
+  Widget _emptyPlans() =>
+      widget.emptyState ??
+      const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final plan in plans) ...[
-            _planCard(plan, initiallyExpanded: false),
-            if (plan != plans.last) const SizedBox(height: AppSpace.sm),
-          ],
+          Text(
+            'Постоянных расписаний пока нет',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          Text('Разовые и ранее созданные занятия всё равно показаны ниже.'),
         ],
+      );
+
+  Widget _endedPlans(List<SchedulePlan> plans) => Container(
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(AppRadius.control),
+    ),
+    child: ExpansionTile(
+      key: const PageStorageKey('ended-schedule-plans'),
+      initiallyExpanded: false,
+      title: Text(
+        'Завершённые (${plans.length})',
+        style: const TextStyle(fontWeight: FontWeight.w800),
       ),
-    );
-  }
+      childrenPadding: const EdgeInsets.fromLTRB(
+        AppSpace.sm,
+        0,
+        AppSpace.sm,
+        AppSpace.sm,
+      ),
+      children: [
+        for (final plan in plans) ...[
+          _planCard(plan, initiallyExpanded: false),
+          if (plan != plans.last) const SizedBox(height: AppSpace.sm),
+        ],
+      ],
+    ),
+  );
 
   Widget _planCard(SchedulePlan plan, {required bool initiallyExpanded}) {
     final cs = Theme.of(context).colorScheme;
+    final entries = _sortedRuleEntries(plan);
     return Container(
       key: ValueKey('schedule-plan-${plan.id}'),
       decoration: BoxDecoration(
@@ -208,9 +249,6 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
         key: PageStorageKey('schedule-plan-expansion-${plan.id}'),
         initiallyExpanded: initiallyExpanded,
         maintainState: true,
-        onExpansionChanged: (expanded) {
-          if (expanded) widget.onEnsureTray(plan);
-        },
         title: Row(
           children: [
             Expanded(
@@ -222,11 +260,21 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
               ),
             ),
             const SizedBox(width: AppSpace.sm),
-            _tag(plan.isGroup ? 'Группа' : 'Индивидуально'),
+            _tag(
+              plan.isArchived
+                  ? 'В архиве'
+                  : plan.isGroup
+                  ? 'Группа'
+                  : !plan.isActive
+                  ? 'Завершено'
+                  : plan.activeUntil == null
+                  ? 'Постоянное'
+                  : 'Временное',
+            ),
           ],
         ),
         subtitle: Text(
-          '${_date(plan.activeFrom)} - ${plan.activeUntil == null ? 'без срока' : _date(plan.activeUntil!)}',
+          '${_date(plan.activeFrom)} — ${plan.activeUntil == null ? 'без срока' : _date(plan.activeUntil!)}',
           style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
         ),
         childrenPadding: const EdgeInsets.fromLTRB(
@@ -236,6 +284,20 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
           AppSpace.md,
         ),
         children: [
+          if (plan.isArchived)
+            Text('В архиве: ${plan.archiveReason ?? "Без причины"}'),
+          if (plan.isArchived &&
+              widget.canWrite &&
+              widget.onRestorePlan != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('schedule-plan-restore-${plan.id}'),
+                onPressed: () => widget.onRestorePlan!(plan),
+                icon: const Icon(Icons.unarchive_outlined),
+                label: const Text('Восстановить из архива'),
+              ),
+            ),
           if (!plan.isActive && plan.endReason?.trim().isNotEmpty == true) ...[
             Align(
               alignment: Alignment.centerLeft,
@@ -267,13 +329,33 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
             ),
             const SizedBox(height: AppSpace.xs),
           ],
-          if (plan.currentRows.isEmpty)
+          if (entries.isEmpty && plan.currentRows.isEmpty)
             const Align(
               alignment: Alignment.centerLeft,
-              child: Text('В расписании нет активных строк.'),
+              child: Text('В расписании нет строк.'),
             )
           else
-            for (final row in plan.currentRows) _planRow(plan, row),
+            _ThreeRecordPager(
+              key: ValueKey('schedule-plan-records-${plan.id}'),
+              count: entries.isEmpty ? plan.currentRows.length : entries.length,
+              itemBuilder: (index) => entries.isEmpty
+                  ? _currentPlanRow(plan, plan.currentRows[index])
+                  : _timelineRuleRow(plan, entries[index]),
+            ),
+          if (!plan.isActive &&
+              !plan.isArchived &&
+              !plan.isGroup &&
+              widget.canWrite &&
+              widget.onArchivePlan != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('schedule-plan-archive-${plan.id}'),
+                onPressed: () => widget.onArchivePlan!(plan),
+                icon: const Icon(Icons.archive_outlined),
+                label: const Text('В архив'),
+              ),
+            ),
           if (plan.isActive && widget.canWrite) ...[
             const SizedBox(height: AppSpace.sm),
             Wrap(
@@ -304,89 +386,150 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
               ],
             ),
           ],
-          const Divider(height: AppSpace.lg),
-          _planTray(plan),
         ],
       ),
     );
   }
 
-  Widget _planRow(SchedulePlan plan, SchedulePlanRow row) {
-    final cs = Theme.of(context).colorScheme;
-    final period =
-        '${_date(row.validFrom)} - '
-        '${row.validUntil == null ? 'без срока' : _date(row.validUntil!)}';
-    final values = [
+  Widget _currentPlanRow(
+    SchedulePlan plan,
+    SchedulePlanRow row,
+  ) => _ruleSurface(
+    values: [
       (Icons.person_outline_rounded, row.teacherName ?? 'Педагог не указан'),
       (Icons.calendar_today_outlined, _weekday(row.weekday)),
       (Icons.schedule_rounded, '${row.beginTime} · ${row.durationMinutes} мин'),
-      (Icons.date_range_outlined, period),
+      (
+        Icons.date_range_outlined,
+        '${_date(row.validFrom)} — ${row.validUntil == null ? 'без срока' : _date(row.validUntil!)}',
+      ),
       (Icons.meeting_room_outlined, row.roomName ?? 'Аудитория не указана'),
+      (Icons.info_outline_rounded, 'Действует'),
+    ],
+    actions: _rowActions(plan, row),
+  );
+
+  Widget _timelineRuleRow(SchedulePlan plan, ScheduleRuleTimelineEntry entry) {
+    final currentRow = plan.currentRows.cast<SchedulePlanRow?>().firstWhere(
+      (row) => row?.id == entry.sourceSeriesId || row?.id == entry.id,
+      orElse: () => null,
+    );
+    final isException = entry.kind == ScheduleRuleTimelineKind.datedException;
+    final isCurrent =
+        !isException &&
+        entry.status == ScheduleRuleTimelineStatus.active &&
+        currentRow != null;
+    final dateValue = isException
+        ? '${_weekday(entry.weekday)} · ${_date(entry.scheduledDate ?? entry.activeFrom)}'
+        : _weekday(entry.weekday);
+    final stateValue = isException
+        ? 'Исключение · ${_date(entry.scheduledDate ?? entry.activeFrom)}'
+        : entry.status == ScheduleRuleTimelineStatus.active
+        ? 'Действует'
+        : 'Завершена';
+    return _ruleSurface(
+      key: ValueKey('schedule-rule-timeline-${entry.id}'),
+      values: [
+        (
+          Icons.person_outline_rounded,
+          entry.teacherName ?? 'Педагог не указан',
+        ),
+        (Icons.calendar_today_outlined, dateValue),
+        (
+          Icons.schedule_rounded,
+          '${entry.beginTime} · ${entry.durationMinutes} мин',
+        ),
+        (
+          Icons.date_range_outlined,
+          '${_date(entry.activeFrom)} — ${entry.activeUntil == null ? 'без срока' : _date(entry.activeUntil!)}',
+        ),
+        (Icons.meeting_room_outlined, entry.roomName ?? 'Аудитория не указана'),
+        (Icons.info_outline_rounded, stateValue),
+      ],
+      actions: isCurrent ? _rowActions(plan, currentRow) : const [],
+    );
+  }
+
+  List<Widget> _rowActions(SchedulePlan plan, SchedulePlanRow row) {
+    if (!plan.isActive || !widget.canWrite) return const [];
+    return [
+      IconButton(
+        key: ValueKey('schedule-plan-row-edit-${row.id}'),
+        onPressed: () => widget.onEditPlan(plan, row),
+        tooltip: 'Изменить строку с выбранной даты',
+        icon: const Icon(Icons.edit_outlined, size: 18),
+      ),
+      IconButton(
+        key: ValueKey('remove-plan-row-${row.id}'),
+        onPressed: () => widget.onRemoveRow(plan, row),
+        tooltip: 'Удалить строку',
+        style: IconButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.error,
+        ),
+        icon: const Icon(Icons.delete_outline_rounded, size: 18),
+      ),
     ];
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpace.sm),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 720;
-          final editable = plan.isActive && widget.canWrite;
-          final contentWidth =
-              constraints.maxWidth - AppSpace.sm * 2 - (editable ? 48 : 0);
-          final content = compact
-              ? Wrap(
-                  spacing: AppSpace.md,
+  }
+
+  Widget _ruleSurface({
+    Key? key,
+    required List<(IconData, String)> values,
+    required List<Widget> actions,
+  }) => Padding(
+    padding: const EdgeInsets.only(top: AppSpace.sm),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1040
+            ? 3
+            : constraints.maxWidth >= 620
+            ? 2
+            : 1;
+        final actionWidth = actions.length * 48.0;
+        final available = (constraints.maxWidth - actionWidth - AppSpace.sm * 2)
+            .clamp(1.0, double.infinity);
+        final cellWidth = (available - AppSpace.sm * (columns - 1)) / columns;
+        return Container(
+          key: key,
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpace.sm),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(AppRadius.control),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: AppSpace.sm,
                   runSpacing: AppSpace.sm,
                   children: [
                     for (final value in values)
                       SizedBox(
-                        width: contentWidth < 430
-                            ? contentWidth
-                            : (contentWidth - AppSpace.md) / 2,
+                        width: cellWidth,
                         child: _rowValue(value.$1, value.$2),
                       ),
                   ],
-                )
-              : Row(
-                  children: [
-                    for (final value in values)
-                      Expanded(child: _rowValue(value.$1, value.$2)),
-                  ],
-                );
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpace.sm),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: content),
-                  if (editable)
-                    IconButton(
-                      key: ValueKey('schedule-plan-row-edit-${row.id}'),
-                      onPressed: () => widget.onEditPlan(plan, row),
-                      tooltip: 'Изменить строку с выбранной даты',
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                    ),
-                ],
+                ),
               ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+              if (actions.isNotEmpty)
+                Row(mainAxisSize: MainAxisSize.min, children: actions),
+            ],
+          ),
+        );
+      },
+    ),
+  );
 
   Widget _rowValue(IconData icon, String label) => Row(
-    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Icon(icon, size: 15, color: AppColor.gold),
       const SizedBox(width: AppSpace.xs),
-      Flexible(
+      Expanded(
         child: Text(
           label,
-          maxLines: 2,
+          maxLines: 3,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontSize: 12),
         ),
@@ -394,130 +537,13 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
     ],
   );
 
-  Widget _planTray(SchedulePlan plan) {
-    final page = widget.trays[plan.id];
-    if (widget.loadingTrayIds.contains(plan.id) && page == null) {
-      return const LinearProgressIndicator(color: AppColor.gold);
-    }
-    final error = widget.trayErrors[plan.id];
-    if (error != null && page == null) {
-      return _errorState(() => widget.onRetryTray(plan));
-    }
-    if (page == null) {
-      return TextButton(
-        onPressed: () => widget.onEnsureTray(plan),
-        child: const Text('Показать занятия'),
-      );
-    }
-    final firstItem = page.items.firstOrNull;
-    final lastItem = page.items.lastOrNull;
-    final pageRange = firstItem == null
-        ? null
-        : firstItem.id == lastItem?.id
-        ? '${_date(firstItem.localDate)} · ${firstItem.localTime}'
-        : '${_date(firstItem.localDate)} - ${_date(lastItem!.localDate)} · ${page.items.length}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Лента занятий',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-                  ),
-                  if (plan.scheduledLessonCount != null)
-                    Text(
-                      'Запланировано: ${plan.scheduledLessonCount}'
-                      '${plan.coveredLessonCount == null ? '' : ' · Покрыто абонементом: ${plan.coveredLessonCount}'}',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  if (pageRange != null)
-                    Text(
-                      pageRange,
-                      key: ValueKey('schedule-plan-tray-range-${plan.id}'),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 10,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            IconButton(
-              key: ValueKey('schedule-plan-tray-previous-${plan.id}'),
-              onPressed:
-                  page.hasPrevious && !widget.loadingTrayIds.contains(plan.id)
-                  ? () => widget.onPageTray(plan, 'previous')
-                  : null,
-              tooltip: 'Предыдущие занятия',
-              icon: const Icon(Icons.chevron_left_rounded),
-            ),
-            IconButton(
-              key: ValueKey('schedule-plan-tray-next-${plan.id}'),
-              onPressed:
-                  page.hasNext && !widget.loadingTrayIds.contains(plan.id)
-                  ? () => widget.onPageTray(plan, 'next')
-                  : null,
-              tooltip: 'Следующие занятия',
-              icon: const Icon(Icons.chevron_right_rounded),
-            ),
-          ],
-        ),
-        if (page.items.isEmpty)
-          Text(
-            'Занятий в этом расписании пока нет.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 12,
-            ),
-          )
-        else
-          _LessonTrayGrid(
-            key: ValueKey('schedule-plan-tray-${plan.id}'),
-            storageKey:
-                '${plan.id}:${firstItem?.id ?? 'empty'}:${lastItem?.id ?? 'empty'}',
-            items: page.items,
-            onOpen: _openTrayItem,
-          ),
-        if (error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpace.xs),
-            child: Row(
-              key: ValueKey('schedule-plan-tray-page-error-${plan.id}'),
-              children: [
-                Expanded(
-                  child: Text(
-                    'Не удалось перелистнуть занятия.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  key: ValueKey('schedule-plan-tray-retry-${plan.id}'),
-                  onPressed: () => widget.onRetryTray(plan),
-                  child: const Text('Повторить'),
-                ),
-              ],
-            ),
-          ),
-        if (widget.loadingTrayIds.contains(plan.id))
-          const LinearProgressIndicator(color: AppColor.gold),
-      ],
-    );
-  }
-
-  Future<void> _openTrayItem(SchedulePlanTrayItem item) async {
-    if (!widget.canWrite || !_openingLessonIds.add(item.id)) return;
+  Future<void> _openTimelineItem(StudentLessonTimelineItem item) async {
+    final actionableLessonId = item.reschedule.actionableLessonId;
+    if (!_openingLessonIds.add(actionableLessonId)) return;
     try {
-      await widget.onOpenTrayItem(item);
+      await widget.onOpenTimelineItem(actionableLessonId);
     } finally {
-      _openingLessonIds.remove(item.id);
+      _openingLessonIds.remove(actionableLessonId);
     }
   }
 
@@ -538,11 +564,11 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
     ),
   );
 
-  Widget _errorState(VoidCallback retry) => Row(
+  Widget _errorState(VoidCallback retry, String message) => Row(
     children: [
       Expanded(
         child: Text(
-          'Не удалось загрузить расписание',
+          message,
           style: TextStyle(color: Theme.of(context).colorScheme.error),
         ),
       ),
@@ -551,150 +577,575 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
   );
 }
 
-class _LessonTrayGrid extends StatelessWidget {
-  const _LessonTrayGrid({
+class _ThreeRecordPager extends StatefulWidget {
+  const _ThreeRecordPager({
     super.key,
-    required this.storageKey,
-    required this.items,
-    required this.onOpen,
+    required this.count,
+    required this.itemBuilder,
   });
+  final int count;
+  final Widget Function(int index) itemBuilder;
+  @override
+  State<_ThreeRecordPager> createState() => _ThreeRecordPagerState();
+}
 
-  final String storageKey;
-  final List<SchedulePlanTrayItem> items;
-  final ValueChanged<SchedulePlanTrayItem> onOpen;
+class _ThreeRecordPagerState extends State<_ThreeRecordPager> {
+  int _page = 0;
+  // Paging owns its offset. The enclosing ExpansionTile stores a boolean in
+  // PageStorage, so this scroll must neither read nor overwrite that entry.
+  final _scroll = ScrollController(keepScrollOffset: false);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _changePage(int page) {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    setState(() => _page = page);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final contentColumns = max(1, (items.length / 2).ceil());
-        final visibleColumns = ((constraints.maxWidth + 4) / 82).floor().clamp(
-          1,
-          contentColumns,
-        );
-        final tileWidth =
-            (constraints.maxWidth - (visibleColumns - 1) * 4) / visibleColumns;
-        return SizedBox(
-          key: const Key('client-lesson-date-tray'),
-          height: 84,
-          child: GridView.builder(
-            key: PageStorageKey('client-lesson-date-tray-$storageKey'),
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.zero,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisExtent: tileWidth,
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
+    final pages = math.max(1, (widget.count / 3).ceil());
+    _page = _page.clamp(0, pages - 1);
+    final start = _page * 3;
+    final end = math.min(start + 3, widget.count);
+    final records = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = start; i < end; i++) ...[
+          widget.itemBuilder(i),
+          if (i < end - 1) const SizedBox(height: AppSpace.sm),
+        ],
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (pages > 1)
+          SizedBox(
+            // Paging and expanding records must not resize the client card.
+            height: 320 * MediaQuery.textScalerOf(context).scale(16) / 16,
+            child: Scrollbar(
+              controller: _scroll,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                primary: false,
+                child: records,
+              ),
             ),
-            itemCount: items.length,
-            itemBuilder: (context, index) => _TrayTile(
-              item: items[index],
-              onTap: () => onOpen(items[index]),
-            ),
+          )
+        else
+          records,
+        if (pages > 1)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                '${start + 1}–$end из ${widget.count}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              IconButton(
+                tooltip: 'Предыдущие записи',
+                onPressed: _page > 0 ? () => _changePage(_page - 1) : null,
+                icon: const Icon(Icons.chevron_left_rounded),
+              ),
+              IconButton(
+                tooltip: 'Следующие записи',
+                onPressed: _page < pages - 1
+                    ? () => _changePage(_page + 1)
+                    : null,
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
           ),
-        );
-      },
+      ],
     );
   }
 }
 
-class _TrayTile extends StatelessWidget {
-  const _TrayTile({required this.item, required this.onTap});
+class StudentLessonTimelineView extends StatefulWidget {
+  const StudentLessonTimelineView({
+    super.key,
+    required this.page,
+    required this.loading,
+    required this.paging,
+    required this.error,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onRetry,
+    required this.onOpen,
+  });
+  final StudentLessonTimelinePage page;
+  final bool loading;
+  final bool paging;
+  final String? error;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onRetry;
+  final ValueChanged<StudentLessonTimelineItem> onOpen;
+  @override
+  State<StudentLessonTimelineView> createState() =>
+      _StudentLessonTimelineViewState();
+}
 
-  final SchedulePlanTrayItem item;
-  final VoidCallback onTap;
+class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
+  Set<String> _settlementTypes = {};
+  final ScrollController _scroll = ScrollController();
+  bool _previousPageRequested = false;
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_scrollChanged);
+  }
+
+  void _scrollChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant StudentLessonTimelineView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldIds = oldWidget.page.items.map((item) => item.id).join('|');
+    final newIds = widget.page.items.map((item) => item.id).join('|');
+    if (oldIds != newIds ||
+        oldWidget.page.windowStart != widget.page.windowStart) {
+      final showEnd = _previousPageRequested;
+      _previousPageRequested = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) {
+          _scroll.jumpTo(showEnd ? _scroll.position.maxScrollExtent : 0);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _move(bool forward, double step, double maxOffset) {
+    final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+    if (_scroll.hasClients && (forward ? offset < maxOffset - 1 : offset > 1)) {
+      _scroll.animateTo(
+        (offset + (forward ? step : -step)).clamp(0.0, maxOffset),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _previousPageRequested = !forward;
+      (forward ? widget.onNext : widget.onPrevious)();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
+      final width = math.max(1.0, constraints.maxWidth - AppSpace.md * 2 - 2);
+      final columns = math.min(
+        15,
+        math.max(1, ((width + 4) / (39 * scale + 4)).floor()),
+      );
+      final tileWidth = (width - (columns - 1) * 4) / columns;
+      final start = widget.page.windowStart;
+      final visibleItems = widget.page.items
+          .where(
+            (item) =>
+                _settlementTypes.isEmpty ||
+                _settlementTypes.contains(item.settlement.settlementTypeKey),
+          )
+          .toList();
+      final byDate = <DateTime, List<StudentLessonTimelineItem>>{};
+      for (final item in visibleItems) {
+        final local = item.scheduledAt.toLocal();
+        final date = DateTime(local.year, local.month, local.day);
+        (byDate[date] ??= []).add(item);
+      }
+      final dates = byDate.keys.toList()..sort();
+      final days = start == null
+          ? null
+          : [
+              for (final date in dates)
+                byDate[date]!..sort((a, b) {
+                  final time = a.scheduledAt.compareTo(b.scheduledAt);
+                  return time != 0 ? time : a.id.compareTo(b.id);
+                }),
+            ];
+      final contentColumns = days == null
+          ? (visibleItems.length / 2).ceil()
+          : days.isEmpty
+          ? 0
+          : math.max(15, (days.length / 2).ceil());
+      final rowHeight = 40 * scale;
+      final maxOffset = math.max(
+        0.0,
+        contentColumns * (tileWidth + 4) - 4 - width,
+      );
+      final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+      final busy = widget.paging || widget.loading;
+      return Container(
+        key: const Key('student-lesson-timeline'),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(color: AppColor.goldLine),
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        padding: const EdgeInsets.all(AppSpace.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Лента занятий',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('student-lesson-timeline-previous'),
+                  onPressed: !busy && (offset > 1 || widget.page.hasPrevious)
+                      ? () => _move(false, columns * (tileWidth + 4), maxOffset)
+                      : null,
+                  tooltip: 'Предыдущие занятия',
+                  icon: const Icon(Icons.chevron_left_rounded),
+                ),
+                IconButton(
+                  key: const Key('student-lesson-timeline-next'),
+                  onPressed:
+                      !busy && (offset < maxOffset - 1 || widget.page.hasNext)
+                      ? () => _move(true, columns * (tileWidth + 4), maxOffset)
+                      : null,
+                  tooltip: 'Следующие занятия',
+                  icon: const Icon(Icons.chevron_right_rounded),
+                ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                key: const Key('timeline-settlement-legend'),
+                width: 360,
+                child: SettlementTypeFilter(
+                  selected: _settlementTypes,
+                  labels: {
+                    ...settlementTypeLabels,
+                    for (final item in widget.page.items)
+                      if (item.settlement.settlementTypeKey != null &&
+                          !settlementTypeLabels.containsKey(
+                            item.settlement.settlementTypeKey,
+                          ))
+                        item.settlement.settlementTypeKey!:
+                            'Другой тип списания',
+                  },
+                  onChanged: (value) =>
+                      setState(() => _settlementTypes = value),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            if (widget.loading && widget.page.items.isEmpty)
+              const LinearProgressIndicator(color: AppColor.gold)
+            else if (widget.error != null && widget.page.items.isEmpty)
+              _timelineError(context)
+            else if (contentColumns == 0)
+              Text(
+                _settlementTypes.isNotEmpty
+                    ? 'В этом периоде нет занятий с выбранными типами списания.'
+                    : start == null
+                    ? 'Занятий пока нет.'
+                    : 'В этом периоде занятий нет.',
+              )
+            else if (days != null)
+              Scrollbar(
+                controller: _scroll,
+                child: SingleChildScrollView(
+                  key: const Key('student-lesson-timeline-grid'),
+                  controller: _scroll,
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: contentColumns * (tileWidth + 4) - 4,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (
+                          var row = 0;
+                          row * contentColumns < days.length;
+                          row++
+                        )
+                          Padding(
+                            padding: EdgeInsets.only(top: row == 0 ? 0 : 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (
+                                  var index = row * contentColumns;
+                                  index <
+                                      math.min(
+                                        (row + 1) * contentColumns,
+                                        days.length,
+                                      );
+                                  index++
+                                ) ...[
+                                  if (index > row * contentColumns)
+                                    const SizedBox(width: 4),
+                                  SizedBox(
+                                    width: tileWidth,
+                                    child: _StudentTimelineDay(
+                                      date: dates[index],
+                                      items: days[index],
+                                      scale: scale,
+                                      onOpen: widget.onOpen,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                key: const Key('student-lesson-timeline-grid'),
+                height: rowHeight * 2 + 4,
+                child: Scrollbar(
+                  controller: _scroll,
+                  child: GridView.builder(
+                    controller: _scroll,
+                    primary: false,
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.zero,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisExtent: tileWidth,
+                      mainAxisSpacing: 4,
+                      crossAxisSpacing: 4,
+                    ),
+                    itemCount: contentColumns * 2,
+                    itemBuilder: (context, index) {
+                      final orderedIndex =
+                          (index % 2) * contentColumns + index ~/ 2;
+                      if (days != null) {
+                        if (orderedIndex >= days.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return _StudentTimelineDay(
+                          date: dates[orderedIndex],
+                          items: days[orderedIndex],
+                          scale: scale,
+                          onOpen: widget.onOpen,
+                        );
+                      }
+                      if (orderedIndex >= visibleItems.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final item = visibleItems[orderedIndex];
+                      return _StudentTimelineItem(
+                        item: item,
+                        onTap: () => widget.onOpen(item),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            if (widget.error != null && widget.page.items.isNotEmpty)
+              _timelineError(context),
+            if (widget.paging)
+              const LinearProgressIndicator(color: AppColor.gold),
+          ],
+        ),
+      );
+    },
+  );
+  Widget _timelineError(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          widget.error ?? 'Не удалось загрузить занятия.',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.error,
+            fontSize: 12,
+          ),
+        ),
+      ),
+      TextButton(onPressed: widget.onRetry, child: const Text('Повторить')),
+    ],
+  );
+}
+
+class _StudentTimelineDay extends StatelessWidget {
+  const _StudentTimelineDay({
+    required this.date,
+    required this.items,
+    required this.scale,
+    required this.onOpen,
+  });
+  final DateTime date;
+  final List<StudentLessonTimelineItem> items;
+  final double scale;
+  final ValueChanged<StudentLessonTimelineItem> onOpen;
 
   @override
   Widget build(BuildContext context) {
+    const weekdays = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+    return Column(
+      key: ValueKey(
+        'student-timeline-date-${DateFormat('yyyy-MM-dd').format(date)}',
+      ),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 24 * scale,
+          child: Center(
+            child: Text(
+              weekdays[date.weekday - 1],
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        for (final item in items)
+          Padding(
+            padding: EdgeInsets.only(bottom: 4 * scale),
+            child: SizedBox(
+              height: 40 * scale,
+              child: _StudentTimelineItem(
+                item: item,
+                onTap: () => onOpen(item),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StudentTimelineItem extends StatelessWidget {
+  const _StudentTimelineItem({required this.item, required this.onTap});
+  final StudentLessonTimelineItem item;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
     final state = LessonStateProjection.fromMap({
-      'lifecycle_state': item.state,
+      'lifecycle_state': _lifecycleWire(item.lifecycleState),
+      if (item.settlement.coveredBySubscription)
+        'settlement_markers': const [
+          {'key': 'subscription_reserved'},
+        ],
     });
-    final marker = item.settlementMarkers.firstOrNull;
-    final covered = lessonHasSubscriptionCoverage({
-      'settlementMarkers': item.settlementMarkers,
-    });
-    final accent = state.token.accent;
-    final markerAccent = marker == null
-        ? accent
-        : lessonDecisionColorToken(marker['colorToken']?.toString());
-    final markerLabels = item.settlementMarkers
-        .map((value) => value['label']?.toString())
-        .whereType<String>();
-    final relationLabel = _relationMarkerLabel(item.relationMarker);
-    final tooltip = [
-      '${_date(item.localDate)} ${item.localTime}',
+    final local = item.scheduledAt.toLocal();
+    final successor =
+        item.lifecycleState == StudentLessonLifecycleState.rescheduled &&
+        item.reschedule.successorId != null;
+    final noChargeReason = switch (item.settlement.settlementTypeKey) {
+      'unpaid_miss' => 'Неоплачиваемый пропуск. Абонемент не расходуется.',
+      'free_lesson' => 'Бесплатное занятие. Абонемент не расходуется.',
+      _ => null,
+    };
+    final description = [
+      _originLabel(item.origin.kind),
+      '${DateFormat('dd.MM.yyyy HH:mm').format(local)} · ${item.durationMinutes} мин',
       state.label,
-      ...markerLabels,
-      ?relationLabel,
-      ?item.teacherName,
-      ?item.roomName,
+      ?LessonSettlementCorner.labelFor(item.settlement.settlementTypeKey),
+      if (state.coveredBySubscription) 'Абонемент',
+      if (!state.coveredBySubscription && noChargeReason != null)
+        noChargeReason,
+      item.teacher?.name ?? 'Педагог не указан',
+      item.room?.name ?? 'Аудитория не указана',
+      if (item.reschedule.predecessorId != null) 'Новое занятие после переноса',
+      if (successor) 'Открыть актуальное занятие',
     ].join('\n');
     return Tooltip(
-      message: tooltip,
+      message: description,
       child: InkWell(
-        key: ValueKey('client-lesson-${item.id}'),
+        key: ValueKey('student-timeline-${item.id}'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
-        child: Container(
-          decoration: BoxDecoration(
-            color: state.token.soft,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: accent.withValues(alpha: 0.55)),
-          ),
-          child: Stack(
-            children: [
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${_shortDate(item.localDate)} · ${item.localTime}',
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: accent,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                      ),
+        child: Semantics(
+          label: description,
+          button: true,
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: state.token.soft,
+              border: Border.all(
+                color: state.token.accent.withValues(alpha: 0.55),
+              ),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: LessonSettlementCorner(
+              settlementTypeKey: item.settlement.settlementTypeKey,
+              timeline: true,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    DateFormat('dd.MM').format(local),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: state.token.accent,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(_stateIcon(item.state), size: 10, color: accent),
-                        if (covered) ...[
+                        Icon(
+                          state.token.icon,
+                          size: 10,
+                          color: state.token.accent,
+                        ),
+                        if (state.coveredBySubscription) ...[
                           const SizedBox(width: 4),
-                          const LessonSubscriptionBadge(compact: true),
+                          const LessonSubscriptionBadge(
+                            compact: true,
+                            iconOnly: true,
+                          ),
+                        ],
+                        if (!state.coveredBySubscription &&
+                            noChargeReason != null) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.money_off_rounded,
+                            key: ValueKey(
+                              'student-timeline-no-charge-${item.id}',
+                            ),
+                            size: 10,
+                            color: state.token.accent,
+                          ),
+                        ],
+                        if (successor) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.redo_rounded,
+                            key: ValueKey(
+                              'student-timeline-successor-${item.id}',
+                            ),
+                            size: 10,
+                            color: state.token.accent,
+                          ),
                         ],
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              if (marker != null && !covered)
-                Positioned(
-                  top: 2,
-                  right: 3,
-                  child: Icon(
-                    Icons.sell_outlined,
-                    size: 9,
-                    color: markerAccent,
-                  ),
-                ),
-              if (item.relationMarker != 'none')
-                Positioned(
-                  bottom: 1,
-                  left: 2,
-                  child: Icon(
-                    item.relationMarker == 'source'
-                        ? Icons.call_split_rounded
-                        : Icons.call_merge_rounded,
-                    size: 9,
-                    color: accent,
-                  ),
-                ),
-            ],
+            ),
           ),
         ),
       ),
@@ -702,70 +1153,71 @@ class _TrayTile extends StatelessWidget {
   }
 }
 
-class _FallbackLessonTray extends StatelessWidget {
-  const _FallbackLessonTray({required this.lessons, this.onOpenLesson});
+class _GroupLessonList extends StatelessWidget {
+  const _GroupLessonList({required this.lessons, required this.onOpen});
 
   final List<Map<String, dynamic>> lessons;
-  final ValueChanged<Map<String, dynamic>>? onOpenLesson;
+  final ValueChanged<Map<String, dynamic>>? onOpen;
 
   @override
-  Widget build(BuildContext context) {
-    final sorted =
-        lessons
-            .map((lesson) {
-              final raw = lesson['scheduled_at'] ?? lesson['scheduledAt'];
-              final scheduled = DateTime.tryParse(raw?.toString() ?? '');
-              if (scheduled == null) return null;
-              final projection = LessonStateProjection.fromMap(lesson);
-              return SchedulePlanTrayItem(
-                id: lesson['id']?.toString() ?? '',
-                scheduledAt: scheduled.toIso8601String(),
-                localDate: DateFormat('yyyy-MM-dd').format(scheduled.toLocal()),
-                localTime: DateFormat('HH:mm').format(scheduled.toLocal()),
-                state: projection.state,
-                settlementMarkers: [
-                  if (lessonHasSubscriptionCoverage(lesson))
-                    {
-                      'key': 'subscription_reserved',
-                      'label': 'Покрыто абонементом',
-                      'colorToken': 'success',
-                    },
-                  if ((lesson['paid_amount'] ?? lesson['paidAmount']) != null)
-                    {'label': 'Есть платёж', 'colorToken': 'success'},
-                  if ((lesson['is_trial'] ?? lesson['isTrial']) == true)
-                    {'label': 'Пробное занятие', 'colorToken': 'warning'},
-                ],
-                relationMarker: 'none',
-                predecessorId: null,
-                successorId: null,
-                teacherName: (lesson['teacher_name'] ?? lesson['teacherName'])
-                    ?.toString(),
-                roomName: (lesson['room_name'] ?? lesson['roomName'])
-                    ?.toString(),
-              );
-            })
-            .whereType<SchedulePlanTrayItem>()
-            .toList()
-          ..sort(
-            (left, right) => left.scheduledAt.compareTo(right.scheduledAt),
-          );
-    final rawById = {
-      for (final lesson in lessons) lesson['id']?.toString(): lesson,
-    };
-    return _LessonTrayGrid(
-      storageKey: 'fallback-lessons',
-      items: sorted,
-      onOpen: (item) {
-        final lesson = rawById[item.id];
-        if (lesson != null) onOpenLesson?.call(lesson);
-      },
-    );
+  Widget build(BuildContext context) => Container(
+    key: const Key('group-lesson-list'),
+    width: double.infinity,
+    padding: const EdgeInsets.all(AppSpace.md),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surface,
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(AppRadius.control),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Занятия группы',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        if (lessons.isEmpty)
+          const Text('Занятий группы пока нет.')
+        else
+          for (final lesson in lessons)
+            ListTile(
+              key: ValueKey('group-lesson-${lesson['id']}'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(_groupLessonDate(lesson)),
+              subtitle: Text(
+                (lesson['teacher_name'] ??
+                        lesson['teacherName'] ??
+                        'Педагог не указан')
+                    .toString(),
+              ),
+              onTap: onOpen == null ? null : () => onOpen!(lesson),
+            ),
+      ],
+    ),
+  );
+}
+
+List<ScheduleRuleTimelineEntry> _sortedRuleEntries(SchedulePlan plan) {
+  final byId = <String, ScheduleRuleTimelineEntry>{};
+  for (final entry in [...plan.ruleTimeline, ...plan.exceptions]) {
+    byId[entry.id] = entry;
   }
+  final entries = byId.values.toList();
+  entries.sort((left, right) {
+    final bucket = left.sortBucket.compareTo(right.sortBucket);
+    if (bucket != 0) return bucket;
+    final at = left.sortBucket == 3
+        ? right.sortAt.compareTo(left.sortAt)
+        : left.sortAt.compareTo(right.sortAt);
+    return at != 0 ? at : left.id.compareTo(right.id);
+  });
+  return entries;
 }
 
 String _date(String value) {
   final parsed = DateTime.tryParse(value);
-  return parsed == null ? value : DateFormat('dd.MM.yyyy').format(parsed);
+  return parsed == null ? value : DateFormat('d.MM.yyyy').format(parsed);
 }
 
 String _dateTime(String value) {
@@ -775,24 +1227,34 @@ String _dateTime(String value) {
       : DateFormat('dd.MM.yyyy HH:mm').format(parsed.toLocal());
 }
 
-String _shortDate(String value) {
-  final parsed = DateTime.tryParse(value);
-  return parsed == null ? value : DateFormat('d.MM').format(parsed);
+String _weekday(int value) => const [
+  'понедельник',
+  'вторник',
+  'среда',
+  'четверг',
+  'пятница',
+  'суббота',
+  'воскресенье',
+][value.clamp(1, 7) - 1];
+
+String _originLabel(StudentLessonOriginKind kind) => switch (kind) {
+  StudentLessonOriginKind.manual => 'Разовое занятие',
+  StudentLessonOriginKind.schedulePlan => 'Постоянное расписание',
+  StudentLessonOriginKind.oneOffException => 'Исключение расписания',
+};
+
+String _lifecycleWire(StudentLessonLifecycleState state) => switch (state) {
+  StudentLessonLifecycleState.scheduled => 'scheduled',
+  StudentLessonLifecycleState.settlementPending => 'settlement_pending',
+  StudentLessonLifecycleState.successfullyCompleted => 'successfully_completed',
+  StudentLessonLifecycleState.cancelled => 'cancelled',
+  StudentLessonLifecycleState.rescheduled => 'rescheduled',
+};
+
+String _groupLessonDate(Map<String, dynamic> lesson) {
+  final raw = lesson['scheduled_at'] ?? lesson['scheduledAt'];
+  final parsed = DateTime.tryParse(raw?.toString() ?? '');
+  return parsed == null
+      ? 'Дата не указана'
+      : DateFormat('dd.MM.yyyy HH:mm').format(parsed.toLocal());
 }
-
-String? _relationMarkerLabel(String marker) => switch (marker) {
-  'source' => 'Перенос: исходное занятие',
-  'successor' => 'Перенос: новое занятие',
-  _ => null,
-};
-
-String _weekday(int value) =>
-    const ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][value.clamp(1, 7) - 1];
-
-IconData _stateIcon(String state) => switch (state) {
-  'successfully_completed' => Icons.check_rounded,
-  'settlement_pending' => Icons.hourglass_top_rounded,
-  'cancelled' => Icons.close_rounded,
-  'rescheduled' => Icons.swap_horiz_rounded,
-  _ => Icons.event_rounded,
-};

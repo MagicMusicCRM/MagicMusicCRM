@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -308,14 +309,14 @@ void main() {
         expect(queries.last.search, 'сводка');
 
         tester
-            .widget<DropdownButton<String>>(
+            .widget<AppDropdownButton<String>>(
               find.byKey(const Key('shared-task-priority-filter')),
             )
             .onChanged!('high');
         expect(queries.last.priority, 'high');
 
         tester
-            .widget<DropdownButton<String>>(
+            .widget<AppDropdownButton<String>>(
               find.byKey(const Key('shared-task-scope-filter')),
             )
             .onChanged!('branch');

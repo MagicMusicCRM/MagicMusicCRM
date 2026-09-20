@@ -21,5 +21,7 @@ describe("LeadCardService", () => {
     );
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     expect(query).toHaveBeenCalledTimes(1);
+    expect(String(query.mock.calls[0][0])).toContain("app.staff_branch_assignments");
+    expect(query.mock.calls[0][1]).toEqual(["lead-a", actor.userId]);
   });
 });

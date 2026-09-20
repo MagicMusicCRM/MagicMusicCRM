@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -33,6 +35,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   late final StudentsBoardController _controller;
   late final StudentsBoardAutoScrollController _autoScroll;
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -90,6 +93,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _controller
       ..removeListener(_onControllerChanged)
       ..dispose();
@@ -104,6 +108,14 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     _controller.resetPages();
     ref.invalidate(studentFunnelProvider(branchId));
     ref.invalidate(studentBoardProvider(branchId));
+  }
+
+  void _setSearchQuery(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => _controller.setQuery(value),
+    );
   }
 
   Future<void> _refreshAndReadback(String branchId) async {
@@ -193,14 +205,25 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
         error: (_, _) => contentState = StudentsBoardContentState.error,
         data: (page) {
           contentState = StudentsBoardContentState.data;
+          final searched = state.query.isEmpty
+              ? const AsyncValue<List<Map<String, dynamic>>>.data([])
+              : ref.watch(
+                  studentBoardSearchProvider((
+                    branchId: branchId,
+                    query: state.query,
+                  )),
+                );
+          final visibleStudents = state.query.isEmpty
+              ? [...page.students, ...state.extraStudents]
+              : searched.value ?? page.students;
+          if (state.query.isNotEmpty && searched.hasError) {
+            contentState = StudentsBoardContentState.error;
+          }
           initialStudents = page.students;
           columns = projectStudentsBoard(
-            groupStudentsByStatus([
-              ...page.students,
-              ...state.extraStudents,
-            ], page.stages),
+            groupStudentsByStatus(visibleStudents, page.stages),
             optimisticStatuses: state.optimisticStatuses,
-            query: state.query,
+            query: '',
           );
           nextCursor =
               state.extraStudents.isEmpty && state.nextStudentCursor == null
@@ -220,8 +243,9 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       transitions: columns.transitions,
       searchController: _searchController,
       scrollController: _autoScroll.scrollController,
-      onSearchChanged: _controller.setQuery,
+      onSearchChanged: _setSearchQuery,
       onClearSearch: () {
+        _searchDebounce?.cancel();
         _searchController.clear();
         _controller.setQuery('');
       },

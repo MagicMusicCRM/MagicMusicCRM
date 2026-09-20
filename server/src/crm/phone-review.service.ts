@@ -6,6 +6,11 @@ import {
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
+import {
+  branchIdExpr,
+  currentActorRoleSql,
+  managerBranchScopeSql,
+} from "./branch-scope";
 import { CrmPolicy } from "./crm.policy";
 import {
   PhoneReviewResolutionAction,
@@ -28,10 +33,47 @@ export class PhoneReviewService {
     private readonly audit: AuditService,
   ) {}
 
+  private actorScopeSql(queueAlias: string, actorExpression: string): string {
+    const role = currentActorRoleSql(actorExpression);
+    return `(
+      ${role}::text <> all(array['admin', 'manager']::text[])
+      or (
+        ${queueAlias}.entity_type = 'lead'
+        and exists (
+          select 1 from app.leads scoped_lead
+          where scoped_lead.id = ${queueAlias}.entity_id
+            and scoped_lead.deleted_at is null
+            and ${managerBranchScopeSql({
+              roleExpression: role,
+              userIdExpression: actorExpression,
+              branchExpression: branchIdExpr("scoped_lead"),
+            })}
+        )
+      )
+      or (
+        ${queueAlias}.entity_type = 'profile'
+        and exists (
+          select 1 from app.students scoped_student
+          where scoped_student.profile_id = ${queueAlias}.entity_id
+            and scoped_student.deleted_at is null
+            and ${managerBranchScopeSql({
+              roleExpression: role,
+              userIdExpression: actorExpression,
+              branchExpression: branchIdExpr("scoped_student"),
+            })}
+        )
+      )
+    )`;
+  }
+
   async countPhoneReviewQueue(actor: ActorContext): Promise<{ count: number }> {
     this.policy.assertCanReadOperationalData(actor);
     const result = await this.database.query<{ count: string }>(
-      `select count(*)::text as count from app.phone_review_queue where resolved_at is null`,
+      `select count(*)::text as count
+         from app.phone_review_queue review
+        where review.resolved_at is null
+          and ${this.actorScopeSql("review", "$1")}`,
+      [actor.userId],
     );
     return { count: Number(result.rows[0]?.count ?? 0) };
   }
@@ -48,11 +90,12 @@ export class PhoneReviewService {
       created_at: string;
     }>(
       `select id, entity_type, entity_id, raw_phone, reason, created_at
-         from app.phone_review_queue
-        where resolved_at is null
+         from app.phone_review_queue review
+        where review.resolved_at is null
+          and ${this.actorScopeSql("review", "$1")}
         order by created_at desc
-        limit $1`,
-      [capped],
+        limit $2`,
+      [actor.userId, capped],
     );
     return {
       items: result.rows.map((row) => ({
@@ -96,13 +139,14 @@ export class PhoneReviewService {
         entity_id: string;
       }>(
         `
-          select id, entity_type, entity_id
-          from app.phone_review_queue
-          where id = $1 and resolved_at is null
+          select review.id, review.entity_type, review.entity_id
+          from app.phone_review_queue review
+          where review.id = $1 and review.resolved_at is null
+            and ${this.actorScopeSql("review", "$2")}
           limit 1
-          for update
+          for update of review
         `,
-        [id],
+        [id, actor.userId],
       );
       const current = currentResult.rows[0];
       if (!current) {

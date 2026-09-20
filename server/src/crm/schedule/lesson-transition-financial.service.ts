@@ -12,16 +12,42 @@ import {
   type LessonSettlementPort,
   type LessonSettlementResult,
 } from "../commerce/lesson-settlement.port";
-import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import {
+  type LessonSettlementCoverageSnapshot,
+  SubscriptionReservationService,
+} from "../commerce/subscription-reservation.service";
 import {
   stableTransitionId,
   targetTransitionState,
 } from "./lesson-transition.rules";
 import type {
+  PreparedRescheduleFinancials,
   TransitionOperation,
-  TransitionPreviewDto,
+  ResolvedTransitionDto,
+  ResolvedRescheduleTransitionDto,
   TransitionSource,
 } from "./lesson-transition.types";
+
+type ConfigurationRevisionIds = {
+  settlementRevisionId: string;
+  compensationRevisionId: string;
+};
+
+export interface RescheduleFinancialCommitInput
+  extends PreparedRescheduleFinancials {
+  actor: ActorContext;
+  reasonText?: string;
+  sourceConfigurationRevisionIds: ConfigurationRevisionIds;
+  successorConfigurationRevisionIds: ConfigurationRevisionIds;
+  coverage: LessonSettlementCoverageSnapshot;
+  correctionId: string;
+}
+
+export interface CommittedRescheduleFinancials {
+  sourceSettlement: LessonSettlementResult;
+  successorPlanId: string;
+  transferredReservationId: string | null;
+}
 
 @Injectable()
 export class LessonTransitionFinancialService {
@@ -37,11 +63,17 @@ export class LessonTransitionFinancialService {
     source: TransitionSource,
     lessonId: string,
     operation: TransitionOperation,
-    dto: TransitionPreviewDto,
+    dto: ResolvedTransitionDto,
   ): Promise<LessonSettlementResult> {
     await client.query("savepoint lesson_transition_preview");
     try {
       if (source.lifecycleState === "successfully_completed") {
+        if (dto.operation !== "reschedule") {
+          throw new ConflictException({
+            code: "COMPLETED_LESSON_RESCHEDULE_NOT_ALLOWED",
+            lessonId: source.id,
+          });
+        }
         return await this.applyCompletedRescheduleCorrection(
           client,
           source,
@@ -52,14 +84,23 @@ export class LessonTransitionFinancialService {
           ),
         );
       }
-      await client.query(
-        "update app.lessons set lifecycle_state = $2 where id = $1",
-        [lessonId, targetTransitionState(operation)],
-      );
+      if (operation !== "reschedule") {
+        await client.query(
+          "update app.lessons set lifecycle_state = $2 where id = $1",
+          [lessonId, targetTransitionState(operation)],
+        );
+      }
+      const sourceDecision = dto.operation === "reschedule"
+        ? dto.sourceFinancialDecision
+        : dto.financialDecision;
+      const sourceConfigurationRevisionIds = dto.operation === "reschedule"
+        ? dto.sourceConfigurationRevisionIds
+        : dto.configurationRevisionIds;
       const settled = await this.settlement.settle(client, lessonId, {
         context: operation,
-        decision: dto.financialDecision,
+        decision: sourceDecision,
         reasonText: dto.reasonText?.trim(),
+        configurationRevisionIds: sourceConfigurationRevisionIds,
       });
       await this.reservations.terminalize(client, settled);
       return settled;
@@ -73,7 +114,27 @@ export class LessonTransitionFinancialService {
     client: PoolClient,
     source: TransitionSource,
     actor: ActorContext,
-    dto: TransitionPreviewDto,
+    dto: ResolvedRescheduleTransitionDto,
+    correctionId: string,
+  ): Promise<LessonSettlementResult> {
+    return this.correctCompletedSource(
+      client,
+      source,
+      actor,
+      dto.sourceFinancialDecision,
+      dto.sourceConfigurationRevisionIds,
+      dto.reasonText,
+      correctionId,
+    );
+  }
+
+  private async correctCompletedSource(
+    client: PoolClient,
+    source: TransitionSource,
+    actor: ActorContext,
+    sourceFinancialDecision: LessonFinancialDecision,
+    sourceConfigurationRevisionIds: ConfigurationRevisionIds,
+    reason: string | undefined,
     correctionId: string,
   ): Promise<LessonSettlementResult> {
     if (!source.branchId || source.lifecycleState !== "successfully_completed") {
@@ -82,18 +143,13 @@ export class LessonTransitionFinancialService {
         lessonId: source.id,
       });
     }
-    const reasonText = dto.reasonText?.trim();
+    const reasonText = reason?.trim();
     if (!reasonText) {
       throw new UnprocessableEntityException({
         code: "LESSON_TRANSITION_REASON_REQUIRED",
         fields: ["reasonText"],
       });
     }
-    const prepared = await this.settlement.preparePlan(
-      client,
-      source.branchId,
-      dto.financialDecision,
-    );
     const previous = await client.query<{ id: string; version: number | string }>(
       `select id, version from app.lesson_settlement_corrections
        where lesson_id = $1 order by version desc limit 1 for update`,
@@ -110,54 +166,97 @@ export class LessonTransitionFinancialService {
         source.id,
         Number(previous.rows[0]?.version ?? 0) + 1,
         previous.rows[0]?.id ?? null,
-        JSON.stringify(dto.financialDecision),
-        prepared.settlementRevisionId,
-        prepared.compensationRevisionId,
+        JSON.stringify(sourceFinancialDecision),
+        sourceConfigurationRevisionIds.settlementRevisionId,
+        sourceConfigurationRevisionIds.compensationRevisionId,
         reasonText,
         actor.userId,
       ],
     );
     return this.settlement.settle(client, source.id, {
       context: "settle",
-      decision: dto.financialDecision,
+      decision: sourceFinancialDecision,
       reasonText,
-      configurationRevisionIds: {
-        settlementRevisionId: prepared.settlementRevisionId,
-        compensationRevisionId: prepared.compensationRevisionId,
-      },
+      configurationRevisionIds: sourceConfigurationRevisionIds,
       correction: { id: correctionId },
     });
   }
 
-  async cloneAndAllocateSuccessor(
+  async commitRescheduleFinancials(
     client: PoolClient,
-    sourceLessonId: string,
+    source: TransitionSource,
     successorId: string,
-    actor: ActorContext,
-    reasonText?: string,
-    branchId?: string,
-    fallbackDecision?: LessonFinancialDecision,
-  ): Promise<void> {
-    const plan = await this.settlement.clonePlan(client, {
-      sourceLessonId,
-      targetLessonId: successorId,
-      selectedBy: actor.userId,
-      reasonText,
-      fallback: branchId && fallbackDecision
-        ? { branchId, decision: fallbackDecision }
-        : undefined,
+    financials: RescheduleFinancialCommitInput,
+  ): Promise<CommittedRescheduleFinancials> {
+    let sourceSettlement: LessonSettlementResult;
+    if (source.lifecycleState === "successfully_completed") {
+      sourceSettlement = await this.correctCompletedSource(
+        client,
+        source,
+        financials.actor,
+        financials.sourceFinancialDecision,
+        financials.sourceConfigurationRevisionIds,
+        financials.reasonText,
+        financials.correctionId,
+      );
+    } else {
+      sourceSettlement = await this.settlement.settle(client, source.id, {
+        context: "reschedule",
+        decision: financials.sourceFinancialDecision,
+        reasonText: financials.reasonText?.trim(),
+        configurationRevisionIds: financials.sourceConfigurationRevisionIds,
+      });
+    }
+    const plan = await this.settlement.assignPreparedPlan(client, {
+      lessonId: successorId,
+      selectedBy: financials.actor.userId,
+      reasonText: financials.reasonText,
+      decision: financials.successorFinancialDecision,
+      ...financials.successorConfigurationRevisionIds,
     });
     const allocations = await this.settlement.plannedSubscriptionAllocations(
       client,
       successorId,
       plan,
     );
+    const transferredIds = new Set<string>();
+    let transferredReservationId: string | null = null;
     for (const allocation of allocations) {
+      const transferable = financials.coverage.reservations.find(
+        (reservation) =>
+          reservation.state === "reserved" &&
+          reservation.subscriptionId === allocation.subscriptionId &&
+          !transferredIds.has(reservation.id),
+      );
+      if (transferable) {
+        const transferred = await this.reservations.transferActiveReservation(
+          client,
+          {
+            reservationId: transferable.id,
+            sourceLessonId: source.id,
+            successorLessonId: successorId,
+            subscriptionId: allocation.subscriptionId,
+            units: allocation.units,
+          },
+        );
+        if (transferred) {
+          transferredIds.add(transferred);
+          transferredReservationId ??= transferred;
+          continue;
+        }
+      }
       await this.reservations.allocate(client, {
         lessonId: successorId,
         chargeType: "subscription",
         ...allocation,
       });
     }
+    await this.reservations.releaseForLessons(client, [source.id]);
+    await this.reservations.reconcile(client, allocations.map((item) => item.subscriptionId), [source.id]);
+    return {
+      sourceSettlement,
+      successorPlanId: successorId,
+      transferredReservationId,
+    };
   }
 }

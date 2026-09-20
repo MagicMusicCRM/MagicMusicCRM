@@ -554,7 +554,7 @@ void main() {
     },
   );
 
-  testWidgets('student search is local and keeps focus while typing', (
+  testWidgets('student search is debounced and keeps focus while typing', (
     tester,
   ) async {
     final api = _CountingApiClient();
@@ -592,6 +592,11 @@ void main() {
       expect(api.count('/crm/students/search'), initialCalls);
       expect(find.byType(KanbanSkeleton), findsNothing);
     }
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(api.count('/crm/students/search'), initialCalls + 1);
+    expect(api.studentSearchQueries.last['q'], 'иван');
+    expect(find.byType(KanbanSkeleton), findsNothing);
   });
 
   testWidgets(

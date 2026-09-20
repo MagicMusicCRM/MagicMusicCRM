@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
@@ -342,60 +343,67 @@ class ScheduleMonthView extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final trial = lesson['is_trial'] == true;
+          final trial =
+              lesson['is_trial'] == true &&
+              lesson['settlement_type_key'] == null;
           final showTrialText =
               trial && constraints.maxWidth >= (relationContext ? 90 : 70);
           final showTrialIcon =
               trial && constraints.maxWidth >= (relationContext ? 38 : 22);
           final showStatusIcon =
-              !trial || constraints.maxWidth >= (relationContext ? 112 : 92);
-          return Row(
-            children: [
-              if (relationContext) ...[
-                Icon(
-                  related
-                      ? Icons.person_pin_circle_outlined
-                      : Icons.people_outline_rounded,
-                  size: 10,
-                  color: color,
-                ),
-                const SizedBox(width: 2),
-              ],
-              if (showStatusIcon) ...[
-                Tooltip(
-                  message: projection.label,
-                  child: Icon(projection.token.icon, size: 10, color: color),
-                ),
-                const SizedBox(width: 2),
-              ],
-              if (showTrialText) ...[
-                const LessonTrialBadge(compact: true),
-                const SizedBox(width: 3),
-              ] else if (showTrialIcon) ...[
-                const Tooltip(
-                  message: 'Пробное',
-                  child: Icon(
-                    Icons.star_rounded,
+              (!trial && constraints.maxWidth >= (relationContext ? 36 : 24)) ||
+              constraints.maxWidth >= (relationContext ? 112 : 92);
+          return LessonSettlementCorner(
+            settlementTypeKey: lesson['settlement_type_key']?.toString(),
+            expand: false,
+            child: Row(
+              children: [
+                if (relationContext && constraints.maxWidth >= 36) ...[
+                  Icon(
+                    related
+                        ? Icons.person_pin_circle_outlined
+                        : Icons.people_outline_rounded,
                     size: 10,
-                    color: AppColor.gold,
+                    color: color,
+                  ),
+                  const SizedBox(width: 2),
+                ],
+                if (showStatusIcon) ...[
+                  Tooltip(
+                    message: projection.label,
+                    child: Icon(projection.token.icon, size: 10, color: color),
+                  ),
+                  const SizedBox(width: 2),
+                ],
+                if (showTrialText) ...[
+                  const LessonTrialBadge(compact: true),
+                  const SizedBox(width: 3),
+                ] else if (showTrialIcon) ...[
+                  const Tooltip(
+                    message: 'Пробное',
+                    child: Icon(
+                      Icons.star_rounded,
+                      size: 10,
+                      color: AppColor.gold,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                ],
+                Expanded(
+                  child: Text(
+                    '$time$name',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: cs.onSurface, fontSize: 9.5),
                   ),
                 ),
-                const SizedBox(width: 2),
+                if (lessonHasSubscriptionCoverage(lesson) &&
+                    constraints.maxWidth >= 64) ...[
+                  const SizedBox(width: 2),
+                  const LessonSubscriptionBadge(compact: true, iconOnly: true),
+                ],
               ],
-              Expanded(
-                child: Text(
-                  '$time$name',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: cs.onSurface, fontSize: 9.5),
-                ),
-              ),
-              if (lessonHasSubscriptionCoverage(lesson) &&
-                  constraints.maxWidth >= 64) ...[
-                const SizedBox(width: 2),
-                const LessonSubscriptionBadge(compact: true, iconOnly: true),
-              ],
-            ],
+            ),
           );
         },
       ),

@@ -1,8 +1,13 @@
+export type SettlementDurationMode = "zero" | "full" | "manual";
+
 export interface LessonSettlementTypeConfig {
   stableKey: string;
   label: string;
   colorToken: string;
   hourShareBasisPoints: number;
+  clientDurationMode: SettlementDurationMode;
+  teacherDurationMode: SettlementDurationMode;
+  defaultTeacherCompensationRuleKey: string;
   fixedPenaltyMinor?: string;
   allowedContexts: string[];
   active: boolean;

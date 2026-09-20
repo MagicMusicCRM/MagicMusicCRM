@@ -12,6 +12,7 @@ class _FakeApiClient extends MagicApiClient {
 
   String? requestedTeacherId;
   Map<String, dynamic>? teacherQuery;
+  var roomAvailabilityRequested = false;
 
   @override
   Future<T> get<T>(
@@ -55,6 +56,9 @@ class _FakeApiClient extends MagicApiClient {
               'conflicts': <dynamic>[],
             }
             as T;
+      case '/crm/rooms/availability':
+        roomAvailabilityRequested = true;
+        return <String, dynamic>{'items': <dynamic>[]} as T;
       default:
         return <String, dynamic>{'items': <dynamic>[]} as T;
     }
@@ -82,7 +86,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(api.teacherQuery?['q'], 'magic2@gmail.com');
+    expect(api.teacherQuery?['q'], isNull);
+    expect(api.teacherQuery?['limit'], 100);
     expect(api.requestedTeacherId, 'teacher-magic2');
+    expect(api.roomAvailabilityRequested, isFalse);
   });
 }

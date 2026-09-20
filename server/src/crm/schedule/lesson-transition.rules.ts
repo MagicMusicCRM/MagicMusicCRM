@@ -1,12 +1,17 @@
 import { UnprocessableEntityException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
+import { rublesToMinor } from "../commerce/lesson-settlement.calculation";
 import type { LessonFinancialDecision } from "../commerce/lesson-settlement.port";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
+import { draftProjection } from "./lesson-transition-draft-projection";
+export { draftProjection } from "./lesson-transition-draft-projection";
 import type {
   BulkFingerprintItem,
   BulkTransitionDto,
+  BulkTransitionInputItem,
   BulkTransitionItem,
+  PlannedSettlementProjection,
   TransitionFinancialProjection,
   TransitionFingerprintInput,
   TransitionOperation,
@@ -106,8 +111,13 @@ const assertBulkHeader = (dto: BulkTransitionDto): void => {
   }
 };
 
+const hasValidBulkDecision = (item: BulkTransitionInputItem): boolean =>
+  item.operation === "reschedule"
+    ? Boolean(item.successorFinancialDecision ?? item.financialDecision)
+    : Boolean(item.financialDecision) && !item.successorFinancialDecision;
+
 const assertBulkItem = (
-  item: BulkTransitionItem,
+  item: BulkTransitionInputItem,
   index: number,
   ids: Set<string>,
 ): void => {
@@ -122,7 +132,7 @@ const assertBulkItem = (
   const validSuccessor = (item.operation === "reschedule") ===
     Boolean(item.successor);
   if (
-    !validId || !validVersion || !validOperation || !item.financialDecision ||
+    !validId || !validVersion || !validOperation || !hasValidBulkDecision(item) ||
     !validSuccessor || ids.has(item.lessonId)
   ) {
     invalidDraft("LESSON_BULK_TRANSITION_INVALID", [`items.${index}`]);
@@ -138,26 +148,33 @@ export function normalizeBulkTransitionItems(
     assertBulkItem(item, index, ids);
     ids.add(item.lessonId);
   });
-  return [...dto.items].sort((left, right) =>
-    left.lessonId.localeCompare(right.lessonId)
-  );
+  return dto.items.map((item) => {
+    if (item.operation !== "reschedule") {
+      return {
+        lessonId: item.lessonId,
+        operation: item.operation,
+        expectedVersion: item.expectedVersion,
+        financialDecision: item.financialDecision!,
+      };
+    }
+    const successorFinancialDecision = resolveSuccessorFinancialDecision(item);
+    return {
+      lessonId: item.lessonId,
+      operation: "reschedule" as const,
+      expectedVersion: item.expectedVersion,
+      successor: item.successor!,
+      sourceFinancialDecision: serverOwnedRescheduleSourceDecision(
+        successorFinancialDecision.clientDecisions?.map(({ clientId }) => clientId) ?? [],
+      ),
+      successorFinancialDecision,
+    };
+  }).sort((left, right) => left.lessonId.localeCompare(right.lessonId));
 }
 
 export const sourceProjection = (source: TransitionSource) => ({
   id: source.id,
   version: source.version,
   state: source.lifecycleState,
-});
-
-export const draftProjection = (draft: TransitionSuccessor) => ({
-  subject: draft.kind === "individual"
-    ? { type: draft.clientRef.type, id: draft.clientRef.id }
-    : { type: "group", id: draft.groupId },
-  teacherId: draft.teacherId,
-  branchId: draft.branchId,
-  roomId: draft.roomId,
-  startAt: draft.scheduledAt,
-  endAt: draft.endAt,
 });
 
 export const transitionAdvisoryKeys = (
@@ -180,36 +197,156 @@ export const transitionAdvisoryKeys = (
   return [...new Set(keys)].sort();
 };
 
-export const normalizedTransitionDecision = (dto: TransitionPreviewDto) => ({
-  settlementTypeKey: dto.financialDecision.settlementTypeKey,
-  clientDecisions: [...(dto.financialDecision.clientDecisions ?? [])]
+const nullableDecisionValue = <T>(value: T | undefined): T | null =>
+  value === undefined ? null : value;
+
+export const normalizedFinancialDecision = (decision: LessonFinancialDecision) => ({
+  settlementTypeKey: decision.settlementTypeKey,
+  clientDecisions: [...(decision.clientDecisions ?? [])]
     .sort((left, right) => left.clientId.localeCompare(right.clientId))
     .map((decision) => ({
       clientId: decision.clientId,
-      settlementTypeKey: decision.settlementTypeKey ?? null,
-      subscriptionId: decision.subscriptionId ?? null,
-      payerStudentId: decision.payerStudentId ?? null,
+      settlementTypeKey: nullableDecisionValue(decision.settlementTypeKey),
+      subscriptionId: nullableDecisionValue(decision.subscriptionId),
+      payerStudentId: nullableDecisionValue(decision.payerStudentId),
+      chargeDurationMinutes: nullableDecisionValue(
+        decision.chargeDurationMinutes,
+      ),
       ...(decision.chargeType === undefined ? {} : { chargeType: decision.chargeType }),
       ...(decision.basePriceMinor === undefined ? {} : { basePriceMinor: decision.basePriceMinor }),
       ...(decision.discount === undefined ? {} : { discount: decision.discount }),
       ...(decision.surcharge === undefined ? {} : { surcharge: decision.surcharge }),
     })),
   teacherCompensationRuleKey:
-    dto.financialDecision.teacherCompensationRuleKey,
+    decision.teacherCompensationRuleKey,
   teacherCompensationValueMinor:
-    dto.financialDecision.teacherCompensationValueMinor ?? null,
+    nullableDecisionValue(decision.teacherCompensationValueMinor),
+  teacherCreditedDurationMinutes:
+    nullableDecisionValue(
+      decision.teacherCreditedDurationMinutes,
+    ),
+  teacherCompensationSource:
+    nullableDecisionValue(decision.teacherCompensationSource),
+});
+
+export const normalizedTransitionDecision = (dto: TransitionPreviewDto) => {
+  if (dto.sourceFinancialDecision && dto.successorFinancialDecision) {
+    return {
+      sourceFinancialDecision: normalizedFinancialDecision(
+        dto.sourceFinancialDecision,
+      ),
+      successorFinancialDecision: normalizedFinancialDecision(
+        dto.successorFinancialDecision,
+      ),
+    };
+  }
+  if (!dto.financialDecision) {
+    throw new UnprocessableEntityException({
+      code: "LESSON_TRANSITION_FINANCIAL_DECISION_REQUIRED",
+      fields: ["financialDecision"],
+    });
+  }
+  return normalizedFinancialDecision(dto.financialDecision);
+};
+
+export const serverOwnedRescheduleSourceDecision = (
+  clientIds: string[],
+): LessonFinancialDecision => ({
+  settlementTypeKey: "free_lesson",
+  clientDecisions: [...new Set(clientIds)].sort().map((clientId) => ({
+    clientId,
+    settlementTypeKey: "free_lesson",
+    chargeType: "none",
+    chargeDurationMinutes: 0,
+  })),
+  teacherCompensationRuleKey: "none",
+  teacherCreditedDurationMinutes: 0,
+});
+
+const decisionFingerprint = (decision: LessonFinancialDecision) =>
+  fingerprintPayload(normalizedFinancialDecision(decision));
+
+export const resolveSuccessorFinancialDecision = (
+  dto: Pick<
+    TransitionPreviewDto,
+    "successorFinancialDecision" | "financialDecision"
+  >,
+): LessonFinancialDecision => {
+  const current = dto.successorFinancialDecision;
+  const legacy = dto.financialDecision;
+  if (!current && !legacy) {
+    throw new UnprocessableEntityException({
+      code: "LESSON_RESCHEDULE_SUCCESSOR_DECISION_REQUIRED",
+      fields: ["successorFinancialDecision"],
+    });
+  }
+  if (
+    current && legacy &&
+    decisionFingerprint(current) !== decisionFingerprint(legacy)
+  ) {
+    throw new UnprocessableEntityException({
+      code: "LESSON_RESCHEDULE_DECISION_AMBIGUOUS",
+      fields: ["successorFinancialDecision", "financialDecision"],
+    });
+  }
+  return current ?? legacy!;
+};
+
+const settlementLabels: Record<string, string> = {
+  lesson: "Занятие",
+  free_lesson: "Бесплатное занятие",
+  paid_miss: "Оплачиваемый пропуск",
+  partially_paid_lesson: "Частично оплачиваемое занятие",
+  partially_paid_miss: "Частично оплачиваемый пропуск",
+  unpaid_miss: "Неоплачиваемый пропуск",
+};
+
+const compensationLabels: Record<string, string> = {
+  none: "Не оплачивать",
+  standard: "Стандартная оплата",
+  percent: "Процент от стандартной оплаты",
+  fixed: "Фиксированная оплата",
+  hourly: "Почасовая оплата",
+};
+
+export const plannedSettlementProjection = (
+  decision: LessonFinancialDecision,
+): PlannedSettlementProjection => ({
+  financialDecision: decision,
+  settlementTypeLabel:
+    settlementLabels[decision.settlementTypeKey] ?? "Настроенный тип расчёта",
+  teacherCompensationLabel:
+    compensationLabels[decision.teacherCompensationRuleKey] ??
+      "Настроенное правило оплаты",
 });
 
 export function transitionFingerprint(input: TransitionFingerprintInput): string {
+  const reschedule = input.dto.sourceFinancialDecision &&
+    input.dto.successorFinancialDecision
+    ? {
+        sourceFinancialDecision: normalizedFinancialDecision(
+          input.dto.sourceFinancialDecision,
+        ),
+        successorFinancialDecision: normalizedFinancialDecision(
+          input.dto.successorFinancialDecision,
+        ),
+      }
+    : null;
   return fingerprintPayload({
     operation: input.operation,
     source: sourceProjection(input.source),
     successor: input.successor ? draftProjection(input.successor) : null,
     reasonCode: transitionReasonCode(input.dto),
     reasonText: input.dto.reasonText?.trim() ?? null,
-    financialDecision: normalizedTransitionDecision(input.dto),
+    financialDecision: reschedule ? null : normalizedTransitionDecision(input.dto),
+    rescheduleFinancialDecisions: reschedule,
     coverage: input.coverage,
-    financial: input.financial,
+    sourceFinancialProjection: input.financial,
+    successorPlannedSettlementProjection: reschedule
+      ? input.successorPlannedSettlement ?? plannedSettlementProjection(
+          input.dto.successorFinancialDecision!,
+        )
+      : null,
   });
 }
 
@@ -228,19 +365,40 @@ export function bulkTransitionFingerprint(
   });
 }
 
-export const bulkTransitionItemDto = (
+export function bulkTransitionItemDto(
+  bulk: BulkTransitionDto,
+  item: Extract<BulkTransitionItem, { operation: "reschedule" }>,
+): Extract<TransitionPreviewDto, { operation: "reschedule" }>;
+export function bulkTransitionItemDto(
+  bulk: BulkTransitionDto,
+  item: Extract<BulkTransitionItem, { operation: "cancel" | "settle" }>,
+): Extract<TransitionPreviewDto, { operation: "cancel" | "settle" }>;
+export function bulkTransitionItemDto(
   bulk: BulkTransitionDto,
   item: BulkTransitionItem,
-): TransitionPreviewDto => {
+): TransitionPreviewDto;
+export function bulkTransitionItemDto(
+  bulk: BulkTransitionDto,
+  item: BulkTransitionItem,
+): TransitionPreviewDto {
   const common = {
     expectedVersion: item.expectedVersion,
     reasonCode: bulk.reasonCode,
     reasonText: bulk.reasonText,
-    financialDecision: item.financialDecision,
   };
   return item.operation === "reschedule"
-    ? { ...common, successor: item.successor! }
-    : common;
+    ? {
+        ...common,
+        operation: "reschedule",
+        successor: item.successor!,
+        sourceFinancialDecision: item.sourceFinancialDecision!,
+        successorFinancialDecision: item.successorFinancialDecision!,
+      }
+    : {
+        ...common,
+        operation: item.operation,
+        financialDecision: item.financialDecision!,
+      };
 };
 
 export const bulkTransitionPreviewId = (items: BulkTransitionItem[]) =>
@@ -253,7 +411,7 @@ export const bulkTransitionPreviewId = (items: BulkTransitionItem[]) =>
   );
 
 export const selectedTransitionSubscriptionIds = (dto: TransitionPreviewDto) =>
-  (dto.financialDecision.clientDecisions ?? [])
+  ((dto.successorFinancialDecision ?? dto.financialDecision)?.clientDecisions ?? [])
     .map((decision) => decision.subscriptionId)
     .filter((id): id is string => Boolean(id));
 
@@ -264,18 +422,93 @@ export const transitionFinancialProjection = (
   teacherFact: (({ id: _id, ...fact }) => fact)(settled.teacherFact) as TransitionFinancialProjection["teacherFact"],
 });
 
-export const completedTransitionReversalDecision = (): LessonFinancialDecision => ({
+export const requiredTransitionClientIds = (source: TransitionSource) => {
+  const excluded = new Set(source.excludedParticipantIds);
+  const ids = source.groupId
+    ? source.participants
+      .map((participant) => participant.studentId)
+      .filter((studentId) => !excluded.has(studentId))
+    : source.snapshot
+      ? [source.snapshot.clientId]
+      : [];
+  return [...new Set(ids)].sort();
+}
+
+export const completedTransitionReversalDecision = (
+  requiredClientIds: string[],
+): LessonFinancialDecision => ({
   settlementTypeKey: "free_lesson",
   teacherCompensationRuleKey: "none",
+  clientDecisions: requiredClientIds.map((clientId) => ({
+    clientId,
+    chargeType: "none",
+    chargeDurationMinutes: 0,
+  })),
 });
+
+export const transitionDecisionForResolution = (
+  decision: LessonFinancialDecision,
+  preservesTeacherDecision: boolean,
+): LessonFinancialDecision => {
+  const legacyAutomatic =
+    decision.teacherCompensationSource === undefined &&
+    decision.teacherCompensationValueMinor === undefined &&
+    decision.teacherCreditedDurationMinutes === undefined &&
+    [undefined, "none", "standard"].includes(
+      decision.teacherCompensationRuleKey,
+    );
+  if (!preservesTeacherDecision || !legacyAutomatic) return decision;
+  const {
+    teacherCompensationRuleKey: _rule,
+    teacherCompensationValueMinor: _value,
+    teacherCreditedDurationMinutes: _duration,
+    teacherCompensationSource: _source,
+    ...clientDecision
+  } = decision;
+  return clientDecision as LessonFinancialDecision;
+};
+
+export const legacyPlanTeacherSource = (
+  decision: LessonFinancialDecision,
+): "automatic" | "manual" =>
+  decision.teacherCompensationValueMinor !== undefined ||
+      !["none", "standard"].includes(decision.teacherCompensationRuleKey)
+    ? "manual"
+    : "automatic";
+
+export const legacySnapshotTeacherDecision = (
+  source: TransitionSource,
+): Pick<
+  LessonFinancialDecision,
+  | "teacherCompensationRuleKey"
+  | "teacherCompensationValueMinor"
+  | "teacherCompensationSource"
+> | undefined => {
+  const snapshot = source.groupId ? source.groupSnapshot : source.snapshot;
+  if (!snapshot) return undefined;
+  return {
+    teacherCompensationRuleKey: snapshot.teacherCompensationType,
+    teacherCompensationValueMinor:
+      snapshot.teacherCompensationType === "none"
+        ? undefined
+        : rublesToMinor(snapshot.teacherCompensationValue.toString()).toString(),
+    teacherCompensationSource: "manual",
+  };
+};
 
 export const effectiveTransitionDto = (
   source: TransitionSource,
   dto: TransitionPreviewDto,
   operation: TransitionOperation,
 ): TransitionPreviewDto =>
-  operation === "reschedule" && source.lifecycleState === "successfully_completed"
-    ? { ...dto, financialDecision: completedTransitionReversalDecision() }
+  operation === "reschedule" && source.lifecycleState === "successfully_completed" &&
+      !dto.sourceFinancialDecision
+    ? {
+        ...dto,
+        financialDecision: completedTransitionReversalDecision(
+          requiredTransitionClientIds(source),
+        ),
+      }
     : dto;
 
 export const hasTransitionClientCharge = (financial: TransitionFinancialProjection) =>

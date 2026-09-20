@@ -153,7 +153,7 @@ extension _MessengerChatList on _MessengerScreenState {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: DropdownButton<String?>(
+                  child: AppDropdownButton<String?>(
                     value: _chatBranchFilter,
                     isExpanded: true,
                     isDense: true,

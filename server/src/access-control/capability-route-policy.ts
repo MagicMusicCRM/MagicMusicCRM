@@ -81,6 +81,7 @@ const globalSchoolFinancePaths = [
   "/crm/expected-payments",
 ] as const;
 const clientFinanceFragments = [
+  "/transfer",
   "/subscriptions",
   "/subscription-payments",
   "/payment-records",
@@ -799,6 +800,17 @@ function resolveScheduleAndFacilitiesPolicy(
   );
 }
 
+function resolveMessengerPolicy({ path }: RoutePolicyContext) {
+  return path.startsWith('/messenger/') || path === '/messenger'
+    ? policy(
+        'crm.client.read.basic',
+        'resource',
+        allRoles,
+        'Messenger domain services enforce chat membership and command policy',
+      )
+    : null;
+}
+
 function resolveCommentPolicy({
   path,
   read,
@@ -816,6 +828,18 @@ function resolveCommentPolicy({
     "self_or_assigned",
     teacherAndStaffRoles,
     "TimelineService assigned/self predicate and per-comment share flag",
+  );
+}
+
+function resolveSectionSeenPolicy({
+  path,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
+  if (path !== "/crm/sections/seen") return null;
+  return policy(
+    "crm.client.read.basic",
+    "self",
+    allRoles,
+    "SectionViewsService stores the authenticated user's own view marker",
   );
 }
 
@@ -891,6 +915,7 @@ function resolveTimelineContactsAndReportingPolicyStage(
   context: RoutePolicyContext,
 ): CapabilityRoutePolicy | null {
   return (
+    resolveSectionSeenPolicy(context) ??
     resolveCommentPolicy(context) ??
     resolveContactPolicy(context) ??
     resolveAnalyticsReportingPolicy(context)
@@ -928,6 +953,7 @@ export function resolveCapabilityRoutePolicy(
     resolveAccessAndConfigurationPolicy(context) ??
     resolvePayrollAndReportingPolicy(context) ??
     resolveClientCommerceAndTasksPolicy(context) ??
+    resolveMessengerPolicy(context) ??
     resolveScheduleAndFacilitiesPolicy(context) ??
     resolveGenericCrmAndDefaultPolicy(context)
   );

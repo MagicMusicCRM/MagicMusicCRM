@@ -1,6 +1,14 @@
+import { unchangedScheduleLessonSql } from "./schedule-lesson-template";
+import { releaseLessonCoverage } from "../commerce/subscription-coverage.persistence";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
+import { currentActorRoleSql } from "../branch-scope";
+import {
+  lockSchedulePlanActorScope,
+  schedulePlanBranchScopeSql,
+  schedulePlanWriteScopeSql,
+} from "./schedule-plan-access";
 import { DatabaseService } from "../../db/database.service";
 import {
   SchedulePlanParticipantDto,
@@ -11,8 +19,14 @@ import {
   LessonFinancialDecision,
   PreparedLessonSettlementPlan,
 } from "../commerce/lesson-settlement.port";
+import type {
+  SchedulePlanTimelineInput,
+  SchedulePlanTimelineLessonInput,
+  SchedulePlanTimelineRuleInput,
+} from "./schedule-plan-timeline";
 
 export interface LockedSchedulePlan {
+  archived_at?: Date | string | null;
   id: string;
   kind: "individual" | "group";
   title: string;
@@ -36,6 +50,8 @@ export interface SchedulePlanSeriesSnapshot {
   duration_minutes: number;
   notes: string | null;
   planned_financial_decision: LessonFinancialDecision | null;
+  settlement_revision_id: string;
+  compensation_revision_id: string;
 }
 
 export interface SchedulePlanEndImpact {
@@ -49,6 +65,7 @@ export interface SchedulePlanEndImpact {
     id: string;
     version: number;
     lifecycleState: "scheduled" | "settlement_pending";
+    clientIds: string[];
   }>;
   reservations: Array<{
     id: string;
@@ -58,11 +75,43 @@ export interface SchedulePlanEndImpact {
     units: string;
   }>;
   terminalLessonCount: number;
+  changedLessonCount: number;
+}
+
+export interface LockedSchedulePlanSeries {
+  id: string;
+  planId: string;
+  version: number;
+  validFrom: string;
+  validUntil: string | null;
+}
+
+export interface FuturePlanLessonCancellationImpact {
+  eligibleLessons: Array<{
+    id: string;
+    version: number;
+    lifecycleState: "scheduled" | "settlement_pending";
+    clientIds: string[];
+  }>;
+  reservations: Array<{
+    id: string;
+    lessonId: string;
+    subscriptionId: string;
+    version: number;
+    units: string;
+  }>;
+  preservedTerminalLessonIds: string[];
+  preservedChangedLessonIds: string[];
 }
 
 export interface SchedulePlanTrayCursor {
   scheduledAt: string;
   id: string;
+}
+
+export interface SchedulePlanListTimelineSource {
+  timelineInput: SchedulePlanTimelineInput;
+  rowDefinitions: Array<{ id: string } & Record<string, unknown>>;
 }
 
 @Injectable()
@@ -85,7 +134,8 @@ export class SchedulePlanRepository {
       ended_by: string | null;
       ended_by_name: string | null;
       end_reason: string | null;
-      series: Record<string, unknown>[];
+      archived_at: Date | string | null;
+      archive_reason: string | null;
       participants: Record<string, unknown>[];
       scheduled_lesson_count: string;
       covered_lesson_count: string;
@@ -94,7 +144,7 @@ export class SchedulePlanRepository {
         with visible_plans as (
           select plan.*,
             row_number() over (
-              partition by plan.status
+              partition by plan.status, (plan.archived_at is not null)
               order by plan.active_from desc, plan.id
             ) as status_rank
           from app.schedule_plans plan
@@ -104,16 +154,18 @@ export class SchedulePlanRepository {
                 and student_participant.student_id = $3
             ))
             and ($4::uuid is null or plan.group_id = $4)
+            and ($6::boolean or plan.archived_at is null)
+            and ${schedulePlanBranchScopeSql("plan", "$2")}
             and (
-              $1::text = any(array['admin','manager','director','system_admin'])
-              or ($1::text = 'teacher' and exists (
+              ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
+              or (${currentActorRoleSql("$1")} = 'teacher' and exists (
                 select 1 from app.schedule_series scoped_series
                 join app.teachers teacher on teacher.id = scoped_series.teacher_id
                 join app.profiles profile on profile.id = teacher.profile_id
                 where scoped_series.plan_id = plan.id
                   and profile.user_id = $2::uuid
               ))
-              or ($1::text = 'client' and (
+              or (${currentActorRoleSql("$1")} = 'client' and (
                 exists (
                   select 1 from app.students student
                   join app.profiles profile on profile.id = student.profile_id
@@ -130,42 +182,15 @@ export class SchedulePlanRepository {
         )
         select plan.id, plan.kind, plan.title, plan.student_id, plan.group_id,
           plan.subscription_id, plan.active_from::text,
-          plan.active_until::text, plan.status, plan.version, plan.ended_at,
-          case when $1::text = any(array['admin','manager','director','system_admin'])
+          plan.active_until::text, plan.status, plan.version, plan.ended_at, plan.archived_at, plan.archive_reason,
+          case when ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
             then plan.ended_by end as ended_by,
-          case when $1::text = any(array['admin','manager','director','system_admin'])
+          case when ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
             then plan.end_reason end as end_reason,
-          case when $1::text = any(array['admin','manager','director','system_admin'])
+          case when ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
             then nullif(trim(coalesce(ended_by_profile.first_name, '') || ' ' ||
               coalesce(ended_by_profile.last_name, '')), '')
             end as ended_by_name,
-          coalesce((
-            select jsonb_agg(jsonb_build_object(
-              'id', series.id,
-              'teacherId', series.teacher_id,
-              'teacherName', nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
-                coalesce(teacher_profile.last_name, '')), ''),
-              'roomId', series.room_id,
-              'roomName', room.name,
-              'branchId', series.branch_id,
-              'branchName', branch.name,
-              'weekday', series.weekday,
-              'beginTime', to_char(series.begin_time, 'HH24:MI'),
-              'durationMinutes', series.duration_minutes,
-              'validFrom', series.valid_from,
-              'validUntil', series.valid_until,
-              'notes', series.notes,
-              'financialDecision', series.planned_financial_decision,
-              'supersededBy', series.superseded_by,
-              'active', series.deleted_at is null and series.superseded_by is null
-            ) order by series.valid_from, series.weekday, series.begin_time, series.id)
-            from app.schedule_series series
-            left join app.teachers teacher on teacher.id = series.teacher_id
-            left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
-            left join app.rooms room on room.id = series.room_id
-            left join app.branches branch on branch.id = series.branch_id
-            where series.plan_id = plan.id
-          ), '[]'::jsonb) as series,
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'id', participant.id,
@@ -200,35 +225,256 @@ export class SchedulePlanRepository {
         order by (plan.status = 'active') desc, plan.active_from desc, plan.id
       `,
       [
-        actor.role,
+        actor.userId,
         actor.userId,
         query.studentId ?? null,
         query.groupId ?? null,
         query.includeEnded === true,
+        query.includeArchived === true,
       ],
     );
+    const planIds = result.rows.map((row) => row.id);
+    if (planIds.length === 0) return { items: [] };
+    const seriesResult = await this.database.query<{
+      plan_id: string;
+      id: string;
+      teacher_id: string;
+      teacher_name: string | null;
+      room_id: string;
+      room_name: string | null;
+      branch_id: string;
+      branch_name: string | null;
+      weekday: number;
+      begin_time: string;
+      duration_minutes: number;
+      valid_from: string;
+      valid_until: string | null;
+      notes: string | null;
+      planned_financial_decision: LessonFinancialDecision | null;
+      superseded_by: string | null;
+      deleted_at: Date | string | null;
+      business_date: string;
+    }>(
+      `select series.plan_id, series.id, series.teacher_id,
+         nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
+           coalesce(teacher_profile.last_name, '')), '') as teacher_name,
+         series.room_id, room.name as room_name,
+         series.branch_id, branch.name as branch_name,
+         series.weekday, to_char(series.begin_time, 'HH24:MI') as begin_time,
+         series.duration_minutes, series.valid_from::text,
+         series.valid_until::text, series.notes,
+         series.planned_financial_decision, series.superseded_by,
+         series.deleted_at,
+         timezone(coalesce(branch.timezone_name, series.timezone_name,
+           'Europe/Moscow'), now())::date::text as business_date
+       from app.schedule_series series
+       left join app.teachers teacher on teacher.id = series.teacher_id
+       left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
+       left join app.rooms room on room.id = series.room_id
+       left join app.branches branch on branch.id = series.branch_id
+       where series.plan_id = any($1::uuid[])
+       order by series.plan_id, series.valid_from, series.weekday,
+         series.begin_time, series.id`,
+      [planIds],
+    );
+    const exceptionResult = await this.database.query<{
+      plan_id: string;
+      lesson_id: string;
+      source_series_id: string;
+      series_id: string | null;
+      scheduled_at: Date | string;
+      expected_scheduled_at: Date | string;
+      scheduled_date: string;
+      business_date: string;
+      source_series_date: string;
+      reschedule_depth: number;
+      teacher_id: string;
+      teacher_name: string | null;
+      room_id: string;
+      room_name: string | null;
+      branch_id: string;
+      branch_name: string | null;
+      weekday: number;
+      begin_time: string;
+      duration_minutes: number;
+      predecessor_id: string | null;
+    }>(
+      `with recursive lesson_lineage (
+         current_lesson_id, source_series_id, source_series_date,
+         successor_id, plan_id, path, depth
+       ) as (
+         select lesson.id, series.id, lesson.series_date, lesson.successor_id,
+           series.plan_id, array[lesson.id], 0
+         from app.lessons lesson
+         join app.schedule_series series on series.id = lesson.series_id
+         where series.plan_id = any($1::uuid[])
+           and lesson.series_date is not null
+           and lesson.deleted_at is null
+         union all
+         select successor.id, lineage.source_series_id,
+           lineage.source_series_date, successor.successor_id,
+           lineage.plan_id, lineage.path || successor.id, lineage.depth + 1
+         from lesson_lineage lineage
+         join app.lessons successor on successor.id = lineage.successor_id
+         where lineage.depth < 100
+           and successor.deleted_at is null
+           and not successor.id = any(lineage.path)
+       ), resolved as (
+         select distinct on (
+           lineage.source_series_id, lineage.source_series_date
+         )
+           lineage.current_lesson_id, lineage.source_series_id,
+           lineage.source_series_date, lineage.plan_id, lineage.depth
+         from lesson_lineage lineage
+         order by lineage.source_series_id, lineage.source_series_date,
+           lineage.depth desc, lineage.current_lesson_id
+       )
+       select resolved.plan_id, lesson.id as lesson_id,
+         source_series.id as source_series_id, lesson.series_id,
+         resolved.source_series_date::text as source_series_date,
+         resolved.depth as reschedule_depth,
+         lesson.scheduled_at,
+         (resolved.source_series_date + source_series.begin_time) at time zone
+           coalesce(source_series.timezone_name, source_branch.timezone_name,
+             'Europe/Moscow') as expected_scheduled_at,
+         to_char(timezone(coalesce(lesson_branch.timezone_name,
+           source_branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at),
+           'YYYY-MM-DD') as scheduled_date,
+         timezone(coalesce(lesson_branch.timezone_name,
+           source_branch.timezone_name, source_series.timezone_name,
+           'Europe/Moscow'), now())::date::text as business_date,
+         lesson.teacher_id,
+         nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
+           coalesce(teacher_profile.last_name, '')), '') as teacher_name,
+         lesson.room_id, room.name as room_name,
+         lesson.branch_id, lesson_branch.name as branch_name,
+         extract(isodow from timezone(coalesce(lesson_branch.timezone_name,
+           source_branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at))::int
+           as weekday,
+         to_char(timezone(coalesce(lesson_branch.timezone_name,
+           source_branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at),
+           'HH24:MI') as begin_time,
+         lesson.duration_minutes, lesson.predecessor_id
+       from resolved
+       join app.lessons lesson on lesson.id = resolved.current_lesson_id
+       join app.schedule_series source_series
+         on source_series.id = resolved.source_series_id
+       left join app.branches source_branch on source_branch.id = source_series.branch_id
+       left join app.branches lesson_branch on lesson_branch.id = lesson.branch_id
+       left join app.teachers teacher on teacher.id = lesson.teacher_id
+       left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
+       left join app.rooms room on room.id = lesson.room_id
+       order by resolved.plan_id, lesson.scheduled_at, lesson.id`,
+      [planIds],
+    );
+    const seriesByPlan = new Map<string, typeof seriesResult.rows>();
+    for (const series of seriesResult.rows) {
+      const rows = seriesByPlan.get(series.plan_id) ?? [];
+      rows.push(series);
+      seriesByPlan.set(series.plan_id, rows);
+    }
+    const exceptionsByPlan = new Map<string, typeof exceptionResult.rows>();
+    for (const exception of exceptionResult.rows) {
+      const rows = exceptionsByPlan.get(exception.plan_id) ?? [];
+      rows.push(exception);
+      exceptionsByPlan.set(exception.plan_id, rows);
+    }
     return {
-      items: result.rows.map((row) => ({
-        id: row.id,
-        kind: row.kind,
-        title: row.title,
-        studentId: row.student_id,
-        groupId: row.group_id,
-        subscriptionId: row.subscription_id,
-        activeFrom: row.active_from,
-        activeUntil: row.active_until,
-        status: row.status,
-        version: Number(row.version),
-        endedAt:
-          row.ended_at == null ? null : new Date(row.ended_at).toISOString(),
-        endedBy: row.ended_by,
-        endedByName: row.ended_by_name,
-        endReason: row.end_reason,
-        rows: row.series,
-        participants: row.participants,
-        scheduledLessonCount: Number(row.scheduled_lesson_count),
-        coveredLessonCount: row.kind === 'individual' ? Number(row.covered_lesson_count) : null,
-      })),
+      items: result.rows.map((row) => {
+        const series = seriesByPlan.get(row.id) ?? [];
+        const timelineRules: SchedulePlanTimelineRuleInput[] = series.map(
+          (item) => ({
+            id: item.id,
+            activeFrom: item.valid_from,
+            activeUntil: item.valid_until,
+            businessDate: item.business_date,
+            deletedAt:
+              item.deleted_at == null
+                ? null
+                : new Date(item.deleted_at).toISOString(),
+            supersededBy: item.superseded_by,
+            teacherId: item.teacher_id,
+            teacherName: item.teacher_name,
+            roomId: item.room_id,
+            roomName: item.room_name,
+            branchId: item.branch_id,
+            branchName: item.branch_name,
+            weekday: item.weekday,
+            beginTime: item.begin_time,
+            durationMinutes: item.duration_minutes,
+          }),
+        );
+        const timelineLessons: SchedulePlanTimelineLessonInput[] = (
+          exceptionsByPlan.get(row.id) ?? []
+        ).map((item) => ({
+          id: item.lesson_id,
+          sourceSeriesId: item.source_series_id,
+          seriesId: item.series_id,
+          scheduledAt: new Date(item.scheduled_at).toISOString(),
+          expectedScheduledAt: new Date(item.expected_scheduled_at).toISOString(),
+          scheduledDate: item.scheduled_date,
+          businessDate: item.business_date,
+          sourceSeriesDate: item.source_series_date,
+          rescheduleDepth: item.reschedule_depth,
+          teacherId: item.teacher_id,
+          teacherName: item.teacher_name,
+          roomId: item.room_id,
+          roomName: item.room_name,
+          branchId: item.branch_id,
+          branchName: item.branch_name,
+          weekday: item.weekday,
+          beginTime: item.begin_time,
+          durationMinutes: item.duration_minutes,
+          predecessorId: item.predecessor_id,
+        }));
+        return {
+          id: row.id,
+          kind: row.kind,
+          title: row.title,
+          studentId: row.student_id,
+          groupId: row.group_id,
+          subscriptionId: row.subscription_id,
+          activeFrom: row.active_from,
+          activeUntil: row.active_until,
+          status: row.status,
+          version: Number(row.version),
+          endedAt:
+            row.ended_at == null ? null : new Date(row.ended_at).toISOString(),
+          endedBy: row.ended_by,
+          endedByName: row.ended_by_name,
+          endReason: row.end_reason,
+          archivedAt: row.archived_at == null ? null : new Date(row.archived_at).toISOString(),
+          archiveReason: row.archive_reason,
+          rowDefinitions: series.map((item) => ({
+              id: item.id,
+              teacherId: item.teacher_id,
+              teacherName: item.teacher_name,
+              roomId: item.room_id,
+              roomName: item.room_name,
+              branchId: item.branch_id,
+              branchName: item.branch_name,
+              weekday: item.weekday,
+              beginTime: item.begin_time,
+              durationMinutes: item.duration_minutes,
+              validFrom: item.valid_from,
+              validUntil: item.valid_until,
+              notes: item.notes,
+              financialDecision: item.planned_financial_decision,
+              supersededBy: item.superseded_by,
+              active: true,
+            })),
+          participants: row.participants,
+          scheduledLessonCount: Number(row.scheduled_lesson_count),
+          coveredLessonCount:
+            row.kind === "individual"
+              ? Number(row.covered_lesson_count)
+              : null,
+          timelineInput: {
+            rules: timelineRules,
+            lessons: timelineLessons,
+          },
+        } satisfies SchedulePlanListTimelineSource & Record<string, unknown>;
+      }),
     };
   }
 
@@ -267,16 +513,52 @@ export class SchedulePlanRepository {
     );
   }
 
-  async lock(client: PoolClient, planId: string): Promise<LockedSchedulePlan> {
+  async lock(
+    client: PoolClient,
+    planId: string,
+    actor: ActorContext,
+  ): Promise<LockedSchedulePlan> {
+    await lockSchedulePlanActorScope(client, actor);
     const result = await client.query<LockedSchedulePlan>(
       `select id, kind, title, student_id, group_id, subscription_id,
-         active_from::text, active_until::text, status, version
-       from app.schedule_plans where id = $1 for update`,
-      [planId],
+         active_from::text, active_until::text, status, version, archived_at
+       from app.schedule_plans plan where id = $1
+         and ${schedulePlanWriteScopeSql("plan", "$2")} for update`,
+      [planId, actor.userId],
     );
     if (!result.rows[0])
       throw new NotFoundException("План расписания не найден.");
     return result.rows[0];
+  }
+
+  async lockCurrentRow(
+    client: PoolClient,
+    planId: string,
+    seriesId: string,
+  ): Promise<LockedSchedulePlanSeries> {
+    const result = await client.query<{
+      id: string;
+      plan_id: string;
+      version: string | number;
+      valid_from: string;
+      valid_until: string | null;
+    }>(
+      `select id, plan_id, version, valid_from::text, valid_until::text
+       from app.schedule_series
+       where id = $2 and plan_id = $1 and deleted_at is null
+         and superseded_by is null
+       for update`,
+      [planId, seriesId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("Строка расписания не найдена.");
+    return {
+      id: row.id,
+      planId: row.plan_id,
+      version: Number(row.version),
+      validFrom: row.valid_from,
+      validUntil: row.valid_until,
+    };
   }
 
   insertParticipants(
@@ -394,7 +676,8 @@ export class SchedulePlanRepository {
     return client.query<SchedulePlanSeriesSnapshot>(
       `select id, valid_from::text, teacher_id, room_id, branch_id, weekday,
          to_char(begin_time, 'HH24:MI') as begin_time, duration_minutes, notes,
-         planned_financial_decision
+         planned_financial_decision, settlement_revision_id,
+         compensation_revision_id
        from app.schedule_series
        where plan_id = $1 and deleted_at is null and superseded_by is null
        order by id for update`,
@@ -425,7 +708,7 @@ export class SchedulePlanRepository {
       `select (
          lesson.deleted_at is not null
          or lesson.lifecycle_state <> 'scheduled'
-         or lesson.original_scheduled_at is not null
+         or not (${unchangedScheduleLessonSql})
        ) as immutable
        from app.lessons lesson
        join app.schedule_series series on series.id = lesson.series_id
@@ -450,16 +733,12 @@ export class SchedulePlanRepository {
        where series.plan_id = $1 and lesson.series_id = series.id
          and lesson.series_date >= $2::date and lesson.series_date < $3::date
          and lesson.lifecycle_state = 'scheduled'
-         and lesson.original_scheduled_at is null and lesson.deleted_at is null
+         and (${unchangedScheduleLessonSql}) and lesson.deleted_at is null
        returning lesson.id`,
       [planId, from, untilExclusive],
     );
     if (removed.rows.length) {
-      await client.query(
-        `update app.lesson_reservations set state = 'released', updated_at = now()
-         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
-        [removed.rows.map((row) => row.id)],
-      );
+      await releaseLessonCoverage(client, removed.rows.map((row) => row.id));
     }
     return removed.rows.map((row) => row.id);
   }
@@ -542,6 +821,213 @@ export class SchedulePlanRepository {
     );
   }
 
+  async futureLessonCancellationImpact(
+    client: PoolClient,
+    input: { planId: string; seriesIds: string[]; effectiveFrom: string },
+    lock = false,
+  ): Promise<FuturePlanLessonCancellationImpact> {
+    if (input.seriesIds.length === 0) {
+      return {
+        eligibleLessons: [],
+        reservations: [],
+        preservedTerminalLessonIds: [],
+        preservedChangedLessonIds: [],
+      };
+    }
+    if (lock) {
+      const beforeLock = await this.futureLessonCancellationImpact(
+        client,
+        input,
+        false,
+      );
+      const lessonIds = [
+        ...beforeLock.eligibleLessons.map((lesson) => lesson.id),
+        ...beforeLock.preservedTerminalLessonIds,
+        ...beforeLock.preservedChangedLessonIds,
+      ];
+      if (lessonIds.length > 0) {
+        await client.query(
+          `select id from app.lessons where id = any($1::uuid[])
+           order by id for update`,
+          [[...new Set(lessonIds)].sort()],
+        );
+      }
+      if (beforeLock.reservations.length > 0) {
+        await client.query(
+          `select id from app.lesson_reservations
+           where id = any($1::uuid[]) order by id for update`,
+          [beforeLock.reservations.map((reservation) => reservation.id).sort()],
+        );
+      }
+      return this.futureLessonCancellationImpact(client, input, false);
+    }
+
+    const direct = await client.query<{
+      id: string;
+      version: string | number;
+      lifecycle_state: string;
+      client_ids: string[] | null;
+      matches_series: boolean;
+    }>(
+      `select lesson.id, lesson.version, lesson.lifecycle_state,
+         array(
+           select distinct client_id from (
+             select lesson.student_id as client_id
+             union all
+             select participant.student_id
+             from app.lesson_snapshot_participants participant
+             where participant.lesson_id = lesson.id
+           ) clients
+           where client_id is not null
+           order by client_id
+         ) as client_ids,
+         (
+           ${unchangedScheduleLessonSql}
+         ) as matches_series
+       from app.lessons lesson
+       join app.schedule_series series on series.id = lesson.series_id
+       left join app.branches branch on branch.id = series.branch_id
+       where series.plan_id = $1 and series.id = any($2::uuid[])
+         and lesson.deleted_at is null
+         and timezone(
+           coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+           lesson.scheduled_at
+         )::date >= $3::date
+       order by lesson.id`,
+      [input.planId, input.seriesIds, input.effectiveFrom],
+    );
+    const eligibleLessons = direct.rows
+      .filter(
+        (lesson) =>
+          lesson.matches_series &&
+          ["scheduled", "settlement_pending"].includes(lesson.lifecycle_state),
+      )
+      .map((lesson) => ({
+        id: lesson.id,
+        version: Number(lesson.version),
+        lifecycleState: lesson.lifecycle_state as
+          | "scheduled"
+          | "settlement_pending",
+        clientIds: lesson.client_ids ?? [],
+      }));
+    const preservedTerminalLessonIds = direct.rows
+      .filter(
+        (lesson) =>
+          !["scheduled", "settlement_pending"].includes(lesson.lifecycle_state),
+      )
+      .map((lesson) => lesson.id);
+    const directChangedIds = direct.rows
+      .filter(
+        (lesson) =>
+          !lesson.matches_series &&
+          ["scheduled", "settlement_pending"].includes(lesson.lifecycle_state),
+      )
+      .map((lesson) => lesson.id);
+    const detached = await client.query<{ id: string }>(
+      `with recursive lineage as (
+         select source.id as current_lesson_id, source.id as source_id,
+           source.successor_id, 0 as depth,
+           array[source.id] as path
+         from app.lessons source
+         where source.series_id = any($1::uuid[])
+           and source.deleted_at is null
+         union all
+         select successor.id, lineage.source_id, successor.successor_id,
+           lineage.depth + 1, lineage.path || successor.id
+         from lineage
+         join app.lessons successor on successor.id = lineage.successor_id
+         where lineage.depth < 100 and successor.deleted_at is null
+           and not successor.id = any(lineage.path)
+       ), resolved as (
+         select distinct on (lineage.source_id)
+           lineage.source_id, lineage.current_lesson_id, lineage.depth
+         from lineage
+         order by lineage.source_id, lineage.depth desc
+       )
+       select lesson.id
+       from resolved
+       join app.lessons lesson on lesson.id = resolved.current_lesson_id
+       left join app.branches branch on branch.id = lesson.branch_id
+       where lesson.series_id is null
+         and lesson.deleted_at is null
+         and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
+         and timezone(
+           coalesce(branch.timezone_name, 'Europe/Moscow'), lesson.scheduled_at
+         )::date >= $2::date
+       order by lesson.id`,
+      [input.seriesIds, input.effectiveFrom],
+    );
+    const preservedChangedLessonIds = [
+      ...new Set([...directChangedIds, ...detached.rows.map((row) => row.id)]),
+    ].sort();
+    const eligibleIds = eligibleLessons.map((lesson) => lesson.id);
+    const reservations =
+      eligibleIds.length === 0
+        ? { rows: [] }
+        : await client.query<{
+            id: string;
+            lesson_id: string;
+            subscription_id: string;
+            version: string | number;
+            units: string;
+          }>(
+            `select id, lesson_id, subscription_id, version, units::text
+             from app.lesson_reservations
+             where lesson_id = any($1::uuid[]) and state = 'reserved'
+             order by id`,
+            [eligibleIds],
+          );
+    return {
+      eligibleLessons,
+      reservations: reservations.rows.map((reservation) => ({
+        id: reservation.id,
+        lessonId: reservation.lesson_id,
+        subscriptionId: reservation.subscription_id,
+        version: Number(reservation.version),
+        units: reservation.units,
+      })),
+      preservedTerminalLessonIds,
+      preservedChangedLessonIds,
+    };
+  }
+
+  retireRow(
+    client: PoolClient,
+    input: {
+      planId: string;
+      seriesId: string;
+      effectiveFrom: string;
+      version: number;
+    },
+  ) {
+    return client.query<{ id: string }>(
+      `update app.schedule_series
+       set valid_until = case when valid_from < $3::date
+             then least(coalesce(valid_until, ($3::date - 1)::date),
+               ($3::date - 1)::date)
+             else valid_until end,
+           deleted_at = case when valid_from >= $3::date
+             then coalesce(deleted_at, now()) else deleted_at end,
+           version = $4, updated_at = now()
+       where id = $2 and plan_id = $1 and deleted_at is null
+         and superseded_by is null
+       returning id`,
+      [input.planId, input.seriesId, input.effectiveFrom, input.version],
+    );
+  }
+
+  bumpAfterRowRemoval(
+    client: PoolClient,
+    input: { planId: string; expectedVersion: number; version: number },
+  ) {
+    return client.query<{ id: string }>(
+      `update app.schedule_plans set version = $3, updated_at = now()
+       where id = $1 and version = $2 and status = 'active'
+       returning id`,
+      [input.planId, input.expectedVersion, input.version],
+    );
+  }
+
   async hasTerminalHistoricalLesson(
     client: PoolClient,
     effectiveFrom: string,
@@ -560,7 +1046,7 @@ export class SchedulePlanRepository {
             now()
           )::date
           and (lesson.lifecycle_state <> 'scheduled'
-            or lesson.original_scheduled_at is not null)
+            or not (${unchangedScheduleLessonSql}))
         order by lesson.series_date, lesson.id
         limit 1
         for update of lesson`,
@@ -598,17 +1084,13 @@ export class SchedulePlanRepository {
         where series.id = $1 and lesson.series_id = series.id
           and lesson.series_date >= $2::date
           and lesson.lifecycle_state = 'scheduled'
-          and lesson.original_scheduled_at is null
+          and (${unchangedScheduleLessonSql})
           and lesson.deleted_at is null
         returning lesson.id, lesson.series_date::text`,
       [seriesId, effectiveFrom],
     );
     if (removed.rows.length) {
-      await client.query(
-        `update app.lesson_reservations set state = 'released', updated_at = now()
-         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
-        [removed.rows.map((row) => row.id)],
-      );
+      await releaseLessonCoverage(client, removed.rows.map((row) => row.id));
     }
     return removed.rows.map((row) => row.series_date);
   }
@@ -675,44 +1157,16 @@ export class SchedulePlanRepository {
        order by id ${lock ? "for update" : ""}`,
       [planId],
     );
-    const lessons = await client.query<{
-      id: string;
-      version: string | number;
-      lifecycle_state: "scheduled" | "settlement_pending";
-    }>(
-      `select lesson.id, lesson.version, lesson.lifecycle_state
-       from app.lessons lesson
-       join app.schedule_series series on series.id = lesson.series_id
-       where series.plan_id = $1 and lesson.series_date > $2::date
-         and lesson.deleted_at is null
-         and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
-       order by lesson.id ${lock ? "for update of lesson" : ""}`,
-      [planId, lastDate],
-    );
-    const lessonIds = lessons.rows.map((row) => row.id);
-    const reservations = lessonIds.length
-      ? await client.query<{
-          id: string;
-          lesson_id: string;
-          subscription_id: string;
-          version: string | number;
-          units: string;
-        }>(
-          `select id, lesson_id, subscription_id, version, units::text
-           from app.lesson_reservations
-           where lesson_id = any($1::uuid[]) and state = 'reserved'
-           order by id ${lock ? "for update" : ""}`,
-          [lessonIds],
-        )
-      : { rows: [] };
-    const terminal = await client.query<{ count: string }>(
-      `select count(*)::text as count
-       from app.lessons lesson
-       join app.schedule_series series on series.id = lesson.series_id
-       where series.plan_id = $1 and lesson.series_date > $2::date
-         and lesson.deleted_at is null
-         and lesson.lifecycle_state not in ('scheduled', 'settlement_pending')`,
-      [planId, lastDate],
+    const nextDate = new Date(`${lastDate}T00:00:00.000Z`);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    const cancellationImpact = await this.futureLessonCancellationImpact(
+      client,
+      {
+        planId,
+        seriesIds: series.rows.map((row) => row.id),
+        effectiveFrom: nextDate.toISOString().slice(0, 10),
+      },
+      lock,
     );
     return {
       series: series.rows.map((row) => ({
@@ -721,19 +1175,11 @@ export class SchedulePlanRepository {
         validFrom: row.valid_from,
         validUntil: row.valid_until,
       })),
-      lessons: lessons.rows.map((row) => ({
-        id: row.id,
-        version: Number(row.version),
-        lifecycleState: row.lifecycle_state,
-      })),
-      reservations: reservations.rows.map((row) => ({
-        id: row.id,
-        lessonId: row.lesson_id,
-        subscriptionId: row.subscription_id,
-        version: Number(row.version),
-        units: row.units,
-      })),
-      terminalLessonCount: Number(terminal.rows[0]?.count ?? 0),
+      lessons: cancellationImpact.eligibleLessons,
+      reservations: cancellationImpact.reservations,
+      terminalLessonCount:
+        cancellationImpact.preservedTerminalLessonIds.length,
+      changedLessonCount: cancellationImpact.preservedChangedLessonIds.length,
     };
   }
 
@@ -823,15 +1269,15 @@ export class SchedulePlanRepository {
     }>(
       `with visible_plan as (
          select plan.id from app.schedule_plans plan
-         where plan.id = $3 and (
-           $1::text = any(array['admin','manager','director','system_admin'])
-           or ($1::text = 'teacher' and exists (
+         where plan.id = $3 and ${schedulePlanBranchScopeSql("plan", "$2")} and (
+           ${currentActorRoleSql("$1")} = any(array['admin','manager','director','system_admin'])
+           or (${currentActorRoleSql("$1")} = 'teacher' and exists (
              select 1 from app.schedule_series scoped_series
              join app.teachers teacher on teacher.id = scoped_series.teacher_id
              join app.profiles profile on profile.id = teacher.profile_id
              where scoped_series.plan_id = plan.id and profile.user_id = $2::uuid
            ))
-           or ($1::text = 'client' and (
+           or (${currentActorRoleSql("$1")} = 'client' and (
              exists (
                select 1 from app.students student join app.profiles profile
                  on profile.id = student.profile_id
@@ -887,7 +1333,7 @@ export class SchedulePlanRepository {
        order by lesson.scheduled_at ${order}, lesson.id ${order}
        limit $6`,
       [
-        actor.role,
+        actor.userId,
         actor.userId,
         planId,
         cursor.scheduledAt,

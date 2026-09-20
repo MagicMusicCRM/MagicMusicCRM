@@ -108,14 +108,6 @@ export class LessonTeacherRateService {
             canonicalAction: "lesson_settlement_correction",
           });
         }
-        if (locked.length && rate === null) {
-          throw new ConflictException({
-            code: "SETTLED_TEACHER_RATE_REQUIRED",
-            message:
-              "Для исправления зафиксированных расчётов укажите конкретную ставку.",
-            lessonIds: locked,
-          });
-        }
         const updated = await client.query<{ id: string }>(
           `
           update app.lessons
@@ -134,34 +126,49 @@ export class LessonTeacherRateService {
              compensation_rule_key, compensation_rule_label,
              compensation_mode, compensation_default_value,
              compensation_actual_value, compensation_override_reason,
-             configuration_revision_id, supersedes_fact_id
+             compensation_source, configuration_revision_id,
+             supersedes_fact_id
            )
            select lesson.id, current_fact.teacher_id,
-             case when $2::numeric = 0 then 'none' else 'hourly' end,
-             $2::numeric, round($2::numeric * 100)::bigint,
+             case when resolved.rate = 0 then 'none' else 'hourly' end,
+             resolved.rate, round(resolved.rate * 100)::bigint,
              current_fact.duration_minutes,
-             case when $2::numeric = 0 then 0 else
-               round($2::numeric * 100 * current_fact.duration_minutes / 60)::bigint
+             case when resolved.rate = 0 then 0 else
+               round(resolved.rate * 100 * current_fact.duration_minutes / 60)::bigint
              end,
              current_fact.currency_code,
              case when current_fact.configuration_revision_id is null
                then null else 'director.manual_rate_correction' end,
              case when current_fact.configuration_revision_id is null
-               then null else 'Ручная коррекция ставки директором' end,
+               then null when $2::numeric is null then 'Возврат к ставке по умолчанию'
+               else 'Ручная коррекция ставки директором' end,
              case when current_fact.configuration_revision_id is null
                then null
-               when $2::numeric = 0 then 'none' else 'hourly' end,
+               when resolved.rate = 0 then 'none' else 'hourly' end,
              case when current_fact.configuration_revision_id is null
-               then null else round($2::numeric * 100)::bigint end,
+               then null else round(resolved.rate * 100)::bigint end,
              case when current_fact.configuration_revision_id is null
-               then null else round($2::numeric * 100)::bigint end,
+               then null else round(resolved.rate * 100)::bigint end,
              case when current_fact.configuration_revision_id is null
                then null else $3 end,
+             'manual',
              current_fact.configuration_revision_id,
              current_fact.id
            from app.lessons lesson
            join app.lesson_teacher_compensation_facts_effective current_fact
              on current_fact.lesson_id = lesson.id
+           left join app.groups lesson_group
+             on lesson_group.id = lesson.group_id and lesson_group.deleted_at is null
+           cross join lateral (
+             select coalesce($2::numeric, lesson_group.teacher_rate, (
+               select history.rate from app.teacher_rates history
+               where history.teacher_id = lesson.teacher_id
+                 and history.deleted_at is null
+                 and history.effective_from <= lesson.scheduled_at::date
+               order by history.effective_from desc, history.created_at desc
+               limit 1
+             ), 0)::numeric as rate
+           ) resolved
            where lesson.id = any($1::uuid[])`,
             [locked, rate, reasonText],
           );

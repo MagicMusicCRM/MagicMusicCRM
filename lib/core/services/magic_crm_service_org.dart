@@ -229,7 +229,10 @@ extension MagicCrmOrg on MagicCrmService {
     if (trimmedAddress != null && trimmedAddress.isNotEmpty) {
       data['address'] = trimmedAddress;
     }
-    if (utcOffsetMinutes != null) data['utcOffsetMinutes'] = utcOffsetMinutes;
+    if (utcOffsetMinutes != null) {
+      data['utcOffsetMinutes'] = utcOffsetMinutes;
+      data['timezone'] = _branchTimezoneForOffset(utcOffsetMinutes);
+    }
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/branches',
       data: data,
@@ -246,7 +249,10 @@ extension MagicCrmOrg on MagicCrmService {
     final data = <String, dynamic>{};
     if (name != null) data['name'] = name.trim();
     if (address != null) data['address'] = address.trim();
-    if (utcOffsetMinutes != null) data['utcOffsetMinutes'] = utcOffsetMinutes;
+    if (utcOffsetMinutes != null) {
+      data['utcOffsetMinutes'] = utcOffsetMinutes;
+      data['timezone'] = _branchTimezoneForOffset(utcOffsetMinutes);
+    }
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/branches/$id',
       data: data,
@@ -565,3 +571,21 @@ extension MagicCrmOrg on MagicCrmService {
     );
   }
 }
+
+String _branchTimezoneForOffset(int minutes) => switch (minutes) {
+  120 => 'Europe/Kaliningrad',
+  180 => 'Europe/Moscow',
+  240 => 'Europe/Samara',
+  300 => 'Asia/Yekaterinburg',
+  360 => 'Asia/Omsk',
+  420 => 'Asia/Krasnoyarsk',
+  480 => 'Asia/Irkutsk',
+  540 => 'Asia/Yakutsk',
+  600 => 'Asia/Vladivostok',
+  660 => 'Asia/Magadan',
+  720 => 'Asia/Kamchatka',
+  0 => 'Etc/UTC',
+  _ when minutes % 60 == 0 && minutes >= -720 && minutes <= 840 =>
+    'Etc/GMT${minutes > 0 ? '-' : '+'}${minutes.abs() ~/ 60}',
+  _ => 'Europe/Moscow',
+};

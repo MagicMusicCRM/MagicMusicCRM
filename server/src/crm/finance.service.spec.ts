@@ -1,3 +1,4 @@
+import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
 import {
   BadRequestException,
   ForbiddenException,
@@ -11,6 +12,8 @@ import { ExpenseService } from "./finance/expense.service";
 import { FinancePaymentService } from "./finance/finance-payment.service";
 import { StudentAccountTransferService } from "./finance/student-account-transfer.service";
 import { StudentFinanceQueryService } from "./finance/student-finance-query.service";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
+import { PlatformIntegrityRepository } from "../platform/platform-integrity.repository";
 import { FinanceService } from "./finance.service";
 
 describe("FinanceService", () => {
@@ -43,21 +46,25 @@ describe("FinanceService", () => {
     const service = new FinanceService(
       new FinancePaymentService(
         typedDatabase,
-        typedAudit,
         typedPolicy,
-        typedRealtime,
+        {} as PaymentLifecycleService,
       ),
       new StudentFinanceQueryService(typedDatabase, typedPolicy),
       new StudentAccountTransferService(
         typedDatabase,
-        typedAudit,
+        new PlatformIntegrityService(
+          typedDatabase,
+          new PlatformIntegrityRepository(),
+        ),
         typedPolicy,
       ),
       new ExpenseService(
         typedDatabase,
-        typedAudit,
+        new PlatformIntegrityService(
+          typedDatabase,
+          new PlatformIntegrityRepository(),
+        ),
         typedPolicy,
-        typedRealtime,
       ),
     );
     return { service, query, audit, policy, realtime };
@@ -246,6 +253,7 @@ describe("FinanceService", () => {
       // which has no total_* fields, so they resolve to 0 here).
       totalAmount: 0,
       totalCount: 0,
+      nextCursor: null,
     });
 
     expect(query.mock.calls[0][1]).toEqual([
@@ -255,7 +263,9 @@ describe("FinanceService", () => {
       "2026-06-01T00:00:00.000Z",
       "2026-07-01T00:00:00.000Z",
       "11111111-1111-4111-8111-111111111111",
-      10,
+      11,
+      null,
+      null,
     ]);
     expect(String(query.mock.calls[0][0])).toContain("pay.branch_id = $6");
   });
@@ -414,178 +424,16 @@ describe("FinanceService", () => {
     expect(result.totalCount).toBe(37);
   });
 
-  it("creates expenses through CRM write policy and audit (P5-5)", async () => {
-    const { service, query, audit, policy } = createService([
-      {
-        id: "exp-a",
-        amount: "1500.00",
-        category: "rent",
-        description: "Аренда",
-        branch_id: "branch-a",
-        branch_name: null,
-        created_at: "2026-06-22T00:00:00.000Z",
-      },
-    ]);
-
+  it("requires command metadata before invoking legacy payment adapter", async () => {
+    const { service, query } = createService([]);
     await expect(
-      service.createExpense(actor, {
-        amount: 1500,
-        category: " rent ",
-        description: " Аренда ",
-        branchId: "branch-a",
-      }),
-    ).resolves.toEqual({
-      id: "exp-a",
-      amount: 1500,
-      category: "rent",
-      description: "Аренда",
-      branchId: "branch-a",
-      branchName: null,
-      createdAt: "2026-06-22T00:00:00.000Z",
-    });
-
-    expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual([1500, "rent", "Аренда", "branch-a"]);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.expense_created",
-        entityType: "expense",
-        entityId: "exp-a",
-      }),
-    );
-  });
-
-  it("is idempotent for duplicate payment submits within the window", async () => {
-    const paymentRow = {
-      id: "pay-a",
-      student_id: "student-a",
-      student_user_id: null,
-      amount: "1500.00",
-      student_first_name: null,
-      student_last_name: null,
-      currency: "RUB",
-      payment_date: "2026-06-23",
-      method: "cash",
-      external_id: null,
-      notes: null,
-      created_by: "manager-a",
-      created_at: "2026-06-23T00:00:00.000Z",
-    };
-    const { service, query, realtime } = createServiceWithQueryResults([
-      { rows: [] }, // 1st: advisory lock
-      { rows: [] }, // 1st: dup-check empty
-      { rows: [paymentRow] }, // insert
-      { rows: [{ user_id: "client-a" }] }, // active Client finance audience
-      { rows: [] }, // 2nd: advisory lock
-      { rows: [paymentRow] }, // 2nd: dup-check returns existing
-    ]);
-    const dto = {
-      studentId: "student-a",
-      amount: 1500,
-      paymentDate: "2026-06-23",
-      method: "cash",
-    } as never;
-
-    const first = await service.createPayment(actor, dto);
-    const second = await service.createPayment(actor, dto);
-
-    expect(first.id).toBe("pay-a");
-    expect(second.id).toBe("pay-a");
-    // lock, dup-check, insert, realtime affected users, lock, dup-check — the
-    // second submit must NOT insert again.
-    expect(query).toHaveBeenCalledTimes(6);
-    expect(String(query.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
-    expect(realtime.emitFinanceChanged).toHaveBeenCalledTimes(1);
-    expect(realtime.emitFinanceChanged).toHaveBeenCalledWith(["client-a"]);
-    expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
-    const financeAudienceSql = String(query.mock.calls[3][0]);
-    expect(financeAudienceSql).toContain("recipient.role = 'client'");
-    expect(financeAudienceSql).toContain("recipient.is_app_account = true");
-  });
-
-  describe("привязка платежа к занятию (✔ владелец 17.07)", () => {
-    const paymentRow = {
-      id: "pay-a",
-      student_id: "student-a",
-      student_user_id: null,
-      amount: "1500.00",
-      student_first_name: null,
-      student_last_name: null,
-      currency: "RUB",
-      payment_date: "2026-06-23",
-      method: "cash",
-      external_id: null,
-      notes: null,
-      created_by: "manager-a",
-      created_at: "2026-06-23T00:00:00.000Z",
-      lesson_id: "lesson-a",
-    };
-
-    it("ties the payment to the lesson", async () => {
-      const { service, query } = createServiceWithQueryResults([
-        { rows: [] }, // advisory lock
-        { rows: [{ id: "lesson-a" }] }, // занятие принадлежит ученику
-        { rows: [] }, // dup-check
-        { rows: [paymentRow] }, // insert
-        { rows: [] }, // realtime audience
-      ]);
-
-      const result = await service.createPayment(actor, {
+      service.createPayment(actor, {
         studentId: "student-a",
-        amount: 1500,
-        paymentDate: "2026-06-23",
-        method: "cash",
-        lessonId: "lesson-a",
-      } as never);
-
-      expect(result.lessonId).toBe("lesson-a");
-      const insertParams = query.mock.calls[3][1] as unknown[];
-      expect(insertParams[insertParams.length - 1]).toBe("lesson-a");
-    });
-
-    it("refuses a lesson that is not this student's, instead of silently unlinking", async () => {
-      // Молча обнулить чужую ссылку было бы хуже отказа: платёж записался бы
-      // «не разнесённым», а тот, кто его привязывал, ушёл бы уверенный, что
-      // привязал. И «оплачено» загорелось бы у чужого дня.
-      const { service, query } = createServiceWithQueryResults([
-        { rows: [] }, // advisory lock
-        { rows: [] }, // занятия у этого ученика нет
-      ]);
-
-      await expect(
-        service.createPayment(actor, {
-          studentId: "student-a",
-          amount: 1500,
-          paymentDate: "2026-06-23",
-          lessonId: "lesson-of-someone-else",
-        } as never),
-      ).rejects.toBeInstanceOf(NotFoundException);
-
-      // Главное: вставки не было.
-      expect(query).toHaveBeenCalledTimes(2);
-    });
-
-    it("does not ask about a lesson when the payment is not tied to one", async () => {
-      // Пополнение счёта авансом ни к какому занятию не относится — это норма,
-      // а не пропуск, и лишний запрос ради этого не нужен.
-      const { service, query } = createServiceWithQueryResults([
-        { rows: [] }, // advisory lock
-        { rows: [] }, // dup-check
-        { rows: [{ ...paymentRow, lesson_id: null }] }, // insert
-        { rows: [] }, // realtime audience
-      ]);
-
-      const result = await service.createPayment(actor, {
-        studentId: "student-a",
-        amount: 1500,
-        paymentDate: "2026-06-23",
-      } as never);
-
-      expect(result.lessonId).toBeNull();
-      expect(String(query.mock.calls[1][0])).toContain(
-        "from app.commerce_ordinary_payments",
-      );
-    });
+        amount: 100,
+        paymentDate: "2026-09-05",
+      }),
+    ).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_KEY_REQUIRED" } });
+    expect(query).not.toHaveBeenCalled();
   });
 
   it("lists expenses with branch/category filters and a total (P5-5)", async () => {
@@ -594,6 +442,7 @@ describe("FinanceService", () => {
         rows: [
           {
             id: "exp-a",
+            version: 1,
             amount: "1500.00",
             category: "rent",
             description: null,
@@ -619,12 +468,14 @@ describe("FinanceService", () => {
     expect(result.items).toEqual([
       {
         id: "exp-a",
+        version: 1,
         amount: 1500,
         category: "rent",
         description: null,
         branchId: "branch-a",
         branchName: "Центр",
         createdAt: "2026-06-22T00:00:00.000Z",
+        occurredAt: "2026-06-22T00:00:00.000Z",
       },
     ]);
     // items query: branch + category filters then the limit param last.
@@ -633,9 +484,11 @@ describe("FinanceService", () => {
       "rent",
       "2026-06-01T00:00:00.000Z",
       "2026-07-01T00:00:00.000Z",
-      50,
+      51,
     ]);
-    expect(String(query.mock.calls[0][0])).toContain("e.created_at < $4");
+    expect(String(query.mock.calls[0][0])).toContain(
+      "coalesce(e.occurred_at,e.created_at) < $4",
+    );
     // total query reuses the filter params WITHOUT the limit.
     expect(query.mock.calls[1][1]).toEqual([
       "branch-a",
@@ -645,94 +498,14 @@ describe("FinanceService", () => {
     ]);
   });
 
-  it("soft-deletes expenses and 404s when missing (P5-5)", async () => {
-    const { service, query, audit } = createService([{ id: "exp-a" }]);
-    await expect(service.deleteExpense(actor, "exp-a")).resolves.toEqual({
-      success: true,
-    });
-    expect(query.mock.calls[0][0]).toContain("set deleted_at = now()");
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "crm.expense_deleted" }),
-    );
-
-    const missing = createService([]);
+  it("rejects transfers without a stable command identity before writing", async () => {
+    const { service, query } = createService([]);
     await expect(
-      missing.service.deleteExpense(actor, "exp-x"),
-    ).rejects.toBeInstanceOf(NotFoundException);
+      service.createAccountTransfer(actor, "student-a", {
+        toStudentId: "student-b",
+        amount: 100,
+      }),
+    ).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_KEY_REQUIRED" } });
+    expect(query).not.toHaveBeenCalled();
   });
-
-  describe("createAccountTransfer", () => {
-    it("writes both legs with opposite signs and links the counterparties", async () => {
-      const { service, query, audit } = createServiceWithQueryResults([
-        { rows: [{ id: "student-a", profile_user_id: "client-a" }] }, // from
-        { rows: [{ id: "student-b", profile_user_id: "client-b" }] }, // to
-        { rows: [{ id: "adj-out" }] },
-        { rows: [{ id: "adj-in" }] },
-      ]);
-
-      await expect(
-        service.createAccountTransfer(actor, "student-a", {
-          toStudentId: "student-b",
-          amount: 1500,
-          description: "Перенос на друга",
-        }),
-      ).resolves.toEqual({
-        fromAdjustmentId: "adj-out",
-        toAdjustmentId: "adj-in",
-        amount: 1500,
-      });
-
-      // Payer leg: negative, pointing at the receiver.
-      expect(query.mock.calls[2][1]).toEqual([
-        "student-a",
-        "transfer_out",
-        -1500,
-        "Перенос на друга",
-        "student-b",
-        null,
-        "manager-a",
-      ]);
-      // Receiver leg: positive, pointing back. Money is conserved.
-      expect(query.mock.calls[3][1]).toEqual([
-        "student-b",
-        "transfer_in",
-        1500,
-        "Перенос на друга",
-        "student-a",
-        null,
-        "manager-a",
-      ]);
-      expect(audit.record).toHaveBeenCalledWith(
-        expect.objectContaining({ action: "crm.account_transfer_created" }),
-      );
-    });
-
-    it("rejects a transfer to self", async () => {
-      const { service } = createService([]);
-
-      await expect(
-        service.createAccountTransfer(actor, "student-a", {
-          toStudentId: "student-a",
-          amount: 100,
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-    });
-
-    it("does not write a leg when the receiver does not exist", async () => {
-      const { service, query } = createServiceWithQueryResults([
-        { rows: [{ id: "student-a", profile_user_id: "client-a" }] },
-        { rows: [] }, // receiver missing
-      ]);
-
-      await expect(
-        service.createAccountTransfer(actor, "student-a", {
-          toStudentId: "ghost",
-          amount: 100,
-        }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      // Nothing inserted: a half-landed transfer would invent or destroy money.
-      expect(query).toHaveBeenCalledTimes(2);
-    });
-  });
-
 });

@@ -245,4 +245,49 @@ describe("ReferenceCatalogLifecycleService", () => {
       }),
     );
   });
+
+  it("restores with a parameter list that matches the active-state SQL", async () => {
+    const archived = row({
+      lifecycle_state: "archived",
+      version: 1,
+      archived_at: "2026-08-11T12:00:00.000Z",
+      archive_reason: "Архив",
+    });
+    const active = row({ ...archived, lifecycle_state: "active", version: 2 });
+    const { service, integrity } = createService([[archived], [], [active]]);
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [archived] })
+      .mockResolvedValueOnce({ rows: [{ id: "discipline-a" }] })
+      .mockResolvedValueOnce({ rows: [] });
+    integrity.executeVersionedMutation.mockImplementation(async (command) => {
+      const resultRef = await command.mutate({ query: clientQuery }, 2);
+      return {
+        resultRef,
+        version: 2,
+        replayed: false,
+        auditId: "audit-a",
+        eventId: "event-a",
+      };
+    });
+
+    await service.restore(
+      director,
+      "discipline",
+      "discipline-a",
+      {
+        expectedVersion: 1,
+        reasonText: "Возвращаем",
+        confirm: true,
+      },
+      metadata,
+    );
+
+    const updateCall = clientQuery.mock.calls.find((call) =>
+      String(call[0]).includes("update app.disciplines"),
+    );
+    expect(updateCall).toBeDefined();
+    expect(String(updateCall![0])).toContain("version = $4");
+    expect(updateCall![1]).toEqual(["discipline-a", 1, "active", 2]);
+  });
 });

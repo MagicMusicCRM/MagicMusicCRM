@@ -1,24 +1,44 @@
-import { ConflictException, Injectable } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+} from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
+import type { CrmPolicy } from "../crm.policy";
 import {
   LessonSettlementPort,
   LessonFinancialDecision,
   LessonSettlementInput,
   LessonSettlementResult,
   PreparedLessonSettlementPlan,
+  ResolvePlannedLessonSettlementInput,
 } from "./lesson-settlement.port";
 import { previewLessonSettlement, settleLesson } from "./lesson-settlement-execution";
-import { loadLessonSettlementCatalog } from "./lesson-settlement-catalog";
+import {
+  invalidLessonSettlementDecision,
+  loadLessonSettlementCatalog,
+} from "./lesson-settlement-catalog";
+import {
+  durationShareBasisPoints,
+  LessonSettlementCalculationError,
+} from "./lesson-settlement.calculation";
+import { resolveSettlementPolicy } from "./lesson-settlement-policy";
 import {
   assignLessonSettlementPlan,
   cloneLessonSettlementPlan,
+  insertPreparedLessonSettlementPlan,
   loadLessonSettlementPlan,
   markLessonSettlementPlanState,
   plannedLessonSubscriptionAllocations,
   prepareLessonSettlementPlan,
+  prepareLessonSettlementPlanWithCatalog,
   replaceLessonSettlementPlan,
 } from "./lesson-settlement-plan.persistence";
+
+export type TeacherCompensationMutationAuthorization = ReturnType<
+  CrmPolicy["teacherCompensationMutationAuthorization"]
+>;
 
 @Injectable()
 export class LessonSettlementService implements LessonSettlementPort {
@@ -45,6 +65,341 @@ export class LessonSettlementService implements LessonSettlementPort {
     );
   }
 
+  async resolvePlannedDecision(
+    client: PoolClient,
+    input: ResolvePlannedLessonSettlementInput,
+  ): Promise<LessonFinancialDecision> {
+    this.assertPlannedActor(input);
+    assertExactClientDecisions(input.decision, input.requiredClientIds);
+    const catalog = await loadLessonSettlementCatalog(
+      client,
+      input.branchId,
+      input.configurationRevisionIds,
+    );
+    return this.resolvePlannedDecisionWithCatalog(catalog, input);
+  }
+
+  async resolvePlannedPlan(
+    client: PoolClient,
+    input: ResolvePlannedLessonSettlementInput,
+  ): Promise<PreparedLessonSettlementPlan> {
+    this.assertPlannedActor(input);
+    assertExactClientDecisions(input.decision, input.requiredClientIds);
+    const catalog = await loadLessonSettlementCatalog(
+      client,
+      input.branchId,
+      input.configurationRevisionIds,
+    );
+    const decision = this.resolvePlannedDecisionWithCatalog(catalog, input);
+    return prepareLessonSettlementPlanWithCatalog(
+      client,
+      catalog,
+      decision,
+      input.actorUserId,
+    );
+  }
+
+  private assertPlannedActor(input: ResolvePlannedLessonSettlementInput): void {
+    if (input.authorization.actor.userId !== input.actorUserId) {
+      throw new ForbiddenException({
+        code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED",
+      });
+    }
+  }
+
+  private resolvePlannedDecisionWithCatalog(
+    catalog: Awaited<ReturnType<typeof loadLessonSettlementCatalog>>,
+    input: ResolvePlannedLessonSettlementInput,
+  ): LessonFinancialDecision {
+    assertDurationWithinLesson(
+      input.durationMinutes,
+      input.durationMinutes,
+      "durationMinutes",
+    );
+    const clientDecisions = input.decision.clientDecisions?.map((decision) => {
+      const policy = resolveSettlementPolicy(
+        catalog,
+        decision.settlementTypeKey ?? input.decision.settlementTypeKey,
+      );
+      if (
+        policy.clientDurationMode === "manual" &&
+        decision.chargeDurationMinutes === undefined
+      ) {
+        invalidLessonSettlementDecision(
+          "CLIENT_PARTIAL_DURATION_REQUIRED",
+          `clientDecisions.${decision.clientId}.chargeDurationMinutes`,
+        );
+      }
+      const isTrial = (decision.settlementTypeKey ?? input.decision.settlementTypeKey) === "trial_lesson";
+      if (input.decision.settlementTypeKey === "trial_lesson" &&
+          decision.settlementTypeKey && decision.settlementTypeKey !== "trial_lesson") {
+        invalidLessonSettlementDecision("TRIAL_CLIENT_OVERRIDE_NOT_ALLOWED", "clientDecisions");
+      }
+      const chargeDurationMinutes = isTrial ? 0 : decision.chargeDurationMinutes ??
+        resolveDurationMinutes(
+          policy.clientDurationMode,
+          input.durationMinutes,
+          undefined,
+        );
+      assertDurationWithinLesson(
+        chargeDurationMinutes,
+        input.durationMinutes,
+        `clientDecisions.${decision.clientId}.chargeDurationMinutes`,
+      );
+      return {
+        ...decision, chargeDurationMinutes,
+        ...(isTrial ? { chargeType: "none" as const, subscriptionId: undefined,
+          payerStudentId: undefined, basePriceMinor: undefined,
+          discount: undefined, surcharge: undefined } : {}),
+      };
+    });
+    const decision = {
+      ...input.decision,
+      ...(clientDecisions ? { clientDecisions } : {}),
+    };
+    if (input.preservedTeacherDecision) {
+      // An explicit operational rule selection on a trial supersedes the old
+      // selection. Omitted/automatic fields still preserve a saved manual choice.
+      if (decision.settlementTypeKey === "trial_lesson" &&
+          input.authorization.actor.role === "admin" &&
+          decision.teacherCompensationSource === "manual") {
+        return this.resolveTeacherDecision(catalog, input, decision);
+      }
+      if (
+        input.preservedTeacherDecision.teacherCompensationSource ===
+        "automatic"
+      ) {
+        if (hasSuppliedTeacherDecision(decision)) {
+          const requested = this.resolveTeacherDecision(
+            catalog,
+            input,
+            decision,
+          );
+          if (requested.teacherCompensationSource === "manual") {
+            return requested;
+          }
+        }
+        return this.resolveTeacherDecision(catalog, input, {
+          ...decision,
+          ...input.preservedTeacherDecision,
+        });
+      }
+      if (hasSuppliedTeacherDecision(decision)) {
+        this.resolveTeacherDecision(catalog, input, decision);
+      }
+      if (
+        input.preservedTeacherDecision.teacherCreditedDurationMinutes !==
+        undefined
+      ) {
+        assertDurationWithinLesson(
+          input.preservedTeacherDecision.teacherCreditedDurationMinutes,
+          input.durationMinutes,
+          "teacherCreditedDurationMinutes",
+        );
+      }
+      return { ...decision, ...input.preservedTeacherDecision };
+    }
+    return this.resolveTeacherDecision(catalog, input, decision);
+  }
+
+  async partialDurationWarnings(
+    client: PoolClient,
+    input: {
+      branchId: string;
+      durationMinutes: number;
+      decision: LessonFinancialDecision;
+      configurationRevisionIds?: NonNullable<
+        LessonSettlementInput["configurationRevisionIds"]
+      >;
+    },
+  ): Promise<string[]> {
+    const catalog = await loadLessonSettlementCatalog(
+      client,
+      input.branchId,
+      input.configurationRevisionIds,
+    );
+    const warnings = new Set<string>();
+    for (const decision of input.decision.clientDecisions ?? []) {
+      const policy = resolveSettlementPolicy(
+        catalog,
+        decision.settlementTypeKey ?? input.decision.settlementTypeKey,
+      );
+      if (policy.clientDurationMode === "manual") {
+        addDurationBoundaryWarning(
+          warnings,
+          "CLIENT",
+          decision.chargeDurationMinutes,
+          input.durationMinutes,
+        );
+      }
+    }
+    const teacherPolicy = resolveSettlementPolicy(
+      catalog,
+      input.decision.settlementTypeKey,
+    );
+    if (
+      input.decision.teacherCreditedDurationMinutes !== undefined &&
+      (teacherPolicy.teacherDurationMode === "manual" ||
+        input.decision.teacherCompensationSource !== "automatic")
+    ) {
+      addDurationBoundaryWarning(
+        warnings,
+        "TEACHER",
+        input.decision.teacherCreditedDurationMinutes,
+        input.durationMinutes,
+      );
+    }
+    return [...warnings];
+  }
+
+  private resolveTeacherDecision(
+    catalog: Awaited<ReturnType<typeof loadLessonSettlementCatalog>>,
+    input: {
+      durationMinutes: number;
+      decision: LessonFinancialDecision;
+      authorization: TeacherCompensationMutationAuthorization;
+      reasonText?: string;
+    },
+    decision: LessonFinancialDecision,
+  ): LessonFinancialDecision {
+    const policy = resolveSettlementPolicy(
+      catalog,
+      decision.settlementTypeKey,
+    );
+    const recommendedMinutes = policy.teacherDurationMode === "manual"
+      ? undefined
+      : resolveDurationMinutes(
+          policy.teacherDurationMode,
+          input.durationMinutes,
+          undefined,
+        );
+    const teacherFieldsOmitted = !hasSuppliedTeacherDecision(decision);
+    if (
+      teacherFieldsOmitted ||
+      decision.teacherCompensationSource === "automatic"
+    ) {
+      if (policy.teacherDurationMode === "manual") {
+        invalidLessonSettlementDecision(
+          "TEACHER_PARTIAL_DURATION_REQUIRED",
+          "teacherCreditedDurationMinutes",
+        );
+      }
+      return {
+        ...decision,
+        teacherCompensationRuleKey: policy.teacherCompensationRuleKey,
+        teacherCompensationValueMinor: undefined,
+        teacherCreditedDurationMinutes: recommendedMinutes,
+        teacherCompensationSource: "automatic",
+      };
+    }
+    const selectedRule = catalog.compensation_rules.find(
+      (rule) =>
+        rule.active && rule.stableKey === decision.teacherCompensationRuleKey,
+    );
+    if (!decision.teacherCompensationRuleKey || !selectedRule) {
+      invalidLessonSettlementDecision(
+        "TEACHER_COMPENSATION_RULE_NOT_FOUND",
+        "teacherCompensationRuleKey",
+      );
+    }
+    if (
+      policy.teacherDurationMode === "manual" &&
+      decision.teacherCreditedDurationMinutes === undefined
+    ) {
+      invalidLessonSettlementDecision(
+        "TEACHER_PARTIAL_DURATION_REQUIRED",
+        "teacherCreditedDurationMinutes",
+      );
+    }
+    const legacyAutomatic = decision.teacherCompensationSource === undefined &&
+      policy.teacherDurationMode !== "manual" &&
+      decision.teacherCompensationValueMinor === undefined &&
+      decision.teacherCreditedDurationMinutes === undefined &&
+      (decision.teacherCompensationRuleKey === "standard" ||
+        decision.teacherCompensationRuleKey ===
+          policy.teacherCompensationRuleKey);
+    const manual = !legacyAutomatic && (
+      policy.teacherDurationMode === "manual" ||
+      decision.teacherCompensationSource === "manual" ||
+      decision.teacherCompensationRuleKey !==
+        policy.teacherCompensationRuleKey ||
+      decision.teacherCompensationValueMinor !== undefined ||
+      decision.teacherCreditedDurationMinutes !== recommendedMinutes
+    );
+    if (!manual) {
+      return {
+        ...decision,
+        teacherCompensationRuleKey: policy.teacherCompensationRuleKey,
+        teacherCompensationValueMinor: undefined,
+        teacherCreditedDurationMinutes: recommendedMinutes,
+        teacherCompensationSource: "automatic",
+      };
+    }
+    const operationalTrialSelection =
+      input.authorization.actor.role === "admin" &&
+      decision.settlementTypeKey === "trial_lesson" &&
+      (decision.teacherCompensationValueMinor === undefined ||
+        decision.teacherCompensationValueMinor === selectedRule.value) &&
+      (decision.teacherCreditedDurationMinutes === undefined ||
+        decision.teacherCreditedDurationMinutes === recommendedMinutes);
+    if (input.authorization.capabilityKey !== "config.commerce.manage" && !operationalTrialSelection) {
+      throw new ForbiddenException({
+        code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED",
+      });
+    }
+    if (!input.reasonText?.trim()) {
+      invalidLessonSettlementDecision(
+        "TEACHER_COMPENSATION_REASON_REQUIRED",
+        "reasonText",
+      );
+    }
+    const requestedMinutes = decision.teacherCreditedDurationMinutes;
+    if (requestedMinutes !== undefined) {
+      assertDurationWithinLesson(
+        requestedMinutes,
+        input.durationMinutes,
+        "teacherCreditedDurationMinutes",
+      );
+    }
+    const derivePercent = policy.teacherDurationMode === "manual" ||
+      (requestedMinutes !== undefined && requestedMinutes !== recommendedMinutes);
+    if (derivePercent) {
+      const percentRule = catalog.compensation_rules.find(
+        (rule) =>
+          rule.active &&
+          rule.mode === "percent" &&
+          (rule.stableKey === policy.teacherCompensationRuleKey ||
+            policy.teacherDurationMode !== "manual"),
+      );
+      if (!percentRule) {
+        invalidLessonSettlementDecision(
+          "TEACHER_COMPENSATION_RULE_NOT_FOUND",
+          "teacherCompensationRuleKey",
+        );
+      }
+      return {
+        ...decision,
+        teacherCompensationRuleKey: percentRule.stableKey,
+        teacherCompensationValueMinor: durationShareBasisPoints(
+          requestedMinutes!,
+          input.durationMinutes,
+        ).toString(),
+        teacherCreditedDurationMinutes: requestedMinutes,
+        teacherCompensationSource: "manual",
+      };
+    }
+    return {
+      ...decision,
+      teacherCreditedDurationMinutes:
+        selectedRule.mode === "percent" &&
+          decision.teacherCompensationValueMinor !== undefined &&
+          requestedMinutes === undefined
+          ? undefined
+          : requestedMinutes ?? recommendedMinutes,
+      teacherCompensationSource: "manual",
+    };
+  }
+
   preparePlan(
     client: PoolClient,
     branchId: string,
@@ -67,6 +422,22 @@ export class LessonSettlementService implements LessonSettlementPort {
     return assignLessonSettlementPlan(client, input);
   }
 
+  async assignPreparedPlan(
+    client: PoolClient,
+    input: PreparedLessonSettlementPlan & {
+      lessonId: string;
+      selectedBy: string;
+      reasonText?: string;
+    },
+  ): Promise<PreparedLessonSettlementPlan> {
+    await insertPreparedLessonSettlementPlan(client, input);
+    return {
+      decision: input.decision,
+      settlementRevisionId: input.settlementRevisionId,
+      compensationRevisionId: input.compensationRevisionId,
+    };
+  }
+
   clonePlan(
     client: PoolClient,
     input: {
@@ -74,10 +445,7 @@ export class LessonSettlementService implements LessonSettlementPort {
       targetLessonId: string;
       selectedBy: string;
       reasonText?: string;
-      fallback?: {
-        branchId: string;
-        decision: LessonFinancialDecision;
-      };
+      fallback?: PreparedLessonSettlementPlan;
     },
   ) {
     return cloneLessonSettlementPlan(client, input);
@@ -139,6 +507,9 @@ export class LessonSettlementService implements LessonSettlementPort {
             teacherCompensationValueMinor:
               effective.teacherCompensationValueMinor,
           }),
+      teacherCreditedDurationMinutes:
+        effective.teacherCreditedDurationMinutes,
+      teacherCompensationSource: effective.teacherCompensationSource,
     };
   }
 
@@ -164,5 +535,82 @@ export class LessonSettlementService implements LessonSettlementPort {
       teacherCompensationRuleKey: rule.stableKey,
       teacherCompensationValueMinor: undefined,
     };
+  }
+}
+
+function resolveDurationMinutes(
+  mode: "zero" | "full" | "manual",
+  durationMinutes: number,
+  selectedMinutes: number | undefined,
+): number {
+  if (mode === "zero") return 0;
+  if (mode === "full") return durationMinutes;
+  return selectedMinutes!;
+}
+
+function assertExactClientDecisions(
+  decision: LessonFinancialDecision,
+  requiredClientIds: string[] | undefined,
+): void {
+  if (requiredClientIds === undefined) return;
+  const required = new Set(requiredClientIds);
+  const seen = new Set<string>();
+  for (const clientDecision of decision.clientDecisions ?? []) {
+    if (seen.has(clientDecision.clientId)) {
+      invalidLessonSettlementDecision(
+        "DUPLICATE_CLIENT_DECISION",
+        "clientDecisions",
+      );
+    }
+    seen.add(clientDecision.clientId);
+    if (!required.has(clientDecision.clientId)) {
+      invalidLessonSettlementDecision(
+        "UNKNOWN_LESSON_CLIENT",
+        "clientDecisions",
+      );
+    }
+  }
+  if ([...required].some((clientId) => !seen.has(clientId))) {
+    invalidLessonSettlementDecision(
+      "CLIENT_DECISION_MISSING",
+      "clientDecisions",
+    );
+  }
+}
+
+function assertDurationWithinLesson(
+  selectedMinutes: number,
+  durationMinutes: number,
+  field: string,
+): void {
+  try {
+    durationShareBasisPoints(selectedMinutes, durationMinutes);
+  } catch (error) {
+    if (error instanceof LessonSettlementCalculationError) {
+      invalidLessonSettlementDecision(error.code, field);
+    }
+    throw error;
+  }
+}
+
+function hasSuppliedTeacherDecision(
+  decision: LessonFinancialDecision,
+): boolean {
+  return decision.teacherCompensationRuleKey !== undefined ||
+    decision.teacherCompensationValueMinor !== undefined ||
+    decision.teacherCreditedDurationMinutes !== undefined ||
+    decision.teacherCompensationSource !== undefined;
+}
+
+function addDurationBoundaryWarning(
+  warnings: Set<string>,
+  subject: "CLIENT" | "TEACHER",
+  selectedMinutes: number | undefined,
+  durationMinutes: number,
+): void {
+  if (selectedMinutes === 0) {
+    warnings.add(`${subject}_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED`);
+  } else if (selectedMinutes === durationMinutes) {
+    warnings.add(`${subject}_FULL_DURATION_SETTLEMENT_TYPE_RECOMMENDED`);
   }
 }

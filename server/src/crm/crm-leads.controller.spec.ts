@@ -45,7 +45,9 @@ describe("CrmLeadsController", () => {
       status: "new",
     };
 
-    await expect(controller.createLead(actor, dto)).resolves.toEqual({
+    await expect(
+      controller.createLead(actor, dto, "create-lead-0001", "request-lead-0001"),
+    ).resolves.toEqual({
       id: "lead-a",
     });
     expect(clientWrites.validateLeadCreate).toHaveBeenCalledWith(dto);
@@ -60,6 +62,10 @@ describe("CrmLeadsController", () => {
         customDataPatch: { branchId: "branch-a" },
       },
       expect.objectContaining({ sourceId: "source-a" }),
+      {
+        idempotencyKey: "create-lead-0001",
+        requestId: "request-lead-0001",
+      },
     );
   });
 

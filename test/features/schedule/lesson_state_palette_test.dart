@@ -25,6 +25,19 @@ void main() {
       expect(projection.label, 'Забронировано');
     });
 
+    test('effective subscription marker does not replace lifecycle color', () {
+      final projection = LessonStateProjection.fromMap(const {
+        'lifecycle_state': 'rescheduled',
+        'settlement_markers': [
+          {'key': 'subscription_reserved'},
+        ],
+      });
+
+      expect(projection.token, LessonStateToken.rescheduled);
+      expect(projection.coveredBySubscription, isTrue);
+      expect(projection.token.accent, AppColor.text2);
+    });
+
     test('coverage requires a reservation rather than a funding choice', () {
       for (final lesson in <Map<String, dynamic>>[
         {'reservation_state': 'reserved'},
@@ -67,8 +80,21 @@ void main() {
         lifecycleState: 'settlement_pending',
       );
 
-      expect(projection.token, LessonStateToken.conflict);
-      expect(projection.label, 'Конфликт');
+      expect(projection.semantic, LessonSemantic.warning);
+      expect(projection.token.accent, AppColor.warning);
+      expect(projection.label, 'Нужно проверить расчёт');
+    });
+
+    test('cancelled and rescheduled retain distinct lifecycle semantics', () {
+      final cancelled = lessonStateProjection(lifecycleState: 'cancelled');
+      final rescheduled = lessonStateProjection(lifecycleState: 'rescheduled');
+
+      expect(cancelled.semantic, LessonSemantic.cancelled);
+      expect(cancelled.token.accent, AppColor.danger);
+      expect(cancelled.label, 'Отменено');
+      expect(rescheduled.semantic, LessonSemantic.rescheduled);
+      expect(rescheduled.token.accent, AppColor.text2);
+      expect(rescheduled.label, 'Перенесено');
     });
 
     test('schedule conflict overrides completed state', () {

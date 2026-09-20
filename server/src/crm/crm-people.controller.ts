@@ -262,14 +262,14 @@ export class CrmPeopleController {
   async exportTeacherStats(
     @CurrentActor() actor: ActorContext,
     @Query() query: TeacherStatsQuery,
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
     const xlsx = await this.payroll.exportTeacherStatsReport(actor, query);
     res.set({
       "Content-Type": XLSX_MIME,
       "Content-Disposition": 'attachment; filename="teacher-stats.xlsx"',
     });
-    return xlsx;
+    res.send(xlsx);
   }
 
   @Get("staff")

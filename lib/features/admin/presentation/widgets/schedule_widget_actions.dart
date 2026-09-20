@@ -1,6 +1,14 @@
 part of 'schedule_widget.dart';
 
 extension _ScheduleActions on _ScheduleWidgetState {
+  bool get _canFilterFinancialTypes => crmHasManagerAccess(
+    ref.read(capabilitySnapshotProvider).asData?.value.role ?? '',
+  );
+
+  Future<Map<String, dynamic>> _loadFinancialFilterCatalog(String? branchId) =>
+      ref
+          .read(magicCrmServiceProvider)
+          .getLessonDecisionCatalog(branchId: branchId);
   bool get _canManageTeacherCompensation {
     final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
     return snapshot != null && crmCanManageTeacherRates(snapshot);
@@ -143,37 +151,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
     final branchId = lesson['branch_id']?.toString();
     final branchName = lesson['branch_name']?.toString() ?? 'Филиал';
     final groupName = lesson['group_name']?.toString() ?? 'Группа';
+    final displayDate = scheduleDisplayDate(start);
     final dateFilter = DateTime(
-      start.year,
-      start.month,
-      start.day,
+      displayDate.year,
+      displayDate.month,
+      displayDate.day,
     ).toIso8601String();
     final references = [
-      if (lessonId?.isNotEmpty == true)
-        reference(
-          icon: Icons.event_note_rounded,
-          label: 'Занятие',
-          value: studentName,
-          link: EntityLink.typed(
-            entityType: EntityLinkType.lesson,
-            entityId: lessonId!,
-            presentation: EntityPresentationReference(
-              primary: studentName,
-              context: branchName,
-            ),
-            optionalFocus: EntityLinkFocus(
-              focus: 'lesson',
-              filter: {
-                'date': dateFilter,
-                if (branchId?.isNotEmpty == true) 'branchId': branchId,
-                if (studentId?.isNotEmpty == true) 'clientType': 'student',
-                if (leadId?.isNotEmpty == true) 'clientType': 'lead',
-                if (studentId?.isNotEmpty == true) 'clientId': studentId,
-                if (leadId?.isNotEmpty == true) 'clientId': leadId,
-              },
-            ),
-          ),
-        ),
       reference(
         icon: Icons.person_rounded,
         label: leadId?.isNotEmpty == true ? 'Лид' : 'Ученик',
@@ -288,28 +272,86 @@ extension _ScheduleActions on _ScheduleWidgetState {
       },
       timeRange: timeRange,
       currentStatus: lifecycleState,
+      coveredBySubscription: lessonHasSubscriptionCoverage(lesson),
       conflicts: conflicts,
       settlementIssue: settlementIssue,
       settlementHistory: settlementHistory,
       lessonId: widget.canWrite ? lessonId : null,
       onEdit: () => _editLesson(lesson),
+      onMove: () => _moveLesson(lesson),
       onCancel: () => _cancelLesson(lesson),
     );
   }
 
   Future<void> _editLesson(Map<String, dynamic> lesson) async {
     if (!widget.canWrite) return;
-    final changed = await CreateLessonDialog.show(context, lesson: lesson);
+    final actionable = await _reloadActionableLesson(lesson);
+    if (!mounted || actionable == null) return;
+    final changed = await CreateLessonDialog.show(context, lesson: actionable);
+    if (changed == true && mounted) await _fetchAll();
+  }
+
+  Future<void> _moveLesson(Map<String, dynamic> lesson) async {
+    if (!widget.canWrite) return;
+    final actionable = await _reloadActionableLesson(lesson);
+    if (!mounted || actionable == null) return;
+    final changed = await CreateLessonDialog.show(
+      context,
+      lesson: actionable,
+      focusDateTime: true,
+    );
+    if (changed == true && mounted) await _fetchAll();
+  }
+
+  Future<void> _proposeDayMove(
+    ScheduleEntry entry,
+    String roomId,
+    DateTime start,
+  ) async {
+    if (!widget.canWrite) return;
+    final actionable = await _reloadActionableLesson(entry.lesson);
+    if (!mounted || actionable == null) return;
+    if (actionable['id']?.toString() != entry.id ||
+        actionable['version'] != entry.lesson['version']) {
+      MagicToast.show(
+        context,
+        'Занятие уже изменено. Расписание обновлено — повторите перенос.',
+        type: MagicToastType.danger,
+      );
+      await _fetchAll();
+      return;
+    }
+    final targetRoom = _rooms
+        .where((room) => room['id']?.toString() == roomId)
+        .firstOrNull;
+    if (targetRoom == null ||
+        targetRoom['branch_id'] != actionable['branch_id']) {
+      MagicToast.show(
+        context,
+        'Для переноса в другой филиал откройте редактор занятия.',
+        type: MagicToastType.danger,
+      );
+      return;
+    }
+    final changed = await CreateLessonDialog.show(
+      context,
+      lesson: actionable,
+      focusDateTime: true,
+      initialDate: start,
+      initialRoomId: roomId,
+    );
     if (changed == true && mounted) await _fetchAll();
   }
 
   Future<void> _cancelLesson(Map<String, dynamic> lesson) async {
     if (!widget.canWrite) return;
+    final actionable = await _reloadActionableLesson(lesson);
+    if (!mounted || actionable == null) return;
     final changed = await showLessonDecisionFlow(
       context,
       crm: ref.read(magicCrmServiceProvider),
       operation: LessonDecisionOperation.cancel,
-      lesson: lesson,
+      lesson: actionable,
       canManageTeacherCompensation: _canManageTeacherCompensation,
     );
     if (changed == true && mounted) {
@@ -323,8 +365,32 @@ extension _ScheduleActions on _ScheduleWidgetState {
     }
   }
 
+  Future<Map<String, dynamic>?> _reloadActionableLesson(
+    Map<String, dynamic> lesson,
+  ) async {
+    try {
+      return await ref
+          .read(magicCrmServiceProvider)
+          .reloadActionableLesson(lesson);
+    } catch (error) {
+      if (!mounted) return null;
+      MagicToast.show(
+        context,
+        userErrorMessage(error, fallback: 'Не удалось открыть занятие.'),
+        type: MagicToastType.danger,
+      );
+      return null;
+    }
+  }
+
   // ── Data fetching ─────────────────────────────────────────────────────────
-  Future<void> _fetchAll() async {
+  Future<void> _fetchAll() => AppPerformance.measureScreen(
+    AppOperation.schedule,
+    _fetchAllData,
+    isVisible: () => mounted && TickerMode.valuesOf(context).enabled,
+  );
+
+  Future<void> _fetchAllData() async {
     _emitState(() {
       _isLoading = true;
       _loadError = null;
@@ -367,6 +433,21 @@ extension _ScheduleActions on _ScheduleWidgetState {
       ]);
       final branches = wave1[0];
       final rooms = wave1[1];
+
+      // A room belongs to exactly one branch. A linked room must therefore
+      // override a branch restored from the previously open schedule tab;
+      // otherwise the room filter and matrix branch can point at different
+      // branches and the linked lesson disappears from the calendar.
+      if (_filterRoomId != null) {
+        final linkedRoom = rooms
+            .where((room) => room['id']?.toString() == _filterRoomId)
+            .firstOrNull;
+        final linkedBranchId = linkedRoom?['branch_id']?.toString();
+        if (linkedBranchId?.isNotEmpty == true) {
+          _selectedBranchId = linkedBranchId;
+          _allBranchesSelected = false;
+        }
+      }
 
       // First open with no branch chosen yet → default to the user's OWN
       // branch (staff assignment), resolved once. Falls back to the first
@@ -427,6 +508,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
 
       final wave2 = await Future.wait<Object?>([
         crm.getScheduleMatrix(
+          isTrial: _onlyTrial ? true : null,
+          settlementTypes: _canFilterFinancialTypes
+              ? _settlementTypes
+              : const {},
+          compensationRules: _canFilterFinancialTypes
+              ? _compensationRules
+              : const {},
           from: fromIso,
           to: toIso,
           branchId: defaultBranch,
@@ -436,7 +524,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
               ? 500
               : 300,
         ),
-        defaultBranch == null
+        defaultBranch == null || widget.fixedTeacherId != null
             ? Future.value(<String, dynamic>{})
             : crm
                   .listRoomAvailability(
@@ -454,6 +542,14 @@ extension _ScheduleActions on _ScheduleWidgetState {
             ? Future.value(<Map<String, dynamic>>[])
             : crm
                   .getScheduleMonthSummary(
+                    teacherId: widget.fixedTeacherId ?? _filterTeacherId,
+                    isTrial: _onlyTrial ? true : null,
+                    settlementTypes: _canFilterFinancialTypes
+                        ? _settlementTypes
+                        : const {},
+                    compensationRules: _canFilterFinancialTypes
+                        ? _compensationRules
+                        : const {},
                     from: fromIso,
                     to: toIso,
                     branchId: defaultBranch,
@@ -593,6 +689,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   Future<void> _fetchAvailabilityForSelectedDay() async {
+    if (widget.fixedTeacherId != null) return;
     final branchIds = _allBranchesSelected
         ? _branches
               .map((branch) => branch['id']?.toString())
@@ -644,18 +741,48 @@ extension _ScheduleActions on _ScheduleWidgetState {
     final branchId = _selectedBranchId;
     if ((branchId == null || branchId.isEmpty) && !_allBranchesSelected) return;
     try {
-      final result = await ref
-          .read(magicCrmServiceProvider)
-          .getScheduleMatrix(
-            localDate: dateOnly(date),
+      final service = ref.read(magicCrmServiceProvider);
+      final results = await Future.wait([
+        for (final day in [date, DateTime(date.year, date.month, date.day + 1)])
+          service.getScheduleMatrix(
+            isTrial: _onlyTrial ? true : null,
+            settlementTypes: _canFilterFinancialTypes
+                ? _settlementTypes
+                : const {},
+            compensationRules: _canFilterFinancialTypes
+                ? _compensationRules
+                : const {},
+            localDate: dateOnly(day),
             branchId: branchId,
             groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
             teacherId: widget.fixedTeacherId ?? _filterTeacherId,
             limit: 500,
-          );
-      final items = result['items'];
-      if (items is! List || !mounted) return;
-      final dayLessons = items.whereType<Map<String, dynamic>>().toList();
+          ),
+      ]);
+      if (!mounted) return;
+      final dayLessons = [
+        for (final result in results)
+          ...(result['items'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>(),
+      ];
+      final focused = dayLessons
+          .where(
+            (lesson) =>
+                _highlightLessonId != null &&
+                lesson['id']?.toString() == _highlightLessonId,
+          )
+          .firstOrNull;
+      final focusedAt = focused == null ? null : _parseLessonTime(focused);
+      if (focusedAt != null &&
+          focusedAt.hour < 1 &&
+          DateUtils.isSameDay(_selectedDate, focusedAt)) {
+        final evening = scheduleDisplayDate(focusedAt);
+        _emitState(() {
+          _selectedDate = evening;
+          _displayedMonth = DateTime(evening.year, evening.month);
+        });
+        return _fetchDayLessons(evening);
+      }
 
       // Upsert by id so the rest of the loaded window is preserved while the
       // selected day becomes complete.
@@ -723,6 +850,14 @@ extension _ScheduleActions on _ScheduleWidgetState {
         return false;
       }
       // Optional filters — applied over the already-loaded matrix, no refetch.
+      if (_canFilterFinancialTypes &&
+          _settlementTypes.isNotEmpty &&
+          !_settlementTypes.contains(l['settlement_type_key']))
+        return false;
+      if (_canFilterFinancialTypes &&
+          _compensationRules.isNotEmpty &&
+          !_compensationRules.contains(l['teacher_compensation_rule_key']))
+        return false;
       if (_onlyTrial && l['is_trial'] != true) return false;
       if (_onlyConflicts && conflictTypes(l['conflict_types']).isEmpty) {
         return false;
@@ -757,6 +892,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   bool get _hasExtraFilters =>
+      _settlementTypes.isNotEmpty ||
+      _compensationRules.isNotEmpty ||
       _onlyTrial ||
       _onlyConflicts ||
       _filterTeacherId != null ||
@@ -764,13 +901,23 @@ extension _ScheduleActions on _ScheduleWidgetState {
       _filterClientId != null;
 
   int get _activeScheduleFilterCount =>
+      (_settlementTypes.isNotEmpty ? 1 : 0) +
+      (_compensationRules.isNotEmpty ? 1 : 0) +
       (_onlyTrial ? 1 : 0) +
       (_onlyConflicts ? 1 : 0) +
       (_filterTeacherId != null ? 1 : 0);
 
-  List<Map<String, dynamic>> _lessonsForDate(DateTime date) {
+  List<Map<String, dynamic>> _lessonsForDate(
+    DateTime date, {
+    bool extendedEvening = false,
+  }) {
     return _filteredLessons.where((l) {
-      final dt = _parseLessonTime(l);
+      final parsed = _parseLessonTime(l);
+      final dt = parsed == null
+          ? null
+          : extendedEvening
+          ? scheduleDisplayDate(parsed)
+          : parsed;
       return dt != null &&
           dt.year == date.year &&
           dt.month == date.month &&
@@ -910,8 +1057,12 @@ extension _ScheduleActions on _ScheduleWidgetState {
       initialValue: _scheduleSearchQuery,
     );
 
-    final normalized = query?.trim().toLowerCase();
-    if (normalized == null) return;
+    if (query != null && mounted) await _runScheduleSearch(query);
+  }
+
+  Future<void> _runScheduleSearch(String query) async {
+    final normalized = query.trim().toLowerCase();
+
     if (normalized.isEmpty) {
       _clearScheduleSearch();
       return;
@@ -962,7 +1113,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
     } catch (error) {
       debugPrint('Exact schedule search failed: $error');
     }
-    if (!mounted) return;
+    if (!mounted || _scheduleSearchQuery != normalized) return;
     matches = _lessonsInCurrentView().where(
       (lesson) => _matchesScheduleSearch(lesson, normalized),
     );
@@ -1024,6 +1175,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
     final responses = await Future.wait([
       for (final target in targets.values.take(12))
         crm.getScheduleMatrix(
+          isTrial: _onlyTrial ? true : null,
+          settlementTypes: _canFilterFinancialTypes
+              ? _settlementTypes
+              : const {},
+          compensationRules: _canFilterFinancialTypes
+              ? _compensationRules
+              : const {},
           from: range.$1,
           to: range.$2,
           branchId: _selectedBranchId,
@@ -1060,7 +1218,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
         }
       }
     }
-    if (!mounted) return;
+    if (!mounted || _scheduleSearchQuery != query) return;
     _emitState(() {
       _lessons = byId.values.toList();
       _teacherNames = teacherNames;
@@ -1099,7 +1257,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
 
   Iterable<Map<String, dynamic>> _lessonsInCurrentView() {
     if (_currentView == ScheduleView.day) {
-      return _lessonsForDate(_selectedDate);
+      return _lessonsForDate(_selectedDate, extendedEvening: true);
     }
     if (_currentView == ScheduleView.week) {
       final monday = DateTime(
@@ -1109,7 +1267,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
       ).subtract(Duration(days: _selectedDate.weekday - 1));
       final end = monday.add(const Duration(days: 7));
       return _filteredLessons.where((lesson) {
-        final at = _parseLessonTime(lesson);
+        final parsed = _parseLessonTime(lesson);
+        final at = parsed == null ? null : scheduleDisplayDate(parsed);
         return at != null && !at.isBefore(monday) && at.isBefore(end);
       });
     }
@@ -1122,6 +1281,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   void _clearScheduleSearch() {
+    _desktopSearchController.clear();
     if (!_hasScheduleSearch && _highlightLessonId == null) return;
     _emitState(() {
       _scheduleSearchQuery = '';
@@ -1141,6 +1301,11 @@ extension _ScheduleActions on _ScheduleWidgetState {
       initialOnlyConflicts: _onlyConflicts,
       initialTeacherId: _filterTeacherId,
       teacherOptions: _teacherFilterOptions,
+      initialSettlementTypes: _settlementTypes,
+      initialCompensationRules: _compensationRules,
+      loadFinancialCatalog: _canFilterFinancialTypes
+          ? _loadFinancialFilterCatalog
+          : null,
     );
     if (result == null) return;
     _applyScheduleFilterResult(result);
@@ -1152,12 +1317,21 @@ extension _ScheduleActions on _ScheduleWidgetState {
         result.branchId != _selectedBranchId ||
         allBranchesSelected != _allBranchesSelected;
     final modeChanged = result.mode != _dayViewMode;
+    final scopeChanged =
+        result.teacherId != _filterTeacherId || result.onlyTrial != _onlyTrial;
+    final financialChanged =
+        result.settlementTypes.length != _settlementTypes.length ||
+        !result.settlementTypes.containsAll(_settlementTypes) ||
+        result.compensationRules.length != _compensationRules.length ||
+        !result.compensationRules.containsAll(_compensationRules);
     _emitState(() {
       _clearHighlight();
       _selectedBranchId = result.branchId;
       _allBranchesSelected = allBranchesSelected;
       _dayViewMode = result.mode;
       _onlyTrial = result.onlyTrial;
+      _settlementTypes = result.settlementTypes;
+      _compensationRules = result.compensationRules;
       _onlyConflicts = result.onlyConflicts;
       _filterTeacherId = result.teacherId;
       if (_selectedTeacherId != null &&
@@ -1167,10 +1341,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
         _selectedTeacherId = null;
       }
     });
-    // The trial/conflict/teacher filters are applied client-side over the
-    // loaded matrix, so they need only a rebuild (done by _emitState). Only a
-    // branch or layout change actually needs a refetch.
-    if (branchChanged || modeChanged) _fetchAll();
+    // Financial, teacher and trial scopes must refresh every matrix query;
+    // local predicates also protect the view while the response is in flight.
+    if (branchChanged || modeChanged || financialChanged || scopeChanged)
+      _fetchAll();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

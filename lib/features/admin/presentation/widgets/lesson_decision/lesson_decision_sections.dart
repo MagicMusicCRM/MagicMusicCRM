@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
 import 'lesson_decision_models.dart';
+import '../lesson_editor/lesson_financial_autofill.dart';
 
 class LessonDecisionReasonField extends StatelessWidget {
   const LessonDecisionReasonField({
@@ -50,6 +52,7 @@ class LessonDecisionFormContent extends StatelessWidget {
     required this.completedSuccessorScheduledAt,
     required this.reasonController,
     required this.compensationValueController,
+    required this.teacherDurationController,
     required this.catalog,
     required this.settlementKey,
     required this.compensationKey,
@@ -57,9 +60,11 @@ class LessonDecisionFormContent extends StatelessWidget {
     required this.participants,
     required this.participantNames,
     required this.clientSettlementKeys,
+    required this.clientDurationMinutes,
     required this.payerIds,
     required this.payerNames,
     required this.subscriptionIds,
+    required this.chargeTypes,
     required this.subscriptions,
     required this.loadingSubscriptions,
     required this.groupLesson,
@@ -73,11 +78,17 @@ class LessonDecisionFormContent extends StatelessWidget {
     required this.onSettlementChanged,
     required this.onCompensationChanged,
     required this.onCompensationValueChanged,
+    required this.onTeacherDurationChanged,
+    required this.onRestoreRecommendation,
     required this.onClientSettlementChanged,
+    required this.onClientDurationChanged,
     required this.searchPayers,
     required this.onPayerChanged,
     required this.onSubscriptionChanged,
+    required this.onChargeTypeChanged,
     required this.compensationValidator,
+    required this.durationMinutes,
+    required this.compensationTouched,
     required this.onClose,
     required this.onSubmit,
     super.key,
@@ -91,6 +102,7 @@ class LessonDecisionFormContent extends StatelessWidget {
   final DateTime completedSuccessorScheduledAt;
   final TextEditingController reasonController;
   final TextEditingController compensationValueController;
+  final TextEditingController teacherDurationController;
   final LessonDecisionCatalog catalog;
   final String? settlementKey;
   final String? compensationKey;
@@ -98,9 +110,11 @@ class LessonDecisionFormContent extends StatelessWidget {
   final List<LessonDecisionParticipant> participants;
   final Map<String, String> participantNames;
   final Map<String, String?> clientSettlementKeys;
+  final Map<String, int?> clientDurationMinutes;
   final Map<String, String?> payerIds;
   final Map<String, String?> payerNames;
   final Map<String, String?> subscriptionIds;
+  final Map<String, String?> chargeTypes;
   final Map<String, List<LessonDecisionSubscription>> subscriptions;
   final Set<String> loadingSubscriptions;
   final bool groupLesson;
@@ -114,15 +128,21 @@ class LessonDecisionFormContent extends StatelessWidget {
   final ValueChanged<String?> onSettlementChanged;
   final ValueChanged<String?> onCompensationChanged;
   final ValueChanged<String> onCompensationValueChanged;
+  final ValueChanged<String> onTeacherDurationChanged;
+  final VoidCallback onRestoreRecommendation;
   final void Function(String clientId, String? settlementKey)
   onClientSettlementChanged;
+  final void Function(String clientId, String value) onClientDurationChanged;
   final Future<List<LessonDecisionParticipant>> Function(String query)
   searchPayers;
   final void Function(String clientId, LessonDecisionParticipant? payer)
   onPayerChanged;
   final void Function(String clientId, String? subscriptionId)
   onSubscriptionChanged;
+  final void Function(String clientId, String? chargeType) onChargeTypeChanged;
   final FormFieldValidator<String> compensationValidator;
+  final int durationMinutes;
+  final bool compensationTouched;
   final VoidCallback onClose;
   final VoidCallback onSubmit;
 
@@ -157,9 +177,11 @@ class LessonDecisionFormContent extends StatelessWidget {
             compensationKey: compensationKey,
             participants: participants,
             clientSettlementKeys: clientSettlementKeys,
+            clientDurationMinutes: clientDurationMinutes,
             payerIds: payerIds,
             payerNames: payerNames,
             subscriptionIds: subscriptionIds,
+            chargeTypes: chargeTypes,
             subscriptions: subscriptions,
             loadingSubscriptions: loadingSubscriptions,
             groupLesson: groupLesson,
@@ -167,10 +189,17 @@ class LessonDecisionFormContent extends StatelessWidget {
             enabled: !busy,
             onSettlementChanged: onSettlementChanged,
             onCompensationChanged: onCompensationChanged,
+            teacherDurationController: teacherDurationController,
+            durationMinutes: durationMinutes,
+            compensationTouched: compensationTouched,
+            onTeacherDurationChanged: onTeacherDurationChanged,
+            onRestoreRecommendation: onRestoreRecommendation,
             onClientSettlementChanged: onClientSettlementChanged,
+            onClientDurationChanged: onClientDurationChanged,
             searchPayers: searchPayers,
             onPayerChanged: onPayerChanged,
             onSubscriptionChanged: onSubscriptionChanged,
+            onChargeTypeChanged: onChargeTypeChanged,
           ),
         if (canManageTeacherCompensation)
           LessonDecisionCompensationSection(
@@ -254,9 +283,11 @@ class LessonDecisionOptionsSection extends StatelessWidget {
     required this.compensationKey,
     required this.participants,
     required this.clientSettlementKeys,
+    required this.clientDurationMinutes,
     required this.payerIds,
     required this.payerNames,
     required this.subscriptionIds,
+    required this.chargeTypes,
     required this.subscriptions,
     required this.loadingSubscriptions,
     required this.groupLesson,
@@ -264,10 +295,17 @@ class LessonDecisionOptionsSection extends StatelessWidget {
     required this.enabled,
     required this.onSettlementChanged,
     required this.onCompensationChanged,
+    required this.teacherDurationController,
+    required this.durationMinutes,
+    required this.compensationTouched,
+    required this.onTeacherDurationChanged,
+    required this.onRestoreRecommendation,
     required this.onClientSettlementChanged,
+    required this.onClientDurationChanged,
     required this.searchPayers,
     required this.onPayerChanged,
     required this.onSubscriptionChanged,
+    required this.onChargeTypeChanged,
     super.key,
   });
 
@@ -276,9 +314,11 @@ class LessonDecisionOptionsSection extends StatelessWidget {
   final String? compensationKey;
   final List<LessonDecisionParticipant> participants;
   final Map<String, String?> clientSettlementKeys;
+  final Map<String, int?> clientDurationMinutes;
   final Map<String, String?> payerIds;
   final Map<String, String?> payerNames;
   final Map<String, String?> subscriptionIds;
+  final Map<String, String?> chargeTypes;
   final Map<String, List<LessonDecisionSubscription>> subscriptions;
   final Set<String> loadingSubscriptions;
   final bool groupLesson;
@@ -286,20 +326,27 @@ class LessonDecisionOptionsSection extends StatelessWidget {
   final bool enabled;
   final ValueChanged<String?> onSettlementChanged;
   final ValueChanged<String?> onCompensationChanged;
+  final TextEditingController teacherDurationController;
+  final int durationMinutes;
+  final bool compensationTouched;
+  final ValueChanged<String> onTeacherDurationChanged;
+  final VoidCallback onRestoreRecommendation;
   final void Function(String clientId, String? settlementKey)
   onClientSettlementChanged;
+  final void Function(String clientId, String value) onClientDurationChanged;
   final Future<List<LessonDecisionParticipant>> Function(String query)
   searchPayers;
   final void Function(String clientId, LessonDecisionParticipant? payer)
   onPayerChanged;
   final void Function(String clientId, String? subscriptionId)
   onSubscriptionChanged;
+  final void Function(String clientId, String? chargeType) onChargeTypeChanged;
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      DropdownButtonFormField<String>(
+      AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: const Key('lesson-decision-settlement'),
         initialValue: settlementKey,
@@ -321,22 +368,28 @@ class LessonDecisionOptionsSection extends StatelessWidget {
           participants: participants,
           settlementTypes: catalog.settlementTypes,
           selectedKeys: clientSettlementKeys,
+          selectedMinutes: clientDurationMinutes,
+          commonSettlementKey: settlementKey,
+          durationMinutes: durationMinutes,
           payerIds: payerIds,
           payerNames: payerNames,
           subscriptionIds: subscriptionIds,
+          chargeTypes: chargeTypes,
           subscriptions: subscriptions,
           loadingSubscriptions: loadingSubscriptions,
           showSettlementOverrides: groupLesson,
           enabled: enabled,
           onChanged: onClientSettlementChanged,
+          onDurationChanged: onClientDurationChanged,
           searchPayers: searchPayers,
           onPayerChanged: onPayerChanged,
           onSubscriptionChanged: onSubscriptionChanged,
+          onChargeTypeChanged: onChargeTypeChanged,
         ),
         const SizedBox(height: AppSpace.md),
       ],
       if (canManageTeacherCompensation)
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           key: const Key('lesson-decision-compensation'),
           initialValue: compensationKey,
@@ -352,6 +405,45 @@ class LessonDecisionOptionsSection extends StatelessWidget {
           validator: (value) => value == null ? 'Выберите оплату' : null,
           onChanged: enabled ? onCompensationChanged : null,
         ),
+      if (canManageTeacherCompensation &&
+          _catalogItem(
+                catalog.settlementTypes,
+                settlementKey,
+              )?.teacherDurationMode ==
+              'manual') ...[
+        const SizedBox(height: AppSpace.md),
+        TextFormField(
+          key: const Key('teacher-credited-duration-minutes'),
+          controller: teacherDurationController,
+          enabled: enabled,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            labelText: 'Засчитать преподавателю, мин *',
+            helperText: _durationHelperText(
+              int.tryParse(teacherDurationController.text),
+              durationMinutes,
+            ),
+          ),
+          validator: (value) => partialDurationError(
+            value,
+            lessonDurationMinutes: durationMinutes,
+          ),
+          onChanged: onTeacherDurationChanged,
+        ),
+      ],
+      if (canManageTeacherCompensation && compensationTouched) ...[
+        const SizedBox(height: AppSpace.xs),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('lesson-decision-restore-recommendation'),
+            onPressed: enabled ? onRestoreRecommendation : null,
+            icon: const Icon(Icons.restart_alt_rounded),
+            label: const Text('Применить рекомендуемое правило'),
+          ),
+        ),
+      ],
     ],
   );
 }
@@ -398,37 +490,49 @@ class LessonDecisionClientOverrides extends StatelessWidget {
     required this.participants,
     required this.settlementTypes,
     required this.selectedKeys,
+    required this.selectedMinutes,
+    required this.commonSettlementKey,
+    required this.durationMinutes,
     required this.payerIds,
     required this.payerNames,
     required this.subscriptionIds,
+    required this.chargeTypes,
     required this.subscriptions,
     required this.loadingSubscriptions,
     required this.showSettlementOverrides,
     required this.enabled,
     required this.onChanged,
+    required this.onDurationChanged,
     required this.searchPayers,
     required this.onPayerChanged,
     required this.onSubscriptionChanged,
+    required this.onChargeTypeChanged,
     super.key,
   });
 
   final List<LessonDecisionParticipant> participants;
   final List<LessonDecisionCatalogItem> settlementTypes;
   final Map<String, String?> selectedKeys;
+  final Map<String, int?> selectedMinutes;
+  final String? commonSettlementKey;
+  final int durationMinutes;
   final Map<String, String?> payerIds;
   final Map<String, String?> payerNames;
   final Map<String, String?> subscriptionIds;
+  final Map<String, String?> chargeTypes;
   final Map<String, List<LessonDecisionSubscription>> subscriptions;
   final Set<String> loadingSubscriptions;
   final bool showSettlementOverrides;
   final bool enabled;
   final void Function(String clientId, String? settlementKey) onChanged;
+  final void Function(String clientId, String value) onDurationChanged;
   final Future<List<LessonDecisionParticipant>> Function(String query)
   searchPayers;
   final void Function(String clientId, LessonDecisionParticipant? payer)
   onPayerChanged;
   final void Function(String clientId, String? subscriptionId)
   onSubscriptionChanged;
+  final void Function(String clientId, String? chargeType) onChargeTypeChanged;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -461,7 +565,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
         const SizedBox(height: AppSpace.md),
         for (var index = 0; index < participants.length; index++) ...[
           if (showSettlementOverrides) ...[
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: Key('lesson-decision-client-${participants[index].id}'),
               initialValue:
@@ -489,6 +593,67 @@ class LessonDecisionClientOverrides extends StatelessWidget {
             ),
             const SizedBox(height: AppSpace.sm),
           ],
+          if (_catalogItem(
+                settlementTypes,
+                selectedKeys[participants[index].id] ?? commonSettlementKey,
+              )?.clientDurationMode ==
+              'manual') ...[
+            KeyedSubtree(
+              key: ValueKey(
+                'lesson-decision-client-duration-state-'
+                '${participants[index].id}-'
+                '${selectedKeys[participants[index].id] ?? commonSettlementKey}',
+              ),
+              child: TextFormField(
+                key: Key(
+                  'lesson-decision-client-duration-${participants[index].id}',
+                ),
+                initialValue: selectedMinutes[participants[index].id]
+                    ?.toString(),
+                enabled: enabled,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: 'Списать с клиента, мин *',
+                  helperText: _durationHelperText(
+                    selectedMinutes[participants[index].id],
+                    durationMinutes,
+                  ),
+                ),
+                validator: (value) => partialDurationError(
+                  value,
+                  lessonDurationMinutes: durationMinutes,
+                ),
+                onChanged: (value) =>
+                    onDurationChanged(participants[index].id, value),
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
+          if (chargeTypes[participants[index].id] != null) ...[
+            AppDropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: Key('lesson-decision-charge-type-${participants[index].id}'),
+              initialValue: chargeTypes[participants[index].id],
+              decoration: const InputDecoration(labelText: 'Источник средств'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'subscription',
+                  child: Text('С абонемента'),
+                ),
+                DropdownMenuItem(
+                  value: 'personal_account',
+                  child: Text('С личного счёта'),
+                ),
+                DropdownMenuItem(value: 'none', child: Text('Без списания')),
+              ],
+              onChanged: enabled
+                  ? (value) =>
+                        onChargeTypeChanged(participants[index].id, value)
+                  : null,
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
           SearchablePickerField(
             key: Key('lesson-decision-payer-${participants[index].id}'),
             label: showSettlementOverrides
@@ -512,9 +677,11 @@ class LessonDecisionClientOverrides extends StatelessWidget {
                   : LessonDecisionParticipant(id: item.id, name: item.label),
             ),
           ),
-          if (payerIds[participants[index].id] != null) ...[
+          if (payerIds[participants[index].id] != null &&
+              chargeTypes[participants[index].id] != 'personal_account' &&
+              chargeTypes[participants[index].id] != 'none') ...[
             const SizedBox(height: AppSpace.sm),
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: Key(
                 'lesson-decision-subscription-${participants[index].id}',
@@ -881,6 +1048,14 @@ String _formatMinor(Object? value) {
 }
 
 String _warningLabel(String value) => switch (value) {
+  'CLIENT_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED' =>
+    'У клиента указано 0 часов списания. Можно выбрать тип без списания. Можно подтвердить изменение и с текущим выбором.',
+  'CLIENT_FULL_DURATION_SETTLEMENT_TYPE_RECOMMENDED' =>
+    'У клиента указана полная длительность занятия. Можно выбрать списание за полное занятие. Можно подтвердить изменение и с текущим выбором.',
+  'TEACHER_ZERO_DURATION_SETTLEMENT_TYPE_RECOMMENDED' =>
+    'Преподавателю указано 0 оплачиваемых часов. Можно выбрать тип без оплаты. Можно подтвердить изменение и с текущим выбором.',
+  'TEACHER_FULL_DURATION_SETTLEMENT_TYPE_RECOMMENDED' =>
+    'Преподавателю указана оплата за полную длительность занятия. Можно выбрать тип оплаты за полное занятие. Можно подтвердить изменение и с текущим выбором.',
   'COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED' =>
     'Прежние списание и оплата преподавателю будут отменены без удаления истории. Новое занятие рассчитается отдельно после завершения.',
   'SUCCESSOR_MAY_CHARGE_AGAIN' =>
@@ -901,3 +1076,18 @@ String _violationLabel(Map<String, dynamic> value) => switch (value['code']
   final code? => code,
   _ => 'Ограничение расписания',
 };
+
+LessonDecisionCatalogItem? _catalogItem(
+  List<LessonDecisionCatalogItem> items,
+  String? key,
+) {
+  if (key == null) return null;
+  for (final item in items) {
+    if (item.key == key) return item;
+  }
+  return null;
+}
+
+String _durationHelperText(int? value, int durationMinutes) => value == null
+    ? 'Укажите от 0 до $durationMinutes мин'
+    : formatLessonMinutes(value);

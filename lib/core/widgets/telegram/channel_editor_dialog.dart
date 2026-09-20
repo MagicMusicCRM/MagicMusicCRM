@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -223,7 +224,7 @@ class _ChannelEditorDialogState extends ConsumerState<ChannelEditorDialog> {
 
   Widget _accessSelector(String target) {
     final value = _access[target] ?? _ChannelAccess.none;
-    return DropdownButton<_ChannelAccess>(
+    return AppDropdownButton<_ChannelAccess>(
       key: ValueKey('channel-access-$target'),
       value: value,
       underline: const SizedBox.shrink(),

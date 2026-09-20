@@ -49,6 +49,26 @@ class MagicApiException implements Exception {
   }
 
   static String _messageFromDioType(DioException error) {
+    final isRead = const {
+      'GET',
+      'HEAD',
+      'OPTIONS',
+    }.contains(error.requestOptions.method.toUpperCase());
+    // Login can issue a session, but cannot commit a CRM/financial command.
+    final isLogin = const {
+      '/auth/login',
+      '/api/auth/login',
+    }.contains(error.requestOptions.uri.path);
+    if (!isRead &&
+        !isLogin &&
+        const {
+          DioExceptionType.connectionError,
+          DioExceptionType.sendTimeout,
+          DioExceptionType.receiveTimeout,
+        }.contains(error.type)) {
+      return 'Не удалось получить подтверждение. Действие могло сохраниться. '
+          'Обновите данные и проверьте результат перед повтором.';
+    }
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:

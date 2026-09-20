@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'dart:async';
 
@@ -98,30 +99,25 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
 
   Future<void> _saveExpense([Map<String, dynamic>? expense]) async {
     final copy = _expenseDialogCopy(expense != null);
-    final result = await showMagicAdaptiveSurface<Map<String, dynamic>>(
+    final identity = MagicMutationIdentity.create(
+      expense == null ? 'expense-create' : 'expense-update',
+    );
+    final saved = await showMagicAdaptiveSurface<bool>(
       context,
       kind: AppSurfaceKind.quickView,
       title: copy.title,
       subtitle: copy.subtitle,
       icon: copy.icon,
-      builder: (_) => ExpenseSheetForm(initialExpense: expense),
+      builder: (_) => ExpenseSheetForm(
+        initialExpense: expense,
+        onSubmit: (data) => _persistExpense(expense, data, identity),
+      ),
     );
-    if (result == null || !mounted) return;
-    try {
-      final persisted = await _persistExpense(expense, result);
-      if (!mounted || !persisted) return;
+    if (saved == true && mounted) {
       MagicToast.show(
         context,
         copy.successMessage,
         type: MagicToastType.success,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      MagicToast.show(
-        context,
-        copy.errorMessage,
-        detail: userErrorMessage(error),
-        type: MagicToastType.danger,
       );
     }
   }
@@ -129,11 +125,14 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   Future<bool> _persistExpense(
     Map<String, dynamic>? expense,
     Map<String, dynamic> result,
+    MagicMutationIdentity identity,
   ) async {
     if (expense == null) {
       await _controller.createExpense(
         amount: result['amount'] as num,
         category: result['category'] as String,
+        occurredAt: result['occurredAt'] as String?,
+        identity: identity,
         description: result['description'] as String?,
         branchId: result['branchId'] as String?,
       );
@@ -143,8 +142,11 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     if (expenseId is! String || expenseId.trim().isEmpty) return false;
     await _controller.updateExpense(
       expenseId: expenseId,
+      expectedVersion: (expense['version'] as num).toInt(),
       amount: result['amount'] as num,
       category: result['category'] as String,
+      occurredAt: result['occurredAt'] as String?,
+      identity: identity,
       description: result['description'] as String?,
       branchId: expense['branchId'] as String? ?? result['branchId'] as String?,
     );
@@ -178,7 +180,10 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await _controller.deleteExpense(expenseId);
+      await _controller.deleteExpense(
+        expenseId,
+        expectedVersion: (expense['version'] as num).toInt(),
+      );
       if (mounted) {
         MagicToast.show(context, 'Расход удалён', type: MagicToastType.success);
       }
@@ -235,7 +240,10 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
         onAddExpense: _saveExpense,
         onEditExpense: _saveExpense,
         onDeleteExpense: _deleteExpense,
+        onLoadMorePayments: _controller.loadMorePayments,
+        onLoadMoreExpenses: _controller.loadMoreExpenses,
         onRetryPayments: _controller.loadPayments,
+        onRetryExpenses: _controller.loadExpenses,
         onRefreshPayments: _controller.loadPayments,
         onOpenStudent: (id, name) async {
           await showClientCard(

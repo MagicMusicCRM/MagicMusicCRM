@@ -58,4 +58,254 @@ describe("ScheduleSeriesMaterializerService", () => {
     );
     expect(query.mock.calls.some((call) => call[1]?.includes(true))).toBe(true);
   });
+
+  it("rechecks the exact frozen plan clients after every materialization lock", async () => {
+    const events: string[] = [];
+    let activeReferences: Array<{ type: string; id: string }> = [];
+    const candidates = [{
+      series_date: "2026-09-07",
+      plan_id: "plan-a",
+      group_id: "group-a",
+      teacher_id: "teacher-a",
+      branch_id: "branch-a",
+      room_id: "room-a",
+      starts_at: "2026-09-07T07:00:00.000Z",
+      ends_at: "2026-09-07T08:00:00.000Z",
+      client_refs: [
+        { type: "student", id: "student-b" },
+        { type: "student", id: "student-a" },
+      ],
+    }];
+    const query = jest.fn(async (sql: string, values?: unknown[]) => {
+      if (sql.includes("with recursive target") && sql.includes("client_refs")) {
+        events.push("candidate-read");
+        return { rows: candidates };
+      }
+      if (sql.includes("pg_advisory_xact_lock")) {
+        events.push(`lock:${String(values?.[0])}`);
+        return { rows: [] };
+      }
+      if (sql.includes("jsonb_to_recordset")) {
+        events.push("active-client-recheck");
+        activeReferences = JSON.parse(String(values?.[0]));
+        return { rows: [] };
+      }
+      if (sql.includes("insert into app.lessons")) {
+        events.push("lesson-insert");
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const service = new ScheduleSeriesMaterializerService(
+      {} as DatabaseService,
+      {
+        validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+      } as unknown as ScheduleConstraintEngine,
+    );
+
+    await service.materializePlanSeries({ query } as never, "series-a");
+
+    expect(events.filter((event) => event === "candidate-read")).toHaveLength(2);
+    expect(events.filter((event) => event.startsWith("lock:"))).toEqual([
+      "lock:branch:branch-a",
+      "lock:client:student:student-a",
+      "lock:client:student:student-b",
+      "lock:plan:plan-a",
+      "lock:room:room-a",
+      "lock:teacher:teacher-a",
+      "lock:series:series-a",
+    ]);
+    expect(events.lastIndexOf("candidate-read")).toBeGreaterThan(
+      events.indexOf("lock:series:series-a"),
+    );
+    expect(activeReferences).toEqual([
+      { type: "student", id: "student-a" },
+      { type: "student", id: "student-b" },
+    ]);
+    const lastLock = events.reduce(
+      (index, event, current) => event.startsWith("lock:") ? current : index,
+      -1,
+    );
+    expect(events.indexOf("active-client-recheck")).toBeGreaterThan(lastLock);
+    expect(events.indexOf("lesson-insert")).toBeGreaterThan(
+      events.indexOf("active-client-recheck"),
+    );
+  });
+
+  it("rejects a resource key introduced by the post-lock candidate reread", async () => {
+    let candidateRead = 0;
+    const writes: string[] = [];
+    const candidate = {
+      series_date: "2026-09-07",
+      plan_id: null,
+      group_id: null,
+      teacher_id: "teacher-a",
+      branch_id: "branch-a",
+      room_id: "room-a",
+      starts_at: "2026-09-07T07:00:00.000Z",
+      ends_at: "2026-09-07T08:00:00.000Z",
+      client_refs: [{ type: "student", id: "student-a" }],
+    };
+    const query = jest.fn(async (sql: string) => {
+      if (sql.includes("with recursive target") && sql.includes("client_refs")) {
+        candidateRead += 1;
+        return {
+          rows: [
+            {
+              ...candidate,
+              teacher_id: candidateRead === 1 ? "teacher-a" : "teacher-b",
+            },
+          ],
+        };
+      }
+      if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
+      if (
+        sql.includes("jsonb_to_recordset") ||
+        sql.includes("insert into app.lessons")
+      ) {
+        writes.push(sql);
+      }
+      return { rows: [] };
+    });
+    const service = new ScheduleSeriesMaterializerService(
+      {} as DatabaseService,
+      {
+        validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+      } as unknown as ScheduleConstraintEngine,
+    );
+
+    await expect(
+      service.materializePlanSeries({ query } as never, "series-a"),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_SERIES_RESOURCES_CHANGED" },
+    });
+    expect(candidateRead).toBe(2);
+    expect(writes).toEqual([]);
+  });
+
+  it("rejects a nested client key outside the outer prelocked set before locking", async () => {
+    const events: string[] = [];
+    const query = jest.fn(async (sql: string) => {
+      if (sql.includes("with recursive target") && sql.includes("client_refs")) {
+        return {
+          rows: [
+            {
+              series_date: "2026-09-07",
+              plan_id: null,
+              group_id: "group-a",
+              teacher_id: "teacher-a",
+              branch_id: "branch-a",
+              room_id: "room-a",
+              starts_at: "2026-09-07T07:00:00.000Z",
+              ends_at: "2026-09-07T08:00:00.000Z",
+              client_refs: [
+                { type: "student", id: "student-a" },
+                { type: "student", id: "student-b" },
+              ],
+            },
+          ],
+        };
+      }
+      if (sql.includes("pg_advisory_xact_lock")) events.push("lock");
+      if (sql.includes("insert into app.lessons")) events.push("write");
+      return { rows: [] };
+    });
+    const service = new ScheduleSeriesMaterializerService(
+      {} as DatabaseService,
+      {
+        validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+      } as unknown as ScheduleConstraintEngine,
+    );
+
+    await expect(
+      service.materializePlanSeries({ query } as never, "series-a", {
+        outerLockContract: {
+          prelockedKeys: [
+            "branch:branch-a",
+            "client:student:student-a",
+            "room:room-a",
+            "teacher:teacher-a",
+          ],
+          expectedKeys: [
+            "branch:branch-a",
+            "client:student:student-a",
+            "room:room-a",
+            "teacher:teacher-a",
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_SERIES_LOCK_SET_CHANGED" },
+    });
+    expect(events).toEqual([]);
+  });
+
+  it("rejects a nested client removal found by the post-lock reread", async () => {
+    let candidateRead = 0;
+    const events: string[] = [];
+    const query = jest.fn(async (sql: string) => {
+      if (sql.includes("with recursive target") && sql.includes("client_refs")) {
+        candidateRead += 1;
+        return {
+          rows: [
+            {
+              series_date: "2026-09-07",
+              plan_id: null,
+              group_id: "group-a",
+              teacher_id: "teacher-a",
+              branch_id: "branch-a",
+              room_id: "room-a",
+              starts_at: "2026-09-07T07:00:00.000Z",
+              ends_at: "2026-09-07T08:00:00.000Z",
+              client_refs:
+                candidateRead === 1
+                  ? [
+                      { type: "student", id: "student-a" },
+                      { type: "student", id: "student-b" },
+                    ]
+                  : [{ type: "student", id: "student-a" }],
+            },
+          ],
+        };
+      }
+      if (sql.includes("pg_advisory_xact_lock")) events.push("lock");
+      if (
+        sql.includes("jsonb_to_recordset") ||
+        sql.includes("insert into app.lessons")
+      ) {
+        events.push("write");
+      }
+      return { rows: [] };
+    });
+    const service = new ScheduleSeriesMaterializerService(
+      {} as DatabaseService,
+      {
+        validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+      } as unknown as ScheduleConstraintEngine,
+    );
+    const expectedKeys = [
+      "branch:branch-a",
+      "client:student:student-a",
+      "client:student:student-b",
+      "room:room-a",
+      "teacher:teacher-a",
+    ];
+
+    await expect(
+      service.materializePlanSeries({ query } as never, "series-a", {
+        outerLockContract: {
+          prelockedKeys: expectedKeys,
+          expectedKeys,
+        },
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_SERIES_LOCK_SET_CHANGED" },
+    });
+    expect(candidateRead).toBe(2);
+    expect(events.filter((event) => event === "lock")).toHaveLength(6);
+    expect(events).not.toContain("write");
+  });
 });

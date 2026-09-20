@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/models/notification_preference.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/notification_preferences_dialog.dart';
 
 class _FakeNotifications implements MagicNotificationsService {
@@ -58,9 +59,7 @@ class _FakeNotifications implements MagicNotificationsService {
 
 Widget _host(_FakeNotifications fake) {
   return ProviderScope(
-    overrides: [
-      magicNotificationsServiceProvider.overrideWithValue(fake),
-    ],
+    overrides: [magicNotificationsServiceProvider.overrideWithValue(fake)],
     child: const MaterialApp(
       home: Scaffold(body: NotificationPreferencesDialog()),
     ),
@@ -68,6 +67,47 @@ Widget _host(_FakeNotifications fake) {
 }
 
 void main() {
+  testWidgets('phone notification channels keep readable labels', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 800);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicNotificationsServiceProvider.overrideWithValue(
+            _FakeNotifications(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark.copyWith(platform: TargetPlatform.android),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.3)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => NotificationPreferencesDialog.show(context),
+                child: const Text('Открыть'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final role = tester.getRect(find.text('Управляющий'));
+    final firstChannel = tester.getRect(find.byType(FilterChip).first);
+    expect(firstChannel.top, greaterThan(role.bottom));
+    expect(tester.getSize(find.byType(Wrap).first).width, greaterThan(250));
+  });
+
   testWidgets('renders a row per role and saves a toggle', (tester) async {
     final fake = _FakeNotifications();
     await tester.pumpWidget(_host(fake));

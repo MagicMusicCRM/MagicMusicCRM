@@ -1,3 +1,7 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
+import 'package:magic_music_crm/core/observability/app_performance.dart';
+import 'client_card_draft_controller.dart';
+import 'client_card_data_controller.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'dart:async';
 
@@ -143,32 +147,23 @@ class _ClientCardState extends ConsumerState<ClientCard>
   String _commentKind = 'admin_comment';
   // Resolved status list: either the one passed in or self-fetched.
   List<StatusRecord> _statuses = const [];
+  final Map<String, bool> _statusRequiresReason = {};
+  String? _pendingLeadStatusComment;
   bool _saving = false;
-  Timer? _autoSaveTimer;
-  Future<bool>? _autoSaveInFlight;
-  int _editRevision = 0;
-  bool _autoSavePending = false;
-  bool _autoSaveQueued = false;
-  bool _autoSaveFailed = false;
-  bool _autoSaveConflict = false;
-  final Map<String, int> _leadCoreEditRevisions = {};
-  final Map<String, int> _studentCoreEditRevisions = {};
-  final Map<String, int> _leadCustomEditRevisions = {};
-  final Map<String, int> _studentCustomEditRevisions = {};
-  int? _leadStatusEditRevision;
-  int? _studentStatusEditRevision;
-  int? _leadResponsibleEditRevision;
-  int? _studentResponsibleEditRevision;
+  late final ClientCardDraftController _draft;
   bool _converting = false;
   bool _replacingSubscription = false;
   bool _cancellingSubscription = false;
   bool _creatingPayment = false;
   CommerceMovement? _adjustingPayment;
-  bool _loadingCard = true;
+  bool get _loadingCard => _readController.leadLoading;
   int _commentsRefreshKey = 0;
   // Bumped after a homework is assigned so the «Прогресс» tab refetches.
   int _homeworkRefreshKey = 0;
-  Map<String, dynamic>? _leadCard;
+  late final ClientCardDataController _readController;
+  Map<String, dynamic>? get _leadCard => _readController.lead;
+  set _leadCard(Map<String, dynamic>? value) =>
+      _readController.acceptLeadSnapshot(value);
   List<Map<String, dynamic>> _duplicateCandidates = [];
   bool _loadingDuplicates = true;
   Map<String, dynamic>? _family;
@@ -200,11 +195,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
   set _edited(bool value) {
     _workspaceController.edited = value;
     if (value) {
-      _editRevision++;
-      if (_autoSaveConflict) {
-        _autoSaveFailed = true;
+      _draft.revision++;
+      if (_draft.conflict) {
+        _draft.failed = true;
       } else {
-        _autoSaveFailed = false;
+        _draft.failed = false;
         _scheduleAutoSave();
       }
     }
@@ -229,6 +224,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
   set _customFieldsExpanded(bool value) =>
       _workspaceController.customFieldsExpanded = value;
   bool _internalContextAllowed = false;
+  bool get _canWriteClient =>
+      widget.capabilitySnapshot?.allows('crm.client.write') ??
+      crmHasManagerAccess(_currentActorRole() ?? '');
+  bool? get _explicitFinanceAccess =>
+      widget.capabilitySnapshot?.allows('commerce.client_finance.read');
   bool _internalContextLoading = false;
   bool _operationalHistoryLoadingMore = false;
   String? _internalContextError;
@@ -313,24 +313,29 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // Loaded from `getStudentCard` (+ a family fetch). Each section is isolated so
   // a single failed call never blanks the whole card.
   Map<String, dynamic>? _student;
-  StudentFunnelConfiguration? _studentFunnel;
-  String? _studentFunnelError;
-  StudentBalance? _balance;
-  List<Subscription> _subscriptions = [];
-  List<Payment> _payments = [];
-  CommerceStudent? _commerceStudent;
-  List<Lesson> _lessons = [];
-  Map<String, int> _studentIndicators = const {};
-  List<Map<String, dynamic>> _studentTasks = [];
-  // Unified comment stream folded into the «История» merge — the «Комментарии»
-  // tab reads live via [_CommentsList].
-  List<Map<String, dynamic>> _studentComments = [];
-  List<Map<String, dynamic>> _groups = [];
-  bool _loadingStudent = true;
-  String? _studentError;
+  StudentFunnelConfiguration? get _studentFunnel =>
+      _readController.student?.funnel;
+  String? get _studentFunnelError => _readController.student?.funnelError;
+  CommerceStudent? get _commerceStudent => _readController.student?.commerce;
+  String? get _commerceLoadError => _readController.student?.commerceError;
+  StudentBalance? get _balance => _commerceStudent?.primaryBalance;
+  List<Subscription> get _subscriptions =>
+      _commerceStudent?.subscriptionModels
+          .where((s) => s.isActive)
+          .toList(growable: false) ??
+      const [];
+  List<Payment> get _payments => _commerceStudent?.paymentModels ?? const [];
+  List<Lesson> get _lessons => _readController.student?.lessons ?? const [];
+  Map<String, int> get _studentIndicators =>
+      _readController.student?.indicators ?? const {};
+  List<Map<String, dynamic>> get _groups =>
+      _readController.student?.groups ?? const [];
+  bool get _loadingStudent => _readController.studentLoading;
+  String? get _studentError => _readController.studentError;
   bool _realtimeRefreshQueued = false;
-  final List<CrmChangedEvent> _realtimeRefreshQueue = [];
-  final List<CrmChangedEvent> _realtimeRefreshDeferred = [];
+  bool _realtimeRefreshInFlight = false;
+  bool _realtimeVisible = true;
+  final Set<_CardRefreshRegion> _realtimeRefreshRegions = {};
   // Bumped ONLY when field values are replaced from the server (fetch/merge).
   // Text editors key on this instead of their live value, so local keystrokes
   // never recreate the field (which would drop cursor/focus/IME state), while
@@ -464,6 +469,19 @@ class _ClientCardState extends ConsumerState<ClientCard>
   @override
   void initState() {
     super.initState();
+    _draft = ClientCardDraftController(
+      isDirty: () => _edited,
+      isValid: () => !_hasInvalidEditedEmail,
+      persist: (revision) => _persistEdits(editRevision: revision),
+      onChanged: () {
+        if (mounted) _emitState(() {});
+      },
+    );
+    _readController = ClientCardDataController(
+      crm: ref.read(magicCrmServiceProvider),
+      resolveRole: _resolveActorRole,
+      canReadFinance: () => _explicitFinanceAccess,
+    )..addListener(_onReadModelsChanged);
     final restoredOffset = widget.initialViewState?.scrollOffset ?? 0;
     _workspaceController = ClientCardWorkspaceController(
       initialSection: widget.initialSection,
@@ -513,12 +531,25 @@ class _ClientCardState extends ConsumerState<ClientCard>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _realtimeVisible = TickerMode.valuesOf(context).enabled;
+    if (_realtimeVisible) _queueRealtimeRefresh();
     _scheduleWorkspaceFormRegistration();
   }
 
   @override
   void didUpdateWidget(covariant ClientCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.capabilitySnapshot?.accessVersion !=
+        widget.capabilitySnapshot?.accessVersion) {
+      if (!_canWriteClient) {
+        _internalContextAllowed = false;
+        _internalNote = null;
+        _operationalHistory = const [];
+      }
+      if (_studentId.isNotEmpty) {
+        unawaited(_readController.refreshCommerce(_studentId));
+      }
+    }
     _scheduleWorkspaceFormRegistration();
     if (oldWidget.initialSection != widget.initialSection) {
       _workspaceController.restoreSection(widget.initialSection);
@@ -637,19 +668,19 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   void _recordCoreEdit(String key) {
-    if (_mode.hasLeadHalf) _leadCoreEditRevisions[key] = _editRevision;
-    if (_mode.hasStudentHalf) _studentCoreEditRevisions[key] = _editRevision;
+    if (_mode.hasLeadHalf) _draft.leadCoreEdits[key] = _draft.revision;
+    if (_mode.hasStudentHalf) _draft.studentCoreEdits[key] = _draft.revision;
   }
 
   bool get _hasPendingCardEdits =>
-      _leadCoreEditRevisions.isNotEmpty ||
-      _studentCoreEditRevisions.isNotEmpty ||
-      _leadCustomEditRevisions.isNotEmpty ||
-      _studentCustomEditRevisions.isNotEmpty ||
-      _leadStatusEditRevision != null ||
-      _studentStatusEditRevision != null ||
-      _leadResponsibleEditRevision != null ||
-      _studentResponsibleEditRevision != null;
+      _draft.leadCoreEdits.isNotEmpty ||
+      _draft.studentCoreEdits.isNotEmpty ||
+      _draft.leadCustomEdits.isNotEmpty ||
+      _draft.studentCustomEdits.isNotEmpty ||
+      _draft.leadStatusEdit != null ||
+      _draft.studentStatusEdit != null ||
+      _draft.leadResponsibleEdit != null ||
+      _draft.studentResponsibleEdit != null;
 
   void _selectSection(String section) {
     unawaited(_selectSectionAfterPendingNote(section));
@@ -724,12 +755,34 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
   }
 
+  void _onReadModelsChanged() {
+    if (mounted) {
+      _emitState(() {});
+      _queueRealtimeRefresh();
+    }
+  }
+
   @override
   void dispose() {
     _workspaceRegistrationGeneration++;
-    _syncWorkspaceFormDirty();
-    _unregisterWorkspaceForm(preserveDirtyDraft: true);
-    _autoSaveTimer?.cancel();
+    final workspaceScope = _registeredWorkspaceScope;
+    final tabId = _registeredWorkspaceTabId;
+    final formKey = _registeredWorkspaceFormKey;
+    _registeredWorkspaceScope = null;
+    _registeredWorkspaceTabId = null;
+    _registeredWorkspaceFormKey = null;
+    if (workspaceScope != null && tabId != null && formKey != null) {
+      final dirty = _edited || _internalNotePending;
+      workspaceScope.controller.detachForm(
+        tabId,
+        formKey,
+        dirty: dirty,
+        expectedVersion: _workspaceExpectedVersion,
+        draft: dirty ? _buildWorkspaceDraft() : const {},
+      );
+    }
+    _draft.dispose();
+    _readController.dispose();
     _commentCtrl.dispose();
     _workspaceController.dispose();
     super.dispose();
@@ -809,7 +862,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
           ),
         ],
       ),
-      actionBar: _isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs),
+      actionBar: _canWriteClient
+          ? (_isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs))
+          : null,
       onCloseRequested: _handleClose,
     );
   }

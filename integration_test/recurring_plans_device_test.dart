@@ -59,31 +59,85 @@ const _endedPlan = {
   'rows': <Map<String, dynamic>>[],
 };
 
+Map<String, dynamic> _timelineItem({
+  required String id,
+  required String scheduledAt,
+  String lifecycleState = 'scheduled',
+  String originKind = 'generated',
+  String? planId = 'plan-active',
+  String? seriesId = 'series-active',
+  String? predecessorId,
+  String? successorId,
+  bool covered = false,
+}) => {
+  'id': id,
+  'version': 1,
+  'scheduledAt': scheduledAt,
+  'durationMinutes': 60,
+  'lifecycleState': lifecycleState,
+  'student': {'id': 'student-1', 'name': 'Анна Смирнова'},
+  'group': null,
+  'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
+  'room': {'id': 'room-1', 'name': 'Класс 1'},
+  'branch': {'id': 'branch-1', 'name': 'Сокол'},
+  'origin': {'kind': originKind, 'planId': planId, 'seriesId': seriesId},
+  'settlement': {
+    'coveredBySubscription': covered,
+    'settlementTypeKey': covered ? 'subscription' : null,
+  },
+  'reschedule': {
+    'predecessorId': predecessorId,
+    'successorId': successorId,
+    'actionableLessonId': successorId ?? id,
+  },
+};
+
+Map<String, dynamic> _timelinePage(
+  List<Map<String, dynamic>> items, {
+  bool hasPrevious = false,
+  bool hasNext = false,
+  String? previousCursor,
+  String? nextCursor,
+}) => {
+  'items': items,
+  'hasPrevious': hasPrevious,
+  'hasNext': hasNext,
+  'previousCursor': previousCursor,
+  'nextCursor': nextCursor,
+};
+
 class _PagingPlanApi extends FakeCardApiClient {
   _PagingPlanApi()
     : super(role: 'manager', schedulePlans: const [_activePlan, _endedPlan]);
 
-  static const _first = <String, dynamic>{
-    'planId': 'plan-active',
+  static final _first = <String, dynamic>{
     'items': [
-      {
-        'id': 'lesson-device-first',
-        'scheduledAt': '2026-08-07T13:00:00.000Z',
-        'localDate': '2026-08-07',
-        'localTime': '16:00',
-        'state': 'rescheduled',
-        'settlementMarkers': [
-          {
-            'key': 'paid_absence',
-            'label': 'Оплачиваемый пропуск',
-            'colorToken': 'blue',
-          },
-        ],
-        'relationMarker': 'source',
-        'successorId': 'lesson-device-next',
-        'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
-        'room': {'id': 'room-1', 'name': 'Класс 1'},
-      },
+      _timelineItem(
+        id: 'lesson-device-manual',
+        scheduledAt: '2026-08-05T13:00:00.000Z',
+        originKind: 'manual',
+        planId: null,
+        seriesId: null,
+      ),
+      _timelineItem(
+        id: 'lesson-device-plan-a',
+        scheduledAt: '2026-08-06T13:00:00.000Z',
+        planId: 'plan-a',
+        seriesId: 'series-a',
+      ),
+      _timelineItem(
+        id: 'lesson-device-plan-b',
+        scheduledAt: '2026-08-07T13:00:00.000Z',
+        planId: 'plan-b',
+        seriesId: 'series-b',
+        covered: true,
+      ),
+      _timelineItem(
+        id: 'lesson-device-cancelled',
+        scheduledAt: '2026-08-08T13:00:00.000Z',
+        lifecycleState: 'cancelled',
+        successorId: 'lesson-device-successor',
+      ),
     ],
     'hasPrevious': false,
     'hasNext': true,
@@ -91,21 +145,13 @@ class _PagingPlanApi extends FakeCardApiClient {
     'nextCursor': 'device-next',
   };
 
-  static const _next = <String, dynamic>{
-    'planId': 'plan-active',
+  static final _next = <String, dynamic>{
     'items': [
-      {
-        'id': 'lesson-device-next',
-        'scheduledAt': '2026-08-14T13:00:00.000Z',
-        'localDate': '2026-08-14',
-        'localTime': '16:00',
-        'state': 'scheduled',
-        'settlementMarkers': <Map<String, dynamic>>[],
-        'relationMarker': 'successor',
-        'predecessorId': 'lesson-device-first',
-        'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
-        'room': {'id': 'room-1', 'name': 'Класс 1'},
-      },
+      _timelineItem(
+        id: 'lesson-device-successor',
+        scheduledAt: '2026-08-14T13:00:00.000Z',
+        predecessorId: 'lesson-device-cancelled',
+      ),
     ],
     'hasPrevious': true,
     'hasNext': false,
@@ -119,7 +165,7 @@ class _PagingPlanApi extends FakeCardApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (path == '/crm/schedule-plans/plan-active/tray') {
+    if (path == '/crm/students/student-1/lesson-timeline') {
       final query = {...?queryParameters};
       getRequests.add(path);
       getCalls.add((path: path, query: query));
@@ -174,32 +220,13 @@ void main() {
       ],
       schedulePlans: const [_activePlan, _endedPlan],
       mutateSchedulePlanOnEnd: true,
-      schedulePlanTrays: const {
-        'plan-active': {
-          'planId': 'plan-active',
-          'items': [
-            {
-              'id': 'lesson-active',
-              'scheduledAt': '2026-08-07T13:00:00.000Z',
-              'localDate': '2026-08-07',
-              'localTime': '16:00',
-              'state': 'scheduled',
-              'settlementMarkers': [
-                {
-                  'key': 'paid_absence',
-                  'label': 'Оплачиваемый пропуск',
-                  'colorToken': 'blue',
-                },
-              ],
-              'relationMarker': 'none',
-              'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
-              'room': {'id': 'room-1', 'name': 'Класс 1'},
-            },
-          ],
-          'hasPrevious': false,
-          'hasNext': false,
-        },
-      },
+      studentLessonTimelinePage: _timelinePage([
+        _timelineItem(
+          id: 'lesson-active',
+          scheduledAt: '2026-08-07T13:00:00.000Z',
+          covered: true,
+        ),
+      ]),
     );
     await tester.pumpWidget(
       RepaintBoundary(
@@ -207,7 +234,7 @@ void main() {
         child: ProviderScope(
           overrides: [magicApiClientProvider.overrideWithValue(api)],
           child: MaterialApp(
-            theme: AppTheme.dark,
+            theme: AppTheme.production,
             home: Scaffold(
               body: SafeArea(
                 child: SingleChildScrollView(
@@ -233,12 +260,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Индивидуальный вокал'), findsOneWidget);
-    expect(find.byKey(const Key('client-lesson-date-tray')), findsOneWidget);
-    expect(find.text('Завершённое фортепиано'), findsNothing);
-    await captureEvidence(tester, 'recurring-plan-active-tray');
-    await tester.ensureVisible(find.text('Завершённые (1)'));
-    await tester.tap(find.text('Завершённые (1)'));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message?.contains('Абонемент') ?? false),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Завершённое фортепиано'), findsOneWidget);
+    await captureEvidence(tester, 'recurring-plan-active-timeline');
+    await _expandPlan(tester, 'plan-active');
     expect(find.text('Завершённое фортепиано'), findsOneWidget);
 
     final edit = find.byKey(
@@ -341,12 +374,7 @@ void main() {
       find.byKey(const ValueKey('schedule-plan-end-plan-active')),
       findsNothing,
     );
-    expect(find.text('Завершённые (2)'), findsOneWidget);
-    if (find.text('Индивидуальный вокал').evaluate().isEmpty) {
-      await tester.ensureVisible(find.text('Завершённые (2)'));
-      await tester.tap(find.text('Завершённые (2)'));
-      await tester.pumpAndSettle();
-    }
+    expect(find.text('Завершено'), findsNWidgets(2));
     if (find
         .byKey(const ValueKey('schedule-plan-end-history-plan-active'))
         .evaluate()
@@ -368,7 +396,7 @@ void main() {
     debugPrint('V7_RECURRING_PLANS_DEVICE_PASS');
   });
 
-  testWidgets('recurring tray pages with authoritative markers on device', (
+  testWidgets('canonical timeline pages and final row removal on device', (
     tester,
   ) async {
     await initializeDateFormatting('ru');
@@ -379,7 +407,7 @@ void main() {
         child: ProviderScope(
           overrides: [magicApiClientProvider.overrideWithValue(api)],
           child: MaterialApp(
-            theme: AppTheme.dark,
+            theme: AppTheme.production,
             home: Scaffold(
               body: SafeArea(
                 child: SingleChildScrollView(
@@ -392,7 +420,7 @@ void main() {
                     subscriptions: const [
                       {'id': 'subscription-1', 'label': '12 занятий'},
                     ],
-                    canWrite: false,
+                    canWrite: true,
                     onChanged: () {},
                   ),
                 ),
@@ -404,37 +432,84 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Завершённое фортепиано'), findsNothing);
-    expect(find.text('7.08 · 16:00'), findsOneWidget);
-    expect(find.byIcon(Icons.sell_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.call_split_rounded), findsOneWidget);
-    await captureEvidence(tester, 'recurring-plan-tray-page-1');
-
-    await tester.tap(
-      find.byKey(const ValueKey('schedule-plan-tray-next-plan-active')),
+    expect(find.text('Завершённое фортепиано'), findsOneWidget);
+    expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('schedule-plan-tray-plan-active')),
+      findsNothing,
     );
+    for (final id in [
+      'lesson-device-manual',
+      'lesson-device-plan-a',
+      'lesson-device-plan-b',
+      'lesson-device-cancelled',
+    ]) {
+      expect(find.byKey(ValueKey('student-timeline-$id')), findsOneWidget);
+    }
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip &&
+            (widget.message?.contains('Разовое занятие') ?? false),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('student-timeline-lesson-device-successor')),
+      findsNothing,
+    );
+    await captureEvidence(tester, 'student-lesson-timeline-page-1');
+
+    await tester.tap(find.byKey(const Key('student-lesson-timeline-next')));
     await tester.pumpAndSettle();
-    expect(find.text('14.08 · 16:00'), findsOneWidget);
-    expect(find.byIcon(Icons.call_merge_rounded), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('student-timeline-lesson-device-successor')),
+      findsOneWidget,
+    );
     expect(api.getCalls.last.query, {
       'cursor': 'device-next',
       'direction': 'next',
       'limit': 24,
     });
-    await captureEvidence(tester, 'recurring-plan-tray-page-2');
+    await captureEvidence(tester, 'student-lesson-timeline-page-2');
 
-    await tester.tap(
-      find.byKey(const ValueKey('schedule-plan-tray-previous-plan-active')),
-    );
+    await tester.tap(find.byKey(const Key('student-lesson-timeline-previous')));
     await tester.pumpAndSettle();
-    expect(find.text('7.08 · 16:00'), findsOneWidget);
     expect(api.getCalls.last.query, {
       'cursor': 'device-previous',
       'direction': 'previous',
       'limit': 24,
     });
+
+    await _expandPlan(tester, 'plan-active');
+    final remove = find.byKey(const ValueKey('remove-plan-row-series-active'));
+    await tester.ensureVisible(remove);
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('schedule-plan-row-removal-reason')),
+      'Клиент меняет расписание',
+    );
+    await tester.tap(find.byKey(const Key('schedule-plan-row-removal-submit')));
+    await tester.pumpAndSettle();
+    expect(find.text('Будет отменено будущих занятий: 3'), findsOneWidget);
+    expect(find.text('История проведённых занятий сохранится'), findsOneWidget);
+    expect(
+      find.text(
+        'Это последняя действующая строка. Расписание будет завершено.',
+      ),
+      findsOneWidget,
+    );
+    await captureEvidence(tester, 'schedule-plan-final-row-impact');
+    await tester.tap(
+      find.byKey(const Key('schedule-plan-row-removal-confirm')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('schedule-plan-row-removal-submit')));
+    await tester.pumpAndSettle();
+    expect(remove, findsNothing);
     expect(tester.takeException(), isNull);
-    debugPrint('V7_RECURRING_PLAN_TRAY_DEVICE_PASS');
+    debugPrint('V7_STUDENT_LESSON_TIMELINE_DEVICE_PASS');
   });
 
   testWidgets('individual plan reads back mixed rows on device', (
@@ -478,7 +553,7 @@ void main() {
         child: ProviderScope(
           overrides: [magicApiClientProvider.overrideWithValue(api)],
           child: MaterialApp(
-            theme: AppTheme.dark,
+            theme: AppTheme.production,
             home: Scaffold(
               body: SafeArea(
                 child: SingleChildScrollView(
@@ -548,6 +623,7 @@ void main() {
       find.byKey(const ValueKey('schedule-plan-created-plan-1')),
       findsOneWidget,
     );
+    await _expandPlan(tester, 'created-plan-1');
     for (var index = 1; index <= 3; index++) {
       expect(
         find.byKey(ValueKey('schedule-plan-row-edit-created-series-$index')),
@@ -571,6 +647,15 @@ void main() {
   });
 }
 
+Future<void> _expandPlan(WidgetTester tester, String id) async {
+  final tile = find.byKey(PageStorageKey('schedule-plan-expansion-$id'));
+  await tester.ensureVisible(tile);
+  await tester.tap(
+    find.descendant(of: tile, matching: find.byType(ListTile)).first,
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> _chooseReferences(WidgetTester tester) async {
   await _chooseSearchable(
     tester,
@@ -589,12 +674,10 @@ Future<void> _chooseReferences(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Бесплатное занятие').last);
   await tester.pumpAndSettle();
-  await tester.tap(
+  expect(
     find.byKey(const ValueKey('schedule-plan-compensation-rule')),
+    findsNothing,
   );
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Не оплачивать').last);
-  await tester.pumpAndSettle();
 }
 
 Future<void> _chooseSearchable(

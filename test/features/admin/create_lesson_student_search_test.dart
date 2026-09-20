@@ -31,6 +31,10 @@ class _FakeApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    if (path == '/access/me') {
+      return <String, dynamic>{'accountId': 'test-admin', 'accessVersion': 1,
+        'role': 'admin', 'capabilities': const [], 'scopes': const {}} as T;
+    }
     if (path == '/crm/clients/resolve') {
       return <String, dynamic>{
             'ref': {

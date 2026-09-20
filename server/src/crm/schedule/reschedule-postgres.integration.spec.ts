@@ -11,6 +11,8 @@ import { NotificationsService } from "../../notifications/notifications.service"
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { ClientArchiveService } from "../clients/client-archive.service";
+import { lessonSettlementLockKey } from "../commerce/lesson-settlement-locks";
 import { LessonSettlementPort } from "../commerce/lesson-settlement.port";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
@@ -22,7 +24,10 @@ import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { LessonCompletionWorkerRepository } from "./completion-worker.repository";
 import { LessonCompletionService } from "./lesson-completion.service";
 import { LessonCompletionWorker } from "./lesson-completion.worker";
+import { LessonActionableChainService } from "./lesson-actionable-chain.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
+import { LessonCommandRepository } from "./lesson-command.repository";
+import { LessonPlannedSettlementCommandService } from "./lesson-planned-settlement-command.service";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonBulkTransitionService } from "./lesson-bulk-transition.service";
 import { LessonTransitionCommandService } from "./lesson-transition-command.service";
@@ -30,6 +35,7 @@ import { LessonTransitionCommitService } from "./lesson-transition-commit.servic
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
 import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
+import { stableTransitionId } from "./lesson-transition.rules";
 import { LessonTransitionService } from "./lesson-transition.service";
 import { LessonSettlementCorrectionService } from "./lesson-settlement-correction.service";
 
@@ -50,6 +56,9 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
   let settlement: LessonSettlementService;
   let completionWorker: LessonCompletionWorker;
   let corrections: LessonSettlementCorrectionService;
+  let archives: ClientArchiveService;
+  let tokens: SubscriptionPreviewTokenService;
+  let plannedSettlements: LessonPlannedSettlementCommandService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
@@ -67,18 +76,35 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       ),
     );
     const lifecycle = new LessonLifecycleRepository(database);
+    const actionableChains = new LessonActionableChainService(lifecycle);
     const reservations = new SubscriptionReservationService(database, {
       emitCrmChanged: jest.fn(),
       emitFinanceChanged: jest.fn(),
     } as unknown as RealtimeBus);
-    const tokens = new SubscriptionPreviewTokenService(config);
+    tokens = new SubscriptionPreviewTokenService(config);
     const platform = new PlatformIntegrityService(
       database,
       new PlatformIntegrityRepository(),
     );
     const policy = new CrmPolicy();
+    archives = new ClientArchiveService(
+      database,
+      platform,
+      policy,
+      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+    );
     const validator = new LessonRequiredFieldValidator();
     settlement = new LessonSettlementService(database);
+    plannedSettlements = new LessonPlannedSettlementCommandService(
+      database,
+      platform,
+      policy,
+      reservations,
+      settlement,
+      tokens,
+      new LessonCommandRepository(database),
+      constraints,
+    );
     corrections = new LessonSettlementCorrectionService(database, platform, policy,
       settlement, tokens, reservations, constraints);
     const buildTransitionGraph = (settlementPort: LessonSettlementPort) => {
@@ -94,6 +120,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         settlementPort,
         reservations,
         financial,
+        new LessonCommandRepository(database),
       );
       const commits = new LessonTransitionCommitService(
         preparation,
@@ -107,6 +134,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         policy,
         preparation,
         tokens,
+        actionableChains,
       );
       const commands = new LessonTransitionCommandService(
         platform,
@@ -114,6 +142,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         tokens,
         commits,
         reservations,
+        actionableChains,
       );
       const bulkTransitions = new LessonBulkTransitionService(
         database,
@@ -136,11 +165,14 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       },
       preparePlan: settlement.preparePlan.bind(settlement),
       assignPlan: settlement.assignPlan.bind(settlement),
+      assignPreparedPlan: settlement.assignPreparedPlan.bind(settlement),
       clonePlan: settlement.clonePlan.bind(settlement),
       loadPlan: settlement.loadPlan.bind(settlement),
       markPlanState: settlement.markPlanState.bind(settlement),
       plannedSubscriptionAllocations:
         settlement.plannedSubscriptionAllocations.bind(settlement),
+      resolvePlannedPlan: settlement.resolvePlannedPlan.bind(settlement),
+      reuseStoredTeacherCompensation: settlement.reuseStoredTeacherCompensation.bind(settlement),
     } satisfies LessonSettlementPort);
     const completionRepository = new LessonCompletionWorkerRepository(database);
     completionWorker = new LessonCompletionWorker(
@@ -164,6 +196,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     const paidDecision = {
       settlementTypeKey: "paid_miss",
       teacherCompensationRuleKey: "standard",
+      clientDecisions: [{ clientId: fixture.studentId }],
     };
     const metadata = (label: string) => ({
       idempotencyKey: `${label}-${randomUUID()}`,
@@ -218,34 +251,109 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         metadata("complete-before-reschedule"),
       );
 
+      const completedEvidence = async () => {
+        const result = await pool.query(
+          `select source.lifecycle_state, source.version,
+             (select count(*)::int from app.lessons
+               where predecessor_id = source.id) as successors,
+             (select count(*)::int from app.lesson_settlement_plans plan
+               where plan.lesson_id = source.id
+                  or plan.lesson_id in (
+                    select id from app.lessons where predecessor_id = source.id
+                  )) as plans,
+             (select count(*)::int from app.lesson_settlement_corrections
+               where lesson_id = source.id) as corrections,
+             (select count(*)::int from app.lesson_transitions
+               where lesson_id = source.id) as transitions,
+             (select count(*)::int from app.lesson_client_charge_facts
+               where lesson_id = source.id) as client_facts,
+             (select count(*)::int from app.lesson_teacher_compensation_facts
+               where lesson_id = source.id) as teacher_facts,
+             (select state::text from app.lesson_reservations
+               where lesson_id = source.id limit 1) as reservation_state,
+             (select units::text from app.lesson_reservations
+               where lesson_id = source.id limit 1) as reservation_units,
+             (select count(*)::int from app.audit_events
+               where entity_type = 'lesson'
+                 and entity_id = source.id::text) as audits,
+             (select count(*)::int from app.platform_outbox_events
+               where aggregate_type = 'schedule:lesson'
+                 and aggregate_id = source.id::text) as outbox,
+             (select count(*)::int from app.idempotency_records
+               where actor_key = $2) as idempotency
+           from app.lessons source where source.id = $1`,
+          [sourceLessonId, `user:${fixture.managerId}`],
+        );
+        return result.rows[0];
+      };
+      const beforeUnauthorized = await completedEvidence();
+      const reversalRequestDecision = {
+        settlementTypeKey: "paid_miss",
+        clientDecisions: [{ clientId: fixture.studentId }],
+      } as never;
+      const forbiddenTeacherDecision = {
+        settlementTypeKey: "paid_miss",
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "70000",
+        teacherCreditedDurationMinutes: 60,
+        teacherCompensationSource: "manual" as const,
+        clientDecisions: [{ clientId: fixture.studentId }],
+      };
+      const completedReschedule = {
+        expectedVersion: 3,
+        reasonCode: "business.error",
+        reasonText: "Исправление ошибочно завершённого занятия",
+        successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+      };
+      await expect(
+        service.previewReschedule(actor, sourceLessonId, {
+          ...completedReschedule,
+          financialDecision: forbiddenTeacherDecision,
+        }),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      expect(await completedEvidence()).toEqual(beforeUnauthorized);
+
       const reschedulePreview = await service.previewReschedule(
         actor,
         sourceLessonId,
         {
-          expectedVersion: 3,
-          reasonCode: "business.error",
-          reasonText: "Исправление ошибочно завершённого занятия",
-          financialDecision: paidDecision,
-          successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+          ...completedReschedule,
+          financialDecision: reversalRequestDecision,
         },
       );
       expect(reschedulePreview).toMatchObject({
         canConfirm: true,
-        financialDecision: {
+        sourceFinancialDecision: {
           settlementTypeKey: "free_lesson",
           teacherCompensationRuleKey: "none",
+        },
+        successorFinancialDecision: {
+          settlementTypeKey: "paid_miss",
+          teacherCompensationRuleKey: "standard",
         },
         warnings: ["COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED"],
       });
       const rescheduleCommand = {
-        expectedVersion: 3,
-        reasonCode: "business.error",
-        reasonText: "Исправление ошибочно завершённого занятия",
-        financialDecision: paidDecision,
-        successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+        ...completedReschedule,
+        financialDecision: reversalRequestDecision,
         previewToken: reschedulePreview.previewToken!,
         confirm: true as const,
       };
+      await expect(
+        service.reschedule(
+          actor,
+          sourceLessonId,
+          { ...rescheduleCommand, financialDecision: forbiddenTeacherDecision },
+          metadata("completed-reschedule-unauthorized"),
+        ),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      expect(await completedEvidence()).toEqual(beforeUnauthorized);
       await expect(
         failingService.reschedule(
           actor,
@@ -286,15 +394,63 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         effectiveSubscriptionUnits(pool, fixture.subscriptionId),
       ).resolves.toBe("1.00");
 
-      const moved = await service.reschedule(
-        actor,
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const director = {
+        userId: fixture.managerId,
+        role: "director" as const,
+      };
+      const authorizedPreview = await service.previewReschedule(
+        director,
         sourceLessonId,
-        rescheduleCommand,
+        {
+          ...completedReschedule,
+          financialDecision: forbiddenTeacherDecision,
+        },
+      );
+      expect(authorizedPreview).toMatchObject({
+        sourceFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          teacherCompensationSource: "automatic",
+        },
+        successorFinancialDecision: {
+          settlementTypeKey: "paid_miss",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "70000",
+          teacherCompensationSource: "manual",
+        },
+      });
+      const moved = await service.reschedule(
+        director,
+        sourceLessonId,
+        {
+          ...completedReschedule,
+          financialDecision: forbiddenTeacherDecision,
+          previewToken: authorizedPreview.previewToken!,
+          confirm: true,
+        },
         metadata("completed-reschedule"),
       );
-      expect(moved.financialDecision).toEqual({
-        settlementTypeKey: "free_lesson",
-        teacherCompensationRuleKey: "none",
+      expect(moved).toMatchObject({
+        sourceFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          teacherCompensationSource: "automatic",
+        },
+        successorFinancialDecision: {
+          settlementTypeKey: "paid_miss",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "70000",
+          teacherCompensationSource: "manual",
+        },
+        financialDecision: {
+          settlementTypeKey: "paid_miss",
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "70000",
+          teacherCompensationSource: "manual",
+        },
       });
       const successorId = moved.successor!.id;
       const state = await pool.query<{
@@ -493,10 +649,12 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     const freeDecision = {
       settlementTypeKey: "free_lesson",
       teacherCompensationRuleKey: "none",
+      clientDecisions: [{ clientId: fixture.studentId }],
     };
     const paidMissDecision = {
       settlementTypeKey: "paid_miss",
       teacherCompensationRuleKey: "standard",
+      clientDecisions: [{ clientId: fixture.studentId }],
     };
     try {
       const conflicting = await service.previewReschedule(
@@ -529,12 +687,19 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         successor: { scheduledAt: "2026-07-27T11:00:00.000Z" },
       });
       expect(preview).toMatchObject({
+        requestedLessonId: fixture.sourceId,
+        actionableLessonId: fixture.sourceId,
+        redirected: false,
         canConfirm: true,
-        financialDecision: {
+        sourceFinancialDecision: {
           settlementTypeKey: "free_lesson",
-          teacherCompensationRuleKey: "standard",
+          teacherCompensationRuleKey: "none",
         },
-        financialPreview: {
+        successorFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+        },
+        sourceFinancialPreview: {
           clientFacts: [
             expect.objectContaining({
               settlementTypeKey: "free_lesson",
@@ -543,9 +708,15 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             }),
           ],
           teacherFact: expect.objectContaining({
-            compensationRuleKey: "standard",
-            amountMinor: "70000",
+            compensationRuleKey: "none",
+            amountMinor: "0",
           }),
+        },
+        successorPlannedSettlementPreview: {
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "none",
+          },
         },
       });
       expect(preview.previewToken).toBeTruthy();
@@ -588,6 +759,23 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         successor: { state: "scheduled", version: 1 },
         replayed: false,
       });
+      const redirectedPreview = await service.previewReschedule(
+        actor,
+        fixture.sourceId,
+        {
+          expectedVersion: 1,
+          reasonCode: "client.requested",
+          reasonText: "Повторный перенос из исходной карточки",
+          financialDecision: freeDecision,
+          successor: { scheduledAt: "2026-07-27T14:00:00.000Z" },
+        },
+      );
+      expect(redirectedPreview).toMatchObject({
+        requestedLessonId: fixture.sourceId,
+        actionableLessonId: result.successor!.id,
+        redirected: true,
+        source: { id: result.successor!.id, version: 1 },
+      });
       const replay = await service.reschedule(
         actor,
         fixture.sourceId,
@@ -599,6 +787,16 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         replayed: true,
       });
 
+      await database.transaction((client) => settlement.assignPlan(client, {
+        lessonId: fixture.cancelId,
+        branchId: fixture.branchId,
+        decision: {
+          ...paidMissDecision,
+          teacherCompensationSource: "automatic",
+        },
+        selectedBy: fixture.managerId,
+        reasonText: "Автоматический план для проверки отмены",
+      }));
       const cancelPreview = await service.previewCancel(
         actor,
         fixture.cancelId,
@@ -649,6 +847,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       const settleDecision = {
         settlementTypeKey: "lesson",
         teacherCompensationRuleKey: "standard",
+        clientDecisions: [{ clientId: fixture.studentId }],
       };
       await database.transaction(async (client) => {
         await settlement.assignPlan(client, {
@@ -786,7 +985,458 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     }
   });
 
-  it("cancels every catalog type allowed for cancellation with exact financial and reservation history", async () => {
+  it("resolves transition teacher provenance before preview and commit", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const manager = { userId: fixture.managerId, role: "manager" as const };
+    const director = { userId: fixture.managerId, role: "director" as const };
+    const metadata = (label: string) => ({
+      idempotencyKey: `${label}-${randomUUID()}`,
+      requestId: `request-${label}-${randomUUID()}`,
+    });
+    const manuallySourced = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "fixed",
+      teacherCompensationValueMinor: "70000",
+      teacherCompensationSource: "manual" as const,
+      clientDecisions: [{ clientId: fixture.studentId }],
+    };
+    try {
+      await expect(
+        service.previewCancel(manager, fixture.cancelId, {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Ручная оплата запрещена менеджеру",
+          financialDecision: manuallySourced,
+        }),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      await expect(transitionCounts(pool, fixture.cancelId)).resolves.toEqual({
+        lifecycle_state: "scheduled",
+        version: 1,
+        successors: 0,
+        transitions: 0,
+        client_facts: 0,
+        teacher_facts: 0,
+      });
+
+      const legacyManual = {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "70000",
+        clientDecisions: [{ clientId: fixture.studentId }],
+      };
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const manualPreview = await service.previewCancel(
+        director,
+        fixture.cancelId,
+        {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Та же сумма выбрана вручную директором",
+          financialDecision: legacyManual,
+        },
+      );
+      expect(manualPreview.financialDecision).toMatchObject({
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "70000",
+        teacherCompensationSource: "manual",
+      });
+      const manualCommit = await service.cancel(
+        director,
+        fixture.cancelId,
+        {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Та же сумма выбрана вручную директором",
+          financialDecision: legacyManual,
+          previewToken: manualPreview.previewToken!,
+          confirm: true,
+        },
+        metadata("manual-provenance"),
+      );
+      expect(manualCommit.financialDecision).toEqual(
+        manualPreview.financialDecision,
+      );
+      await expect(
+        pool.query<{ compensation_source: string }>(
+          `select compensation_source
+           from app.lesson_teacher_compensation_facts_effective
+           where lesson_id = $1`,
+          [fixture.cancelId],
+        ),
+      ).resolves.toMatchObject({ rows: [{ compensation_source: "manual" }] });
+
+      await pool.query("update app.users set role = 'manager' where id = $1", [
+        fixture.managerId,
+      ]);
+
+      const legacyAutomatic = {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+        clientDecisions: [{ clientId: fixture.studentId }],
+      };
+      await database.transaction((client) => settlement.assignPlan(client, {
+        lessonId: fixture.sourceId,
+        branchId: fixture.branchId,
+        decision: {
+          ...legacyAutomatic,
+          teacherCompensationSource: "automatic",
+        },
+        selectedBy: fixture.managerId,
+        reasonText: "Автоматический план для проверки provenance",
+      }));
+      const automaticPreview = await service.previewCancel(
+        manager,
+        fixture.sourceId,
+        {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Старый автоматический payload",
+          financialDecision: legacyAutomatic,
+        },
+      );
+      expect(automaticPreview.financialDecision).toMatchObject({
+        teacherCompensationSource: "automatic",
+      });
+      const automaticCommit = await service.cancel(
+        manager,
+        fixture.sourceId,
+        {
+          expectedVersion: 1,
+          reasonCode: "school.cancelled",
+          reasonText: "Старый автоматический payload",
+          financialDecision: legacyAutomatic,
+          previewToken: automaticPreview.previewToken!,
+          confirm: true,
+        },
+        metadata("automatic-provenance"),
+      );
+      expect(automaticCommit.financialDecision).toEqual(
+        automaticPreview.financialDecision,
+      );
+      await expect(
+        pool.query<{ compensation_source: string }>(
+          `select compensation_source
+           from app.lesson_teacher_compensation_facts_effective
+           where lesson_id = $1`,
+          [fixture.sourceId],
+        ),
+      ).resolves.toMatchObject({
+        rows: [{ compensation_source: "automatic" }],
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("plans a partial personal-account successor from its new teacher date and replays once", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const successorDecision = {
+      settlementTypeKey: "partially_paid_lesson",
+      clientDecisions: [{
+        clientId: fixture.studentId,
+        chargeType: "personal_account" as const,
+        basePriceMinor: "180000",
+        chargeDurationMinutes: 30,
+      }],
+      teacherCompensationRuleKey: "standard",
+      teacherCreditedDurationMinutes: 45,
+    };
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      await pool.query(
+        `insert into app.teacher_rates (teacher_id, rate, effective_from) values
+           ($1, 700, '2026-01-01'),
+           ($2, 900, '2026-01-01'),
+           ($2, 1200, '2026-08-01')`,
+        [fixture.teacherId, fixture.replacementTeacherId],
+      );
+      const draft = {
+        scheduledAt: "2026-08-03T08:00:00.000Z",
+        teacherId: fixture.replacementTeacherId,
+        roomId: fixture.replacementRoomId,
+      };
+      const preview = await service.previewReschedule(
+        actor,
+        fixture.cancelId,
+        {
+          expectedVersion: 1,
+          reasonCode: "client.requested",
+          reasonText: "Частичный перенос на нового преподавателя",
+          successor: draft,
+          successorFinancialDecision: successorDecision,
+        },
+      );
+
+      expect(preview).toMatchObject({
+        canConfirm: true,
+        sourceFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+        },
+        successorFinancialDecision: {
+          ...successorDecision,
+          teacherCompensationRuleKey: "percent",
+          teacherRateSnapshot: { type: "hourly", value: "1200" },
+          teacherCompensationSource: "manual",
+        },
+      });
+
+      const command = {
+        expectedVersion: 1,
+        reasonCode: "client.requested",
+        reasonText: "Частичный перенос на нового преподавателя",
+        successor: draft,
+        successorFinancialDecision: successorDecision,
+        previewToken: preview.previewToken!,
+        confirm: true as const,
+      };
+      const metadata = {
+        idempotencyKey: `partial-personal-move-${randomUUID()}`,
+        requestId: `partial-personal-request-${randomUUID()}`,
+      };
+      const moved = await service.reschedule(
+        actor,
+        fixture.cancelId,
+        command,
+        metadata,
+      );
+      const replay = await service.reschedule(
+        actor,
+        fixture.cancelId,
+        command,
+        metadata,
+      );
+      expect(replay).toMatchObject({
+        successor: { id: moved.successor!.id },
+        transitionId: moved.transitionId,
+        replayed: true,
+      });
+
+      const persisted = await pool.query<{
+        source_client_amount: string;
+        source_client_share: number;
+        source_teacher_amount: string;
+        source_teacher_type: string;
+        successor_teacher_id: string;
+        successor_teacher_rate: string;
+        successor_snapshot_rate: string;
+        successor_decision: typeof successorDecision & {
+          teacherRateSnapshot: { type: string; value: string };
+          teacherCompensationSource: string;
+        };
+        successor_plan_revisions: number;
+        successor_client_facts: number;
+        successor_teacher_facts: number;
+      }>(
+        `select
+           source_client.amount_minor::text as source_client_amount,
+           source_client.hour_share_basis_points as source_client_share,
+           source_teacher.amount_minor::text as source_teacher_amount,
+           source_teacher.compensation_type as source_teacher_type,
+           successor.teacher_id as successor_teacher_id,
+           successor.teacher_rate::text as successor_teacher_rate,
+           successor_snapshot.teacher_compensation_value::text as successor_snapshot_rate,
+           successor_plan.decision as successor_decision,
+           (select count(*)::int from app.lesson_settlement_plan_revisions
+             where lesson_id = successor.id) as successor_plan_revisions,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = successor.id) as successor_client_facts,
+           (select count(*)::int from app.lesson_teacher_compensation_facts
+             where lesson_id = successor.id) as successor_teacher_facts
+         from app.lessons source
+         join app.lessons successor on successor.id = source.successor_id
+         join app.lesson_client_charge_facts_effective source_client
+           on source_client.lesson_id = source.id
+         join app.lesson_teacher_compensation_facts_effective source_teacher
+           on source_teacher.lesson_id = source.id
+         join app.lesson_snapshots successor_snapshot
+           on successor_snapshot.lesson_id = successor.id
+         join app.lesson_settlement_plans successor_plan
+           on successor_plan.lesson_id = successor.id
+         where source.id = $1`,
+        [fixture.cancelId],
+      );
+      expect(persisted.rows[0]).toEqual({
+        source_client_amount: "0",
+        source_client_share: 0,
+        source_teacher_amount: "0",
+        source_teacher_type: "none",
+        successor_teacher_id: fixture.replacementTeacherId,
+        successor_teacher_rate: "1200.00",
+        successor_snapshot_rate: "1200.00",
+        successor_decision: expect.objectContaining({
+          ...successorDecision,
+          teacherCompensationRuleKey: "percent",
+          teacherRateSnapshot: { type: "hourly", value: "1200" },
+          teacherCompensationSource: "manual",
+        }),
+        successor_plan_revisions: 1,
+        successor_client_facts: 0,
+        successor_teacher_facts: 0,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("moves the active subscription reservation to the successor exactly once", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const successorDecision = {
+      settlementTypeKey: "lesson",
+      teacherCompensationRuleKey: "standard",
+      clientDecisions: [{
+        clientId: fixture.studentId,
+        chargeType: "subscription" as const,
+        subscriptionId: fixture.subscriptionId,
+      }],
+    };
+    try {
+      const before = await pool.query<{ id: string }>(
+        `select id from app.lesson_reservations
+         where lesson_id = $1 and state = 'reserved'`,
+        [fixture.capacityId],
+      );
+      const preview = await service.previewReschedule(
+        actor,
+        fixture.capacityId,
+        {
+          expectedVersion: 1,
+          reasonCode: "client.requested",
+          reasonText: "Перенос брони абонемента",
+          successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+          successorFinancialDecision: successorDecision,
+        },
+      );
+      const command = {
+        expectedVersion: 1,
+        reasonCode: "client.requested",
+        reasonText: "Перенос брони абонемента",
+        successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+        successorFinancialDecision: successorDecision,
+        previewToken: preview.previewToken!,
+        confirm: true as const,
+      };
+      const metadata = {
+        idempotencyKey: `subscription-move-${randomUUID()}`,
+        requestId: `subscription-move-request-${randomUUID()}`,
+      };
+      const moved = await service.reschedule(
+        actor,
+        fixture.capacityId,
+        command,
+        metadata,
+      );
+      const replay = await service.reschedule(
+        actor,
+        fixture.capacityId,
+        command,
+        metadata,
+      );
+
+      const reservations = await pool.query<{
+        id: string;
+        lesson_id: string;
+        state: string;
+        units: string;
+      }>(
+        `select id, lesson_id, state, units::text
+         from app.lesson_reservations
+         where lesson_id = any($1::uuid[])
+         order by id`,
+        [[fixture.capacityId, moved.successor!.id]],
+      );
+      expect(reservations.rows).toEqual([{
+        id: before.rows[0]!.id,
+        lesson_id: moved.successor!.id,
+        state: "reserved",
+        units: "1.00",
+      }]);
+      expect(replay).toMatchObject({
+        successor: { id: moved.successor!.id },
+        replayed: true,
+      });
+      const integrity = await pool.query<{
+        source_state: string;
+        source_version: string;
+        source_successor_id: string;
+        successor_version: string;
+        successor_predecessor_id: string;
+        transitions: number;
+        plan_revisions: number;
+        audits: number;
+        outbox: number;
+        outbox_successor_id: string;
+        idempotency: number;
+      }>(
+        `select
+           source.lifecycle_state as source_state,
+           source.version::text as source_version,
+           source.successor_id as source_successor_id,
+           successor.version::text as successor_version,
+           successor.predecessor_id as successor_predecessor_id,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = source.id) as transitions,
+           (select count(*)::int from app.lesson_settlement_plan_revisions
+             where lesson_id = successor.id) as plan_revisions,
+           (select count(*)::int from app.audit_events
+             where request_id = $2) as audits,
+           (select count(*)::int from app.platform_outbox_events
+             where request_id = $2) as outbox,
+           (select payload->>'successorId' from app.platform_outbox_events
+             where request_id = $2 limit 1) as outbox_successor_id,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $3 and operation = 'schedule.lesson.reschedule'
+               and idempotency_key = $4) as idempotency
+         from app.lessons source
+         join app.lessons successor on successor.id = source.successor_id
+         where source.id = $1`,
+        [
+          fixture.capacityId,
+          metadata.requestId,
+          `user:${fixture.managerId}`,
+          metadata.idempotencyKey,
+        ],
+      );
+      expect(integrity.rows[0]).toEqual({
+        source_state: "rescheduled",
+        source_version: "2",
+        source_successor_id: moved.successor!.id,
+        successor_version: "1",
+        successor_predecessor_id: fixture.capacityId,
+        transitions: 1,
+        plan_revisions: 1,
+        audits: 1,
+        outbox: 1,
+        outbox_successor_id: moved.successor!.id,
+        idempotency: 1,
+      });
+      await expect(
+        effectiveSubscriptionUnits(pool, fixture.subscriptionId),
+      ).resolves.toBe("0.00");
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("cancels every automatic catalog policy with exact financial and reservation history", async () => {
     const lifecycle = new LessonLifecycleRepository(database);
     const fixture = await createFixture(pool, lifecycle);
     const actor = { userId: fixture.managerId, role: "manager" as const };
@@ -800,6 +1450,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         reservationState: "released",
         reservationUnits: "1.00",
         availableUnits: "1.00",
+        teacherRule: "none",
+        teacherAmount: "0",
       },
       {
         key: "paid_miss",
@@ -810,16 +1462,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         reservationState: "consumed",
         reservationUnits: "1.00",
         availableUnits: "0.00",
-      },
-      {
-        key: "partially_paid_miss",
-        label: "Частично оплачиваемый пропуск",
-        color: "cyan",
-        share: 5_000,
-        units: "0.50",
-        reservationState: "consumed",
-        reservationUnits: "0.50",
-        availableUnits: "0.50",
+        teacherRule: "standard",
+        teacherAmount: "70000",
       },
       {
         key: "unpaid_miss",
@@ -830,16 +1474,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         reservationState: "released",
         reservationUnits: "1.00",
         availableUnits: "1.00",
-      },
-      {
-        key: "penalty_lesson",
-        label: "Занятие со штрафом",
-        color: "violet",
-        share: 10_000,
-        units: "1.00",
-        reservationState: "consumed",
-        reservationUnits: "1.00",
-        availableUnits: "0.00",
+        teacherRule: "none",
+        teacherAmount: "0",
       },
     ] as const;
     try {
@@ -887,7 +1523,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         });
 
         if (index === 0) {
-          for (const forbiddenKey of ["lesson", "partially_paid_lesson"]) {
+          for (const forbiddenKey of ["lesson"]) {
             await expect(
               service.previewCancel(actor, lessonId, {
                 expectedVersion: 1,
@@ -896,6 +1532,10 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
                 financialDecision: {
                   settlementTypeKey: forbiddenKey,
                   teacherCompensationRuleKey: "standard",
+                  clientDecisions: [{
+                    clientId: fixture.studentId,
+                    chargeDurationMinutes: 60,
+                  }],
                 },
               }),
             ).rejects.toMatchObject({
@@ -907,8 +1547,21 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
 
         const financialDecision = {
           settlementTypeKey: item.key,
-          teacherCompensationRuleKey: "standard",
+          teacherCompensationRuleKey: item.teacherRule,
+          clientDecisions: [{
+            clientId: fixture.studentId,
+          }],
         };
+        await database.transaction((client) => settlement.assignPlan(client, {
+          lessonId,
+          branchId: fixture.branchId,
+          decision: {
+            ...financialDecision,
+            teacherCompensationSource: "automatic",
+          },
+          selectedBy: fixture.managerId,
+          reasonText: `Автоматический план: ${item.label}`,
+        }));
         const reasonText = `Отмена: ${item.label}`;
         const preview = await service.previewCancel(actor, lessonId, {
           expectedVersion: 1,
@@ -933,8 +1586,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
               }),
             ],
             teacherFact: expect.objectContaining({
-              compensationRuleKey: "standard",
-              amountMinor: "70000",
+              compensationRuleKey: item.teacherRule,
+              amountMinor: item.teacherAmount,
               configurationRevisionId: expect.any(String),
             }),
           },
@@ -967,7 +1620,10 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         );
         expect(cancelled).toMatchObject({
           source: { id: lessonId, state: "cancelled", version: 2 },
-          financialDecision,
+          financialDecision: expect.objectContaining({
+            settlementTypeKey: item.key,
+            teacherCompensationRuleKey: item.teacherRule,
+          }),
           replayed: false,
         });
         expect(replay).toMatchObject({
@@ -1073,7 +1729,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           fact_units: item.units,
           amount_minor: "0",
           client_revision_id: expect.any(String),
-          teacher_amount_minor: "70000",
+          teacher_amount_minor: item.teacherAmount,
           teacher_revision_id: expect.any(String),
           reason_code: "school.cancelled",
           reason_text: reasonText,
@@ -1100,6 +1756,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     const financialDecision = {
       settlementTypeKey: "free_lesson",
       teacherCompensationRuleKey: "none",
+      clientDecisions: [{ clientId: fixture.studentId }],
     };
     const successor = {
       teacherId: fixture.replacementTeacherId,
@@ -1207,6 +1864,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     const decision = {
       settlementTypeKey: "free_lesson",
       teacherCompensationRuleKey: "none",
+      clientDecisions: [fixture.studentId, fixture.secondStudentId]
+        .map((clientId) => ({ clientId })),
     };
     const previewDto = {
       expectedVersion: 1,
@@ -1224,27 +1883,43 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(preview).toMatchObject({
         canConfirm: true,
         source: { state: "scheduled" },
-        financialDecision: {
+        sourceFinancialDecision: {
           settlementTypeKey: "free_lesson",
-          teacherCompensationRuleKey: "standard",
+          teacherCompensationRuleKey: "none",
+        },
+        successorFinancialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
         },
         successor: {
           subject: { type: "group", id: fixture.groupId },
           startAt: "2026-08-03T09:00:00.000Z",
         },
-        financialPreview: {
-          clientFacts: [
+        sourceFinancialPreview: {
+          clientFacts: expect.arrayContaining([
             expect.objectContaining({
               clientId: fixture.studentId,
               settlementTypeKey: "free_lesson",
               amountMinor: "0",
               units: "0.00",
             }),
-          ],
+            expect.objectContaining({
+              clientId: fixture.secondStudentId,
+              settlementTypeKey: "free_lesson",
+              amountMinor: "0",
+              units: "0.00",
+            }),
+          ]),
           teacherFact: expect.objectContaining({
-            compensationRuleKey: "standard",
-            amountMinor: "70000",
+            compensationRuleKey: "none",
+            amountMinor: "0",
           }),
+        },
+        successorPlannedSettlementPreview: {
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "none",
+          },
         },
       });
       const command = {
@@ -1265,7 +1940,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(moved).toMatchObject({
         source: { state: "rescheduled", version: 2 },
         successor: { state: "scheduled", version: 1 },
-        clientFinancialFactIds: [expect.any(String)],
+        clientFinancialFactIds: [expect.any(String), expect.any(String)],
         teacherFinancialFactId: expect.any(String),
         replayed: false,
       });
@@ -1317,8 +1992,8 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         source_version: 2,
         successor_state: "scheduled",
         successor_group_id: fixture.groupId,
-        successor_participants: 1,
-        source_client_facts: 1,
+        successor_participants: 2,
+        source_client_facts: 2,
         source_teacher_facts: 1,
         transitions: 1,
         successor_plan_state: "planned",
@@ -1327,6 +2002,449 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(
         new Date(persisted.rows[0]!.successor_scheduled_at).toISOString(),
       ).toBe("2026-08-03T09:00:00.000Z");
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects inexact frozen-group rows before durable writes and honors exclusions", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const exactDecision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      clientDecisions: [{ clientId: fixture.studentId }],
+    };
+    try {
+      await pool.query(
+        `insert into app.lesson_participant_exclusions (
+           lesson_id, student_id, reason_code, actor_user_id
+         ) values ($1, $2, 'test.exact-transition', $3)`,
+        [fixture.groupSourceId, fixture.secondStudentId, fixture.managerId],
+      );
+      const previewDto = {
+        expectedVersion: 1,
+        reasonCode: "school.cancelled",
+        reasonText: "Проверка точного списка участников",
+        financialDecision: exactDecision,
+      };
+      const validPreview = await service.previewCancel(
+        actor,
+        fixture.groupSourceId,
+        previewDto,
+      );
+      expect(validPreview.financialPreview).toMatchObject({
+        clientFacts: [expect.objectContaining({ clientId: fixture.studentId })],
+      });
+
+      const invalidCases = [
+        {
+          code: "CLIENT_DECISION_MISSING",
+          clientDecisions: [],
+        },
+        {
+          code: "DUPLICATE_CLIENT_DECISION",
+          clientDecisions: [
+            { clientId: fixture.studentId },
+            { clientId: fixture.studentId },
+          ],
+        },
+        {
+          code: "UNKNOWN_LESSON_CLIENT",
+          clientDecisions: [
+            { clientId: fixture.studentId },
+            { clientId: fixture.secondStudentId },
+          ],
+        },
+      ];
+      const idempotencyKeys: string[] = [];
+      for (const invalid of invalidCases) {
+        const financialDecision = {
+          ...exactDecision,
+          clientDecisions: invalid.clientDecisions,
+        };
+        await expect(service.previewCancel(actor, fixture.groupSourceId, {
+          ...previewDto,
+          financialDecision,
+        })).rejects.toMatchObject({
+          status: 422,
+          response: { code: invalid.code },
+        });
+        const idempotencyKey = `exact-group-${invalid.code}-${randomUUID()}`;
+        idempotencyKeys.push(idempotencyKey);
+        await expect(service.cancel(actor, fixture.groupSourceId, {
+          ...previewDto,
+          financialDecision,
+          previewToken: validPreview.previewToken!,
+          confirm: true,
+        }, {
+          idempotencyKey,
+          requestId: `request-${idempotencyKey}`,
+        })).rejects.toMatchObject({
+          status: 422,
+          response: { code: invalid.code },
+        });
+      }
+
+      expect(await transitionCounts(pool, fixture.groupSourceId)).toEqual({
+        lifecycle_state: "scheduled",
+        version: 1,
+        successors: 0,
+        transitions: 0,
+        client_facts: 0,
+        teacher_facts: 0,
+      });
+      const writes = await pool.query<{
+        audits: number;
+        outbox: number;
+        idempotency: number;
+      }>(
+        `select
+           (select count(*)::int from app.audit_events
+             where entity_id = $1) as audits,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_id = $1) as outbox,
+           (select count(*)::int from app.idempotency_records
+             where idempotency_key = any($2::text[])) as idempotency`,
+        [fixture.groupSourceId, idempotencyKeys],
+      );
+      expect(writes.rows[0]).toEqual({ audits: 0, outbox: 0, idempotency: 0 });
+
+      await expect(service.cancel(actor, fixture.groupSourceId, {
+        ...previewDto,
+        previewToken: validPreview.previewToken!,
+        confirm: true,
+      }, {
+        idempotencyKey: `exact-group-valid-${randomUUID()}`,
+        requestId: `exact-group-valid-${randomUUID()}`,
+      })).resolves.toMatchObject({
+        source: { state: "cancelled", version: 2 },
+        clientFinancialFactIds: [expect.any(String)],
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("serializes partial group archive and transition commits in both lock orders", async () => {
+    const lifecycle = new LessonLifecycleRepository(database);
+    const run = async (first: "archive" | "transition") => {
+      const fixture = await createFixture(pool, lifecycle);
+      const actor = { userId: fixture.managerId, role: "director" as const };
+      const staleDecision = {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+        clientDecisions: [fixture.studentId, fixture.secondStudentId]
+          .map((clientId) => ({ clientId })),
+      };
+      const previewDto = {
+        expectedVersion: 1,
+        reasonCode: "school.cancelled",
+        reasonText: "Конкурентная проверка архива и перехода",
+        financialDecision: staleDecision,
+      };
+      const archiveDto = {
+        type: "student" as const,
+        id: fixture.secondStudentId,
+        expectedVersion: 1,
+        reason: `test.transition-race.${first}`,
+        confirm: true as const,
+      };
+      const blocker = await pool.connect();
+      let archivePromise: Promise<unknown> | undefined;
+      let transitionPromise: Promise<unknown> | undefined;
+      try {
+        await pool.query("update app.users set role = 'director' where id = $1", [
+          fixture.managerId,
+        ]);
+        const scheduled = await pool.query<{ version: number | string }>(
+          "update app.lessons set scheduled_at = now() + interval '1 day' where id = $1 returning version",
+          [fixture.groupSourceId],
+        );
+        previewDto.expectedVersion = Number(scheduled.rows[0]!.version);
+        const signedPreview = await service.previewCancel(
+          actor,
+          fixture.groupSourceId,
+          previewDto,
+        );
+        const transition = () => service.cancel(actor, fixture.groupSourceId, {
+          ...previewDto,
+          previewToken: signedPreview.previewToken!,
+          confirm: true,
+        }, {
+          idempotencyKey: `transition-race-${first}-${randomUUID()}`,
+          requestId: `transition-race-${first}-${randomUUID()}`,
+        });
+        await blocker.query("begin");
+        if (first === "archive") {
+          await blocker.query(
+            "select id from app.students where id = $1 for update",
+            [fixture.secondStudentId],
+          );
+          archivePromise = archives.archive(actor, archiveDto);
+          const archivePid = await waitForBlockedQuery(
+            pool,
+            "insert into app.lesson_participant_exclusions",
+          );
+          expect(await sessionHoldsAdvisoryLock(pool, archivePid)).toBe(true);
+          transitionPromise = transition();
+          await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+          await blocker.query("commit");
+          await archivePromise;
+          await expect(transitionPromise).rejects.toMatchObject({
+            status: 422,
+            response: { code: "UNKNOWN_LESSON_CLIENT" },
+          });
+        } else {
+          await blocker.query(
+            "select id from app.lessons where id = $1 for update",
+            [fixture.groupSourceId],
+          );
+          transitionPromise = transition();
+          const transitionPid = await waitForBlockedQuery(
+            pool,
+            "select lesson.id",
+          );
+          expect(await sessionHoldsAdvisoryLock(pool, transitionPid)).toBe(true);
+          archivePromise = archives.archive(actor, archiveDto);
+          await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+          await blocker.query("commit");
+          await expect(transitionPromise).resolves.toMatchObject({
+            source: { state: "cancelled" },
+            clientFinancialFactIds: [expect.any(String), expect.any(String)],
+          });
+          await archivePromise;
+        }
+        const evidence = await pool.query<{
+          exclusions: number;
+          facts: number;
+          transitions: number;
+        }>(
+          `select
+             (select count(*)::int from app.lesson_participant_exclusions
+               where lesson_id = $1 and student_id = $2) as exclusions,
+             (select count(*)::int from app.lesson_client_charge_facts
+               where lesson_id = $1) as facts,
+             (select count(*)::int from app.lesson_transitions
+               where lesson_id = $1) as transitions`,
+          [fixture.groupSourceId, fixture.secondStudentId],
+        );
+        expect(evidence.rows[0]).toEqual(first === "archive"
+          ? { exclusions: 1, facts: 0, transitions: 0 }
+          : { exclusions: 0, facts: 2, transitions: 1 });
+      } finally {
+        await blocker.query("rollback").catch(() => undefined);
+        blocker.release();
+        await Promise.allSettled([
+          archivePromise ?? Promise.resolve(),
+          transitionPromise ?? Promise.resolve(),
+        ]);
+        await cleanup(pool, fixture);
+      }
+    };
+
+    await run("archive");
+    await run("transition");
+  });
+
+  it("re-discovers and locks a reschedule successor before archive exclusions", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const decision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      clientDecisions: [fixture.studentId, fixture.secondStudentId]
+        .map((clientId) => ({ clientId })),
+    };
+    const sourceBlocker = await pool.connect();
+    const successorBlocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let reschedulePromise: Promise<unknown> | undefined;
+    let successorPreviewPromise: Promise<Awaited<ReturnType<typeof service.previewCancel>>> | undefined;
+    let successorTransition: Promise<unknown> | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const scheduled = await pool.query<{ version: number | string }>(
+        "update app.lessons set scheduled_at = now() + interval '1 day' where id = $1 returning version",
+        [fixture.groupSourceId],
+      );
+      const successorSchedule = await pool.query<{ scheduled_at: Date | string }>(
+        `select ((date_trunc('week', now() at time zone 'Europe/Moscow')
+          + interval '1 week 12 hours') at time zone 'Europe/Moscow') as scheduled_at`,
+      );
+      const expectedVersion = Number(scheduled.rows[0]!.version);
+      const rescheduleDto = {
+        expectedVersion,
+        reasonCode: "client.requested",
+        reasonText: "Проверка successor во время архива",
+        financialDecision: decision,
+        successor: {
+          scheduledAt: new Date(successorSchedule.rows[0]!.scheduled_at).toISOString(),
+        },
+      };
+      const preview = await service.previewReschedule(
+        actor,
+        fixture.groupSourceId,
+        rescheduleDto,
+      );
+      const idempotencyKey = `archive-successor-${randomUUID()}`;
+      const successorId = stableTransitionId(
+        `schedule.lesson.reschedule\0${fixture.groupSourceId}\0${actor.userId}\0${idempotencyKey}`,
+      );
+      await sourceBlocker.query("begin");
+      await sourceBlocker.query(
+        "select id from app.lessons where id = $1 for update",
+        [fixture.groupSourceId],
+      );
+      await successorBlocker.query("begin");
+      await successorBlocker.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [lessonSettlementLockKey(successorId)],
+      );
+      reschedulePromise = service.reschedule(actor, fixture.groupSourceId, {
+        ...rescheduleDto,
+        previewToken: preview.previewToken!,
+        confirm: true,
+      }, {
+        idempotencyKey,
+        requestId: `archive-successor-${randomUUID()}`,
+      });
+      await waitForBlockedQuery(pool, "select lesson.id");
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.secondStudentId,
+        expectedVersion: 1,
+        reason: "test.reschedule-successor-race",
+        confirm: true,
+      });
+      await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+      await sourceBlocker.query("commit");
+      await expect(reschedulePromise).resolves.toMatchObject({
+        successor: { id: successorId, state: "scheduled" },
+      });
+      const archivePid = await waitForBlockedQuery(
+        pool,
+        "pg_advisory_xact_lock",
+      );
+      expect(await sessionHoldsAdvisoryLock(pool, archivePid)).toBe(true);
+      const cancelDto = {
+        expectedVersion: 1,
+        reasonCode: "school.cancelled",
+        reasonText: "Параллельная отмена successor",
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: fixture.studentId }],
+        },
+      };
+      successorPreviewPromise = service.previewCancel(actor, successorId, cancelDto);
+      await successorBlocker.query("commit");
+      await archivePromise;
+      const cancelPreview = await successorPreviewPromise;
+      expect(cancelPreview.financialPreview).toMatchObject({
+        clientFacts: [expect.objectContaining({ clientId: fixture.studentId })],
+      });
+      successorTransition = service.cancel(actor, successorId, {
+        ...cancelDto,
+        previewToken: cancelPreview.previewToken!,
+        confirm: true,
+      }, {
+        idempotencyKey: `archive-successor-cancel-${randomUUID()}`,
+        requestId: `archive-successor-cancel-${randomUUID()}`,
+      });
+      await expect(successorTransition).resolves.toMatchObject({
+        source: { state: "cancelled" },
+        clientFinancialFactIds: [expect.any(String)],
+      });
+      const evidence = await pool.query<{
+        exclusions: number;
+        facts: number;
+        archived_facts: number;
+        transitions: number;
+        state: string;
+      }>(
+        `select lesson.lifecycle_state as state,
+           (select count(*)::int from app.lesson_participant_exclusions
+             where lesson_id = lesson.id and student_id = $2) as exclusions,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = lesson.id) as facts,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = lesson.id and client_id = $2) as archived_facts,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = lesson.id) as transitions
+         from app.lessons lesson where lesson.id = $1`,
+        [successorId, fixture.secondStudentId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        state: "cancelled",
+        exclusions: 1,
+        facts: 1,
+        archived_facts: 0,
+        transitions: 1,
+      });
+    } finally {
+      await sourceBlocker.query("rollback").catch(() => undefined);
+      await successorBlocker.query("rollback").catch(() => undefined);
+      sourceBlocker.release();
+      successorBlocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        reschedulePromise ?? Promise.resolve(),
+        successorPreviewPromise ?? Promise.resolve(),
+        successorTransition ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("previews and commits an exact frozen lead row", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const financialDecision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      clientDecisions: [{ clientId: fixture.leadId }],
+    };
+    try {
+      const previewDto = {
+        expectedVersion: 1,
+        reasonCode: "school.cancelled",
+        reasonText: "Отмена пробного занятия лида",
+        financialDecision,
+      };
+      const preview = await service.previewCancel(
+        actor,
+        fixture.leadLessonId,
+        previewDto,
+      );
+      expect(preview.financialPreview).toMatchObject({
+        clientFacts: [expect.objectContaining({
+          clientType: "lead",
+          clientId: fixture.leadId,
+        })],
+      });
+      await expect(service.cancel(actor, fixture.leadLessonId, {
+        ...previewDto,
+        previewToken: preview.previewToken!,
+        confirm: true,
+      }, {
+        idempotencyKey: `exact-lead-${randomUUID()}`,
+        requestId: `exact-lead-${randomUUID()}`,
+      })).resolves.toMatchObject({
+        source: { state: "cancelled", version: 2 },
+        clientFinancialFactIds: [expect.any(String)],
+      });
     } finally {
       await cleanup(pool, fixture);
     }
@@ -1341,6 +2459,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     const decision = {
       settlementTypeKey: "free_lesson",
       teacherCompensationRuleKey: "none",
+      clientDecisions: [{ clientId: fixture.studentId }],
     };
     const preview = (scheduledAt: string) =>
       service.previewReschedule(actor, fixture.sourceId, {
@@ -1356,7 +2475,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     });
     try {
       const left = await preview("2026-07-27T11:00:00.000Z");
-      const right = await preview("2026-07-27T12:00:00.000Z");
+      const right = await preview("2026-07-27T14:00:00.000Z");
       await expect(
         service.reschedule(
           actor,
@@ -1378,6 +2497,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       const capacityDecision = {
         settlementTypeKey: "lesson",
         teacherCompensationRuleKey: "standard",
+        clientDecisions: [{ clientId: fixture.studentId }],
       };
       await database.transaction(async (client) => {
         await settlement.assignPlan(client, {
@@ -1450,7 +2570,6 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         plan_state: "review_required",
         facts: 0,
       });
-
       const results = await Promise.allSettled([
         service.reschedule(
           actor,
@@ -1474,7 +2593,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             reasonCode: "schedule.concurrent",
             reasonText: "Проверка конкурентного переноса",
             financialDecision: decision,
-            successor: { scheduledAt: "2026-07-27T12:00:00.000Z" },
+            successor: { scheduledAt: "2026-07-27T14:00:00.000Z" },
             previewToken: right.previewToken!,
             confirm: true,
           },
@@ -1487,6 +2606,18 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(
         results.filter((result) => result.status === "rejected"),
       ).toHaveLength(1);
+      const loser = results.find((result) => result.status === "rejected");
+      expect(loser).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 409,
+          response: {
+            code: expect.stringMatching(
+              /^LESSON_(VERSION_STALE|ALREADY_RESCHEDULED)$/,
+            ),
+          },
+        },
+      });
       const counts = await transitionCounts(pool, fixture.sourceId);
       expect(counts).toEqual({
         lifecycle_state: "rescheduled",
@@ -1506,10 +2637,11 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       userId: managerId,
       role: "manager" as const,
     });
-    const decision = {
+    const decisionFor = (studentId: string) => ({
       settlementTypeKey: "free_lesson",
       teacherCompensationRuleKey: "none",
-    };
+      clientDecisions: [{ clientId: studentId }],
+    });
     const prepareReview = async (
       fixture: Awaited<ReturnType<typeof createFixture>>,
       lessonIds: string[],
@@ -1519,7 +2651,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           await settlement.assignPlan(client, {
             lessonId,
             branchId: fixture.branchId,
-            decision,
+            decision: decisionFor(fixture.studentId),
             selectedBy: fixture.managerId,
             reasonText: "Массовая проверка автоматического расчёта",
           });
@@ -1553,7 +2685,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
             lessonId,
             operation: "settle" as const,
             expectedVersion: 2,
-            financialDecision: decision,
+            financialDecision: decisionFor(successFixture.studentId),
           }),
         ),
       };
@@ -1626,7 +2758,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           lessonId,
           operation: "settle" as const,
           expectedVersion: 2,
-          financialDecision: decision,
+          financialDecision: decisionFor(rollbackFixture.studentId),
         })),
       };
       const preview = await service.previewBulk(actor, previewDto);
@@ -1668,6 +2800,517 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     }
   });
 
+  it("serializes archive fixed-point discovery with bulk lesson locks", async () => {
+    const lifecycle = new LessonLifecycleRepository(database);
+    const fixture = await createFixture(pool, lifecycle);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    let lessonA = stableTransitionId("archive-bulk-lock-order-a");
+    for (let index = 0; lessonA.localeCompare(fixture.groupSourceId) >= 0; index += 1) {
+      lessonA = stableTransitionId(`archive-bulk-lock-order-a-${index}`);
+    }
+    const lessonB = fixture.groupSourceId;
+    const creator = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let bulkPromise: Promise<unknown> | undefined;
+    try {
+      expect(lessonA.localeCompare(lessonB)).toBeLessThan(0);
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const scheduledB = await pool.query<{ version: number | string }>(
+        "update app.lessons set scheduled_at = now() + interval '1 day' where id = $1 returning version",
+        [lessonB],
+      );
+      await pool.query(
+        `insert into app.lessons (
+           id, group_id, teacher_id, branch_id, room_id, scheduled_at,
+           duration_minutes, status, is_trial, created_by
+         ) select $1, group_id, teacher_id, branch_id, room_id,
+           now() + interval '2 days', duration_minutes, status, is_trial, created_by
+         from app.lessons where id = $2`,
+        [lessonA, lessonB],
+      );
+      await database.transaction((client) => lifecycle.createGroupSnapshot(client, {
+        lessonId: lessonA,
+        groupId: fixture.groupId,
+        completionType: "standard.success",
+        teacherCompensationType: "fixed",
+        teacherCompensationValue: 700,
+        trial: false,
+        participants: [{
+          studentId: fixture.studentId,
+          chargeType: "personal_account",
+          chargeValue: 800,
+        }],
+      }));
+      const decision = (clientIds: string[]) => ({
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+        clientDecisions: clientIds.map((clientId) => ({ clientId })),
+      });
+      const previewDto = {
+        reasonCode: "school.cancelled",
+        reasonText: "Проверка общего multi-lesson gate",
+        items: [
+          {
+            lessonId: lessonB,
+            operation: "cancel" as const,
+            expectedVersion: Number(scheduledB.rows[0]!.version),
+            financialDecision: decision([
+              fixture.studentId,
+              fixture.secondStudentId,
+            ]),
+          },
+          {
+            lessonId: lessonA,
+            operation: "cancel" as const,
+            expectedVersion: 1,
+            financialDecision: decision([fixture.studentId]),
+          },
+        ],
+      };
+      const preview = await service.previewBulk(actor, previewDto);
+      expect(preview.canConfirm).toBe(true);
+      await creator.query("begin");
+      await creator.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`client:student:${fixture.secondStudentId}`],
+      );
+      await creator.query(
+        `insert into app.lesson_snapshot_participants (
+           lesson_id, student_id, charge_type, charge_value
+         ) values ($1, $2, 'none', 0)`,
+        [lessonA, fixture.secondStudentId],
+      );
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.secondStudentId,
+        expectedVersion: 1,
+        reason: "test.bulk-fixed-point-lock-order",
+        confirm: true,
+      });
+      await waitForBlockedQuery(pool, "pg_advisory_xact_lock");
+      bulkPromise = service.bulk(actor, {
+        ...previewDto,
+        previewToken: preview.previewToken!,
+        confirm: true,
+      }, {
+        idempotencyKey: `bulk-fixed-point-${randomUUID()}`,
+        requestId: `bulk-fixed-point-${randomUUID()}`,
+      });
+      await waitForBlockedSessionCount(pool, 2);
+      const lessonAWasFree = await advisoryLockIsAvailable(
+        pool,
+        lessonSettlementLockKey(lessonA),
+      );
+      await creator.query("commit");
+      const [archiveResult, bulkResult] = await Promise.allSettled([
+        archivePromise,
+        bulkPromise,
+      ]);
+      expect(lessonAWasFree).toBe(true);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(bulkResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 422,
+          response: { code: "UNKNOWN_LESSON_CLIENT" },
+        },
+      });
+      const evidence = await pool.query<{
+        exclusions: number;
+        facts: number;
+        transitions: number;
+      }>(
+        `select
+           (select count(*)::int from app.lesson_participant_exclusions
+             where lesson_id = any($1::uuid[]) and student_id = $2) as exclusions,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = any($1::uuid[])) as facts,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = any($1::uuid[])) as transitions`,
+        [[lessonA, lessonB], fixture.secondStudentId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        exclusions: 2,
+        facts: 0,
+        transitions: 0,
+      });
+    } finally {
+      await creator.query("rollback").catch(() => undefined);
+      creator.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        bulkPromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("gates a single reschedule before archive fixed-point lesson locks", async () => {
+    const lifecycle = new LessonLifecycleRepository(database);
+    const fixture = await createFixture(pool, lifecycle);
+    const archiveActor = {
+      userId: fixture.managerId,
+      role: "director" as const,
+    };
+    const rescheduleActor = {
+      userId: fixture.teacherUserId,
+      role: "director" as const,
+    };
+    const lessonA = stableTransitionId(`archive-single-reschedule-${randomUUID()}`);
+    const creator = await pool.connect();
+    const lessonBlocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let reschedulePromise: Promise<unknown> | undefined;
+    try {
+      await pool.query(
+        "update app.users set role = 'director' where id = any($1::uuid[])",
+        [[fixture.managerId, fixture.teacherUserId]],
+      );
+      await pool.query(
+        "update app.lessons set scheduled_at = now() + interval '1 day' where id = $1",
+        [fixture.groupSourceId],
+      );
+      const successorSchedule = await pool.query<{ scheduled_at: Date | string }>(
+        `select ((date_trunc('week', now() at time zone 'Europe/Moscow')
+          + interval '1 week 12 hours') at time zone 'Europe/Moscow') as scheduled_at`,
+      );
+      await lessonBlocker.query("begin");
+      await lessonBlocker.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [lessonSettlementLockKey(lessonA)],
+      );
+      await pool.query(
+        `insert into app.aggregate_versions (
+           aggregate_type, aggregate_id, version
+         ) values ('schedule:lesson', $1, 1)`,
+        [lessonA],
+      );
+      await creator.query("begin");
+      await creator.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`client:student:${fixture.secondStudentId}`],
+      );
+      await creator.query(
+        `insert into app.lessons (
+           id, group_id, teacher_id, branch_id, room_id, scheduled_at,
+           duration_minutes, status, is_trial, created_by
+         ) select $1, group_id, teacher_id, branch_id, room_id,
+           now() + interval '2 days', duration_minutes, status, is_trial, created_by
+         from app.lessons where id = $2`,
+        [lessonA, fixture.groupSourceId],
+      );
+      await lifecycle.createGroupSnapshot(creator, {
+        lessonId: lessonA,
+        groupId: fixture.groupId,
+        completionType: "standard.success",
+        teacherCompensationType: "fixed",
+        teacherCompensationValue: 700,
+        trial: false,
+        participants: [fixture.studentId, fixture.secondStudentId].map(
+          (studentId) => ({
+            studentId,
+            chargeType: "personal_account" as const,
+            chargeValue: 800,
+          }),
+        ),
+      });
+      archivePromise = archives.archive(archiveActor, {
+        type: "student",
+        id: fixture.secondStudentId,
+        expectedVersion: 1,
+        reason: "test.single-reschedule-fixed-point-lock-order",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedQuery(
+        pool,
+        "pg_advisory_xact_lock",
+      );
+      const previewToken = tokens.issueLessonTransition({
+        kind: "lesson.transition",
+        operation: "reschedule",
+        actorUserId: rescheduleActor.userId,
+        lessonId: lessonA,
+        expectedVersion: 1,
+        transitionFingerprint: "a".repeat(64),
+      }).token;
+      const rescheduleIdempotencyKey =
+        `single-reschedule-gate-${randomUUID()}`;
+      reschedulePromise = service.reschedule(rescheduleActor, lessonA, {
+        expectedVersion: 1,
+        reasonCode: "client.requested",
+        reasonText: "Параллельный перенос во время архива клиента",
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          clientDecisions: [fixture.studentId, fixture.secondStudentId]
+            .map((clientId) => ({ clientId })),
+        },
+        successor: {
+          scheduledAt: new Date(
+            successorSchedule.rows[0]!.scheduled_at,
+          ).toISOString(),
+        },
+        previewToken,
+        confirm: true,
+      }, {
+        idempotencyKey: rescheduleIdempotencyKey,
+        requestId: `single-reschedule-gate-${randomUUID()}`,
+      });
+      expect(await promiseStateAfter(reschedulePromise, 100)).toBe("pending");
+      await waitForBlockedSessionCount(pool, 2);
+      await creator.query("commit");
+      await waitForHeldAdvisoryLockCount(pool, archivePid, 3);
+      await lessonBlocker.query("commit");
+      const [archiveResult, rescheduleResult] = await Promise.allSettled([
+        archivePromise,
+        reschedulePromise,
+      ]);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(rescheduleResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 422,
+          response: { code: "ARCHIVED_CLIENT_REFERENCE" },
+        },
+      });
+      const evidence = await pool.query<{
+        state: string;
+        exclusions: number;
+        facts: number;
+        transitions: number;
+        successors: number;
+        idempotency: number;
+        aggregate_version: number;
+      }>(
+        `select lesson.lifecycle_state as state,
+           (select count(*)::int from app.lesson_participant_exclusions
+             where lesson_id = lesson.id and student_id = $2) as exclusions,
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = lesson.id) as facts,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = lesson.id) as transitions,
+           (select count(*)::int from app.lessons successor
+             where successor.predecessor_id = lesson.id) as successors,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $3
+               and operation = 'schedule.lesson.reschedule'
+               and idempotency_key = $4) as idempotency,
+           (select version::int from app.aggregate_versions
+             where aggregate_type = 'schedule:lesson'
+               and aggregate_id = lesson.id::text) as aggregate_version
+         from app.lessons lesson where lesson.id = $1`,
+        [
+          lessonA,
+          fixture.secondStudentId,
+          `user:${rescheduleActor.userId}`,
+          rescheduleIdempotencyKey,
+        ],
+      );
+      expect(evidence.rows[0]).toEqual({
+        state: "scheduled",
+        exclusions: 1,
+        facts: 0,
+        transitions: 0,
+        successors: 0,
+        idempotency: 0,
+        aggregate_version: 1,
+      });
+    } finally {
+      await creator.query("rollback").catch(() => undefined);
+      await lessonBlocker.query("rollback").catch(() => undefined);
+      creator.release();
+      lessonBlocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        reschedulePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("gates planned resource edits before archive lesson rows", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const archiveActor = {
+      userId: fixture.managerId,
+      role: "director" as const,
+    };
+    const editActor = {
+      userId: fixture.teacherUserId,
+      role: "director" as const,
+    };
+    const lessonId = fixture.sourceId;
+    const planBlocker = await pool.connect();
+    let schedulePlanId: string | undefined;
+    let archivePromise: Promise<unknown> | undefined;
+    let editPromise: Promise<unknown> | undefined;
+    const idempotencyKey = `planned-resource-gate-${randomUUID()}`;
+    try {
+      await pool.query(
+        "update app.users set role = 'director' where id = any($1::uuid[])",
+        [[fixture.managerId, fixture.teacherUserId]],
+      );
+      const scheduled = await pool.query<{ version: number | string }>(
+        `update app.lessons set scheduled_at = now() + interval '1 day'
+         where id = $1 returning version`,
+        [lessonId],
+      );
+      const expectedVersion = Number(scheduled.rows[0]!.version);
+      await database.transaction((client) => settlement.assignPlan(client, {
+        lessonId,
+        branchId: fixture.branchId,
+        decision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: fixture.studentId }],
+        },
+        selectedBy: fixture.managerId,
+        reasonText: "Исходный план для гонки resource edit",
+      }));
+      schedulePlanId = (await pool.query<{ id: string }>(
+        `insert into app.schedule_plans (
+           kind, title, student_id, subscription_id, active_from, created_by
+         ) values ('individual', $1, $2, $3, current_date, $4)
+         returning id`,
+        [
+          `Planned resource gate ${randomUUID()}`,
+          fixture.studentId,
+          fixture.subscriptionId,
+          fixture.managerId,
+        ],
+      )).rows[0]!.id;
+      await planBlocker.query("begin");
+      await planBlocker.query(
+        "select id from app.schedule_plans where id = $1 for update",
+        [schedulePlanId],
+      );
+      archivePromise = archives.archive(archiveActor, {
+        type: "student",
+        id: fixture.studentId,
+        expectedVersion: 1,
+        reason: "test.planned-resource-edit-lock-order",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedQuery(pool, "select plan.id");
+      await waitForHeldAdvisoryLockCount(pool, archivePid, 3);
+      const previewToken = tokens.issueLessonTransition({
+        kind: "lesson.transition",
+        operation: "planned-settlement",
+        actorUserId: editActor.userId,
+        lessonId,
+        expectedVersion,
+        transitionFingerprint: "b".repeat(64),
+      }).token;
+      editPromise = plannedSettlements.updateSettlementPlan(editActor, lessonId, {
+        expectedVersion,
+        reasonText: "Перенос ресурсов до архивирования",
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: fixture.studentId }],
+        },
+        resources: {
+          teacherId: fixture.replacementTeacherId,
+          branchId: fixture.branchId,
+          roomId: fixture.replacementRoomId,
+        },
+        previewToken,
+        confirm: true,
+      }, {
+        idempotencyKey,
+        requestId: `planned-resource-gate-${randomUUID()}`,
+      });
+      expect(await promiseStateAfter(editPromise, 100)).toBe("pending");
+      await waitForBlockedSessionCount(pool, 2);
+      expect(await lessonRowLockIsAvailable(pool, lessonId)).toBe(true);
+      await planBlocker.query("commit");
+      const [archiveResult, editResult] = await Promise.allSettled([
+        archivePromise,
+        editPromise,
+      ]);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(editResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 409,
+          response: { code: "STALE_VERSION" },
+        },
+      });
+      const evidence = await pool.query<{
+        state: string;
+        teacher_id: string;
+        branch_id: string;
+        room_id: string;
+        plan_state: string;
+        revisions: number;
+        facts: number;
+        planned_audits: number;
+        planned_outbox: number;
+        planned_idempotency: number;
+      }>(
+        `select lesson.lifecycle_state as state,
+           lesson.teacher_id, lesson.branch_id, lesson.room_id,
+           settlement_plan.state as plan_state,
+           (select count(*)::int from app.lesson_settlement_plan_revisions
+             where lesson_id = lesson.id) as revisions,
+           ((select count(*) from app.lesson_client_charge_facts
+              where lesson_id = lesson.id) +
+            (select count(*) from app.lesson_teacher_compensation_facts
+              where lesson_id = lesson.id))::int as facts,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $2
+               and action = 'crm.lesson_settlement_plan_updated'
+               and entity_id = lesson.id::text) as planned_audits,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_type = 'schedule:lesson'
+               and aggregate_id = lesson.id::text) as planned_outbox,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $3
+               and operation = 'schedule.lesson.settlement-plan.update'
+               and idempotency_key = $4) as planned_idempotency
+         from app.lessons lesson
+         join app.lesson_settlement_plans settlement_plan
+           on settlement_plan.lesson_id = lesson.id
+         where lesson.id = $1`,
+        [lessonId, editActor.userId, `user:${editActor.userId}`, idempotencyKey],
+      );
+      expect(evidence.rows[0]).toEqual({
+        state: "cancelled",
+        teacher_id: fixture.teacherId,
+        branch_id: fixture.branchId,
+        room_id: fixture.roomId,
+        plan_state: "cancelled",
+        revisions: 1,
+        facts: 0,
+        planned_audits: 0,
+        planned_outbox: 0,
+        planned_idempotency: 0,
+      });
+    } finally {
+      await planBlocker.query("rollback").catch(() => undefined);
+      planBlocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        editPromise ?? Promise.resolve(),
+      ]);
+      if (schedulePlanId) {
+        await pool.query(
+          `delete from app.aggregate_versions
+           where aggregate_type = 'schedule:plan' and aggregate_id = $1`,
+          [schedulePlanId],
+        );
+        await pool.query("delete from app.schedule_plans where id = $1", [
+          schedulePlanId,
+        ]);
+      }
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("materializes one routed lesson change per audience member across an outbox retry", async () => {
     const fixture = await createFixture(
       pool,
@@ -1677,6 +3320,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
     const financialDecision = {
       settlementTypeKey: "free_lesson",
       teacherCompensationRuleKey: "none",
+      clientDecisions: [{ clientId: fixture.studentId }],
     };
     const successor = {
       scheduledAt: "2026-07-27T11:00:00.000Z",
@@ -1887,6 +3531,137 @@ async function transitionCounts(pool: Pool, lessonId: string) {
   return { ...result.rows[0]!, version: Number(result.rows[0]!.version) };
 }
 
+async function waitForBlockedQuery(pool: Pool, fragment: string): Promise<number> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ pid: number }>(
+      `select pid from pg_stat_activity
+       where datname = current_database()
+         and wait_event_type = 'Lock'
+         and query ilike $1
+       order by query_start desc limit 1`,
+      [`%${fragment}%`],
+    );
+    if (result.rows[0]) return result.rows[0].pid;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const active = await pool.query<{ pid: number; state: string; wait_event_type: string | null; query: string }>(
+    `select pid, state, wait_event_type, query from pg_stat_activity
+     where datname = current_database() and state <> 'idle' order by query_start`,
+  );
+  throw new Error(
+    `Timed out waiting for blocked query: ${fragment}; active=${JSON.stringify(active.rows)}`,
+  );
+}
+
+async function waitForBlockedSessionCount(
+  pool: Pool,
+  expected: number,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ count: number }>(
+      `select count(*)::int as count from pg_stat_activity
+       where datname = current_database()
+         and wait_event_type = 'Lock'`,
+    );
+    if (result.rows[0]!.count >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const active = await pool.query<{ state: string; wait_event_type: string | null; query: string }>(
+    `select state, wait_event_type, query from pg_stat_activity
+     where datname = current_database() and state <> 'idle' order by query_start`,
+  );
+  throw new Error(
+    `Timed out waiting for ${expected} blocked sessions; active=${JSON.stringify(active.rows)}`,
+  );
+}
+
+async function advisoryLockIsAvailable(pool: Pool, key: string): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const result = await client.query<{ acquired: boolean }>(
+      "select pg_try_advisory_xact_lock(hashtextextended($1::text, 0)) as acquired",
+      [key],
+    );
+    return result.rows[0]!.acquired;
+  } finally {
+    await client.query("rollback").catch(() => undefined);
+    client.release();
+  }
+}
+
+async function lessonRowLockIsAvailable(
+  pool: Pool,
+  lessonId: string,
+): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(
+      "select id from app.lessons where id = $1 for update nowait",
+      [lessonId],
+    );
+    return true;
+  } catch (error) {
+    if ((error as { code?: string }).code === "55P03") return false;
+    throw error;
+  } finally {
+    await client.query("rollback").catch(() => undefined);
+    client.release();
+  }
+}
+
+async function waitForHeldAdvisoryLockCount(
+  pool: Pool,
+  pid: number,
+  expected: number,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ count: number }>(
+      `select count(*)::int as count from pg_locks
+       where pid = $1 and locktype = 'advisory' and granted`,
+      [pid],
+    );
+    if (result.rows[0]!.count >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(
+    `Timed out waiting for ${expected} held advisory locks on pid ${pid}`,
+  );
+}
+
+async function promiseStateAfter(
+  promise: Promise<unknown>,
+  milliseconds: number,
+): Promise<"pending" | "fulfilled" | { rejected: unknown }> {
+  return Promise.race([
+    promise.then(
+      () => "fulfilled" as const,
+      (error) => ({ rejected: error }),
+    ),
+    new Promise<"pending">((resolve) =>
+      setTimeout(() => resolve("pending"), milliseconds),
+    ),
+  ]);
+}
+
+async function sessionHoldsAdvisoryLock(
+  pool: Pool,
+  pid: number,
+): Promise<boolean> {
+  const result = await pool.query<{ held: boolean }>(
+    `select exists(
+       select 1 from pg_locks
+       where pid = $1 and locktype = 'advisory' and granted
+     ) as held`,
+    [pid],
+  );
+  return result.rows[0]!.held;
+}
+
 async function effectiveSubscriptionUnits(
   pool: Pool,
   subscriptionId: string,
@@ -1920,23 +3695,29 @@ async function createFixture(pool: Pool, lifecycle: LessonLifecycleRepository) {
   );
   const users = await pool.query<{ id: string; role: string }>(
     `insert into app.users (email, role, email_verified_at) values
-      ($1, 'manager', now()), ($2, 'teacher', now()), ($3, 'client', now())
+      ($1, 'manager', now()), ($2, 'teacher', now()),
+      ($3, 'client', now()), ($4, 'client', now())
       returning id, role::text as role`,
     [
       `transition-manager-${randomUUID()}@test.local`,
       `transition-teacher-${randomUUID()}@test.local`,
       `transition-client-${randomUUID()}@test.local`,
+      `transition-client-two-${randomUUID()}@test.local`,
     ],
   );
   const managerId = users.rows.find((row) => row.role === "manager")!.id;
   const teacherUserId = users.rows.find((row) => row.role === "teacher")!.id;
-  const clientUserId = users.rows.find((row) => row.role === "client")!.id;
+  const clientUserIds = users.rows
+    .filter((row) => row.role === "client")
+    .map((row) => row.id);
+  const clientUserId = clientUserIds[0]!;
+  const secondClientUserId = clientUserIds[1]!;
   const profiles = await pool.query<{ id: string; user_id: string }>(
     `insert into app.profiles (user_id, first_name, last_name) values
       ($1, 'Transition', 'Teacher'), ($2, 'Transition', 'Student'),
-      ($3, 'Transition', 'Manager')
+      ($3, 'Transition', 'Manager'), ($4, 'Transition', 'Student Two')
       returning id, user_id`,
-    [teacherUserId, clientUserId, managerId],
+    [teacherUserId, clientUserId, managerId, secondClientUserId],
   );
   await pool.query(
     `with staff as (
@@ -2001,10 +3782,20 @@ async function createFixture(pool: Pool, lifecycle: LessonLifecycleRepository) {
     [replacementTeacherId],
   );
   const student = await pool.query<{ id: string }>(
-    "insert into app.students (profile_id, branch_id) values ($1, $2) returning id",
-    [studentProfileId, branchId],
+    `insert into app.students (profile_id, branch_id) values
+       ($1, $3),
+       ((select id from app.profiles where user_id = $2), $3)
+     returning id`,
+    [studentProfileId, secondClientUserId, branchId],
   );
   const studentId = student.rows[0]!.id;
+  const secondStudentId = student.rows[1]!.id;
+  const lead = await pool.query<{ id: string }>(
+    `insert into app.leads (first_name, last_name, phone, branch_id)
+     values ('Transition', 'Lead', $1, $2) returning id`,
+    [`+7999${String(Math.floor(Math.random() * 1_000_0000)).padStart(7, "0")}`, branchId],
+  );
+  const leadId = lead.rows[0]!.id;
   const group = await pool.query<{ id: string }>(
     `insert into app.groups (teacher_id, branch_id, name, price_per_lesson)
      values ($1, $2, $3, 800) returning id`,
@@ -2013,8 +3804,8 @@ async function createFixture(pool: Pool, lifecycle: LessonLifecycleRepository) {
   const groupId = group.rows[0]!.id;
   await pool.query(
     `insert into app.group_students (group_id, student_id, joined_at)
-     values ($1, $2, '2026-01-01')`,
-    [groupId, studentId],
+     values ($1, $2, '2026-01-01'), ($1, $3, '2026-01-01')`,
+    [groupId, studentId, secondStudentId],
   );
   const subscription = await pool.query<{ id: string }>(
     `insert into app.subscriptions (
@@ -2061,6 +3852,15 @@ async function createFixture(pool: Pool, lifecycle: LessonLifecycleRepository) {
     [groupId, teacherId, branchId, room.rows[0]!.id, managerId],
   );
   const groupSourceId = groupLesson.rows[0]!.id;
+  const leadLesson = await pool.query<{ id: string }>(
+    `insert into app.lessons (
+       lead_id, teacher_id, branch_id, room_id, scheduled_at,
+       duration_minutes, created_by
+     ) values ($1, $2, $3, $4, '2026-08-04T07:00:00Z', 60, $5)
+     returning id`,
+    [leadId, teacherId, branchId, room.rows[0]!.id, managerId],
+  );
+  const leadLessonId = leadLesson.rows[0]!.id;
   const funding = [
     { lessonId: sourceId!, chargeType: "none" as const, chargeValue: 0 },
     {
@@ -2107,10 +3907,31 @@ async function createFixture(pool: Pool, lifecycle: LessonLifecycleRepository) {
           chargeType: "personal_account",
           chargeValue: 800,
         },
+        {
+          studentId: secondStudentId,
+          chargeType: "none",
+          chargeValue: 0,
+        },
       ],
     });
   } finally {
     groupClient.release();
+  }
+  const leadClient = await pool.connect();
+  try {
+    await lifecycle.createSnapshot(leadClient, {
+      lessonId: leadLessonId,
+      clientType: "lead",
+      clientId: leadId,
+      completionType: "standard.success",
+      clientChargeType: "none",
+      clientChargeValue: 0,
+      teacherCompensationType: "fixed",
+      teacherCompensationValue: 700,
+      trial: true,
+    });
+  } finally {
+    leadClient.release();
   }
   const capacityClient = await pool.connect();
   try {
@@ -2141,6 +3962,9 @@ async function createFixture(pool: Pool, lifecycle: LessonLifecycleRepository) {
     teacherId,
     replacementTeacherId,
     studentId,
+    secondStudentId,
+    leadId,
+    leadLessonId,
     groupId,
     groupSourceId,
     managerId,
@@ -2151,6 +3975,7 @@ async function createFixture(pool: Pool, lifecycle: LessonLifecycleRepository) {
       managerId,
       teacherUserId,
       clientUserId,
+      secondClientUserId,
       replacementTeacherUser.rows[0]!.id,
     ],
     profileIds: [
@@ -2285,15 +4110,20 @@ async function cleanup(
     await client.query("delete from app.subscriptions where student_id = $1", [
       fixture.studentId,
     ]);
-    await client.query("delete from app.students where id = $1", [
-      fixture.studentId,
+    await client.query("delete from app.students where id = any($1::uuid[])", [
+      [fixture.studentId, fixture.secondStudentId],
     ]);
+    await client.query("delete from app.leads where id = $1", [fixture.leadId]);
     await client.query(
       "delete from app.teacher_availability_rules where teacher_id = any($1::uuid[])",
       [[fixture.teacherId, fixture.replacementTeacherId]],
     );
     await client.query(
       "delete from app.teacher_branches where teacher_id = any($1::uuid[])",
+      [[fixture.teacherId, fixture.replacementTeacherId]],
+    );
+    await client.query(
+      "delete from app.teacher_rates where teacher_id = any($1::uuid[])",
       [[fixture.teacherId, fixture.replacementTeacherId]],
     );
     await client.query("delete from app.teachers where id = any($1::uuid[])", [

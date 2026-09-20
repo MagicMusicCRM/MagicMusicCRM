@@ -199,6 +199,8 @@ export class CrmPolicy {
       "teacherCompensationValue",
       "teacherCompensationRuleKey",
       "teacherCompensationValueMinor",
+      "teacherCreditedDurationMinutes",
+      "teacherCompensationSource",
     ]);
     const containsCompensation = (value: unknown): boolean => {
       if (Array.isArray(value)) return value.some(containsCompensation);
@@ -209,9 +211,10 @@ export class CrmPolicy {
     };
     const supplied = containsCompensation(input);
     if (!supplied || this.canManageTeacherCompensation(actor)) return;
-    throw new ForbiddenException(
-      "Изменять оплату преподавателя может только директор.",
-    );
+    throw new ForbiddenException({
+      code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED",
+      message: "Изменять оплату преподавателя может только директор.",
+    });
   }
 
   assertCanManagePayrollHistory(actor: ActorContext): void {

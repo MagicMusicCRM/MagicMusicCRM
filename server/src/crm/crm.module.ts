@@ -14,6 +14,8 @@ import { AdminStaffController } from "./admin-staff.controller";
 import { CrmStudentsController } from "./crm-students.controller";
 import { CrmDashboardController } from "./crm-dashboard.controller";
 import { CrmScheduleController } from "./crm-schedule.controller";
+import { SchedulePlanArchiveController } from "./schedule/schedule-plan-archive.controller";
+import { SchedulePlanArchiveService } from "./schedule/schedule-plan-archive.service";
 import { CrmPeopleController } from "./crm-people.controller";
 import { CrmFacilitiesController } from "./crm-facilities.controller";
 import { CrmReferenceDataController } from "./crm-reference-data.controller";
@@ -104,6 +106,7 @@ import { LessonTransitionPreparationService } from "./schedule/lesson-transition
 import { LessonTransitionFinancialService } from "./schedule/lesson-transition-financial.service";
 import { LessonTransitionCommitService } from "./schedule/lesson-transition-commit.service";
 import { LessonTransitionPreviewService } from "./schedule/lesson-transition-preview.service";
+import { LessonActionableChainService } from "./schedule/lesson-actionable-chain.service";
 import { LessonTransitionCommandService } from "./schedule/lesson-transition-command.service";
 import { LessonBulkTransitionService } from "./schedule/lesson-bulk-transition.service";
 import { LESSON_SETTLEMENT_PORT } from "./commerce/lesson-settlement.port";
@@ -168,8 +171,12 @@ import { SchedulePlanQueryService } from "./schedule/schedule-plan-query.service
 import { SchedulePlanConstraintPreviewService } from "./schedule/schedule-plan-constraint-preview.service";
 import { SchedulePlanMutationService } from "./schedule/schedule-plan-mutation.service";
 import { SchedulePlanEndService } from "./schedule/schedule-plan-end.service";
+import { FuturePlanLessonCancellationService } from "./schedule/future-plan-lesson-cancellation.service";
+import { SchedulePlanRowRemovalService } from "./schedule/schedule-plan-row-removal.service";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
 import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
+import { StudentLessonTimelineRepository } from "./schedule/student-lesson-timeline.repository";
+import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline.service";
 
 @Module({
   imports: [
@@ -189,6 +196,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     CrmStudentsController,
     CrmDashboardController,
     CrmScheduleController,
+    SchedulePlanArchiveController,
     CrmPeopleController,
     CrmFacilitiesController,
     CrmReferenceDataController,
@@ -273,6 +281,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     ClientCardReadService,
     ClientInternalContextService,
     LessonLifecycleRepository,
+    LessonActionableChainService,
     AvailabilityRepository,
     AvailabilityService,
     ConstraintEngineRepository,
@@ -290,6 +299,9 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     SchedulePlanConstraintPreviewService,
     SchedulePlanMutationService,
     SchedulePlanEndService,
+    SchedulePlanArchiveService,
+    FuturePlanLessonCancellationService,
+    SchedulePlanRowRemovalService,
     SchedulePlanService,
     LessonTransitionPreparationService,
     LessonTransitionFinancialService,
@@ -303,6 +315,8 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     LessonCompletionService,
     LessonCompletionWorker,
     LessonSettlementCorrectionService,
+    StudentLessonTimelineRepository,
+    StudentLessonTimelineService,
     PackageCatalogRepository,
     PackageCatalogService,
     SubscriptionPurchaseTermsService,

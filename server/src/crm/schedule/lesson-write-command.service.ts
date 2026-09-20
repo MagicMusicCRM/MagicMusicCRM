@@ -6,7 +6,10 @@ import {
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
-import { ClientReferenceService } from "../clients/client-reference.service";
+import {
+  assertActiveClientReferences,
+  ClientReferenceService,
+} from "../clients/client-reference.service";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
@@ -95,14 +98,21 @@ export class LessonWriteCommandService {
         const effectiveDraft = canManageTeacherCompensation
           ? draft
           : await this.withEffectiveTeacherRate(client, draft);
-        const financialDecision = canManageTeacherCompensation
-          ? dto.financialDecision!
-          : await this.settlement.applyDefaultTeacherCompensation(
-              client,
-              effectiveDraft.branchId,
-              dto.financialDecision!,
-            );
         await this.acquireLocks(client, effectiveDraft);
+        await assertActiveClientReferences(client, [effectiveDraft.clientRef]);
+        const preparedPlan = await this.settlement.resolvePlannedPlan(
+          client,
+          {
+            branchId: effectiveDraft.branchId,
+            durationMinutes: effectiveDraft.durationMinutes,
+            decision: dto.financialDecision!,
+            actorUserId: actor.userId,
+            authorization:
+              this.policy.teacherCompensationMutationAuthorization(actor),
+            reasonText: dto.plannedSettlementReason,
+            requiredClientIds: [effectiveDraft.clientRef.id],
+          },
+        );
         await this.assertConstraints(effectiveDraft, client);
         await this.assertLeadNotConverted(client, effectiveDraft);
         await this.repository.insertLesson(
@@ -123,12 +133,11 @@ export class LessonWriteCommandService {
           subscriptionId: effectiveDraft.subscriptionId ?? undefined,
           trial: effectiveDraft.isTrial,
         });
-        const plan = await this.settlement.assignPlan(client, {
+        const plan = await this.settlement.assignPreparedPlan(client, {
           lessonId,
-          branchId: effectiveDraft.branchId,
-          decision: financialDecision,
           selectedBy: actor.userId,
           reasonText: dto.plannedSettlementReason,
+          ...preparedPlan,
         });
         for (const allocation of await this.settlement.plannedSubscriptionAllocations(
           client,

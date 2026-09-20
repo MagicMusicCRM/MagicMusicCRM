@@ -4,34 +4,29 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/responsive_detail_row.dart';
 
 /// One icon+label+value row inside the lesson details sheet. Pure.
 Widget detailRow(
   BuildContext context,
   IconData icon,
   String label,
-  String value,
-) {
+  String value, {
+  Widget? valueWidget,
+}) {
   return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Icon(icon, size: 18, color: AppColor.gold),
       SizedBox(width: 8),
-      Text(
-        '$label: ',
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-          fontSize: 13,
-        ),
-      ),
       Expanded(
-        child: Text(
-          value,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+        child: ResponsiveDetailRow(
+          label: '$label: ',
+          value: value,
+          valueWidget: valueWidget,
         ),
       ),
     ],
@@ -39,29 +34,22 @@ Widget detailRow(
 }
 
 /// Human-readable RU label for a lesson status. Pure.
-String lessonStatusLabel(String? status) {
-  switch (status) {
-    case 'completed':
-    case 'done':
-    case 'successfully_completed':
-      return 'Завершено';
-    case 'settlement_pending':
-      return 'Конфликт';
-    case 'cancelled':
-      return 'Отменено';
-    case 'scheduled':
-    case 'planned':
-      return 'Забронировано';
-    default:
-      return status ?? 'Забронировано';
-  }
-}
+String lessonStatusLabel(String? status) =>
+    LessonStateProjection.fromMap({'status': status}).label;
 
 /// Safe staff-facing explanation for an automatic settlement failure.
 /// Backend failure identifiers and exception messages must never be rendered
 /// verbatim: they may contain implementation details and are not actionable.
 String lessonSettlementIssueLabel(String? failureCode) {
   return switch (failureCode) {
+    'LESSON_SUBSCRIPTION_PAYMENT_REQUIRED' =>
+      'Оплаченных занятий в абонементе недостаточно. Подтвердите оплату или выберите другой источник, затем подтвердите расчёт. Списание и оплата преподавателю пока не выполнены.',
+    'LESSON_ACCOUNT_INSUFFICIENT_BALANCE' =>
+      'На личном счёте недостаточно средств. Пополните счёт или измените источник оплаты, затем подтвердите расчёт. Списание и оплата преподавателю пока не выполнены.',
+    'LESSON_ACCOUNT_PAYER_REQUIRED' =>
+      'Укажите доступного плательщика для списания с личного счёта, затем подтвердите расчёт.',
+    'SUBSCRIPTION_CAPACITY' =>
+      'Выбранный абонемент не может покрыть занятие: проверьте остаток, срок действия и плательщика. Выберите подходящий абонемент или другой источник оплаты, затем подтвердите расчёт. Списание и оплата преподавателю пока не выполнены.',
     'LESSON_SETTLEMENT_PLAN_MISSING' =>
       'Не найден план списания и оплаты преподавателю.',
     'LESSON_SNAPSHOT_INCOMPLETE' =>
@@ -115,26 +103,19 @@ Widget _referenceRow(
       reference.available ? reference.value : 'Связанная запись недоступна',
     );
   }
-  return Row(
-    children: [
-      Icon(reference.icon, size: 18, color: AppColor.gold),
-      const SizedBox(width: AppSpace.sm),
-      Text(
-        '${reference.label}: ',
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-          fontSize: 13,
-        ),
-      ),
-      Expanded(
-        child: EntityLinkText(
-          key: ValueKey('lesson-reference-${reference.label}'),
-          text: reference.value,
-          onPressed: () => onOpen(EntityOpenTarget.current),
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-      ),
-    ],
+  return detailRow(
+    context,
+    reference.icon,
+    reference.label,
+    reference.value,
+    valueWidget: EntityLinkText(
+      key: ValueKey('lesson-reference-${reference.label}'),
+      text: reference.value,
+      onPressed: () => onOpen(EntityOpenTarget.current),
+      style: Theme.of(
+        context,
+      ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+    ),
   );
 }
 
@@ -151,9 +132,11 @@ Future<void> showLessonDetailsSheet(
   void Function(EntityLink link, EntityOpenTarget target)? onOpenReference,
   required String timeRange,
   required String currentStatus,
+  bool coveredBySubscription = false,
   required List<String> conflicts,
   required String? lessonId,
   required VoidCallback onEdit,
+  required VoidCallback onMove,
   required Future<void> Function() onCancel,
   String? settlementIssue,
   List<Map<String, dynamic>> settlementHistory = const [],
@@ -190,7 +173,7 @@ Future<void> showLessonDetailsSheet(
             Navigator.pop(surfaceContext);
             onOpenReference?.call(reference.link!, target);
           }),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
         ],
         detailRow(
           surfaceContext,
@@ -198,13 +181,26 @@ Future<void> showLessonDetailsSheet(
           'Время',
           timeRange,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
         detailRow(
           surfaceContext,
           Icons.info_outline_rounded,
           'Статус',
           lessonStatusLabel(currentStatus),
         ),
+        if (coveredBySubscription) ...[
+          const SizedBox(height: 10),
+          detailRow(
+            surfaceContext,
+            Icons.card_membership_outlined,
+            'Покрытие',
+            'Абонемент',
+            valueWidget: const Align(
+              alignment: Alignment.centerLeft,
+              child: LessonSubscriptionBadge(),
+            ),
+          ),
+        ],
         if (settlementIssue?.trim().isNotEmpty == true) ...[
           const SizedBox(height: 10),
           detailRow(
@@ -248,6 +244,15 @@ Future<void> showLessonDetailsSheet(
             },
             icon: const Icon(Icons.edit_outlined, size: 18),
             label: const Text('Изменить занятие'),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pop(surfaceContext);
+              onMove();
+            },
+            icon: const Icon(Icons.event_repeat_outlined, size: 18),
+            label: const Text('Перенести'),
           ),
           const SizedBox(height: AppSpace.sm),
           TextButton.icon(

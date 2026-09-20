@@ -27,6 +27,7 @@ class _ReferenceCatalogLifecycleDialogState
   late final ReferenceCatalogLifecycleController _controller;
   String? _serverName;
   int _entitySyncRevision = 0;
+  bool _changed = false;
 
   @override
   void initState() {
@@ -68,7 +69,10 @@ class _ReferenceCatalogLifecycleDialogState
       name: _name.text,
       reasonText: _reason.text,
     );
-    if (renamed && mounted) _reason.clear();
+    if (renamed && mounted) {
+      _changed = true;
+      _reason.clear();
+    }
   }
 
   Future<void> _commitLifecycle() async {
@@ -85,6 +89,6 @@ class _ReferenceCatalogLifecycleDialogState
     reasonController: _reason,
     onRename: _rename,
     onCommit: _commitLifecycle,
-    onClose: () => Navigator.pop(context),
+    onClose: () => Navigator.pop(context, _changed),
   );
 }

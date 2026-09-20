@@ -160,6 +160,42 @@ _RecordedRequest _lastGet(_FakeApiClient api, String path) {
 }
 
 void main() {
+  test(
+    'compensation filter is shared by report and export and can be cleared',
+    () async {
+      final api = _FakeApiClient();
+      final controller = _controller(api);
+      addTearDown(controller.dispose);
+      await controller.setQuery(
+        controller.state.query.copyWith(compensationRuleKey: 'trial_lesson'),
+      );
+      expect(
+        _lastGet(
+          api,
+          '/crm/reports/teacher-stats',
+        ).parameters['compensationRuleKey'],
+        'trial_lesson',
+      );
+      await controller.export();
+      expect(
+        _lastGet(
+          api,
+          '/crm/reports/teacher-stats/export',
+        ).parameters['compensationRuleKey'],
+        'trial_lesson',
+      );
+      await controller.setQuery(
+        controller.state.query.copyWith(compensationRuleKey: null),
+      );
+      expect(
+        _lastGet(
+          api,
+          '/crm/reports/teacher-stats',
+        ).parameters.containsKey('compensationRuleKey'),
+        isFalse,
+      );
+    },
+  );
   test('external range and branch produce the exact report query', () async {
     final api = _FakeApiClient();
     final controller = _controller(

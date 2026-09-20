@@ -7,7 +7,8 @@ extension _MessengerConversationView on _MessengerScreenState {
         ? AppColor.text2
         : TelegramColors.lightTextSecondary;
     final isChannel = _selectedChatType == 'channel';
-    final isGroup = _selectedChatType == 'group';
+    final isGroup =
+        _selectedChatType == 'group' || _selectedChatRawType == 'group';
     // «Объявления» is a group chat everyone reads but only управляющий/директор
     // may post to.
     final isAnnouncements = _selectedChatSlug == 'announcements';
@@ -296,10 +297,12 @@ extension _MessengerConversationView on _MessengerScreenState {
                       }),
                       onDelete: _deleteMessage,
                       onForward: _onForwardMessage,
-                      onPin: (msg) => _togglePin(
-                        msg['id'].toString(),
-                        msg['pinned_at'] == null,
-                      ),
+                      onPin: (isGroup && !_isManagerOrAdminRole)
+                          ? null
+                          : (msg) => _togglePin(
+                              msg['id'].toString(),
+                              msg['pinned_at'] == null,
+                            ),
                       onReact: _toggleReaction,
                       reactionsMap: _reactionsMap,
                     ),

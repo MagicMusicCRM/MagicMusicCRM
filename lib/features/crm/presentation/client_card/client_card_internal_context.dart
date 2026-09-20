@@ -3,6 +3,10 @@ part of 'client_card.dart';
 extension _ClientCardInternalContext on _ClientCardState {
   Future<void> _fetchInternalContext() async {
     try {
+      if (widget.capabilitySnapshot != null && !_canWriteClient) {
+        _internalContextAllowed = false;
+        return;
+      }
       final role = await _resolveActorRole();
       if (!crmHasManagerAccess(role)) return;
       if (mounted) {

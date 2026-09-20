@@ -84,8 +84,6 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
             if (state.processingState == ProcessingState.completed) {
               _isPlaying = false;
               _position = Duration.zero;
-              _player.seek(Duration.zero);
-              _player.pause();
             }
           });
         }
@@ -132,6 +130,9 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
             // on the player's processingState stream owns the buffering state.
             if (mounted) setState(() => _isLoading = false);
           }
+        }
+        if (_player.processingState == ProcessingState.completed) {
+          await _player.seek(Duration.zero);
         }
         await _player.play();
       }

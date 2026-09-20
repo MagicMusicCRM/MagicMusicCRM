@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:intl/intl.dart';
@@ -186,7 +187,7 @@ class _SubscriptionReplacementFormState
               style: const TextStyle(color: AppColor.text2, fontSize: 11.5),
             ),
             const SizedBox(height: AppSpace.lg),
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: const Key('subscription-replace-reason'),
               initialValue: _reasonController.text,
@@ -244,10 +245,15 @@ class _SubscriptionReplacementFormState
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                subtitle: const Text(
-                  'Старый абонемент закроется, использованные часы и резервы '
-                  'перейдут в новый; фактические оплаты не изменятся.',
-                  style: TextStyle(color: AppColor.text2, fontSize: 11.5),
+                subtitle: Text(
+                  preview.usage.newAvailableUnits != null
+                      ? 'Новый абонемент получит полный объём. Проведённые занятия '
+                            'останутся в истории старого; покрытие будущих пересчитается '
+                            'с ближайших занятий. Доплату нужно внести отдельно; '
+                            'переплата сохранится в расчётах по абонементу.'
+                      : 'Старый абонемент закроется, использованные часы и резервы '
+                            'перейдут в новый; фактические оплаты не изменятся.',
+                  style: const TextStyle(color: AppColor.text2, fontSize: 11.5),
                 ),
                 onChanged: _fieldsEnabled
                     ? (value) => setState(() {
@@ -448,7 +454,9 @@ class _UsageSummary extends StatelessWidget {
       title: 'Использование и будущие занятия',
       icon: Icons.schedule_rounded,
       rows: [
-        ('Использовано', '${usage.usedUnits} ч'),
+        ('Использовано в старом', '${usage.usedUnits} ч'),
+        if (usage.newAvailableUnits != null)
+          ('Полный объём нового', '${usage.newAvailableUnits} ч'),
         (
           'Будущие занятия',
           '${usage.futureLessonCount} · ${usage.futureUnits} ч',
@@ -503,12 +511,36 @@ class _FinancialSummary extends StatelessWidget {
       icon: Icons.account_balance_wallet_outlined,
       rows: [
         (
-          'Фактически оплачено',
+          'Оплачено по цепочке абонементов',
           _formatReplacementMinor(
             financial.actualPaidMinor,
             financial.currencyCode,
           ),
         ),
+        if (financial.usedValueMinor != null)
+          (
+            'Стоимость использованного в старом',
+            _formatReplacementMinor(
+              financial.usedValueMinor!,
+              financial.currencyCode,
+            ),
+          ),
+        if (financial.remainingValueMinor != null)
+          (
+            'Зачёт остатка старого',
+            _formatReplacementMinor(
+              financial.remainingValueMinor!,
+              financial.currencyCode,
+            ),
+          ),
+        if (financial.priorConsumedValueMinor != null)
+          (
+            'Стоимость проведённых по всей цепочке',
+            _formatReplacementMinor(
+              financial.priorConsumedValueMinor!,
+              financial.currencyCode,
+            ),
+          ),
         (
           'Изменение стоимости',
           '$deltaPrefix${_formatReplacementMinor(financial.obligationDeltaMinor, financial.currencyCode)}',

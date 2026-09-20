@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -314,7 +315,7 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
                       key: const Key('access-editor-scroll'),
                       padding: const EdgeInsets.all(AppSpace.lg),
                       children: [
-                        DropdownButtonFormField<String>(
+                        AppDropdownButtonFormField<String>(
                           menuMaxHeight: 256,
                           key: const Key('access-role-selector'),
                           initialValue: _selectedRole,
@@ -351,7 +352,7 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
                           ),
                         ],
                         const SizedBox(height: AppSpace.md),
-                        DropdownButtonFormField<String>(
+                        AppDropdownButtonFormField<String>(
                           menuMaxHeight: 256,
                           key: const Key('access-reason'),
                           initialValue: _reasonController.text,

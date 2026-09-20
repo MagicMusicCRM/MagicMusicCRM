@@ -1,8 +1,10 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_financial_autofill.dart';
 
 import 'preferred_schedule_editor_state.dart';
 
@@ -20,6 +22,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required this.planMode,
     required this.requireFinancialDecision,
     required this.canManageTeacherCompensation,
+    required this.participantLabels,
     required this.requireSubscription,
     required this.allowOpenEnded,
     required this.showPeriod,
@@ -34,6 +37,9 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required this.onSubscriptionChanged,
     required this.onSettlementTypeChanged,
     required this.onCompensationRuleChanged,
+    required this.onTeacherMinutesChanged,
+    required this.onClientMinutesChanged,
+    required this.onApplyRecommendation,
     required this.onPickStartDate,
     required this.onPickEndDate,
     required this.onOpenEndedChanged,
@@ -56,6 +62,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
   final bool planMode;
   final bool requireFinancialDecision;
   final bool canManageTeacherCompensation;
+  final Map<String, String> participantLabels;
   final bool requireSubscription;
   final bool allowOpenEnded;
   final bool showPeriod;
@@ -70,6 +77,9 @@ class PreferredScheduleEditorView extends StatelessWidget {
   final ValueChanged<String?> onSubscriptionChanged;
   final ValueChanged<String?> onSettlementTypeChanged;
   final ValueChanged<String?> onCompensationRuleChanged;
+  final ValueChanged<String> onTeacherMinutesChanged;
+  final void Function(String clientId, String value) onClientMinutesChanged;
+  final VoidCallback onApplyRecommendation;
   final VoidCallback onPickStartDate;
   final VoidCallback onPickEndDate;
   final ValueChanged<bool> onOpenEndedChanged;
@@ -99,8 +109,12 @@ class PreferredScheduleEditorView extends StatelessWidget {
           state: state,
           catalog: decisionCatalog,
           canManageTeacherCompensation: canManageTeacherCompensation,
+          participantLabels: participantLabels,
           onSettlementChanged: onSettlementTypeChanged,
           onCompensationChanged: onCompensationRuleChanged,
+          onTeacherMinutesChanged: onTeacherMinutesChanged,
+          onClientMinutesChanged: onClientMinutesChanged,
+          onApplyRecommendation: onApplyRecommendation,
         ),
       ],
       ..._periodFields(),
@@ -128,7 +142,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
       ),
       if (requireSubscription) ...[
         const SizedBox(height: AppSpace.md),
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           key: const ValueKey('schedule-plan-subscription'),
           initialValue: state.subscriptionId,
@@ -147,7 +161,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     ];
   }
 
-  Widget _branchField() => DropdownButtonFormField<String>(
+  Widget _branchField() => AppDropdownButtonFormField<String>(
     menuMaxHeight: 256,
     key: const ValueKey('preferred-schedule-branch'),
     initialValue: state.branchId.isEmpty ? null : state.branchId,
@@ -233,7 +247,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required String Function(int) itemLabel,
     required ValueChanged<int>? onChanged,
     String? helperText,
-  }) => DropdownButtonFormField<int>(
+  }) => AppDropdownButtonFormField<int>(
     menuMaxHeight: 256,
     key: key,
     initialValue: value,
@@ -401,38 +415,120 @@ class _DecisionFields extends StatelessWidget {
     required this.state,
     required this.catalog,
     required this.canManageTeacherCompensation,
+    required this.participantLabels,
     required this.onSettlementChanged,
     required this.onCompensationChanged,
+    required this.onTeacherMinutesChanged,
+    required this.onClientMinutesChanged,
+    required this.onApplyRecommendation,
   });
 
   final PreferredScheduleEditorState state;
   final LessonDecisionCatalog? catalog;
   final bool canManageTeacherCompensation;
+  final Map<String, String> participantLabels;
   final ValueChanged<String?> onSettlementChanged;
   final ValueChanged<String?> onCompensationChanged;
+  final ValueChanged<String> onTeacherMinutesChanged;
+  final void Function(String clientId, String value) onClientMinutesChanged;
+  final VoidCallback onApplyRecommendation;
 
   @override
-  Widget build(BuildContext context) => _ResponsiveFields(
-    fields: [
-      _dropdown(
-        key: const ValueKey('schedule-plan-settlement-type'),
-        label: 'Тип списания *',
-        helperText: 'Применится после окончания занятия',
-        value: state.settlementTypeKey,
-        items: catalog?.settlementTypes ?? const [],
-        onChanged: onSettlementChanged,
-      ),
-      if (canManageTeacherCompensation)
-        _dropdown(
-          key: const ValueKey('schedule-plan-compensation-rule'),
-          label: 'Оплата преподавателю *',
-          helperText: 'Сотрудник выбирает правило явно',
-          value: state.teacherCompensationRuleKey,
-          items: catalog?.compensationRules ?? const [],
-          onChanged: onCompensationChanged,
+  Widget build(BuildContext context) {
+    final settlement = catalog?.settlementTypes
+        .where((item) => item.key == state.settlementTypeKey)
+        .firstOrNull;
+    final manualClients = [
+      for (final decision in state.clientDecisions)
+        if (catalog?.settlementTypes
+                .where(
+                  (item) =>
+                      item.key ==
+                      (decision['settlementTypeKey']?.toString() ??
+                          state.settlementTypeKey),
+                )
+                .firstOrNull
+                ?.clientDurationMode ==
+            'manual')
+          decision,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ResponsiveFields(
+          fields: [
+            _dropdown(
+              key: const ValueKey('schedule-plan-settlement-type'),
+              label: 'Тип списания *',
+              helperText: 'Применится после окончания занятия',
+              value: state.settlementTypeKey,
+              items: _itemsWithStoredValue(
+                catalog?.settlementTypes ?? const [],
+                state.settlementTypeKey,
+              ),
+              onChanged: onSettlementChanged,
+            ),
+            if (canManageTeacherCompensation)
+              _dropdown(
+                key: const ValueKey('schedule-plan-compensation-rule'),
+                label: 'Оплата преподавателю *',
+                helperText: 'Сотрудник выбирает правило явно',
+                value: state.teacherCompensationRuleKey,
+                items: _itemsWithStoredValue(
+                  catalog?.compensationRules ?? const [],
+                  state.teacherCompensationRuleKey,
+                ),
+                onChanged: onCompensationChanged,
+              ),
+            if (canManageTeacherCompensation &&
+                settlement?.teacherDurationMode == 'manual')
+              _MinutesField(
+                key: const ValueKey('schedule-plan-teacher-minutes'),
+                value: state.teacherCreditedDurationInput ?? '',
+                label: 'Минут преподавателю *',
+                lessonDurationMinutes: state.durationMinutes,
+                onChanged: onTeacherMinutesChanged,
+              ),
+          ],
         ),
-    ],
-  );
+        if (state.compensationTouched && canManageTeacherCompensation) ...[
+          const SizedBox(height: AppSpace.sm),
+          TextButton.icon(
+            key: const ValueKey('schedule-plan-apply-recommendation'),
+            onPressed: onApplyRecommendation,
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text('Применить рекомендуемое правило'),
+          ),
+        ],
+        if (manualClients.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.md),
+          Text(
+            'Минуты списания · ${formatLessonMinutes(state.durationMinutes)}',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          _ResponsiveFields(
+            fields: [
+              for (final decision in manualClients)
+                _MinutesField(
+                  key: ValueKey(
+                    'schedule-plan-client-minutes-${decision['clientId']}',
+                  ),
+                  value: decision['chargeDurationMinutes']?.toString() ?? '',
+                  label:
+                      '${participantLabels[decision['clientId']?.toString()] ?? 'Ученик'} *',
+                  lessonDurationMinutes: state.durationMinutes,
+                  onChanged: (value) => onClientMinutesChanged(
+                    decision['clientId'].toString(),
+                    value,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
 
   Widget _dropdown({
     required Key key,
@@ -441,16 +537,100 @@ class _DecisionFields extends StatelessWidget {
     required String? value,
     required List<LessonDecisionCatalogItem> items,
     required ValueChanged<String?> onChanged,
-  }) => DropdownButtonFormField<String>(
+  }) => AppDropdownButtonFormField<String>(
     menuMaxHeight: 256,
+    isExpanded: true,
     key: key,
     initialValue: value,
     decoration: InputDecoration(labelText: label, helperText: helperText),
     items: [
       for (final item in items)
-        DropdownMenuItem(value: item.key, child: Text(item.label)),
+        DropdownMenuItem(
+          value: item.key,
+          child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
     ],
     onChanged: onChanged,
+  );
+
+  List<LessonDecisionCatalogItem> _itemsWithStoredValue(
+    List<LessonDecisionCatalogItem> items,
+    String? value,
+  ) {
+    if (value == null ||
+        value.isEmpty ||
+        items.any((item) => item.key == value)) {
+      return items;
+    }
+    return [
+      LessonDecisionCatalogItem(
+        key: value,
+        label: 'Сохранено: $value',
+        order: -1,
+      ),
+      ...items,
+    ];
+  }
+}
+
+class _MinutesField extends StatefulWidget {
+  const _MinutesField({
+    required this.value,
+    required this.label,
+    required this.lessonDurationMinutes,
+    required this.onChanged,
+    super.key,
+  });
+
+  final String value;
+  final String label;
+  final int lessonDurationMinutes;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_MinutesField> createState() => _MinutesFieldState();
+}
+
+class _MinutesFieldState extends State<_MinutesField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MinutesField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != _controller.text) {
+      _controller.value = TextEditingValue(
+        text: widget.value,
+        selection: TextSelection.collapsed(offset: widget.value.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TextFormField(
+    controller: _controller,
+    keyboardType: TextInputType.number,
+    decoration: InputDecoration(
+      labelText: widget.label,
+      helperText: 'От 0 до ${widget.lessonDurationMinutes} мин',
+    ),
+    autovalidateMode: AutovalidateMode.onUserInteraction,
+    validator: (value) => partialDurationError(
+      value,
+      lessonDurationMinutes: widget.lessonDurationMinutes,
+    ),
+    onChanged: widget.onChanged,
   );
 }
 
@@ -472,13 +652,19 @@ class _ResponsiveFields extends StatelessWidget {
           ],
         );
       }
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      const spacing = AppSpace.sm;
+      const minimumWidth = 240.0;
+      final columns =
+          ((constraints.maxWidth + spacing) / (minimumWidth + spacing))
+              .floor()
+              .clamp(1, fields.length);
+      final fieldWidth =
+          (constraints.maxWidth - spacing * (columns - 1)) / columns;
+      return Wrap(
+        spacing: spacing,
+        runSpacing: AppSpace.md,
         children: [
-          for (var index = 0; index < fields.length; index++) ...[
-            if (index > 0) const SizedBox(width: AppSpace.sm),
-            Expanded(child: fields[index]),
-          ],
+          for (final field in fields) SizedBox(width: fieldWidth, child: field),
         ],
       );
     },

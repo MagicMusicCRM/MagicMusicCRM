@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -60,7 +61,7 @@ Finder _field(String name) =>
     find.byKey(ValueKey('lesson-client-$name-student-a'));
 
 void _select(WidgetTester tester, String field, String value) {
-  tester.widget<DropdownButtonFormField<String>>(_field(field)).onChanged!(
+  tester.widget<AppDropdownButtonFormField<String>>(_field(field)).onChanged!(
     value,
   );
 }
@@ -90,10 +91,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final source = tester.widget<DropdownButton<String>>(
+      final source = tester.widget<AppDropdownButton<String>>(
         find.descendant(
           of: find.byKey(const ValueKey('lesson-client-charge-type-lead-a')),
-          matching: find.byType(DropdownButton<String>),
+          matching: find.byType(AppDropdownButton<String>),
         ),
       );
       expect(source.items!.map((item) => item.value), ['personal_account']);
@@ -468,7 +469,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(_field('charge-type'))
+          .widget<AppDropdownButtonFormField<String>>(_field('charge-type'))
           .onChanged,
       isNull,
     );

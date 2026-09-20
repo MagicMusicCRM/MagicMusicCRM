@@ -103,12 +103,14 @@ export interface PaymentRow {
 
 const lessonDecisionFields = [
   "settlementTypeKey", "clientDecisions", "teacherCompensationRuleKey",
-  "teacherCompensationValueMinor",
+  "teacherCompensationValueMinor", "teacherCreditedDurationMinutes",
+  "teacherCompensationSource",
 ] as const;
 
 const lessonClientDecisionFields = [
   "clientId", "settlementTypeKey", "subscriptionId", "payerStudentId",
-  "chargeType", "basePriceMinor", "discount", "surcharge",
+  "chargeType", "chargeDurationMinutes", "basePriceMinor", "discount",
+  "surcharge",
 ] as const;
 
 function pickLessonDecisionFields(

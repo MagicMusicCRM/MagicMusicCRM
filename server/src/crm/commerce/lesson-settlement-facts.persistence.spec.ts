@@ -47,6 +47,7 @@ function teacherFact() {
     compensation_default_value: "0",
     compensation_actual_value: "0",
     compensation_override_reason: null,
+    compensation_source: "automatic",
     configuration_revision_id: "compensation-revision",
   };
 }
@@ -91,9 +92,50 @@ describe("lesson settlement facts persistence", () => {
         id: "teacher-fact-a",
         teacherId: "teacher-a",
         amountMinor: "100000",
+        compensationSource: "automatic",
       },
     });
   });
+
+  it("preserves an explicit manual source even when the value matches the default", async () => {
+    const client = queuedClient([
+      queryResult([clientFact()]),
+      queryResult([{ ...teacherFact(), compensation_source: "manual" }]),
+    ]);
+
+    await expect(
+      loadLessonSettlementFacts(client, "lesson-a"),
+    ).resolves.toMatchObject({
+      teacherFact: {
+        compensationActualValue: "0",
+        compensationOverrideReason: null,
+        compensationSource: "manual",
+      },
+    });
+  });
+
+  it.each([
+    [null, "automatic"],
+    ["Историческая ручная корректировка", "manual"],
+  ] as const)(
+    "uses the documented legacy source fallback for override reason %p",
+    async (reason, expectedSource) => {
+      const client = queuedClient([
+        queryResult([clientFact()]),
+        queryResult([{
+          ...teacherFact(),
+          compensation_source: null,
+          compensation_override_reason: reason,
+        }]),
+      ]);
+
+      await expect(
+        loadLessonSettlementFacts(client, "lesson-a"),
+      ).resolves.toMatchObject({
+        teacherFact: { compensationSource: expectedSource },
+      });
+    },
+  );
 
   it("fails closed when only one side of the settlement exists", async () => {
     const client = queuedClient([queryResult([clientFact()]), queryResult([])]);

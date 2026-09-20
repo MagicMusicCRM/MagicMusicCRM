@@ -694,6 +694,7 @@ describe("CrmService", () => {
       false,
       null, // source_id unchanged
       false, // clear_email: omission preserves the current contact email
+      false, // clear_phone: omission preserves the current contact phone
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

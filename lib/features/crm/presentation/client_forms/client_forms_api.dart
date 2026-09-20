@@ -137,6 +137,7 @@ class ClientFormsApi {
   }
 
   Future<Map<String, dynamic>> createLead({
+    required MagicMutationIdentity identity,
     required String firstName,
     required String lastName,
     required String phone,
@@ -145,8 +146,9 @@ class ClientFormsApi {
     required String status,
     required List<Map<String, dynamic>> customFields,
   }) {
-    return _api.post<Map<String, dynamic>>(
+    return _api.postIdempotent<Map<String, dynamic>>(
       '/crm/leads',
+      identity: identity,
       data: {
         'firstName': firstName.trim(),
         'lastName': lastName.trim(),
@@ -160,6 +162,7 @@ class ClientFormsApi {
   }
 
   Future<Map<String, dynamic>> createStudent({
+    required MagicMutationIdentity identity,
     required String firstName,
     required String lastName,
     required String phone,
@@ -168,8 +171,9 @@ class ClientFormsApi {
     required String sourceId,
     required List<Map<String, dynamic>> customFields,
   }) {
-    return _api.post<Map<String, dynamic>>(
+    return _api.postIdempotent<Map<String, dynamic>>(
       '/crm/students',
+      identity: identity,
       data: {
         'firstName': firstName.trim(),
         'lastName': lastName.trim(),

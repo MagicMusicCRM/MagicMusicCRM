@@ -1,15 +1,22 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_feedback.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_decision_policy.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_financial_section.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_participant_section.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_schedule_section.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_view.dart';
+
+import '../../support/modal_layout_evidence.dart';
 
 Widget _host(Widget child) => MaterialApp(home: Material(child: child));
 
@@ -282,6 +289,117 @@ List<String> _forbiddenUsesIn(String source) => [
 ];
 
 void main() {
+  testWidgets(
+    'editing calculation gives the reason field a visible validation error',
+    (tester) async {
+      final form = GlobalKey<FormState>();
+      await tester.pumpWidget(
+        _host(
+          Form(
+            key: form,
+            child: LessonEditorView(
+              model: _viewModel(
+                isEdit: true,
+                draft: _draft(),
+                references: _references(),
+              ),
+              actions: _RecordingActions(),
+            ),
+          ),
+        ),
+      );
+      expect(form.currentState!.validate(), isFalse);
+      await tester.pumpAndSettle();
+      final reason = find.byKey(const Key('lesson-edit-reason'));
+      await tester.ensureVisible(reason);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Укажите причину изменения (от 3 символов)'),
+        findsOneWidget,
+      );
+      await tester.enterText(reason, 'По просьбе ученика');
+      form.currentState!.validate();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Укажите причину изменения (от 3 символов)'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final (size, scale, platform) in [
+    (const Size(1280, 900), 1.0, TargetPlatform.windows),
+    (const Size(600, 800), 1.3, TargetPlatform.windows),
+    (const Size(320, 800), 1.3, TargetPlatform.android),
+    (const Size(390, 844), 1.0, TargetPlatform.android),
+    (const Size(430, 932), 1.5, TargetPlatform.android),
+  ]) {
+    testWidgets('real lesson form layout ${size.width} text $scale', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadModalFonts);
+      final actions = _RecordingActions();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: evidenceRootKey,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            supportedLocales: const [Locale('ru')],
+            locale: const Locale('ru'),
+            theme: AppTheme.production.copyWith(platform: platform),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showMagicDialog<void>(
+                    context: context,
+                    builder: (_) =>
+                        LessonEditorView(model: _viewModel(), actions: actions),
+                  ),
+                  child: const Text('Открыть'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Открыть'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Создать').hitTestable(), findsOneWidget);
+      final client = tester.getRect(
+        find.byKey(const ValueKey('lesson-client-field')),
+      );
+      expect(
+        client.width,
+        greaterThan(size.width >= 840 ? 650 : size.width - 130),
+      );
+      await captureModalLayout(tester, 'lesson-${size.width.toInt()}-top');
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-snapshot-preview')),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Оплата преподавателю').hitTestable(), findsOneWidget);
+      await captureModalLayout(
+        tester,
+        'lesson-${size.width.toInt()}-calculation',
+      );
+      await tester.tap(find.text('Создать'));
+      expect(actions.saveCount, 1);
+    });
+  }
+
   testWidgets('schedule section emits analyzer and suggestion intents', (
     tester,
   ) async {
@@ -384,7 +502,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('lesson-time-field')));
 
     tester
-        .widget<DropdownButtonFormField<int>>(
+        .widget<AppDropdownButtonFormField<int>>(
           find.byKey(const ValueKey('lesson-duration-field')),
         )
         .onChanged
@@ -449,7 +567,7 @@ void main() {
     pickers.first.onSelected(pickers.first.items.last);
     pickers.elementAt(1).onSelected(pickers.elementAt(1).items.first);
     pickers.elementAt(2).onSelected(pickers.elementAt(2).items.first);
-    final branchField = tester.widget<DropdownButtonFormField<String>>(
+    final branchField = tester.widget<AppDropdownButtonFormField<String>>(
       find.byKey(const ValueKey('lesson-branch-field:branch-a')),
     );
     branchField.onChanged?.call('branch-a');
@@ -815,21 +933,16 @@ void main() {
       ),
     );
 
-    tester
-        .widget<SwitchListTile>(
-          find.byKey(const ValueKey('lesson-trial-toggle')),
-        )
-        .onChanged
-        ?.call(true);
+    expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
     expect(find.text('Автозавершение'), findsOneWidget);
     tester
-        .widget<DropdownButtonFormField<String>>(
+        .widget<AppDropdownButtonFormField<String>>(
           find.byKey(const ValueKey('lesson-settlement-type-field')),
         )
         .onChanged
         ?.call('paid');
     tester
-        .widget<DropdownButtonFormField<String>>(
+        .widget<AppDropdownButtonFormField<String>>(
           find.byKey(const ValueKey('lesson-compensation-rule-field')),
         )
         .onChanged
@@ -842,7 +955,7 @@ void main() {
       find.byKey(const ValueKey('lesson-compensation-override-reason-field')),
       'Причина',
     );
-    expect(actions.trial, isTrue);
+    expect(actions.trial, isNull);
     expect(actions.completion, isNull);
     expect(actions.settlement, 'paid');
     expect(actions.compensationRule, 'fixed');
@@ -850,6 +963,325 @@ void main() {
     expect(actions.compensationReason, 'Причина');
     expect(find.text('Оплата ученика'), findsOneWidget);
     expect(find.text('Результат и расчёты'), findsOneWidget);
+  });
+
+  testWidgets(
+    'admin trial permission exposes rule selection without arbitrary rate fields',
+    (tester) async {
+      final draft = _draft().copyWith(
+        settlementTypeKey: 'trial_lesson',
+        compensationRuleKey: 'trial_lesson',
+      );
+      final references = LessonEditorReferenceState(
+        teachers: const [],
+        clients: const [],
+        branches: const [],
+        rooms: const [],
+        subscriptions: const [],
+        catalog: const LessonDecisionCatalog(
+          settlementTypes: [
+            LessonDecisionCatalogItem(
+              key: 'trial_lesson',
+              label: 'Пробный урок',
+              order: 7,
+            ),
+          ],
+          compensationRules: [
+            LessonDecisionCatalogItem(
+              key: 'trial_lesson',
+              label: 'Пробный урок — без оплаты',
+              mode: 'none',
+              order: 5,
+            ),
+            LessonDecisionCatalogItem(
+              key: 'standard',
+              label: 'Стандартная ставка',
+              mode: 'standard',
+              order: 1,
+            ),
+          ],
+        ),
+      );
+      final actions = _RecordingActions();
+      for (final allowed in [false, true]) {
+        await tester.pumpWidget(
+          _host(
+            SingleChildScrollView(
+              child: LessonFinancialSection(
+                model: LessonFinancialSectionModel(
+                  session: _session(isEdit: true, draft: draft),
+                  draft: draft,
+                  references: references,
+                  isSaving: false,
+                  requiresCompensationValue: false,
+                  compensationNeedsReason: false,
+                  canManageTeacherCompensation: false,
+                  canSelectTrialCompensation: allowed,
+                ),
+                actions: actions,
+              ),
+            ),
+          ),
+        );
+        final rule = find.byKey(
+          const ValueKey('lesson-compensation-rule-field'),
+        );
+        expect(rule, allowed ? findsOneWidget : findsNothing);
+        expect(
+          find.byKey(const ValueKey('lesson-compensation-value-field')),
+          findsNothing,
+        );
+        expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
+        if (allowed) {
+          tester.widget<AppDropdownButtonFormField<String>>(rule).onChanged!(
+            'standard',
+          );
+          expect(actions.compensationRule, 'standard');
+        }
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  for (final size in const [Size(320, 900), Size(1200, 900)]) {
+    testWidgets('partial duration controls fit ${size.width} and emit edits', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.reset);
+      final actions = _RecordingActions();
+      final draft = _financialDraft().copyWith(
+        settlementTypeKey: 'partial',
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: 'manual',
+        compensationTouched: true,
+        clientDecisions: const [
+          {
+            'clientId': 'student-a',
+            'chargeType': 'subscription',
+            'subscriptionId': 'subscription-a',
+            'chargeDurationMinutes': 30,
+          },
+        ],
+      );
+      final base = _financialReferences();
+      final references = LessonEditorReferenceState(
+        teachers: base.teachers,
+        clients: base.clients,
+        branches: base.branches,
+        rooms: base.rooms,
+        subscriptions: base.subscriptions,
+        catalog: const LessonDecisionCatalog(
+          settlementTypes: [
+            LessonDecisionCatalogItem(
+              key: 'partial',
+              label: 'Частично оплачиваемое занятие',
+              order: 0,
+              clientDurationMode: 'manual',
+              teacherDurationMode: 'manual',
+              defaultTeacherCompensationRuleKey: 'percent',
+            ),
+          ],
+          compensationRules: [
+            LessonDecisionCatalogItem(
+              key: 'percent',
+              label: 'Процент',
+              order: 0,
+              mode: 'percent',
+              value: '10000',
+            ),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(
+        _host(
+          SingleChildScrollView(
+            child: LessonFinancialSection(
+              model: LessonFinancialSectionModel(
+                session: _session(draft: draft),
+                draft: draft,
+                references: references,
+                isSaving: false,
+                requiresCompensationValue: true,
+                compensationNeedsReason: true,
+                canManageTeacherCompensation: true,
+              ),
+              actions: actions,
+              funding: _FundingLookup(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final clientField = find.byKey(
+        const ValueKey('lesson-client-duration-student-a'),
+      );
+      final teacherField = find.byKey(
+        const ValueKey('teacher-credited-duration-minutes'),
+      );
+      expect(clientField, findsOneWidget);
+      expect(teacherField, findsOneWidget);
+      expect(find.text('30 мин'), findsOneWidget);
+      expect(find.text('45 мин'), findsOneWidget);
+      expect(find.text('Применить рекомендуемое правило'), findsOneWidget);
+      if (size.width == 320) {
+        expect(tester.getSize(clientField).width, greaterThan(250));
+        expect(tester.getSize(teacherField).width, greaterThan(250));
+        final clientLabel = find.text('Списать с клиента, мин *');
+        final teacherLabel = find.text('Засчитать преподавателю, мин *');
+        expect(tester.getSize(clientLabel).height, lessThan(32));
+        expect(tester.getSize(teacherLabel).height, lessThan(32));
+        expect(tester.getSize(clientLabel).width, greaterThan(130));
+        expect(tester.getSize(teacherLabel).width, greaterThan(160));
+      }
+      await tester.enterText(clientField, '20');
+      await tester.enterText(teacherField, '40');
+      final restore = find.text('Применить рекомендуемое правило');
+      await tester.ensureVisible(restore);
+      await tester.pump();
+      await tester.tap(restore);
+
+      expect(actions.clientDuration, ('student-a', 20));
+      expect(actions.teacherDuration, 40);
+      expect(actions.restoreRecommendationCount, 1);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('teacher minutes keep focus across sequential draft rebuilds', (
+    tester,
+  ) async {
+    final policy = LessonEditorDecisionPolicy();
+    final base = _financialReferences();
+    final references = LessonEditorReferenceState(
+      teachers: base.teachers,
+      clients: base.clients,
+      branches: base.branches,
+      rooms: base.rooms,
+      subscriptions: base.subscriptions,
+      catalog: const LessonDecisionCatalog(
+        settlementTypes: [
+          LessonDecisionCatalogItem(
+            key: 'partial',
+            label: 'Частично оплачиваемое занятие',
+            order: 0,
+            clientDurationMode: 'manual',
+            teacherDurationMode: 'manual',
+            defaultTeacherCompensationRuleKey: 'percent',
+          ),
+        ],
+        compensationRules: [
+          LessonDecisionCatalogItem(
+            key: 'percent',
+            label: 'Процент',
+            order: 0,
+            mode: 'percent',
+            value: '10000',
+          ),
+        ],
+      ),
+    );
+    var draft = _financialDraft().copyWith(
+      settlementTypeKey: 'partial',
+      compensationRuleKey: 'percent',
+      compensationValueMinor: '10000',
+      teacherCreditedDurationMinutes: null,
+      clientDecisions: const [
+        {
+          'clientId': 'student-a',
+          'chargeType': 'subscription',
+          'subscriptionId': 'subscription-a',
+          'chargeDurationMinutes': 30,
+        },
+      ],
+    );
+    StateSetter? rebuild;
+    late final _RecordingActions actions;
+    actions = _RecordingActions(
+      onEdit: (edit) => rebuild?.call(() {
+        draft = policy.applyEdit(draft, references, edit).draft;
+      }),
+    );
+
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return SingleChildScrollView(
+              child: LessonFinancialSection(
+                model: LessonFinancialSectionModel(
+                  session: _session(draft: draft),
+                  draft: draft,
+                  references: references,
+                  isSaving: false,
+                  requiresCompensationValue: true,
+                  compensationNeedsReason: false,
+                  canManageTeacherCompensation: true,
+                ),
+                actions: actions,
+                fundingFields: const SizedBox.shrink(),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    final field = find.byKey(
+      const ValueKey('teacher-credited-duration-minutes'),
+    );
+    await tester.tap(field);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '4',
+        selection: TextSelection.collapsed(offset: 1),
+      ),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '45',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump();
+
+    expect(draft.teacherCreditedDurationMinutes, 45);
+    expect(
+      policy.createPayload(
+        session: _session(draft: draft),
+        draft: draft,
+        references: references,
+        canManageTeacherCompensation: true,
+      )['financialDecision'],
+      containsPair('teacherCreditedDurationMinutes', 45),
+    );
+    final restore = find.text('Применить рекомендуемое правило');
+    await tester.ensureVisible(restore);
+    await tester.tap(restore);
+    await tester.pump();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .controller
+          .text,
+      isEmpty,
+    );
   });
 
   testWidgets(
@@ -1002,6 +1434,50 @@ void main() {
     },
   );
 
+  testWidgets('snapshot values align in a column and stack on a phone', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    for (final width in [680.0, 320.0]) {
+      tester.view.physicalSize = Size(width, 900);
+      await tester.pumpWidget(
+        _host(
+          LessonEditorFeedback(
+            model: LessonEditorFeedbackModel(
+              session: _session(),
+              draft: _draft(),
+              validationMessage: null,
+              settlementLabel: 'Занятие',
+              clientSnapshotValue: '0 ₽',
+              compensationLabel: 'Полная стандартная ставка',
+              teacherSnapshotValue: 'Стандартная ставка преподавателя · 0 ₽',
+              canManageTeacherCompensation: true,
+            ),
+          ),
+        ),
+      );
+      final value = tester.getRect(
+        find.text(
+          'Полная стандартная ставка · Стандартная ставка преподавателя · 0 ₽',
+        ),
+      );
+      final label = tester.getRect(find.text('Оплата преподавателю'));
+      if (width > 600) {
+        expect(
+          value.left,
+          closeTo(tester.getRect(find.text('Обычное')).left, 1),
+        );
+        expect(value.top, closeTo(label.top, 1));
+      } else {
+        expect(value.left, closeTo(label.left, 1));
+        expect(value.top, greaterThanOrEqualTo(label.bottom));
+        expect(value.width, greaterThanOrEqualTo(280));
+      }
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('feedback preserves snapshot, validation and action behavior', (
     tester,
   ) async {
@@ -1124,11 +1600,19 @@ void main() {
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('lesson-date-field'))).dy,
       lessThan(
-        tester.getTopLeft(find.byKey(const ValueKey('lesson-trial-toggle'))).dy,
+        tester
+            .getTopLeft(
+              find.byKey(const ValueKey('lesson-settlement-type-field')),
+            )
+            .dy,
       ),
     );
     expect(
-      tester.getTopLeft(find.byKey(const ValueKey('lesson-trial-toggle'))).dy,
+      tester
+          .getTopLeft(
+            find.byKey(const ValueKey('lesson-settlement-type-field')),
+          )
+          .dy,
       lessThan(
         tester
             .getTopLeft(find.byKey(const ValueKey('lesson-snapshot-preview')))
@@ -1189,7 +1673,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-branch-field:branch-a')),
           )
           .onChanged,
@@ -1229,7 +1713,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<int>>(
+          .widget<AppDropdownButtonFormField<int>>(
             find.byKey(const ValueKey('lesson-duration-field')),
           )
           .onChanged,
@@ -1243,26 +1727,19 @@ void main() {
           .onPressed,
       isNotNull,
     );
-    expect(
-      tester
-          .widget<SwitchListTile>(
-            find.byKey(const ValueKey('lesson-trial-toggle')),
-          )
-          .onChanged,
-      isNotNull,
-    );
+    expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
     expect(find.text('Автозавершение'), findsOneWidget);
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-settlement-type-field')),
           )
           .onChanged,
-      isNotNull,
+      isNull,
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-compensation-rule-field')),
           )
           .onChanged,
@@ -1290,7 +1767,7 @@ void main() {
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Отмена'))
           .onPressed,
-      isNotNull,
+      isNull,
     );
     expect(
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
@@ -1325,7 +1802,7 @@ void main() {
     );
     expect(
       tester
-          .widget<DropdownButtonFormField<String>>(
+          .widget<AppDropdownButtonFormField<String>>(
             find.byKey(const ValueKey('lesson-branch-field:branch-a')),
           )
           .onChanged,
@@ -1359,20 +1836,13 @@ void main() {
     }
     expect(
       tester
-          .widget<DropdownButtonFormField<int>>(
+          .widget<AppDropdownButtonFormField<int>>(
             find.byKey(const ValueKey('lesson-duration-field')),
           )
           .onChanged,
       isNotNull,
     );
-    expect(
-      tester
-          .widget<SwitchListTile>(
-            find.byKey(const ValueKey('lesson-trial-toggle')),
-          )
-          .onChanged,
-      isNull,
-    );
+    expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
     expect(find.text('Автозавершение'), findsOneWidget);
     for (final key in const [
       ValueKey('lesson-settlement-type-field'),
@@ -1380,7 +1850,7 @@ void main() {
     ]) {
       expect(
         tester
-            .widget<DropdownButtonFormField<String>>(find.byKey(key))
+            .widget<AppDropdownButtonFormField<String>>(find.byKey(key))
             .onChanged,
         isNull,
       );
@@ -1407,7 +1877,7 @@ void main() {
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Отмена'))
           .onPressed,
-      isNotNull,
+      isNull,
     );
     expect(
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
@@ -1432,12 +1902,14 @@ void main() {
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_participant_section.dart':
           {
+            'package:magic_music_crm/core/widgets/app_dropdown.dart',
             'package:flutter/material.dart',
             'package:magic_music_crm/core/widgets/searchable_picker_field.dart',
             'lesson_editor_models.dart',
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_schedule_section.dart':
           {
+            'package:magic_music_crm/core/widgets/app_dropdown.dart',
             'dart:async',
             'package:flutter/material.dart',
             'package:magic_music_crm/core/navigation/entity_link_text.dart',
@@ -1446,21 +1918,23 @@ void main() {
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_financial_section.dart':
           {
+            'package:magic_music_crm/core/widgets/app_dropdown.dart',
             'package:flutter/material.dart',
             'package:flutter/services.dart',
-            'package:magic_music_crm/core/theme/app_theme.dart',
             '../lesson_decision/lesson_decision_models.dart',
             '../lesson_decision/lesson_decision_sections.dart',
             '../lesson_form_rules.dart',
             'lesson_client_funding_fields.dart',
             'lesson_editor_feedback.dart',
             'lesson_editor_models.dart',
+            'lesson_financial_autofill.dart',
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_editor_feedback.dart':
           {
             'package:flutter/material.dart',
             'package:magic_music_crm/core/api/magic_api_error.dart',
             'package:magic_music_crm/core/theme/design_tokens.dart',
+            'package:magic_music_crm/core/widgets/responsive_detail_row.dart',
             'lesson_editor_models.dart',
           },
     };
@@ -1521,9 +1995,10 @@ void main() {
 }
 
 class _RecordingActions implements LessonEditorActions {
-  _RecordingActions({this.searchResults = const []});
+  _RecordingActions({this.searchResults = const [], this.onEdit});
 
   final List<LessonClientRef> searchResults;
+  final ValueChanged<LessonEditorEdit>? onEdit;
   final List<String> searchedQueries = [];
   bool? trial;
   String? completion;
@@ -1541,6 +2016,9 @@ class _RecordingActions implements LessonEditorActions {
   int dateRequests = 0;
   int timeRequests = 0;
   int? duration;
+  (String, int?)? clientDuration;
+  int? teacherDuration;
+  int restoreRecommendationCount = 0;
   int saveCount = 0;
   int cancelCount = 0;
 
@@ -1555,6 +2033,7 @@ class _RecordingActions implements LessonEditorActions {
 
   @override
   void edit(LessonEditorEdit edit) {
+    onEdit?.call(edit);
     switch (edit) {
       case LessonClientDecisionsEdit():
         break;
@@ -1586,6 +2065,12 @@ class _RecordingActions implements LessonEditorActions {
         }
       case LessonDurationEdit(:final value):
         duration = value;
+      case LessonClientDurationEdit(:final clientId, :final value):
+        clientDuration = (clientId, value);
+      case LessonTeacherDurationEdit(:final value):
+        teacherDuration = value;
+      case LessonRestoreRecommendationEdit():
+        restoreRecommendationCount++;
       case LessonNotesEdit(:final value):
         notes = value;
       case LessonTrialEdit(:final value):

@@ -6,7 +6,6 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
-import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -24,7 +23,6 @@ import { buildCrmConfigurationImpact } from "./crm-configuration-impact.policy";
 import {
   assertCrmConfigurationBranch,
   crmConfigurationRevisionDto,
-  type CrmConfigurationQueryable,
   type CrmConfigurationRevisionRow,
   hasStoredCrmClientFieldValues,
   resolveEffectiveCrmConfiguration,
@@ -135,11 +133,12 @@ export class CrmConfigurationService {
 
   async saveDraft(actor: ActorContext, dto: SaveCrmConfigurationDraftDto) {
     await this.assertScope(actor, dto.branchId);
-    const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
     const current = await resolveEffectiveCrmConfiguration(
       this.database,
       dto.branchId,
     );
+    this.assertRawSystemOwnedCatalogUnchanged(current.snapshot, dto.snapshot);
+    const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
     const currentVersion = dto.branchId
       ? current.branchVersion
       : current.schoolVersion;
@@ -150,12 +149,7 @@ export class CrmConfigurationService {
         currentVersion,
       });
     }
-    await this.assertCommerceCatalogAccess(
-      this.database,
-      actor,
-      snapshot,
-      current.snapshot,
-    );
+    this.assertSystemOwnedCatalogUnchanged(current.snapshot, snapshot);
     const conflictTarget = dto.branchId
       ? "(user_id, branch_id) where branch_id is not null"
       : "(user_id) where branch_id is null";
@@ -185,17 +179,16 @@ export class CrmConfigurationService {
 
   async preview(actor: ActorContext, dto: SaveCrmConfigurationDraftDto) {
     await this.assertScope(actor, dto.branchId);
-    const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
     const effective = await resolveEffectiveCrmConfiguration(
       this.database,
       dto.branchId,
     );
-    await this.assertCommerceCatalogAccess(
-      this.database,
-      actor,
-      snapshot,
+    this.assertRawSystemOwnedCatalogUnchanged(
       effective.snapshot,
+      dto.snapshot,
     );
+    const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
+    this.assertSystemOwnedCatalogUnchanged(effective.snapshot, snapshot);
     return buildCrmConfigurationImpact({
       next: snapshot,
       current: effective.snapshot,
@@ -236,12 +229,21 @@ export class CrmConfigurationService {
     const revision = target.rows[0];
     if (!revision)
       throw new NotFoundException("Версия конфигурации не найдена.");
-    const snapshot = dto.branchId
+    const historicalSnapshot = dto.branchId
       ? applyCrmConfigurationBranchPatch(
           (await resolveSchoolCrmConfiguration(this.database)).snapshot,
           revision.patch as ConfigBranchPatch,
         )
       : revision.effective_snapshot;
+    const current = await resolveEffectiveCrmConfiguration(
+      this.database,
+      dto.branchId,
+    );
+    const snapshot = {
+      ...historicalSnapshot,
+      lessonSettlementTypes: current.snapshot.lessonSettlementTypes,
+      teacherCompensationRules: current.snapshot.teacherCompensationRules,
+    };
     return this.publishRevision(
       actor,
       {
@@ -267,18 +269,17 @@ export class CrmConfigurationService {
         message: "Укажите причину публикации.",
       });
     }
-    const requested = normalizeCrmConfigurationSnapshot(dto.snapshot);
     const result = await this.database.transaction(async (client) => {
       await client.query("select pg_advisory_xact_lock(hashtext($1))", [
         `crm-configuration:${dto.branchId ?? "school"}`,
       ]);
-       if (dto.branchId) {
-         await assertCrmConfigurationBranch(client, dto.branchId);
-       }
-       const effective = await resolveEffectiveCrmConfiguration(
-         client,
-         dto.branchId,
-       );
+      if (dto.branchId) {
+        await assertCrmConfigurationBranch(client, dto.branchId);
+      }
+      const effective = await resolveEffectiveCrmConfiguration(
+        client,
+        dto.branchId,
+      );
       const currentVersion = dto.branchId
         ? effective.branchVersion
         : effective.schoolVersion;
@@ -289,19 +290,18 @@ export class CrmConfigurationService {
           currentVersion,
         });
       }
-      await this.assertCommerceCatalogAccess(
-        client,
-        actor,
-        requested,
+      this.assertRawSystemOwnedCatalogUnchanged(
         effective.snapshot,
-        true,
+        dto.snapshot,
       );
+      const requested = normalizeCrmConfigurationSnapshot(dto.snapshot);
+      this.assertSystemOwnedCatalogUnchanged(effective.snapshot, requested);
       const impact = await buildCrmConfigurationImpact({
         next: requested,
         current: effective.snapshot,
         school: dto.branchId ? effective.schoolSnapshot : undefined,
         hasStoredClientFieldValues: (definitionId) =>
-           hasStoredCrmClientFieldValues(client, definitionId),
+          hasStoredCrmClientFieldValues(client, definitionId),
       });
       if (!impact.valid) {
         throw new UnprocessableEntityException({
@@ -312,12 +312,12 @@ export class CrmConfigurationService {
       }
       const snapshot = dto.branchId
         ? requested
-         : await syncCrmClientFields(client, requested);
+        : await syncCrmClientFields(client, requested);
       const nextVersion = currentVersion + 1;
       const patch = dto.branchId
         ? createCrmConfigurationBranchPatch(effective.schoolSnapshot, snapshot)
         : snapshot;
-       const inserted = await client.query<CrmConfigurationRevisionRow>(
+      const inserted = await client.query<CrmConfigurationRevisionRow>(
         `insert into app.crm_configuration_revisions (
            branch_id, version, patch, effective_snapshot, impact, reason,
            rollback_from_version, created_by
@@ -395,31 +395,45 @@ export class CrmConfigurationService {
     }
   }
 
-  private async assertCommerceCatalogAccess(
-    queryable: CrmConfigurationQueryable,
-    actor: ActorContext,
-    next: ConfigSnapshot,
+  private assertSystemOwnedCatalogUnchanged(
     current: ConfigSnapshot,
-    lockForCommit = false,
-  ): Promise<void> {
+    next: ConfigSnapshot,
+  ): void {
     if (
       sameCrmConfigurationValue(
-        next.lessonSettlementTypes,
         current.lessonSettlementTypes,
+        next.lessonSettlementTypes,
       ) &&
       sameCrmConfigurationValue(
-        next.teacherCompensationRules,
         current.teacherCompensationRules,
+        next.teacherCompensationRules,
       )
     ) {
       return;
     }
-    await authorizeCurrentCapability(
-      queryable,
-      actor,
-      "config.commerce.manage",
-      lockForCommit,
-    );
+    throw new ForbiddenException({
+      code: "SYSTEM_SETTLEMENT_POLICY_READ_ONLY",
+    });
   }
 
+  private assertRawSystemOwnedCatalogUnchanged(
+    current: ConfigSnapshot,
+    next: Record<string, unknown>,
+  ): void {
+    if (
+      sameCrmConfigurationValue(
+        current.lessonSettlementTypes,
+        next.lessonSettlementTypes,
+      ) &&
+      sameCrmConfigurationValue(
+        current.teacherCompensationRules,
+        next.teacherCompensationRules,
+      )
+    ) {
+      return;
+    }
+    throw new ForbiddenException({
+      code: "SYSTEM_SETTLEMENT_POLICY_READ_ONLY",
+    });
+  }
 }

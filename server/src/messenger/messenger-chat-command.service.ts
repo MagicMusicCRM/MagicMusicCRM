@@ -75,7 +75,28 @@ export class MessengerChatCommandService {
       return row;
     });
 
-    return toChatSummaryDto(chat);
+    const partner = await this.database.query<{
+      email: string | null;
+      first_name: string | null;
+      last_name: string | null;
+      avatar_file_id: string | null;
+    }>(
+      `select u.email, p.first_name, p.last_name, p.avatar_file_id
+       from app.users u
+       left join app.profiles p on p.user_id = u.id and p.deleted_at is null
+       where u.id = $1
+       limit 1`,
+      [dto.targetUserId],
+    );
+    const profile = partner.rows[0];
+    return toChatSummaryDto({
+      ...chat,
+      partner_user_id: dto.targetUserId,
+      partner_email: profile?.email ?? null,
+      partner_first_name: profile?.first_name ?? null,
+      partner_last_name: profile?.last_name ?? null,
+      partner_avatar_file_id: profile?.avatar_file_id ?? null,
+    });
   }
 
   async createGroup(actor: ActorContext, dto: CreateGroupChatDto) {

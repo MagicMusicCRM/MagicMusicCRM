@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -220,7 +221,7 @@ class _SystemSettingsWorkspaceState
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: DropdownButtonFormField<String>(
+                        child: AppDropdownButtonFormField<String>(
                           menuMaxHeight: 256,
                           initialValue: _area,
                           isExpanded: true,
@@ -770,13 +771,14 @@ class _SalesSettingsState extends ConsumerState<_SalesSettings> {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              FilterChip(
-                key: const ValueKey('subscription-packages-archive-filter'),
-                selected: _showArchived,
-                onSelected: (value) => setState(() => _showArchived = value),
-                avatar: const Icon(Icons.archive_outlined, size: 18),
-                label: const Text('Показать архив'),
-              ),
+              if (widget.canEdit)
+                FilterChip(
+                  key: const ValueKey('subscription-packages-archive-filter'),
+                  selected: _showArchived,
+                  onSelected: (value) => setState(() => _showArchived = value),
+                  avatar: const Icon(Icons.archive_outlined, size: 18),
+                  label: const Text('Показать архив'),
+                ),
               if (widget.canEdit)
                 FilledButton.icon(
                   onPressed: () async {

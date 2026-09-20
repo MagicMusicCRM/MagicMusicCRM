@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_archive_button.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_api.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/comment_share_button.dart';
@@ -40,12 +41,32 @@ class ClientCardRolesTestApi extends MagicApiClient {
             'lifecycle': {'state': 'active', 'tombstone': false, 'version': 3},
             'sections': {
               'lessons': {
-                'count': 1,
+                'count': 5,
                 'items': [
                   {
                     'id': 'lesson-a',
                     'scheduledAt': '2026-08-01T10:00:00.000Z',
                     'lifecycleState': 'scheduled',
+                  },
+                  {
+                    'id': 'lesson-completed',
+                    'scheduledAt': '2026-08-02T10:00:00.000Z',
+                    'lifecycleState': 'successfully_completed',
+                  },
+                  {
+                    'id': 'lesson-cancelled',
+                    'scheduledAt': '2026-08-03T10:00:00.000Z',
+                    'lifecycleState': 'cancelled',
+                  },
+                  {
+                    'id': 'lesson-rescheduled',
+                    'scheduledAt': '2026-08-04T10:00:00.000Z',
+                    'lifecycleState': 'rescheduled',
+                  },
+                  {
+                    'id': 'lesson-pending',
+                    'scheduledAt': '2026-08-05T10:00:00.000Z',
+                    'lifecycleState': 'settlement_pending',
                   },
                 ],
               },
@@ -216,6 +237,22 @@ void main() {
     expect(find.text('Активен · Центр'), findsOneWidget);
     expect(find.textContaining('01.08.2026'), findsOneWidget);
     expect(find.text('Забронировано'), findsOneWidget);
+    expect(find.text('Завершено'), findsOneWidget);
+    expect(find.text('Отменено'), findsOneWidget);
+    expect(find.text('Перенесено'), findsOneWidget);
+    expect(find.text('Нужно проверить расчёт'), findsOneWidget);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.cancel_outlined)).color,
+      AppColor.danger,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.swap_horiz_rounded)).color,
+      AppColor.text2,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.hourglass_top_rounded)).color,
+      AppColor.warning,
+    );
     expect(find.text('+79990000000'), findsNothing);
     expect(find.text('Финансовый секрет'), findsNothing);
     expect(find.text('Оплаты'), findsNothing);

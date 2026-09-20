@@ -8,6 +8,7 @@ export interface PreparedStudentCreate {
   readonly email: string | null;
   readonly fullName: string;
   readonly phone: string | null;
+  readonly clearPhone?: boolean;
   readonly status: string;
   readonly leadId: string | null;
   readonly customDataPatch: Readonly<Record<string, unknown>>;
@@ -25,6 +26,7 @@ export interface PreparedStudentUpdate {
   readonly phone: string | null;
   readonly email: string | null;
   readonly clearEmail?: boolean;
+  readonly clearPhone?: boolean;
   readonly status: string | null;
   readonly customDataPatch: Readonly<Record<string, unknown>>;
   readonly requestedResponsibleId: string | undefined;

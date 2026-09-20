@@ -15,6 +15,7 @@ import { PlatformIntegrityService } from "../../platform/platform-integrity.serv
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { CrmPolicy } from "../crm.policy";
+import { FinancePaymentService } from "../finance/finance-payment.service";
 import { ActualPaymentService } from "./actual-payment.service";
 import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { InstallmentDueWorker } from "./installment-due.worker";
@@ -1035,54 +1036,58 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     });
   });
 
-  it.each(['2026-07-18', null])("persists backdated dates with expiry %s and a partial actual payment in one purchase", async (expiresAt) => {
-    const input = {
-      packageId,
-      payerStudentId: studentId,
-      fundingMode: "personal_account" as const,
-      purchaseReason: "Частичная оплата при продаже",
-      startsAt: "2026-06-18",
-      expiresAt,
-      paymentAmountMinor: "300000",
-      paymentOccurredAt: "2026-06-18T09:30:00.000Z",
-      paymentMethod: "cash" as const,
-      paymentComment: "Первый взнос",
-    };
-    const preview = await issueService.previewPurchase(
-      actors.director,
-      studentId,
-      input,
-    );
-    expect(preview).toMatchObject({
-      canCommit: true,
-      paidNowMinor: "300000",
-    });
+  it.each(["2026-07-18", null])(
+    "persists backdated dates with expiry %s and a partial actual payment in one purchase",
+    async (expiresAt) => {
+      const input = {
+        packageId,
+        payerStudentId: studentId,
+        fundingMode: "personal_account" as const,
+        purchaseReason: "Частичная оплата при продаже",
+        startsAt: "2026-06-18",
+        expiresAt,
+        paymentAmountMinor: "300000",
+        paymentOccurredAt: "2026-06-18T09:30:00.000Z",
+        paymentMethod: "cash" as const,
+        paymentComment: "Первый взнос",
+      };
+      const preview = await issueService.previewPurchase(
+        actors.director,
+        studentId,
+        input,
+      );
+      expect(preview).toMatchObject({
+        canCommit: true,
+        paidNowMinor: "300000",
+      });
 
-    const purchased = await issueService.purchase(
-      actors.director,
-      studentId,
-      { ...input, previewToken: preview.previewToken, confirm: true },
-      mutationMetadata(`partial-payment-at-sale-${expiresAt ?? 'indefinite'}`),
-    );
+      const purchased = await issueService.purchase(
+        actors.director,
+        studentId,
+        { ...input, previewToken: preview.previewToken, confirm: true },
+        mutationMetadata(
+          `partial-payment-at-sale-${expiresAt ?? "indefinite"}`,
+        ),
+      );
 
-    expect(purchased.subscription).toMatchObject({
-      startsAt: "2026-06-18",
-      expiresAt,
-    });
-    expect(purchased.balanceAtIssue).toEqual({
-      currencyCode: "RUB",
-      actualPaymentsMinor: "300000",
-      obligationsMinor: "800000",
-      netMinor: "-500000",
-    });
-    const persisted = await pool.query<{
-      amount_minor: string;
-      method: string;
-      notes: string;
-      payment_date: Date;
-      record_status: string;
-    }>(
-      `
+      expect(purchased.subscription).toMatchObject({
+        startsAt: "2026-06-18",
+        expiresAt,
+      });
+      expect(purchased.balanceAtIssue).toEqual({
+        currencyCode: "RUB",
+        actualPaymentsMinor: "300000",
+        obligationsMinor: "800000",
+        netMinor: "-500000",
+      });
+      const persisted = await pool.query<{
+        amount_minor: string;
+        method: string;
+        notes: string;
+        payment_date: Date;
+        record_status: string;
+      }>(
+        `
         select payment.amount_minor::text, payment.method, payment.notes,
           payment.payment_date,
           record.status as record_status
@@ -1091,19 +1096,20 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
           on record.id = payment.payment_record_id
         where payment.issued_subscription_id = $1
       `,
-      [purchased.subscription.id],
-    );
-    expect(persisted.rows).toHaveLength(1);
-    expect(persisted.rows[0]).toMatchObject({
-      amount_minor: "300000",
-      method: "cash",
-      notes: "Первый взнос",
-      record_status: "paid",
-    });
-    expect(persisted.rows[0]!.payment_date.toISOString()).toBe(
-      "2026-06-18T09:30:00.000Z",
-    );
-  });
+        [purchased.subscription.id],
+      );
+      expect(persisted.rows).toHaveLength(1);
+      expect(persisted.rows[0]).toMatchObject({
+        amount_minor: "300000",
+        method: "cash",
+        notes: "Первый взнос",
+        record_status: "paid",
+      });
+      expect(persisted.rows[0]!.payment_date.toISOString()).toBe(
+        "2026-06-18T09:30:00.000Z",
+      );
+    },
+  );
 
   it("corrects a paid record atomically and keeps the source in technical history", async () => {
     const scope = await commerceRepository.resolveStudentScope(
@@ -2111,6 +2117,94 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     );
     return Number(result.rows[0]!.count);
   }
+  it("routes legacy payments through canonical records and idempotency", async () => {
+    const legacy = new FinancePaymentService(
+      database,
+      new CrmPolicy(),
+      paymentLifecycle,
+    );
+    const lesson = await pool.query(
+      "insert into app.lessons(student_id,branch_id,scheduled_at,status) select id,branch_id,now(),'scheduled' from app.students where id=$1 returning id",
+      [payerStudentId],
+    );
+    const dto = {
+      studentId: payerStudentId,
+      amount: 123.45,
+      currency: "RUB",
+      paymentDate: "2026-08-07T09:00:00Z",
+      method: "cash",
+      externalId: "legacy-receipt",
+      lessonId: lesson.rows[0].id,
+    };
+    const command = mutationMetadata("legacy-adapter");
+    const first = await (legacy.createPayment as Function)(
+      actors.director,
+      dto,
+      command,
+    );
+    const replay = await (legacy.createPayment as Function)(
+      actors.director,
+      dto,
+      command,
+    );
+    expect(replay.id).toBe(first.id);
+    const canonical = await pool.query(
+      "select id from app.client_payment_records where actual_payment_id=$1",
+      [first.id],
+    );
+    expect(canonical.rows).toHaveLength(1);
+    expect(first.lessonId).toBe(lesson.rows[0].id);
+    const separate = await legacy.createPayment(
+      actors.director,
+      { ...dto, externalId: "another-receipt" },
+      mutationMetadata("legacy-other-receipt"),
+    );
+    expect(separate.id).not.toBe(first.id);
+    const pageQuery = {
+      studentId: payerStudentId,
+      from: "2026-08-07T00:00:00Z",
+      to: "2026-08-08T00:00:00Z",
+      limit: 1,
+    };
+    const page1 = await legacy.listPayments(actors.director, pageQuery);
+    expect(page1.nextCursor).toBeTruthy();
+    expect(page1.totalCount).toBe(2);
+    const page2 = await legacy.listPayments(actors.director, {
+      ...pageQuery,
+      cursor: page1.nextCursor!,
+    });
+    expect(page2.nextCursor).toBeNull();
+    expect(page2.totalAmount).toBeCloseTo(246.9);
+    expect(
+      [...page1.items, ...page2.items].map((item) => item.id).sort(),
+    ).toEqual([first.id, separate.id].sort());
+    await expect(
+      legacy.listPayments(actors.director, { cursor: "invalid" }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      legacy.createPayment(
+        actors.director,
+        { ...dto, currency: "EUR" },
+        command,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    await pool.query("update app.users set role='manager' where id=$1", [
+      actors.director.userId,
+    ]);
+    try {
+      await expect(
+        legacy.createPayment(
+          actors.director,
+          dto,
+          mutationMetadata("legacy-stale-role"),
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+    } finally {
+      await pool.query("update app.users set role='director' where id=$1", [
+        actors.director.userId,
+      ]);
+    }
+  });
 });
 
 async function createFixture(pool: Pool): Promise<{

@@ -12,6 +12,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ActorContext } from "../common/security/actor-context";
+import {
+  assertVersionedMutationMetadata,
+  VersionedMutationMetadata,
+} from "../platform/versioned-mutation-metadata";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { BlacklistService } from "./blacklist.service";
@@ -108,7 +112,11 @@ export class CrmLeadsController {
   async createLead(
     @CurrentActor() actor: ActorContext,
     @Body() dto: StrictCreateLeadDto,
+    @Headers("idempotency-key") idempotencyKey: string,
+    @Headers("x-request-id") requestId: string,
   ) {
+    const metadata: VersionedMutationMetadata = { idempotencyKey, requestId };
+    assertVersionedMutationMetadata(metadata);
     const validated = await this.clientWrites.validateLeadCreate(dto);
     return this.leads.createLead(
       actor,
@@ -123,6 +131,7 @@ export class CrmLeadsController {
           : undefined,
       },
       validated,
+      metadata,
     );
   }
 

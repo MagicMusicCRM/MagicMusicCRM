@@ -28,7 +28,7 @@ void main() {
   );
 
   testWidgets(
-    'desktop section root omits the redundant history and title bar',
+    'desktop section root has one-click search in the page header, not tabs',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(1200, 800);
@@ -37,6 +37,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
             accountWorkspaceStoreProvider.overrideWithValue(
               AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
             ),
@@ -51,11 +52,110 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(MagicContextBar), findsNothing);
+      expect(find.byType(MagicContextBar), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(MagicContextBar),
+          matching: find.byType(TextField),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('global-people-search')), findsNothing);
       expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
       expect(find.text('Корневой экран'), findsOneWidget);
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('people-search-results')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('workspace-new-tab')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('people-search-results')), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(tester.takeException(), isNull);
     },
   );
+
+  for (final width in [840.0, 1024.0, 1578.0]) {
+    testWidgets('desktop search fits header at $width with enlarged text', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 850);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
+            accountWorkspaceStoreProvider.overrideWithValue(
+              AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+            ),
+          ],
+          child: MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: Size(width, 850),
+                textScaler: TextScaler.linear(1.5),
+              ),
+              child: ProductionWorkspaceHost(
+                snapshot: snapshot,
+                tabBuilder: (_, tab) => const Text('Содержимое'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final field = find.byKey(const ValueKey('global-people-search-field'));
+      final bounds = tester.getRect(field);
+      expect(bounds.right, lessThanOrEqualTo(width));
+      expect(bounds.width, inInclusiveRange(220, 320));
+      expect(bounds.top, greaterThanOrEqualTo(52));
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('people-search-results')))
+            .right,
+        lessThanOrEqualTo(width),
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('phone retains the search button and its existing dialog', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: ProductionWorkspaceHost(
+            snapshot: snapshot,
+            tabBuilder: (_, tab) => const Text('Содержимое'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(MagicContextBar), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('global-people-search')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('desktop production content inherits the Material body style', (
     tester,
@@ -1001,7 +1101,7 @@ CapabilitySnapshot _workspaceSnapshot(
   accountId: accountId,
   role: 'manager',
   accessVersion: accessVersion,
-  capabilities: const {'crm.client.read.basic'},
+  capabilities: const {'crm.client.read.basic', 'crm.client.write'},
   scopes: const {},
 );
 

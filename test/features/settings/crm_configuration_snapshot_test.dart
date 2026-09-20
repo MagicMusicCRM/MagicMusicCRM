@@ -115,6 +115,13 @@ void main() {
       CrmConfigurationSnapshotOps.optionKey(null, 'Online', 0, used),
       'online_1_2',
     );
+
+    final cyrillicWithDigits = CrmConfigurationSnapshotOps.stableOptionKey(
+      '* Звонок на мобильный 0387',
+      6,
+    );
+    expect(cyrillicWithDigits, 'option_0387_7');
+    expect(cyrillicWithDigits, matches(RegExp(r'^[a-z][a-z0-9_]{0,63}$')));
   });
 
   test('reorder and numeric serialization remain deterministic', () {

@@ -749,28 +749,38 @@ export class ReferenceCatalogLifecycleService {
     const activeColumns = entityType === "branch_discipline"
       ? ""
       : `is_active = ${input.lifecycleState === "active" ? "true" : "false"},`;
-    const lifecycleColumns = input.lifecycleState === "active"
+    const restoring = input.lifecycleState === "active";
+    const lifecycleColumns = restoring
       ? `deleted_at = null, archived_at = null, archived_by = null,
          archive_reason = null,`
       : `deleted_at = now(), archived_at = now(), archived_by = $4,
          archive_reason = $5,`;
+    const versionParameter = restoring ? "$4" : "$6";
+    const parameters = restoring
+      ? [
+          entityId,
+          input.expectedVersion,
+          input.lifecycleState,
+          input.nextVersion,
+        ]
+      : [
+          entityId,
+          input.expectedVersion,
+          input.lifecycleState,
+          input.actorUserId,
+          input.reasonText,
+          input.nextVersion,
+        ];
     const result = await client.query(
       `update app.${table}
        set lifecycle_state = $3,
            ${activeColumns}
            ${lifecycleColumns}
-           version = $6,
+           version = ${versionParameter},
            updated_at = now()
        where id = $1 and version = $2
        returning id`,
-      [
-        entityId,
-        input.expectedVersion,
-        input.lifecycleState,
-        input.actorUserId,
-        input.reasonText,
-        input.nextVersion,
-      ],
+      parameters,
     );
     if (!result.rows[0]) {
       throw new ConflictException({

@@ -34,11 +34,18 @@ function fact(
       label: "Проведено",
       colorToken: "success",
       hourShareBasisPoints: 10_000,
+      clientDurationMode: "full",
+      teacherDurationMode: "full",
+      defaultTeacherCompensationRuleKey: "standard",
       allowedContexts: ["settle"],
       active: true,
       order: 0,
     },
-    calculation: { units, amountMinor: "0" },
+    calculation: {
+      hourShareBasisPoints: 10_000,
+      units,
+      amountMinor: "0",
+    },
   };
 }
 

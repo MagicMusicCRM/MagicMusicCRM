@@ -161,6 +161,22 @@ class _ClientFormsFakeApi extends MagicApiClient {
     }
     throw StateError('Unexpected POST $path');
   }
+
+  @override
+  Future<T> postIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) {
+    return post<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
 }
 
 Future<void> _pump(

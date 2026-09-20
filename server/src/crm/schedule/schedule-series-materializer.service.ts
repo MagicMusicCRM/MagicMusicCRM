@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
+import { assertActiveClientReferences } from "../clients/client-reference.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import {
@@ -35,6 +36,10 @@ interface ScheduleMaterializationOptions {
   includePast?: boolean;
   deferPlanReservations?: boolean;
   replaceableLineageDates?: string[];
+  outerLockContract?: {
+    prelockedKeys: string[];
+    expectedKeys: string[];
+  };
 }
 
 @Injectable()
@@ -184,6 +189,43 @@ export class ScheduleSeriesMaterializerService {
     ]);
   }
 
+  private normalizedConstraintKeys(keys: Array<string | null>) {
+    return [
+      ...new Set(
+        keys
+          .filter((key): key is string => typeof key === "string")
+          .map((key) => key.toLowerCase()),
+      ),
+    ].sort();
+  }
+
+  private assertOuterLockContract(
+    candidates: SeriesConstraintCandidate[],
+    options: ScheduleMaterializationOptions,
+  ) {
+    const contract = options.outerLockContract;
+    if (!contract || candidates.length === 0) return;
+
+    const requiredKeys = this.normalizedConstraintKeys(
+      this.seriesConstraintLockKeys(candidates),
+    );
+    const prelockedKeys = new Set(
+      this.normalizedConstraintKeys(contract.prelockedKeys),
+    );
+    const expectedKeys = this.normalizedConstraintKeys(contract.expectedKeys);
+    if (
+      requiredKeys.some((key) => !prelockedKeys.has(key)) ||
+      requiredKeys.length !== expectedKeys.length ||
+      requiredKeys.some((key, index) => key !== expectedKeys[index])
+    ) {
+      throw new ConflictException({
+        code: "SCHEDULE_SERIES_LOCK_SET_CHANGED",
+        message:
+          "Schedule series client or resource set changed during materialization.",
+      });
+    }
+  }
+
   private async assertNoScheduleSeriesConflicts(
     seriesId: string,
     executor: ScheduleQueryExecutor = this.database,
@@ -195,6 +237,9 @@ export class ScheduleSeriesMaterializerService {
       options,
     );
     const lockedKeys = this.seriesConstraintLockKeys(beforeLock);
+    // A nested legacy edit already holds the outer series lock. It must never
+    // discover and acquire a new client/resource key from that point onward.
+    this.assertOuterLockContract(beforeLock, options);
     await acquireScheduleLockKeys(executor, lockedKeys);
     await acquireScheduleSeriesLock(executor, seriesId);
 
@@ -205,21 +250,27 @@ export class ScheduleSeriesMaterializerService {
       executor,
       options,
     );
-    const normalizedLockedKeys = new Set(
-      lockedKeys
-        .filter((key): key is string => typeof key === "string")
-        .map((key) => key.toLowerCase()),
-    );
-    if (
-      this.seriesConstraintLockKeys(candidates).some(
-        (key) => key != null && !normalizedLockedKeys.has(key.toLowerCase()),
-      )
-    ) {
-      throw new ConflictException({
-        code: "SCHEDULE_SERIES_RESOURCES_CHANGED",
-        message: "Schedule series resources changed during materialization.",
-      });
+    if (options.outerLockContract) {
+      this.assertOuterLockContract(candidates, options);
+    } else {
+      const normalizedLockedKeys = new Set(
+        this.normalizedConstraintKeys(lockedKeys),
+      );
+      if (
+        this.seriesConstraintLockKeys(candidates).some(
+          (key) => key != null && !normalizedLockedKeys.has(key.toLowerCase()),
+        )
+      ) {
+        throw new ConflictException({
+          code: "SCHEDULE_SERIES_RESOURCES_CHANGED",
+          message: "Schedule series resources changed during materialization.",
+        });
+      }
     }
+    await assertActiveClientReferences(
+      executor as unknown as PoolClient,
+      candidates.flatMap((candidate) => candidate.client_refs ?? []),
+    );
 
     for (const candidate of candidates) {
       if (!candidate.teacher_id || !candidate.branch_id || !candidate.room_id) {
@@ -444,25 +495,62 @@ export class ScheduleSeriesMaterializerService {
           subscription_id, trial, duration_minutes
         )
         select lesson.id, 'student', plan.student_id, 'standard.success',
-          'subscription',
-          round(
-            lesson.duration_minutes::numeric
-              * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
-          ) / 100,
+          coalesce(choice.item->>'chargeType', 'subscription'),
+          case
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'none'
+              then 0
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'personal_account'
+              and choice.item->>'basePriceMinor' ~ '^(0|[1-9][0-9]*)$'
+              then (choice.item->>'basePriceMinor')::numeric / 100
+            when choice.item->>'chargeDurationMinutes' ~ '^[0-9]+$'
+              then (choice.item->>'chargeDurationMinutes')::numeric / 60
+            else round(
+              lesson.duration_minutes::numeric
+                * coalesce((
+                    select (client_type.item->>'hourShareBasisPoints')::numeric
+                    from jsonb_array_elements(
+                      revision.effective_snapshot->'lessonSettlementTypes'
+                    ) client_type(item)
+                    where client_type.item->>'stableKey' =
+                      choice.item->>'settlementTypeKey'
+                    limit 1
+                  ), (settlement.item->>'hourShareBasisPoints')::numeric) / 6000
+            ) / 100
+          end,
           case when rate.value > 0 then 'hourly' else 'none' end,
-          rate.value, coalesce(series.subscription_id, plan.subscription_id),
+          rate.value,
+          case
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'subscription'
+              then coalesce(
+                nullif(choice.item->>'subscriptionId', '')::uuid,
+                series.subscription_id,
+                plan.subscription_id
+              )
+            else null
+          end,
           false, lesson.duration_minutes
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
         join app.schedule_plans plan on plan.id = series.plan_id
+        cross join lateral (
+          select (
+            select decision.item
+            from jsonb_array_elements(coalesce(
+              series.planned_financial_decision->'clientDecisions',
+              '[]'::jsonb
+            )) decision(item)
+            where decision.item->>'clientId' = plan.student_id::text
+            limit 1
+          ) as item
+        ) choice
         join app.crm_configuration_revisions revision
           on revision.id = series.settlement_revision_id
         cross join lateral (
-          select item
+          select settlement_type.item
           from jsonb_array_elements(
             revision.effective_snapshot->'lessonSettlementTypes'
-          ) item
-          where item->>'stableKey' =
+          ) settlement_type(item)
+          where settlement_type.item->>'stableKey' =
             series.planned_financial_decision->>'settlementTypeKey'
           limit 1
         ) settlement
@@ -519,30 +607,66 @@ export class ScheduleSeriesMaterializerService {
         insert into app.lesson_snapshot_participants (
           lesson_id, student_id, charge_type, charge_value, subscription_id
         )
-        select lesson.id, participant.student_id, 'subscription',
-          round(
-            lesson.duration_minutes::numeric
-              * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
-          ) / 100,
-          participant.subscription_id
+        select lesson.id, participant.student_id,
+          coalesce(choice.item->>'chargeType', 'subscription'),
+          case
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'none'
+              then 0
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'personal_account'
+              and choice.item->>'basePriceMinor' ~ '^(0|[1-9][0-9]*)$'
+              then (choice.item->>'basePriceMinor')::numeric / 100
+            when choice.item->>'chargeDurationMinutes' ~ '^[0-9]+$'
+              then (choice.item->>'chargeDurationMinutes')::numeric / 60
+            else round(
+              lesson.duration_minutes::numeric
+                * coalesce((
+                    select (client_type.item->>'hourShareBasisPoints')::numeric
+                    from jsonb_array_elements(
+                      revision.effective_snapshot->'lessonSettlementTypes'
+                    ) client_type(item)
+                    where client_type.item->>'stableKey' =
+                      choice.item->>'settlementTypeKey'
+                    limit 1
+                  ), (settlement.item->>'hourShareBasisPoints')::numeric) / 6000
+            ) / 100
+          end,
+          case
+            when coalesce(choice.item->>'chargeType', 'subscription') = 'subscription'
+              then coalesce(
+                nullif(choice.item->>'subscriptionId', '')::uuid,
+                participant.subscription_id
+              )
+            else null
+          end
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
-        join app.crm_configuration_revisions revision
-          on revision.id = series.settlement_revision_id
-        cross join lateral (
-          select item
-          from jsonb_array_elements(
-            revision.effective_snapshot->'lessonSettlementTypes'
-          ) item
-          where item->>'stableKey' =
-            series.planned_financial_decision->>'settlementTypeKey'
-          limit 1
-        ) settlement
         join app.schedule_plan_participants participant
           on participant.plan_id = series.plan_id
          and participant.effective_from <= lesson.series_date
          and (participant.effective_until is null
            or participant.effective_until >= lesson.series_date)
+        cross join lateral (
+          select (
+            select decision.item
+            from jsonb_array_elements(coalesce(
+              series.planned_financial_decision->'clientDecisions',
+              '[]'::jsonb
+            )) decision(item)
+            where decision.item->>'clientId' = participant.student_id::text
+            limit 1
+          ) as item
+        ) choice
+        join app.crm_configuration_revisions revision
+          on revision.id = series.settlement_revision_id
+        cross join lateral (
+          select settlement_type.item
+          from jsonb_array_elements(
+            revision.effective_snapshot->'lessonSettlementTypes'
+          ) settlement_type(item)
+          where settlement_type.item->>'stableKey' =
+            series.planned_financial_decision->>'settlementTypeKey'
+          limit 1
+        ) settlement
         where lesson.id = any($1::uuid[])
         on conflict (lesson_id, student_id) do nothing
       `,
@@ -616,78 +740,25 @@ export class ScheduleSeriesMaterializerService {
     lessonIds: string[],
   ): Promise<void> {
     if (!lessonIds.length) return;
-    const planCharges = await executor.query<{
-      lesson_id: string;
-      student_id: string;
-      subscription_id: string;
-      units: string;
-    }>(
-      `
-        select snapshot.lesson_id, snapshot.client_id as student_id,
-          lesson.scheduled_at,
-          snapshot.subscription_id, snapshot.client_charge_value::text as units
-        from app.lesson_snapshots snapshot
-        join app.lessons lesson on lesson.id = snapshot.lesson_id
-        join app.schedule_series series on series.id = lesson.series_id
-        where snapshot.lesson_id = any($1::uuid[])
-          and series.plan_id is not null
-          and lesson.deleted_at is null and lesson.lifecycle_state = 'scheduled'
-          and not exists (select 1 from app.lesson_reservations existing
-            where existing.lesson_id = lesson.id and existing.subscription_id = snapshot.subscription_id
-              and existing.state in ('reserved', 'consumed'))
-          and not exists (
-            select 1 from app.lesson_settlement_plans funding_plan,
-              jsonb_array_elements(coalesce(funding_plan.decision->'clientDecisions', '[]'::jsonb)) choice
-            where funding_plan.lesson_id = lesson.id and choice->>'clientId' = snapshot.client_id::text
-              and (choice->>'chargeType' in ('personal_account', 'none')
-                or (choice->>'subscriptionId' is not null and choice->>'subscriptionId' <> snapshot.subscription_id::text))
-          )
-          and snapshot.client_charge_type = 'subscription'
-          and snapshot.client_charge_value > 0
-        union all
-        select participant.lesson_id, participant.student_id,
-          lesson.scheduled_at,
-          participant.subscription_id, participant.charge_value::text
-        from app.lesson_snapshot_participants participant
-        join app.lessons lesson on lesson.id = participant.lesson_id
-        join app.schedule_series series on series.id = lesson.series_id
-        where participant.lesson_id = any($1::uuid[])
-          and series.plan_id is not null
-          and lesson.deleted_at is null and lesson.lifecycle_state = 'scheduled'
-          and not exists (select 1 from app.lesson_reservations existing
-            where existing.lesson_id = lesson.id and existing.subscription_id = participant.subscription_id
-              and existing.state in ('reserved', 'consumed'))
-          and not exists (
-            select 1 from app.lesson_settlement_plans funding_plan,
-              jsonb_array_elements(coalesce(funding_plan.decision->'clientDecisions', '[]'::jsonb)) choice
-            where funding_plan.lesson_id = lesson.id and choice->>'clientId' = participant.student_id::text
-              and (choice->>'chargeType' in ('personal_account', 'none')
-                or (choice->>'subscriptionId' is not null and choice->>'subscriptionId' <> participant.subscription_id::text))
-          )
-          and participant.charge_type = 'subscription'
-          and participant.charge_value > 0
-        order by subscription_id, scheduled_at, lesson_id
-      `,
-      [lessonIds],
-    );
-    if (planCharges.rows.length && !this.reservations) {
-      throw new Error(
-        "SubscriptionReservationService is required for plan generation.",
-      );
+    const subscriptions = await executor.query<{ subscription_id: string }>(`
+      select subscription_id from app.lesson_snapshots
+      where lesson_id = any($1::uuid[]) and subscription_id is not null
+      union
+      select subscription_id from app.lesson_snapshot_participants
+      where lesson_id = any($1::uuid[]) and subscription_id is not null
+      union
+      select (choice->>'subscriptionId')::uuid from app.lesson_settlement_plans plan,
+        jsonb_array_elements(coalesce(plan.decision->'clientDecisions', '[]'::jsonb)) choice
+      where plan.lesson_id = any($1::uuid[]) and nullif(choice->>'subscriptionId', '') is not null
+    `, [lessonIds]);
+    if (subscriptions.rows.length && !this.reservations) {
+      throw new Error("SubscriptionReservationService is required for plan generation.");
     }
-    for (const charge of planCharges.rows) {
-      await this.reservations!.allocate(executor as PoolClient, {
-        lessonId: charge.lesson_id,
-        clientType: "student",
-        clientId: charge.student_id,
-        chargeType: "subscription",
-        subscriptionId: charge.subscription_id,
-        units: Number(charge.units),
-        allowUncovered: true,
-      });
+    if (subscriptions.rows.length) {
+      await this.reservations!.reconcile(executor as PoolClient,
+        subscriptions.rows.map((row) => row.subscription_id));
     }
   }
-
   materializePlanSeries(
     client: PoolClient,
     seriesId: string,

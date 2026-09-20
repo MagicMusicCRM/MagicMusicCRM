@@ -5,7 +5,6 @@ import { Pool } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { RealtimeBus } from "../../realtime/realtime-bus";
-import type { ConfigSnapshot } from "../crm-configuration.contracts";
 import { LessonLifecycleRepository } from "../schedule/lesson-lifecycle.repository";
 import type { CalculatedLessonClientFact } from "./lesson-settlement-facts.persistence";
 import { LessonSettlementService } from "./lesson-settlement.service";
@@ -49,11 +48,210 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("keeps partial preview, result, reservation, and immutable facts on one effective share", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      const decision = {
+        settlementTypeKey: "partially_paid_lesson",
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "60000",
+        teacherCompensationSource: "manual" as const,
+        clientDecisions: [
+          {
+            clientId: fixture.studentId,
+            chargeType: "subscription" as const,
+            subscriptionId: fixture.groupSubscriptionId,
+            chargeDurationMinutes: 15,
+          },
+          {
+            clientId: fixture.secondStudentId,
+            chargeType: "personal_account" as const,
+            basePriceMinor: "80000",
+            chargeDurationMinutes: 45,
+          },
+        ],
+      };
+      const input = {
+        context: "settle" as const,
+        reasonText: "Согласованы точные длительности участников",
+        decision,
+      };
+
+      const preview = await database.transaction((client) =>
+        service.preview(client, fixture.groupFundingLessonId, input)
+      );
+      expect(preview.clientFacts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          clientId: fixture.studentId,
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 2_500,
+          units: "0.25",
+          amountMinor: "0",
+        }),
+        expect.objectContaining({
+          clientId: fixture.secondStudentId,
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 7_500,
+          units: "0.75",
+          amountMinor: "60000",
+        }),
+      ]));
+
+      const settled = await database.transaction(async (client) => {
+        const result = await service.settle(
+          client,
+          fixture.groupFundingLessonId,
+          input,
+        );
+        await reservations.terminalize(client, result);
+        return result;
+      });
+      expect(settled.clientFacts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          clientId: fixture.studentId,
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 2_500,
+          units: "0.25",
+          amountMinor: "0",
+        }),
+        expect.objectContaining({
+          clientId: fixture.secondStudentId,
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 7_500,
+          units: "0.75",
+          amountMinor: "60000",
+        }),
+      ]));
+      const persisted = await pool.query<{
+        client_id: string;
+        settlement_type_key: string;
+        hour_share_basis_points: number;
+        units: string;
+        amount_minor: string;
+      }>(
+        `select client_id, settlement_type_key, hour_share_basis_points,
+           units::text, amount_minor::text
+         from app.lesson_client_charge_facts_effective
+         where lesson_id = $1
+         order by client_id`,
+        [fixture.groupFundingLessonId],
+      );
+      expect(persisted.rows).toEqual(expect.arrayContaining([
+        {
+          client_id: fixture.studentId,
+          settlement_type_key: "partially_paid_lesson",
+          hour_share_basis_points: 2_500,
+          units: "0.25",
+          amount_minor: "0",
+        },
+        {
+          client_id: fixture.secondStudentId,
+          settlement_type_key: "partially_paid_lesson",
+          hour_share_basis_points: 7_500,
+          units: "0.75",
+          amount_minor: "60000",
+        },
+      ]));
+      const reservation = await pool.query<{ state: string; units: string }>(
+        `select state, units::text from app.lesson_reservations
+         where lesson_id = $1 and subscription_id = $2`,
+        [fixture.groupFundingLessonId, fixture.groupSubscriptionId],
+      );
+      expect(reservation.rows[0]).toEqual({ state: "consumed", units: "0.25" });
+      expect(decision).toMatchObject({
+        settlementTypeKey: "partially_paid_lesson",
+        clientDecisions: [
+          { clientId: fixture.studentId, chargeDurationMinutes: 15 },
+          { clientId: fixture.secondStudentId, chargeDurationMinutes: 45 },
+        ],
+      });
+
+      await expect(service.settleStandalone(fixture.groupLessonId, {
+        ...input,
+        decision: {
+          ...decision,
+          clientDecisions: [
+            {
+              clientId: fixture.studentId,
+              chargeType: "personal_account",
+              basePriceMinor: "80000",
+              chargeDurationMinutes: 61,
+            },
+            {
+              clientId: fixture.secondStudentId,
+              chargeType: "personal_account",
+              basePriceMinor: "80000",
+              chargeDurationMinutes: 30,
+            },
+          ],
+        },
+      })).rejects.toMatchObject({
+        status: 422,
+        response: { code: "PARTIAL_DURATION_EXCEEDS_LESSON" },
+      });
+      const invalidFacts = await pool.query<{ count: number }>(
+        `select count(*)::int as count from app.lesson_client_charge_facts
+         where lesson_id = $1`,
+        [fixture.groupLessonId],
+      );
+      expect(invalidFacts.rows[0]?.count).toBe(0);
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("executes an explicit percent value without synthesizing full credited minutes", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      const decision = await database.transaction((client) =>
+        service.resolvePlannedDecision(client, {
+          branchId: fixture.branchId,
+          durationMinutes: 60,
+          decision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "percent",
+            teacherCompensationValueMinor: "5000",
+            teacherCompensationSource: "manual",
+            clientDecisions: [{ clientId: fixture.studentId }],
+          },
+          requiredClientIds: [fixture.studentId],
+          actorUserId: fixture.managerId,
+          authorization: {
+            actor: { userId: fixture.managerId, role: "director" },
+            capabilityKey: "config.commerce.manage",
+          },
+          reasonText: "Половина стандартной ставки",
+        })
+      );
+      expect(decision).toMatchObject({
+        teacherCompensationRuleKey: "percent",
+        teacherCompensationValueMinor: "5000",
+        teacherCompensationSource: "manual",
+      });
+      expect(decision.teacherCreditedDurationMinutes).toBeUndefined();
+
+      const settled = await service.settleStandalone(fixture.fixedLessonId, {
+        context: "settle",
+        decision,
+        reasonText: "Половина стандартной ставки",
+      });
+      expect(settled.teacherFact).toMatchObject({
+        compensationRuleKey: "percent",
+        compensationActualValue: "5000",
+        amountMinor: "35000",
+        compensationSource: "manual",
+      });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
   it("persists personal-account payer pricing, replays exactly and transfers only effective debits on correction", async () => {
     const fixture = await createFixture(pool, database);
     try {
       const decision = {
         settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+        teacherCompensationSource: "automatic" as const,
         clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.secondStudentId,
           chargeType: "personal_account" as const, basePriceMinor: "100001",
           discount: { type: "percent" as const, percent: 10, reason: "Скидка" },
@@ -76,17 +274,37 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
       const connection = await pool.connect();
       try {
         await connection.query("begin");
-        const corrected = { ...decision, clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId, chargeType: "personal_account" as const, basePriceMinor: "50000" }] };
+        const corrected = {
+          ...decision,
+          teacherCompensationSource: "manual" as const,
+          clientDecisions: [{ clientId: fixture.studentId, payerStudentId: fixture.studentId, chargeType: "personal_account" as const, basePriceMinor: "50000" }],
+        };
         const plan = await service.preparePlan(connection, fixture.branchId, corrected);
         const correctionId = randomUUID();
         await connection.query("insert into app.lesson_settlement_corrections (id, lesson_id, version, decision, settlement_revision_id, compensation_revision_id, reason_text, actor_user_id) values ($1,$2,1,$3::jsonb,$4,$5,'Исправление плательщика',$6)", [correctionId, fixture.subscriptionLessonId, JSON.stringify(corrected), plan.settlementRevisionId, plan.compensationRevisionId, fixture.managerId]);
         const result = await service.settle(connection, fixture.subscriptionLessonId, { context: "settle", decision: corrected, correction: { id: correctionId } });
         expect(result.clientFact).toMatchObject({ payerStudentId: fixture.studentId, amountMinor: "50000" });
+        expect(result.teacherFact).toMatchObject({
+          compensationOverrideReason: null,
+          compensationSource: "manual",
+        });
+        expect(result.teacherFact.compensationActualValue)
+          .toBe(result.teacherFact.compensationDefaultValue);
         const balances = await connection.query("select student_id, balance_minor::text from app.commerce_student_account_projection where student_id = any($1::uuid[])", [[fixture.studentId, fixture.secondStudentId]]);
         expect(balances.rows).toContainEqual({ student_id: fixture.studentId, balance_minor: "-50000" });
         expect(balances.rows.some((row) => row.student_id === fixture.secondStudentId && row.balance_minor !== "0")).toBe(false);
         const history = await connection.query("select count(*)::int as count from app.lesson_client_charge_facts where lesson_id=$1", [fixture.subscriptionLessonId]);
         expect(history.rows[0].count).toBe(2);
+        const teacherHistory = await connection.query(
+          `select compensation_source, supersedes_fact_id is not null as supersedes
+           from app.lesson_teacher_compensation_facts
+           where lesson_id = $1 order by created_at, id`,
+          [fixture.subscriptionLessonId],
+        );
+        expect(teacherHistory.rows).toEqual([
+          { compensation_source: "automatic", supersedes: false },
+          { compensation_source: "manual", supersedes: true },
+        ]);
       } finally { await connection.query("rollback"); connection.release(); }
     } finally { await cleanupFixture(pool, fixture); }
   });
@@ -679,24 +897,9 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     }
   });
 
-  it("persists the 0-200%/penalty/group decision and keeps its catalog snapshot", async () => {
+  it("persists group decisions and rejects the inactive penalty type", async () => {
     const fixture = await createFixture(pool, database);
     try {
-      await publishBranchCatalog(pool, fixture, 1, (snapshot) => ({
-        ...snapshot,
-        lessonSettlementTypes: snapshot.lessonSettlementTypes.map((type) =>
-          type.stableKey === "penalty_lesson"
-            ? {
-                ...type,
-                label: "Двойное занятие со штрафом",
-                colorToken: "violet",
-                hourShareBasisPoints: 20_000,
-                fixedPenaltyMinor: "250",
-              }
-            : type,
-        ),
-      }));
-
       await pool.query(
         `insert into app.lesson_reservations (lesson_id, subscription_id, units)
          values ($1, $2, 18.5)`,
@@ -711,7 +914,7 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
           },
         }),
       ).rejects.toMatchObject({
-        response: { code: "SUBSCRIPTION_CAPACITY" },
+        response: { code: "SETTLEMENT_TYPE_NOT_ALLOWED" },
       });
       const rolledBack = await pool.query<{ count: number; units: string }>(
         `select
@@ -728,31 +931,30 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
         [fixture.groupLessonId, fixture.subscriptionId],
       );
 
-      const penaltyRuns = await Promise.all(
+      const lessonRuns = await Promise.all(
         Array.from({ length: 8 }, () =>
           service.settleStandalone(fixture.subscriptionLessonId, {
             context: "settle",
             decision: {
-              settlementTypeKey: "penalty_lesson",
+              settlementTypeKey: "lesson",
               teacherCompensationRuleKey: "percent",
             },
           }),
         ),
       );
-      const penalty = penaltyRuns[0]!;
-      for (const result of penaltyRuns) expect(result).toEqual(penalty);
-      expect(penalty.clientFact).toMatchObject({
-        settlementTypeKey: "penalty_lesson",
-        settlementLabel: "Двойное занятие со штрафом",
-        settlementColorToken: "violet",
-        hourShareBasisPoints: 20_000,
-        fixedPenaltyMinor: "250",
-        units: "2.00",
-        amountMinor: "250",
+      const lesson = lessonRuns[0]!;
+      for (const result of lessonRuns) expect(result).toEqual(lesson);
+      expect(lesson.clientFact).toMatchObject({
+        settlementTypeKey: "lesson",
+        settlementLabel: "Занятие",
+        settlementColorToken: "success",
+        hourShareBasisPoints: 10_000,
+        units: "1.00",
+        amountMinor: "0",
         chargeType: "subscription",
         subscriptionId: fixture.subscriptionId,
       });
-      expect(penalty.teacherFact).toMatchObject({
+      expect(lesson.teacherFact).toMatchObject({
         compensationRuleKey: "percent",
         compensationRuleLabel: "Процент ставки",
         compensationMode: "percent",
@@ -764,7 +966,7 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
         "select units::text from app.lesson_reservations where lesson_id = $1",
         [fixture.subscriptionLessonId],
       );
-      expect(reservation.rows[0]?.units).toBe("2.00");
+      expect(reservation.rows[0]?.units).toBe("1.00");
 
       const groupDecision = {
         context: "settle" as const,
@@ -953,34 +1155,18 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
       );
       expect(released.rows[0]?.state).toBe("released");
 
-      await publishBranchCatalog(pool, fixture, 2, (snapshot) => ({
-        ...snapshot,
-        lessonSettlementTypes: snapshot.lessonSettlementTypes.map((type) =>
-          type.stableKey === "penalty_lesson"
-            ? { ...type, label: "Новое название", colorToken: "danger" }
-            : type,
-        ),
-        teacherCompensationRules: snapshot.teacherCompensationRules.map(
-          (rule) =>
-            rule.stableKey === "percent"
-              ? { ...rule, label: "Новый процент", value: "5000" }
-              : rule,
-        ),
-      }));
       const replay = await service.settleStandalone(
         fixture.subscriptionLessonId,
         {
           context: "settle",
           decision: {
-            settlementTypeKey: "penalty_lesson",
+            settlementTypeKey: "lesson",
             teacherCompensationRuleKey: "percent",
           },
         },
       );
-      expect(replay).toEqual(penalty);
-      expect(replay.clientFact.settlementLabel).toBe(
-        "Двойное занятие со штрафом",
-      );
+      expect(replay).toEqual(lesson);
+      expect(replay.clientFact.settlementLabel).toBe("Занятие");
       expect(replay.teacherFact.compensationRuleLabel).toBe("Процент ставки");
     } finally {
       await cleanupFixture(pool, fixture);
@@ -990,24 +1176,6 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
   it("persists all five teacher pay rules and requires a reason for manual override", async () => {
     const fixture = await createFixture(pool, database);
     try {
-      await publishBranchCatalog(pool, fixture, 1, (snapshot) => ({
-        ...snapshot,
-        teacherCompensationRules: snapshot.teacherCompensationRules.map(
-          (rule) => {
-            if (rule.stableKey === "percent") {
-              return { ...rule, value: "6250" };
-            }
-            if (rule.stableKey === "fixed") {
-              return { ...rule, value: "85000" };
-            }
-            if (rule.stableKey === "hourly") {
-              return { ...rule, value: "120000" };
-            }
-            return rule;
-          },
-        ),
-      }));
-
       await expect(
         service.settleStandalone(fixture.fixedLessonId, {
           context: "settle",
@@ -1097,14 +1265,14 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
           compensationRuleKey: "percent",
           compensationMode: "percent",
           compensationDefaultValue: "70000",
-          compensationActualValue: "6250",
-          amountMinor: "43750",
+          compensationActualValue: "10000",
+          amountMinor: "70000",
           compensationOverrideReason: null,
         }),
         expect.objectContaining({
           compensationRuleKey: "fixed",
           compensationMode: "fixed",
-          compensationDefaultValue: "85000",
+          compensationDefaultValue: "0",
           compensationActualValue: "95000",
           amountMinor: "95000",
           compensationOverrideReason:
@@ -1113,9 +1281,9 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
         expect.objectContaining({
           compensationRuleKey: "hourly",
           compensationMode: "hourly",
-          compensationDefaultValue: "120000",
-          compensationActualValue: "120000",
-          amountMinor: "120000",
+          compensationDefaultValue: "0",
+          compensationActualValue: "0",
+          amountMinor: "0",
           compensationOverrideReason: null,
         }),
       ]);
@@ -1145,7 +1313,7 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
           compensation_rule_key: "fixed",
           compensation_rule_label: "Фиксированная сумма",
           compensation_mode: "fixed",
-          compensation_default_value: "85000",
+          compensation_default_value: "0",
           compensation_actual_value: "95000",
           compensation_override_reason:
             "Индивидуальная ставка согласована директором",
@@ -1156,10 +1324,10 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
           compensation_rule_key: "hourly",
           compensation_rule_label: "Почасовая сумма",
           compensation_mode: "hourly",
-          compensation_default_value: "120000",
-          compensation_actual_value: "120000",
+          compensation_default_value: "0",
+          compensation_actual_value: "0",
           compensation_override_reason: null,
-          amount_minor: "120000",
+          amount_minor: "0",
         },
         {
           lesson_id: fixture.noneLessonId,
@@ -1177,9 +1345,9 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
           compensation_rule_label: "Процент ставки",
           compensation_mode: "percent",
           compensation_default_value: "70000",
-          compensation_actual_value: "6250",
+          compensation_actual_value: "10000",
           compensation_override_reason: null,
-          amount_minor: "43750",
+          amount_minor: "70000",
         },
         {
           lesson_id: fixture.hourlyLessonId,
@@ -1197,36 +1365,6 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     }
   });
 });
-
-async function publishBranchCatalog(
-  pool: Pool,
-  fixture: Awaited<ReturnType<typeof createFixture>>,
-  version: number,
-  mutate: (snapshot: ConfigSnapshot) => ConfigSnapshot,
-) {
-  const school = await pool.query<{ effective_snapshot: ConfigSnapshot }>(
-    `select effective_snapshot from app.crm_configuration_revisions
-     where branch_id is null order by version desc limit 1`,
-  );
-  const snapshot = mutate(school.rows[0]!.effective_snapshot);
-  const patch = {
-    lessonSettlementTypes: snapshot.lessonSettlementTypes,
-    teacherCompensationRules: snapshot.teacherCompensationRules,
-  };
-  await pool.query(
-    `insert into app.crm_configuration_revisions (
-       branch_id, version, patch, effective_snapshot, impact, reason, created_by
-     ) values ($1, $2, $3::jsonb, $4::jsonb, '{}'::jsonb, $5, $6)`,
-    [
-      fixture.branchId,
-      version,
-      JSON.stringify(patch),
-      JSON.stringify(snapshot),
-      `Settlement catalog test v${version}`,
-      fixture.managerId,
-    ],
-  );
-}
 
 async function createFixture(
   pool: Pool,
@@ -1570,11 +1708,18 @@ function crossPayerCapacityFact(
       label: "Занятие",
       colorToken: "success",
       hourShareBasisPoints: 10_000,
+      clientDurationMode: "full",
+      teacherDurationMode: "full",
+      defaultTeacherCompensationRuleKey: "standard",
       allowedContexts: ["settle"],
       active: true,
       order: 0,
     },
-    calculation: { units: "1.00", amountMinor: "0" },
+    calculation: {
+      hourShareBasisPoints: 10_000,
+      units: "1.00",
+      amountMinor: "0",
+    },
   };
 }
 

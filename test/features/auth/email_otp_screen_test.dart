@@ -47,7 +47,8 @@ void main() {
       ),
       ['1', '2', '3', '4', '5', '6'],
     );
-    await tester.tap(find.text('Подтвердить'));
+    // Entering the sixth digit submits automatically. A later button press
+    // would intentionally submit the same code again after the first response.
     await tester.pumpAndSettle();
 
     expect(adapter.verifyRequests, 1);

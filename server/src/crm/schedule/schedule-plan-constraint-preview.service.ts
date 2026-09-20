@@ -5,6 +5,7 @@ import { DatabaseService } from "../../db/database.service";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { CrmPolicy } from "../crm.policy";
 import type {
   CreateSchedulePlanDto,
@@ -28,36 +29,18 @@ import {
   SchedulePlanOverlapAnalyzer,
   type SchedulePlanRowPreview,
 } from "./schedule-plan-overlap-analyzer";
+import type {
+  PreparedSchedulePlanRow,
+  SchedulePlanConstraintProjection,
+  SchedulePlanHistoricalOccurrence,
+  SchedulePlanHistoricalProjection,
+} from "./schedule-plan-preview.types";
+import { prepareSchedulePlanRow } from "./schedule-plan-row-settlement";
 
-export interface SchedulePlanConstraintProjection {
-  valid: boolean;
-  conflicts: ReturnType<typeof groupScheduleConflicts>;
-  rows: Array<{
-    index: number;
-    valid: boolean;
-    occurrencesChecked: number;
-    failures: SchedulePlanRowPreview["failures"];
-    suggestions: SchedulePlanRowPreview["suggestions"];
-  }>;
-  historical: SchedulePlanHistoricalProjection;
-}
-
-interface SchedulePlanHistoricalOccurrence {
-  rowIndex: number;
-  localDate: string;
-  startAt: string;
-  endAt: string;
-}
-
-interface SchedulePlanHistoricalProjection {
-  confirmRequired: boolean;
-  count: number;
-  from: string | null;
-  until: string | null;
-  occurrences: SchedulePlanHistoricalOccurrence[];
-  previewToken?: string;
-  previewExpiresAt?: string;
-}
+export type {
+  PreparedSchedulePlanRow,
+  SchedulePlanConstraintProjection,
+} from "./schedule-plan-preview.types";
 
 @Injectable()
 export class SchedulePlanConstraintPreviewService {
@@ -77,26 +60,40 @@ export class SchedulePlanConstraintPreviewService {
     dto: SchedulePlanConstraintPreviewDto,
   ): Promise<SchedulePlanConstraintProjection> {
     this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     const normalized = this.definition.normalizeCreate(dto);
     return this.database.transaction(async (client) => {
       const studentIds = this.createStudentIds(normalized);
-      await this.definition.lockAndValidate(client, {
-        planId: schedulePlanStableId(`schedule.plan.preview\0${actor.userId}`),
-        kind: normalized.kind,
-        studentId: normalized.studentId,
-        groupId: normalized.groupId,
-        subscriptionId: normalized.subscriptionId,
-        participants: normalized.participants,
-        rows: normalized.rows,
-      });
-      const authorizedRows = await this.authorizedRows(
+      await this.definition.lockAndValidate(
+        client,
+        {
+          planId: schedulePlanStableId(
+            `schedule.plan.preview\0${actor.userId}`,
+          ),
+          kind: normalized.kind,
+          studentId: normalized.studentId,
+          groupId: normalized.groupId,
+          subscriptionId: normalized.subscriptionId,
+          participants: normalized.participants,
+          rows: normalized.rows,
+        },
+        actor,
+      );
+      await this.series.assertPlanExpansionBounds(
+        client,
+        normalized.rows,
+        normalized.activeFrom,
+        normalized.activeUntil,
+      );
+      const preparedRows = await this.prepareRows(
         client,
         actor,
         normalized.rows,
+        studentIds,
       );
       const rows = await this.previewRows(
         client,
-        authorizedRows,
+        preparedRows.map((preparedRow) => preparedRow.row),
         normalized.activeFrom,
         normalized.activeUntil,
         studentIds,
@@ -128,18 +125,32 @@ export class SchedulePlanConstraintPreviewService {
     dto: UpdateSchedulePlanDto,
   ): Promise<SchedulePlanConstraintProjection> {
     this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     this.definition.assertRows(dto.rows);
     return this.database.transaction(async (client) => {
-      const prepared = await this.definition.prepareUpdate(client, planId, dto);
-      const authorizedRows = await this.authorizedRows(
+      await acquireLessonSettlementCoordinationGate(client);
+      const prepared = await this.definition.prepareUpdate(
+        client,
+        planId,
+        dto,
+        actor,
+      );
+      await this.series.assertPlanExpansionBounds(
+        client,
+        dto.rows,
+        this.updatePreviewFrom(prepared),
+        this.updatePreviewUntil(prepared),
+      );
+      const preparedRows = await this.prepareRows(
         client,
         actor,
         dto.rows,
+        prepared.studentIds,
         prepared,
       );
       const rows = await this.previewUpdateRows(
         client,
-        authorizedRows,
+        preparedRows.map((preparedRow) => preparedRow.row),
         prepared,
       );
       this.overlap.addCrossRowViolations(dto.rows, rows, prepared.studentIds);
@@ -167,15 +178,11 @@ export class SchedulePlanConstraintPreviewService {
     actor: ActorContext,
     normalized: NormalizedSchedulePlanCreate,
     dto: CreateSchedulePlanDto,
+    preparedRows: PreparedSchedulePlanRow[],
   ): Promise<boolean> {
-    const authorizedRows = await this.authorizedRows(
-      client,
-      actor,
-      normalized.rows,
-    );
     const rows = await this.previewRows(
       client,
-      authorizedRows,
+      preparedRows.map((preparedRow) => preparedRow.row),
       normalized.activeFrom,
       normalized.activeUntil,
       this.createStudentIds(normalized),
@@ -199,14 +206,13 @@ export class SchedulePlanConstraintPreviewService {
     planId: string,
     dto: UpdateSchedulePlanDto,
     prepared: PreparedSchedulePlanUpdate,
+    preparedRows: PreparedSchedulePlanRow[],
   ): Promise<boolean> {
-    const authorizedRows = await this.authorizedRows(
+    const rows = await this.previewUpdateRows(
       client,
-      actor,
-      dto.rows,
+      preparedRows.map((preparedRow) => preparedRow.row),
       prepared,
     );
-    const rows = await this.previewUpdateRows(client, authorizedRows, prepared);
     return this.assertHistoricalConfirmation(dto, rows, {
       actor,
       operation: "update",
@@ -225,32 +231,25 @@ export class SchedulePlanConstraintPreviewService {
       : normalized.participants.map((participant) => participant.studentId);
   }
 
-  private async authorizedRows(
+  async prepareRows(
     client: PoolClient,
     actor: ActorContext,
     rows: SchedulePlanRowDto[],
+    allowedClientIds: string[],
     prepared?: PreparedSchedulePlanUpdate,
-  ): Promise<SchedulePlanRowDto[]> {
-    if (this.policy.canManageTeacherCompensation(actor)) return rows;
+  ): Promise<PreparedSchedulePlanRow[]> {
     return Promise.all(
-      rows.map(async (row) => {
-        const stored = prepared?.activeSeries.find(
-          (series) => series.id === row.seriesId,
-        )?.planned_financial_decision;
-        const financialDecision = stored
-          ? {
-              ...row.financialDecision,
-              teacherCompensationRuleKey: stored.teacherCompensationRuleKey,
-              teacherCompensationValueMinor:
-                stored.teacherCompensationValueMinor,
-            }
-          : await this.settlement.applyDefaultTeacherCompensation(
-              client,
-              row.branchId,
-              row.financialDecision,
-            );
-        return { ...row, financialDecision };
-      }),
+      rows.map((row) =>
+        prepareSchedulePlanRow({
+          client,
+          actor,
+          row,
+          allowedClientIds,
+          policy: this.policy,
+          settlement: this.settlement,
+          prepared,
+        }),
+      ),
     );
   }
 
@@ -295,11 +294,6 @@ export class SchedulePlanConstraintPreviewService {
     );
     const previews: SchedulePlanRowPreview[] = [];
     for (const [index, row] of rows.entries()) {
-      await this.settlement.preparePlan(
-        client,
-        row.branchId,
-        row.financialDecision,
-      );
       previews.push({
         index,
         ...(await this.series.previewPlanRow(

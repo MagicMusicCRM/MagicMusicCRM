@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -244,7 +245,7 @@ void main() {
       await _pumpFrames(tester);
       expect(find.text('Отменить абонемент'), findsOneWidget);
       expect(
-        tester.widget<DropdownButtonFormField<String>>(reason).initialValue,
+        tester.widget<AppDropdownButtonFormField<String>>(reason).initialValue,
         'client.requested_cancel',
       );
       await _tapVisible(
@@ -260,7 +261,7 @@ void main() {
       );
       expect(find.text('Повторить'), findsOneWidget);
       expect(
-        tester.widget<DropdownButtonFormField<String>>(reason).onChanged,
+        tester.widget<AppDropdownButtonFormField<String>>(reason).onChanged,
         isNull,
       );
 

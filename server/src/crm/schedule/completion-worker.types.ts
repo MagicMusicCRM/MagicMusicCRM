@@ -1,4 +1,5 @@
 export interface LessonCompletionClaim {
+  failureCode?: string;
   lessonId: string;
   lessonVersion: number;
   scheduledEndAt: Date;
@@ -27,6 +28,7 @@ export interface LessonCompletionWorkerMetrics {
 }
 
 export interface LessonCompletionRunResult {
+  reviewRequired: number;
   claimed: number;
   completed: number;
   terminalObserved: number;

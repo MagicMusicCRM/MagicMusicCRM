@@ -58,6 +58,10 @@ import {
 } from "./dto/schedule-plan.dto";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
 import {
+  SchedulePlanRowRemovalCommandDto,
+  SchedulePlanRowRemovalPreviewDto,
+} from "./dto/schedule-plan-row-removal.dto";
+import {
   LessonSettlementPlanCommandDto,
   LessonSettlementPlanPreviewDto,
 } from "./dto/lesson-settlement-plan.dto";
@@ -66,6 +70,8 @@ import {
   LessonSettlementCorrectionPreviewDto,
 } from "./dto/lesson-settlement-correction.dto";
 import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
+import { StudentLessonTimelineQuery } from "./dto/student-lesson-timeline.query";
+import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -81,7 +87,17 @@ export class CrmScheduleController {
     private readonly v4DomainFlags: V4DomainFlagsService,
     private readonly schedulePlans: SchedulePlanService,
     private readonly settlementCorrections: LessonSettlementCorrectionService,
+    private readonly studentLessonTimelines: StudentLessonTimelineService,
   ) {}
+
+  @Get("students/:studentId/lesson-timeline")
+  studentLessonTimeline(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Query() query: StudentLessonTimelineQuery,
+  ) {
+    return this.studentLessonTimelines.list(actor, studentId, query);
+  }
 
   @Get("schedule-plans")
   listSchedulePlans(
@@ -139,6 +155,31 @@ export class CrmScheduleController {
     @Body() dto: SchedulePlanEndCommandDto,
   ) {
     return this.schedulePlans.end(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post("schedule-plans/:planId/rows/:seriesId/remove/preview")
+  previewSchedulePlanRowRemoval(
+    @CurrentActor() actor: ActorContext,
+    @Param("planId", ParseUUIDPipe) planId: string,
+    @Param("seriesId", ParseUUIDPipe) seriesId: string,
+    @Body() dto: SchedulePlanRowRemovalPreviewDto,
+  ) {
+    return this.schedulePlans.previewRemoveRow(actor, planId, seriesId, dto);
+  }
+
+  @Post("schedule-plans/:planId/rows/:seriesId/remove")
+  removeSchedulePlanRow(
+    @CurrentActor() actor: ActorContext,
+    @Param("planId", ParseUUIDPipe) planId: string,
+    @Param("seriesId", ParseUUIDPipe) seriesId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: SchedulePlanRowRemovalCommandDto,
+  ) {
+    return this.schedulePlans.removeRow(actor, planId, seriesId, dto, {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
     });

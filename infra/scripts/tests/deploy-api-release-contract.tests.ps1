@@ -167,13 +167,14 @@ Assert-Order $preMutationValidationText @(
   'candidate_image_migration_head="$(image_migration_head',
   'rollback_image_migration_head="$(image_migration_head',
   '[[ "${candidate_image_migration_head}" == "${expected_migration}" ]]',
-  '[[ "${rollback_image_migration_head}" == "${expected_current_migration}" ]]',
+  '[[ "${rollback_image_migration_head}" == "${expected_current_migration}" ||',
   'assert_override_contract',
   '"${candidate_override}" "${candidate_image}" "${candidate_image_id}"',
   'assert_override_contract',
   '"${rollback_override}" "${rollback_image}" "${rollback_image_id}"',
   'current_image_id="$(docker inspect',
-  '[[ "${current_image_id}" == "${rollback_image_id}" ]]',
+  'assert_current_image_baseline "${current_image_id}"',
+  '"$(image_migration_head "${current_image_id}" current)"',
   'caddy_container_id="$("${compose_base[@]}" ps --all -q caddy)"',
   '[[ -n "${caddy_container_id}" ]]',
   'pre_migration="$(get_migration)"',
@@ -250,7 +251,7 @@ Assert-Order $preMigrationContractText @(
   'assert_migration "${actual_migration}"',
   '"${actual_migration}" == "${candidate_image_migration_head}"',
   'assert_db_objects',
-  '"${actual_migration}" == "${rollback_image_migration_head}"'
+  '"${actual_migration}" == "${expected_current_migration:-${rollback_image_migration_head}}"'
 ) 'Pre-migration must accept only an exact rollback schema or a revalidated retained candidate schema.'
 
 $rollbackVerificationText = Get-Section `

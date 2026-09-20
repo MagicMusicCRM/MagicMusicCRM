@@ -16,6 +16,7 @@ class DesktopWorkspaceShell extends StatelessWidget {
     this.saveDirty,
     this.discardDirty,
     this.onLimitReached,
+    this.actions,
     super.key,
   });
 
@@ -25,6 +26,7 @@ class DesktopWorkspaceShell extends StatelessWidget {
   final DirtyTabSaver? saveDirty;
   final DirtyTabDiscarder? discardDirty;
   final VoidCallback? onLimitReached;
+  final Widget? actions;
 
   @override
   Widget build(BuildContext context) {
@@ -35,12 +37,19 @@ class DesktopWorkspaceShell extends StatelessWidget {
         if (state.loggedOut) return const SizedBox.shrink();
         return Column(
           children: [
-            _WorkspaceTabStrip(
-              state: state,
-              controller: controller,
-              onSelect: _select,
-              onClose: _close,
-              onLimitReached: onLimitReached,
+            Row(
+              children: [
+                Expanded(
+                  child: _WorkspaceTabStrip(
+                    state: state,
+                    controller: controller,
+                    onSelect: _select,
+                    onClose: _close,
+                    onLimitReached: onLimitReached,
+                  ),
+                ),
+                ?actions,
+              ],
             ),
             Expanded(
               child: _WorkspaceTabViewport(

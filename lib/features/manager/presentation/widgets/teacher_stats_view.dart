@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_models.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_rate_dialogs.dart';
+import 'lesson_settlement_report_dialog.dart';
 
 part 'teacher_stats_components.dart';
 
@@ -35,6 +37,7 @@ class TeacherStatsView extends StatelessWidget {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
+        ..._compensationFilters(context),
         if (!_state.usesExternalRange) ...[
           for (final preset in const ['Неделя', 'Месяц', 'Год'])
             OutlinedButton(
@@ -152,6 +155,45 @@ class TeacherStatsView extends StatelessWidget {
     );
   }
 
+  List<Widget> _compensationFilters(BuildContext context) {
+    final query = _state.query;
+    return [
+      OutlinedButton.icon(
+        onPressed: () async {
+          await showLessonSettlementReport(
+            context,
+            from: query.from,
+            to: query.to,
+            branchId: query.branchId,
+            teacherId: query.teacherId,
+            initialType: query.compensationRuleKey,
+            teacherPayments: true,
+          );
+          await controller.loadReport();
+        },
+        icon: const Icon(Icons.edit_calendar_outlined, size: 18),
+        label: const Text('Занятия и типы оплат'),
+      ),
+      _dropdown(
+        width: 220,
+        key: ValueKey('compensation-${query.compensationRuleKey}'),
+        label: 'Тип оплаты преподавателю',
+        value: query.compensationRuleKey,
+        options: const {
+          null: 'Все типы оплаты',
+          'trial_lesson': 'Пробный урок — без оплаты',
+          'none': 'Не оплачивать',
+          'standard': 'Полная стандартная ставка',
+          'percent': 'Процент ставки',
+          'fixed': 'Фиксированная сумма',
+          'hourly': 'Почасовая сумма',
+        },
+        onChanged: (value) =>
+            controller.setQuery(query.copyWith(compensationRuleKey: value)),
+      ),
+    ];
+  }
+
   Widget _dropdown({
     required double width,
     required Key key,
@@ -162,7 +204,7 @@ class TeacherStatsView extends StatelessWidget {
   }) {
     return SizedBox(
       width: width,
-      child: DropdownButtonFormField<String?>(
+      child: AppDropdownButtonFormField<String?>(
         menuMaxHeight: 256,
         key: key,
         isExpanded: true,
@@ -178,12 +220,6 @@ class TeacherStatsView extends StatelessWidget {
         onChanged: onChanged,
       ),
     );
-  }
-
-  String _teacherName(Map<String, dynamic> teacher) {
-    final value = '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
-        .trim();
-    return value.isEmpty ? 'Без имени' : value;
   }
 
   Future<void> _pickPeriod(BuildContext context) async {

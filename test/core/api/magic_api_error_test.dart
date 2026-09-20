@@ -1,7 +1,36 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 
 void main() {
+  for (final type in [
+    DioExceptionType.connectionError,
+    DioExceptionType.sendTimeout,
+    DioExceptionType.receiveTimeout,
+  ]) {
+    test('login $type never claims a business action may have been saved', () {
+      final error = MagicApiException.fromDio(
+        DioException(
+          requestOptions: RequestOptions(
+            path: '/auth/login',
+            baseUrl: 'http://127.0.0.1/api',
+            method: 'POST',
+          ),
+          type: type,
+        ),
+      );
+      expect(error.toUserMessage(), isNot(contains('могло сохраниться')));
+    });
+    test('business POST $type retains the uncertain-outcome warning', () {
+      final error = MagicApiException.fromDio(
+        DioException(
+          requestOptions: RequestOptions(path: '/crm/lessons', method: 'POST'),
+          type: type,
+        ),
+      );
+      expect(error.toUserMessage(), contains('могло сохраниться'));
+    });
+  }
   group('userErrorMessage', () {
     test('keeps safe Russian email business errors visible', () {
       for (final message in const [

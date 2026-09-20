@@ -42,7 +42,7 @@ describe("Phone review lifecycle (PostgreSQL)", () => {
     client = await pool.connect();
     await client.query("begin");
 
-    actor = { userId: randomUUID(), role: "manager" };
+    actor = { userId: randomUUID(), role: "director" };
     const profileUserId = randomUUID();
     leadId = randomUUID();
     profileId = randomUUID();
@@ -54,7 +54,7 @@ describe("Phone review lifecycle (PostgreSQL)", () => {
       `
         insert into app.users (id, email, role, profile_completed)
         values
-          ($1, $2, 'manager', true),
+          ($1, $2, 'director', true),
           ($3, $4, 'client', true)
       `,
       [

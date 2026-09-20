@@ -1,5 +1,6 @@
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { assertLessonPayers, resolveLessonFunding } from "./lesson-funding";
+import { currentSubscriptionId, subscriptionLineageSql } from "./subscription-lineage";
 import {
   ConflictException,
   UnprocessableEntityException,
@@ -8,6 +9,7 @@ import type { PoolClient } from "pg";
 import {
   calculateClientSettlement,
   calculateTeacherCompensation,
+  durationShareBasisPoints,
   minorToRubles,
 } from "./lesson-settlement.calculation";
 import {
@@ -37,21 +39,22 @@ import type {
   LessonSettlementResult,
   LessonSettlementPreview,
 } from "./lesson-settlement.port";
+import { resolveSettlementPolicy } from "./lesson-settlement-policy";
 import {
   assertCorrectionSubscriptionCapacity,
   assertLessonSubscriptionSelection,
   reserveLessonSettlementSubscriptions,
 } from "./lesson-settlement-subscription-capacity";
+import { acquireLessonSettlementLocks } from "./lesson-settlement-locks";
+import { assertAutomaticLessonAccountCapacity } from "./lesson-account-capacity";
+import { assertAutomaticLessonSubscriptionPayment } from "./lesson-subscription-payment-capacity";
 
 export async function settleLesson(
   client: PoolClient,
   lessonId: string,
   input?: LessonSettlementInput,
 ): Promise<LessonSettlementResult> {
-  await client.query(
-    "select pg_advisory_xact_lock(hashtextextended($1, 0))",
-    [`commerce:lesson-settlement:${lessonId}`],
-  );
+  await acquireLessonSettlementLocks(client, [lessonId]);
   const existing = await loadLessonSettlementFacts(client, lessonId);
   if (existing && !input?.correction) {
     if (input) {
@@ -132,6 +135,11 @@ async function calculateConfiguredLessonSettlement(
     charges,
     clientDecisions,
   );
+  if (!input.correction) {
+    for (const fact of clientFacts) {
+      if (fact.subscriptionId) fact.subscriptionId = await currentSubscriptionId(client, fact.subscriptionId);
+    }
+  }
   return { catalog, clientFacts, teacherFact: calculateConfiguredTeacherFact(source, input, catalog) };
 }
 
@@ -146,6 +154,10 @@ async function insertConfiguredLessonSettlementFacts(
     source.lesson_id,
     Boolean(input.correction),
   );
+  if (input.requireAvailableFunding) {
+    await assertAutomaticLessonAccountCapacity(client, clientFacts);
+    await assertAutomaticLessonSubscriptionPayment(client, clientFacts);
+  }
   await assertAndReserveSubscriptionCapacity(
     client,
     source.lesson_id,
@@ -223,18 +235,13 @@ function calculateConfiguredClientFacts(
   charges: LessonSettlementChargeSource[],
   decisions: Map<string, ClientDecision>,
 ): CalculatedLessonClientFact[] {
-  const settlementTypes = new Map(
-    catalog.settlement_types
-      .filter((type) => type.active)
-      .map((type) => [type.stableKey, type]),
-  );
   return charges.map((charge) =>
     calculateConfiguredClientFact(
       source,
       input,
       charge,
       decisions.get(charge.client_id),
-      settlementTypes,
+      catalog,
     ),
   );
 }
@@ -244,18 +251,28 @@ function calculateConfiguredClientFact(
   input: LessonSettlementInput,
   charge: LessonSettlementChargeSource,
   decision: ClientDecision | undefined,
-  settlementTypes: Map<
-    string,
-    LessonSettlementCatalog["settlement_types"][number]
-  >,
+  catalog: LessonSettlementCatalog,
 ): CalculatedLessonClientFact {
   const settlementKey =
     decision?.settlementTypeKey ?? input.decision.settlementTypeKey;
-  const settlement = settlementTypes.get(settlementKey);
+  const settlement = catalog.settlement_types.find(
+    (item) => item.active && item.stableKey === settlementKey,
+  );
   if (!settlement || !settlement.allowedContexts.includes(input.context)) {
     invalidLessonSettlementDecision(
       "SETTLEMENT_TYPE_NOT_ALLOWED",
       "settlementTypeKey",
+    );
+  }
+  const policy = resolveSettlementPolicy(catalog, settlementKey);
+  if (
+    policy.clientDurationMode === "manual" &&
+    decision?.chargeDurationMinutes === undefined &&
+    decision !== undefined
+  ) {
+    invalidLessonSettlementDecision(
+      "CLIENT_PARTIAL_DURATION_REQUIRED",
+      `clientDecisions.${charge.client_id}.chargeDurationMinutes`,
     );
   }
   const funding = resolveLessonFunding(charge, decision);
@@ -264,7 +281,12 @@ function calculateConfiguredClientFact(
   try {
     calculation = calculateClientSettlement({
       durationMinutes: source.duration_minutes!,
-      hourShareBasisPoints: settlement.hourShareBasisPoints,
+      hourShareBasisPoints: decision?.chargeDurationMinutes === undefined
+        ? settlement.hourShareBasisPoints
+        : durationShareBasisPoints(
+            decision.chargeDurationMinutes,
+            source.duration_minutes!,
+          ),
       fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
       chargeType,
       baseChargeMinor: funding.baseChargeMinor,
@@ -320,13 +342,25 @@ function calculateConfiguredTeacherFact(
       legacyRateRubles: source.teacher_compensation_value!,
       mode: rule.mode,
       configuredValue: rule.value,
-      overrideValue: input.decision.teacherCompensationValueMinor,
+      overrideValue:
+        rule.mode === "percent" &&
+          input.decision.teacherCreditedDurationMinutes !== undefined
+          ? durationShareBasisPoints(
+              input.decision.teacherCreditedDurationMinutes,
+              source.duration_minutes!,
+            ).toString()
+          : input.decision.teacherCompensationValueMinor,
       overrideReason: input.reasonText,
     });
   } catch (error) {
     rethrowLessonSettlementCalculation(error);
   }
-  return { rule, calculation };
+  return {
+    rule,
+    calculation,
+    compensationSource:
+      input.decision.teacherCompensationSource ?? "automatic",
+  };
 }
 
 async function assertExistingLessonSettlementDecision(
@@ -343,6 +377,14 @@ async function assertExistingLessonSettlementDecision(
       .filter((decision) => !excludedClients.has(decision.clientId))
       .map((decision) => [decision.clientId, decision]),
   );
+  for (const fact of existing.clientFacts) {
+    const selected = clients.get(fact.clientId);
+    if (!selected?.subscriptionId || !fact.subscriptionId || selected.subscriptionId === fact.subscriptionId) continue;
+    const inherited = await client.query<{ inherited: boolean }>(
+      `select $2::uuid in (${subscriptionLineageSql("$1", "ancestors")}) as inherited`,
+      [fact.subscriptionId, selected.subscriptionId]);
+    if (inherited.rows[0]?.inherited) clients.set(fact.clientId, { ...selected, subscriptionId: fact.subscriptionId });
+  }
   const ownerBySubscription = await loadExistingSubscriptionOwners(
     client,
     existing,
@@ -373,11 +415,20 @@ async function assertExistingLessonSettlementDecision(
       const pricingMatches = !decision ||
         (decision.basePriceMinor === undefined && !decision.discount && !decision.surcharge) ||
         fingerprintPayload(funding.pricingSnapshot) === fingerprintPayload(fact.pricingSnapshot);
+      const requestedHourShareBasisPoints =
+        decision?.chargeDurationMinutes === undefined
+          ? undefined
+          : durationShareBasisPoints(
+              decision.chargeDurationMinutes,
+              existing.teacherFact.durationMinutes,
+            );
       return (
         funding.chargeType === fact.chargeType &&
         funding.subscriptionId === fact.subscriptionId &&
         (funding.payerStudentId ?? fact.clientId) === (fact.payerStudentId ?? subscriptionOwner ?? fact.clientId) &&
         pricingMatches &&
+        (requestedHourShareBasisPoints === undefined ||
+          requestedHourShareBasisPoints === fact.hourShareBasisPoints) &&
         fact.settlementTypeKey ===
           (decision?.settlementTypeKey ?? input.decision.settlementTypeKey) &&
         (requiresExplicitPayer
@@ -392,6 +443,9 @@ async function assertExistingLessonSettlementDecision(
     }) &&
     existing.teacherFact.compensationRuleKey ===
       input.decision.teacherCompensationRuleKey &&
+    (input.decision.teacherCompensationSource === undefined ||
+      existing.teacherFact.compensationSource ===
+        input.decision.teacherCompensationSource) &&
     (!input.decision.teacherCompensationValueMinor ||
       existing.teacherFact.compensationActualValue ===
         input.decision.teacherCompensationValueMinor);
@@ -463,13 +517,13 @@ export function assertLessonSettleable(
   source: LessonSettlementSource,
   context?: LessonSettlementInput["context"],
 ): void {
-  const expectedState = expectedSettlementLifecycleState(context);
-  if (source.lifecycle_state !== expectedState) {
+  const expectedStates = expectedSettlementLifecycleStates(context);
+  if (!expectedStates.includes(source.lifecycle_state)) {
     throw new ConflictException({
       code: "LESSON_NOT_IN_SETTLEMENT_STATE",
       lessonId: source.lesson_id,
       state: source.lifecycle_state,
-      expectedState,
+      expectedState: expectedStates.join(" or "),
     });
   }
   if (!hasCompleteLessonSettlementSnapshot(source)) {
@@ -480,12 +534,12 @@ export function assertLessonSettleable(
   }
 }
 
-function expectedSettlementLifecycleState(
+function expectedSettlementLifecycleStates(
   context?: LessonSettlementInput["context"],
-): string {
-  if (context === "reschedule") return "rescheduled";
-  if (context === "cancel") return "cancelled";
-  return "successfully_completed";
+): string[] {
+  if (context === "reschedule") return ["scheduled", "settlement_pending"];
+  if (context === "cancel") return ["cancelled"];
+  return ["successfully_completed"];
 }
 
 function hasCompleteLessonSettlementSnapshot(

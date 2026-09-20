@@ -2,6 +2,113 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 
 void main() {
+  test('retired partial miss is unavailable even from an older server', () {
+    for (final operation in LessonDecisionOperation.values) {
+      final catalog = LessonDecisionCatalog.fromJson({
+        'settlementTypes': [
+          for (final key in [
+            'partially_paid_miss',
+            'partially_paid_lesson',
+            'paid_miss',
+          ])
+            {
+              'stableKey': key,
+              'label': key,
+              'order': 0,
+              'active': true,
+              'allowedContexts': ['cancel', 'reschedule', 'settle'],
+            },
+        ],
+      }, operation);
+      expect(catalog.settlementTypes.map((item) => item.key), [
+        'partially_paid_lesson',
+        'paid_miss',
+      ]);
+    }
+  });
+  test(
+    'cancel draft starts as unpaid miss with zero client and teacher time',
+    () {
+      final draft = LessonDecisionDraft.forCancel(
+        catalog: const LessonDecisionCatalog(
+          settlementTypes: [
+            LessonDecisionCatalogItem(
+              key: 'unpaid_miss',
+              label: 'Неоплачиваемый пропуск',
+              order: 0,
+              clientDurationMode: 'zero',
+              teacherDurationMode: 'zero',
+              defaultTeacherCompensationRuleKey: 'none',
+            ),
+          ],
+          compensationRules: [
+            LessonDecisionCatalogItem(
+              key: 'none',
+              label: 'Не оплачивать',
+              order: 0,
+              mode: 'none',
+            ),
+          ],
+        ),
+        lesson: const {'durationMinutes': 60, 'studentId': 'student-1'},
+        clients: const [
+          LessonDecisionParticipant(id: 'student-1', name: 'Анна'),
+        ],
+        existingClientDecisions: const [
+          {
+            'clientId': 'student-1',
+            'chargeType': 'subscription',
+            'payerStudentId': 'payer-1',
+            'subscriptionId': 'subscription-1',
+          },
+        ],
+      );
+
+      expect(draft.settlementTypeKey, 'unpaid_miss');
+      expect(draft.teacherCompensationRuleKey, 'none');
+      expect(draft.clientDecisions.single.chargeDurationMinutes, 0);
+      expect(draft.clientDecisions.single.chargeType, 'none');
+      expect(draft.clientDecisions.single.preferredChargeType, 'subscription');
+      expect(draft.clientDecisions.single.payerStudentId, 'payer-1');
+      expect(draft.clientDecisions.single.subscriptionId, 'subscription-1');
+      expect(draft.teacherCreditedDurationMinutes, 0);
+    },
+  );
+
+  test('cancel draft retains personal-account funding for a paid switch', () {
+    final draft = LessonDecisionDraft.forCancel(
+      catalog: const LessonDecisionCatalog(
+        settlementTypes: [
+          LessonDecisionCatalogItem(
+            key: 'unpaid_miss',
+            label: 'Неоплачиваемый пропуск',
+            order: 0,
+            clientDurationMode: 'zero',
+            teacherDurationMode: 'zero',
+            defaultTeacherCompensationRuleKey: 'none',
+          ),
+        ],
+        compensationRules: [],
+      ),
+      lesson: const {'durationMinutes': 60, 'studentId': 'student-1'},
+      clients: const [LessonDecisionParticipant(id: 'student-1', name: 'Анна')],
+      existingClientDecisions: const [
+        {
+          'clientId': 'student-1',
+          'chargeType': 'personal_account',
+          'payerStudentId': 'payer-1',
+          'basePriceMinor': '100000',
+        },
+      ],
+    );
+
+    final client = draft.clientDecisions.single;
+    expect(client.chargeType, 'none');
+    expect(client.preferredChargeType, 'personal_account');
+    expect(client.payerStudentId, 'payer-1');
+    expect(client.retainedFunding, {'basePriceMinor': '100000'});
+  });
+
   test(
     'normalizes editor pricing into the existing commercial HTTP contract',
     () {

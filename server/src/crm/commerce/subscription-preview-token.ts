@@ -14,6 +14,8 @@ const LESSON_TRANSITION_TOKEN_DOMAIN =
   "magicmusiccrm:lesson-transition-preview:v1";
 const SCHEDULE_PLAN_END_TOKEN_DOMAIN =
   "magicmusiccrm:schedule-plan-end-preview:v1";
+const SCHEDULE_PLAN_ROW_REMOVAL_TOKEN_DOMAIN =
+  "magicmusiccrm:schedule-plan-row-removal-preview:v1";
 const SCHEDULE_PLAN_HISTORY_TOKEN_DOMAIN =
   "magicmusiccrm:schedule-plan-history-preview:v1";
 
@@ -38,6 +40,18 @@ export interface SchedulePlanEndPreviewTokenPayload {
   planId: string;
   expectedVersion: number;
   lastDate: string;
+  impactFingerprint: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
+
+export interface SchedulePlanRowRemovalPreviewTokenPayload {
+  kind: "schedule.plan.row.remove";
+  actorUserId: string;
+  planId: string;
+  seriesId: string;
+  expectedVersion: number;
+  effectiveFrom: string;
   impactFingerprint: string;
   issuedAtSeconds: number;
   expiresAtSeconds: number;
@@ -142,6 +156,10 @@ export interface SubscriptionPurchasePreviewTokenPayload {
 
 export interface SubscriptionReplacePreviewTokenPayload {
   kind: "subscription.replace";
+  replacementMode?: "full_volume";
+  oldUnitCount?: string;
+  priorConsumedValueMinor?: string;
+  oldObligationMinor?: string;
   actorUserId: string;
   studentId: string;
   payerStudentId: string;
@@ -411,6 +429,32 @@ export function verifySchedulePlanEndPreview(
   );
 }
 
+export function signSchedulePlanRowRemovalPreview(
+  secret: string,
+  payload: SchedulePlanRowRemovalPreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    SCHEDULE_PLAN_ROW_REMOVAL_TOKEN_DOMAIN,
+    payload,
+    assertSchedulePlanRowRemovalPayload,
+  );
+}
+
+export function verifySchedulePlanRowRemovalPreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): SchedulePlanRowRemovalPreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    SCHEDULE_PLAN_ROW_REMOVAL_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertSchedulePlanRowRemovalPayload,
+  );
+}
+
 export function signSchedulePlanHistoryPreview(
   secret: string,
   payload: SchedulePlanHistoryPreviewTokenPayload,
@@ -498,6 +542,25 @@ function assertSchedulePlanEndPayload(
   value: unknown,
 ): asserts value is SchedulePlanEndPreviewTokenPayload {
   assertExactPayload(value, "schedule.plan.end", schedulePlanEndRules);
+}
+
+const schedulePlanRowRemovalRules: readonly PreviewPayloadRule[] = [
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["planId", (payload) => !isUuid(payload.planId)],
+  ["seriesId", (payload) => !isUuid(payload.seriesId)],
+  ["expectedVersion", (payload) => !isPositiveInteger(payload.expectedVersion)],
+  ["effectiveFrom", (payload) => !isDateOnly(payload.effectiveFrom)],
+  ["impactFingerprint", (payload) => !isFingerprint(payload.impactFingerprint)],
+];
+
+function assertSchedulePlanRowRemovalPayload(
+  value: unknown,
+): asserts value is SchedulePlanRowRemovalPreviewTokenPayload {
+  assertExactPayload(
+    value,
+    "schedule.plan.row.remove",
+    schedulePlanRowRemovalRules,
+  );
 }
 
 const schedulePlanHistoryRules: readonly PreviewPayloadRule[] = [
@@ -674,7 +737,15 @@ const replaceRules: readonly PreviewPayloadRule[] = [
 function assertReplacePayload(
   value: unknown,
 ): asserts value is SubscriptionReplacePreviewTokenPayload {
-  assertExactPayload(value, "subscription.replace", replaceRules);
+  const payload = asPreviewPayload(value);
+  const rules: readonly PreviewPayloadRule[] = payload.replacementMode === undefined ? replaceRules : [
+    ...replaceRules,
+    ["replacementMode", (p) => p.replacementMode !== "full_volume"],
+    ["oldUnitCount", (p) => !isUnits(p.oldUnitCount)],
+    ["priorConsumedValueMinor", (p) => !isMinor(p.priorConsumedValueMinor)],
+    ["oldObligationMinor", (p) => !isSignedMinor(p.oldObligationMinor)],
+  ];
+  assertExactPayload(value, "subscription.replace", rules);
 }
 
 const cancelRules: readonly PreviewPayloadRule[] = [

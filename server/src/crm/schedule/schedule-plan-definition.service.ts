@@ -5,6 +5,9 @@ import {
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
+import type { ActorContext } from "../../common/security/actor-context";
+import { assertSchedulePlanDraftScope } from "./schedule-plan-access";
+import { assertActiveClientReferences } from "../clients/client-reference.service";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import type {
   CreateSchedulePlanDto,
@@ -16,7 +19,6 @@ import type {
 import {
   type LockedSchedulePlan,
   SchedulePlanRepository,
-  type SchedulePlanSeriesSnapshot,
 } from "./schedule-plan.repository";
 import {
   assertUniqueSchedulePlanParticipants,
@@ -25,46 +27,19 @@ import {
   previousScheduleDate,
   type SchedulePlanUpdateMode,
 } from "./schedule-plan-backdate";
+import type {
+  NormalizedSchedulePlanCreate,
+  NormalizedSchedulePlanEnd,
+  PreparedSchedulePlanUpdate,
+  SchedulePlanValidationInput,
+} from "./schedule-plan-definition.types";
 
-export interface NormalizedSchedulePlanCreate {
-  kind: "individual" | "group";
-  title: string;
-  studentId: string | null;
-  groupId: string | null;
-  subscriptionId: string | null;
-  activeFrom: string;
-  activeUntil: string | null;
-  participants: SchedulePlanParticipantDto[];
-  rows: SchedulePlanRowDto[];
-}
-
-export interface PreparedSchedulePlanUpdate {
-  plan: LockedSchedulePlan;
-  mode: SchedulePlanUpdateMode;
-  participants: SchedulePlanParticipantDto[];
-  subscriptionId: string | null;
-  activeUntil: string | null;
-  studentIds: string[];
-  activeSeries: SchedulePlanSeriesSnapshot[];
-  effectiveFrom: string;
-  prefixUntil: string | null;
-}
-
-export interface SchedulePlanValidationInput {
-  planId: string;
-  kind: "individual" | "group";
-  studentId: string | null;
-  groupId: string | null;
-  subscriptionId: string | null;
-  participants: SchedulePlanParticipantDto[];
-  rows: SchedulePlanRowDto[];
-}
-
-export interface NormalizedSchedulePlanEnd {
-  expectedVersion: number;
-  lastDate: string;
-  reasonText: string;
-}
+export type {
+  NormalizedSchedulePlanCreate,
+  NormalizedSchedulePlanEnd,
+  PreparedSchedulePlanUpdate,
+  SchedulePlanValidationInput,
+} from "./schedule-plan-definition.types";
 
 export const failSchedulePlan = (code: string, fields: string[]): never => {
   throw new UnprocessableEntityException({ code, fields });
@@ -128,9 +103,9 @@ export class SchedulePlanDefinitionService {
     client: PoolClient,
     planId: string,
     dto: UpdateSchedulePlanDto,
+    actor: ActorContext,
   ): Promise<PreparedSchedulePlanUpdate> {
-    const plan = await this.repository.lock(client, planId);
-    this.assertEditable(plan, dto);
+    const plan = await this.repository.lock(client, planId, actor);
     const effectiveFrom = dto.effectiveFrom.slice(0, 10);
     let mode = initialSchedulePlanUpdateMode(plan, effectiveFrom);
     const participantsAtOldStart =
@@ -153,12 +128,11 @@ export class SchedulePlanDefinitionService {
     const activeUntil = Object.prototype.hasOwnProperty.call(dto, "activeUntil")
       ? (dto.activeUntil?.slice(0, 10) ?? null)
       : plan.active_until;
-    this.assertPeriod(effectiveFrom, activeUntil);
     const studentIds =
       plan.kind === "individual"
         ? [plan.student_id!]
         : participants.map((participant) => participant.studentId);
-    await this.lockAndValidate(client, {
+    const validation = {
       planId,
       kind: plan.kind,
       studentId: plan.student_id,
@@ -166,7 +140,12 @@ export class SchedulePlanDefinitionService {
       subscriptionId,
       participants,
       rows: dto.rows,
-    });
+    };
+    await assertSchedulePlanDraftScope(client, actor, validation);
+    const locked = await this.lockValidationBarriers(client, validation);
+    this.assertEditable(plan, dto);
+    this.assertPeriod(effectiveFrom, activeUntil);
+    await this.assertLockedSemantics(client, validation, locked);
     const activeSeries = (await this.repository.activeSeries(client, planId))
       .rows;
     mode = await prepareSchedulePlanUpdateMode({
@@ -201,10 +180,33 @@ export class SchedulePlanDefinitionService {
   async lockAndValidate(
     client: PoolClient,
     input: SchedulePlanValidationInput,
+    actor: ActorContext,
   ): Promise<void> {
+    await assertSchedulePlanDraftScope(client, actor, input);
+    const locked = await this.lockValidationBarriers(client, input);
+    await this.assertLockedSemantics(client, input, locked);
+  }
+
+  private async lockValidationBarriers(
+    client: PoolClient,
+    input: SchedulePlanValidationInput,
+  ) {
     const subscriptionIds = this.subscriptionIds(input);
     const studentIds = this.studentIds(input);
     await this.lockResources(client, input, subscriptionIds, studentIds);
+    await assertActiveClientReferences(
+      client,
+      studentIds.map((id) => ({ type: "student", id })),
+    );
+    return { subscriptionIds, studentIds };
+  }
+
+  private async assertLockedSemantics(
+    client: PoolClient,
+    input: SchedulePlanValidationInput,
+    locked: { subscriptionIds: string[]; studentIds: string[] },
+  ) {
+    const { subscriptionIds, studentIds } = locked;
     await this.assertSubscriptionAssignments(client, input, subscriptionIds);
     await this.assertResources(client, input.rows, studentIds);
     if (input.kind === "group") {

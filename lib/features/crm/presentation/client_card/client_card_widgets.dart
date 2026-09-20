@@ -49,12 +49,22 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
   // kinds (e.g. plain staff comments) get no badge.
   String? _kindLabel(Object? kind) {
     return switch (kind?.toString()) {
-      'admin_comment' => 'Админ',
-      'teacher_note' => 'Педагог',
+      'admin_comment' => 'Комментарий',
+      'teacher_note' => 'Комментарий',
       'progress' => 'Прогресс',
       _ => null,
     };
   }
+
+  String _commentAuthorRoleLabel(String role) => switch (role) {
+    'teacher' => 'Преподаватель',
+    'admin' => 'Администратор',
+    'manager' => 'Управляющий',
+    'director' => 'Директор',
+    'system_admin' => 'Системный администратор',
+    'client' => 'Клиент',
+    _ => role,
+  };
 
   /// «К занятию 11 июл» — метка комментария, оставленного к конкретному уроку.
   ///
@@ -256,6 +266,16 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
                                 ),
                               ),
                             ),
+                            if (c.authorRole != null) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                _commentAuthorRoleLabel(c.authorRole!),
+                                style: TextStyle(
+                                  color: cs.onSurfaceVariant,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
                             if (kindLabel != null) ...[
                               const SizedBox(width: 6),
                               _kindBadge(kindLabel),

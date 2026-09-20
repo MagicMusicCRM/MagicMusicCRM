@@ -1,9 +1,11 @@
 import { loadExcludedLessonParticipantIds } from "./lesson-settlement-facts.persistence";
 import { assertLessonPayers, resolveLessonFunding } from "./lesson-funding";
+import { currentSubscriptionId } from "./subscription-lineage";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import {
   calculateClientSettlement,
+  durationShareBasisPoints,
 } from "./lesson-settlement.calculation";
 import {
   assertPlannedLessonSettlementDecision,
@@ -19,6 +21,7 @@ import type {
   PreparedLessonSettlementPlan,
   StoredLessonSettlementPlan,
 } from "./lesson-settlement.port";
+import { resolveSettlementPolicy } from "./lesson-settlement-policy";
 
 interface PlanChargeSource {
   client_type: "lead" | "student";
@@ -34,8 +37,22 @@ export async function prepareLessonSettlementPlan(
   decision: LessonFinancialDecision,
   actorUserId?: string,
 ): Promise<PreparedLessonSettlementPlan> {
-  await assertLessonPayers(client, decision, actorUserId);
   const catalog = await loadLessonSettlementCatalog(client, branchId);
+  return prepareLessonSettlementPlanWithCatalog(
+    client,
+    catalog,
+    decision,
+    actorUserId,
+  );
+}
+
+export async function prepareLessonSettlementPlanWithCatalog(
+  client: PoolClient,
+  catalog: LessonSettlementCatalog,
+  decision: LessonFinancialDecision,
+  actorUserId?: string,
+): Promise<PreparedLessonSettlementPlan> {
+  await assertLessonPayers(client, decision, actorUserId);
   assertPlannedLessonSettlementDecision(catalog, decision);
   return {
     decision: JSON.parse(JSON.stringify(decision)) as LessonFinancialDecision,
@@ -76,10 +93,7 @@ export async function cloneLessonSettlementPlan(
     targetLessonId: string;
     selectedBy: string;
     reasonText?: string;
-    fallback?: {
-      branchId: string;
-      decision: LessonFinancialDecision;
-    };
+    fallback?: PreparedLessonSettlementPlan;
   },
 ): Promise<PreparedLessonSettlementPlan> {
   const source = await loadLessonSettlementPlan(
@@ -95,12 +109,7 @@ export async function cloneLessonSettlementPlan(
   }
   const prepared = source
     ? preparedPlanFromStored(source)
-    : await prepareLessonSettlementPlan(
-        client,
-        input.fallback!.branchId,
-        input.fallback!.decision,
-        input.selectedBy,
-      );
+    : input.fallback!;
   await assertLessonPayers(client, prepared.decision, input.selectedBy);
   await insertPreparedLessonSettlementPlan(client, {
     lessonId: input.targetLessonId,
@@ -202,7 +211,11 @@ export async function plannedLessonSubscriptionAllocations(
   if ((plan.decision.clientDecisions ?? []).some((item) => !knownIds.has(item.clientId))) {
     invalidLessonSettlementDecision("UNKNOWN_LESSON_CLIENT", "clientDecisions");
   }
-  return calculatePlanAllocations(charges, durationMinutes, plan, catalog);
+  const allocations = calculatePlanAllocations(charges, durationMinutes, plan, catalog);
+  for (const allocation of allocations) {
+    allocation.subscriptionId = await currentSubscriptionId(client, allocation.subscriptionId);
+  }
+  return allocations;
 }
 
 async function loadPlanAllocationSources(
@@ -251,16 +264,13 @@ function calculatePlanAllocations(
   const decisions = new Map(
     (plan.decision.clientDecisions ?? []).map((item) => [item.clientId, item]),
   );
-  const settlementTypes = new Map(
-    catalog.settlement_types.map((item) => [item.stableKey, item]),
-  );
   return charges.flatMap((charge) =>
     calculatePlanAllocation(
       charge,
       durationMinutes,
       plan.decision,
       decisions.get(charge.client_id),
-      settlementTypes,
+      catalog,
     ),
   );
 }
@@ -271,12 +281,14 @@ function calculatePlanAllocation(
   decision: LessonFinancialDecision,
   selected: NonNullable<LessonFinancialDecision["clientDecisions"]>[number]
     | undefined,
-  settlementTypes: Map<string, LessonSettlementCatalog["settlement_types"][number]>,
+  catalog: LessonSettlementCatalog,
 ): PlannedSubscriptionAllocation[] {
   const funding = resolveLessonFunding(charge, selected);
   const { chargeType, subscriptionId } = funding;
-  const settlement = settlementTypes.get(
-    selected?.settlementTypeKey ?? decision.settlementTypeKey,
+  const settlementKey = selected?.settlementTypeKey ??
+    decision.settlementTypeKey;
+  const settlement = catalog.settlement_types.find(
+    (item) => item.stableKey === settlementKey,
   );
   if (!settlement) {
     invalidLessonSettlementDecision(
@@ -284,11 +296,27 @@ function calculatePlanAllocation(
       "settlementTypeKey",
     );
   }
+  const policy = resolveSettlementPolicy(catalog, settlementKey);
+  if (
+    policy.clientDurationMode === "manual" &&
+    selected?.chargeDurationMinutes === undefined &&
+    decision.teacherCompensationSource !== undefined
+  ) {
+    invalidLessonSettlementDecision(
+      "CLIENT_PARTIAL_DURATION_REQUIRED",
+      `clientDecisions.${charge.client_id}.chargeDurationMinutes`,
+    );
+  }
   let calculated;
   try {
     calculated = calculateClientSettlement({
       durationMinutes,
-      hourShareBasisPoints: settlement.hourShareBasisPoints,
+      hourShareBasisPoints: selected?.chargeDurationMinutes === undefined
+        ? settlement.hourShareBasisPoints
+        : durationShareBasisPoints(
+            selected.chargeDurationMinutes,
+            durationMinutes,
+          ),
       fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
       chargeType,
       baseChargeMinor: funding.baseChargeMinor,

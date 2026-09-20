@@ -18,6 +18,7 @@ function createContext(
     oldStatus: "active",
     oldVersion: 3,
     oldFinalPriceMinor: "800000",
+    oldUnitCount: "8", priorConsumedValueMinor: "0", oldObligationMinor: "800000",
     oldCurrencyCode: "RUB",
     legacyLessonsUsed: "2",
     newPackage: {
@@ -82,22 +83,22 @@ describe("SubscriptionReplacementPolicy", () => {
     const context = createContext();
 
     expect(policy.calculate(context)).toEqual({
-      deltaMinor: 200000n,
-      positionMinor: 400000n,
+      deltaMinor: 400000n,
+      usedValueMinor: 200000n, remainingValueMinor: 600000n, priorConsumedValueMinor: 200000n,
+      positionMinor: 600000n,
       positionKind: "debt",
     });
     expect(policy.planReservations(context)).toEqual({
-      transferReservationIds: ["reservation-1", "reservation-2"],
-      releaseReservationIds: ["reservation-3"],
-      transferredUnits: "5",
-      releasedUnits: "1",
+      transferReservationIds: ["reservation-1", "reservation-2", "reservation-3"],
+      releaseReservationIds: [],
+      transferredUnits: "6",
+      releasedUnits: "0",
     });
     expect(
       policy.warnings(context).map((warning: { code: string }) => warning.code),
     ).toEqual([
-      "USED_UNITS_TRANSFERRED",
+      "USED_UNITS_RETAINED_IN_HISTORY",
       "FUTURE_LESSONS_PRESERVED",
-      "RESERVATIONS_RELEASED_FOR_CAPACITY",
       "ACTUAL_PAYMENTS_PRESERVED",
     ]);
   });
@@ -129,14 +130,12 @@ describe("SubscriptionReplacementPolicy", () => {
     );
   });
 
-  it("rejects a replacement volume below used units", () => {
+  it("allows a full replacement volume below previously used units", () => {
     const context = createContext({
       newPackage: { ...createContext().newPackage, unitCount: "1.99" },
     });
 
-    expect(() => policy.assertContext(context)).toThrow(
-      "Объём нового пакета не может быть меньше уже использованного.",
-    );
+    expect(() => policy.assertContext(context)).not.toThrow();
   });
 
   it("rejects stale preview token facts", () => {
@@ -175,7 +174,8 @@ describe("SubscriptionReplacementPolicy", () => {
       installments: [],
       paymentMethod: null,
       commercialRules: {
-        carriedUsedUnits: "2",
+        replacementMode: "full_volume",
+        carriedUsedUnits: "0", priorConsumedValueMinor: "200000", previousUsedUnits: "2",
         replacedFromSubscriptionId: "subscription-old",
       },
     });

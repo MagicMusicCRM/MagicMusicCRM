@@ -9,6 +9,7 @@ import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
@@ -45,6 +46,7 @@ export class LessonPlannedSettlementCommandService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     const calculated = await this.database.transaction(async (client) => {
+      await acquireLessonSettlementCoordinationGate(client);
       await client.query("savepoint lesson_planned_settlement_preview");
       try {
         return await this.calculateSettlementPlanChange(
@@ -75,6 +77,7 @@ export class LessonPlannedSettlementCommandService {
       financialPreview: calculated.financial,
       reservationPreview: calculated.reservations,
       resourceChanges: calculated.resourceChange,
+      warnings: calculated.warnings,
       previewToken: signed.token,
       previewExpiresAt: signed.expiresAt,
     };
@@ -123,6 +126,7 @@ export class LessonPlannedSettlementCommandService {
         type: "schedule.lesson.changed",
         payload: { lessonId, action: "settlement-plan-updated" },
       },
+      beforeVersionAdvance: acquireLessonSettlementCoordinationGate,
       mutate: async (client, nextVersion) => {
         const calculated = await this.calculateSettlementPlanChange(
           client,
@@ -193,20 +197,53 @@ export class LessonPlannedSettlementCommandService {
     const resources = await applyLessonResourceEdit(
       client, actor, lessonId, dto.resources, this.constraints,
     );
-    const authorizedDecision = this.policy.canManageTeacherCompensation(actor)
-      ? dto.financialDecision
+    const storedTeacherDecision = this.policy.canManageTeacherCompensation(actor)
+      ? undefined
       : await this.settlement.reuseStoredTeacherCompensation(
           client,
           lessonId,
           dto.financialDecision,
         );
-    const decision = { ...authorizedDecision, teacherRateSnapshot: resources.teacherRateSnapshot };
-    const prepared = await this.settlement.preparePlan(
-      client,
-      resources.branchId,
-      decision,
-      actor.userId,
+    const duration = await client.query<{ duration_minutes: number }>(
+      "select duration_minutes from app.lessons where id = $1",
+      [lessonId],
     );
+    const prepared = await this.settlement.resolvePlannedPlan(client, {
+      branchId: resources.branchId,
+      durationMinutes: duration.rows[0]!.duration_minutes,
+      decision: {
+        ...dto.financialDecision,
+        teacherRateSnapshot: resources.teacherRateSnapshot,
+      },
+      actorUserId: actor.userId,
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
+      reasonText: dto.reasonText,
+      requiredClientIds: resources.requiredClientIds,
+      ...(storedTeacherDecision
+        ? {
+            preservedTeacherDecision: {
+              teacherCompensationRuleKey:
+                storedTeacherDecision.teacherCompensationRuleKey,
+              teacherCompensationValueMinor:
+                storedTeacherDecision.teacherCompensationValueMinor,
+              teacherCreditedDurationMinutes:
+                storedTeacherDecision.teacherCreditedDurationMinutes,
+              teacherCompensationSource:
+                storedTeacherDecision.teacherCompensationSource,
+            },
+          }
+        : {}),
+    });
+    const warnings = await this.settlement.partialDurationWarnings(client, {
+      branchId: resources.branchId,
+      durationMinutes: duration.rows[0]!.duration_minutes,
+      decision: dto.financialDecision,
+      configurationRevisionIds: {
+        settlementRevisionId: prepared.settlementRevisionId,
+        compensationRevisionId: prepared.compensationRevisionId,
+      },
+    });
     const allocations = await this.settlement.plannedSubscriptionAllocations(
       client,
       lessonId,
@@ -216,15 +253,17 @@ export class LessonPlannedSettlementCommandService {
       ...item, payerStudentId: item.payerStudentId ?? item.clientId,
     })).sort((left, right) => left.subscriptionId.localeCompare(right.subscriptionId)));
     const branchChanged = resources.change && resources.change.before.branchId !== resources.change.after.branchId;
+    await this.reservations.lockSettlementCoverage(client, lessonId, allocations.map((item) => item.subscriptionId));
     if (branchChanged || fundingKey(previousAllocations) !== fundingKey(allocations)) {
       await this.reservations.releaseForLessons(client, [lessonId]);
-      for (const allocation of allocations) {
+    }
+    for (const allocation of [...allocations].sort((a, b) => a.subscriptionId.localeCompare(b.subscriptionId))) {
         await this.reservations.allocate(client, {
           lessonId,
           chargeType: "subscription",
           ...allocation,
+          allowUncovered: true,
         });
-      }
     }
     const financial = await this.previewPlannedFinancial(client, lessonId, dto, prepared);
     const after = await this.repository.listReservedAllocations(client, lessonId);
@@ -253,6 +292,7 @@ export class LessonPlannedSettlementCommandService {
       compensationRevisionId: prepared.compensationRevisionId,
       reservations,
       financial,
+      warnings,
       resourceChanges: resources.change,
     });
     return {
@@ -260,6 +300,7 @@ export class LessonPlannedSettlementCommandService {
       prepared,
       financial,
       reservations,
+      warnings,
       fingerprint,
       resourceChange: resources.change,
     };
@@ -269,7 +310,7 @@ export class LessonPlannedSettlementCommandService {
     client: PoolClient,
     lessonId: string,
     dto: LessonSettlementPlanPreviewDto,
-    prepared: Awaited<ReturnType<LessonSettlementService["preparePlan"]>>,
+    prepared: Awaited<ReturnType<LessonSettlementService["resolvePlannedPlan"]>>,
   ) {
     await client.query("savepoint lesson_planned_financial_preview");
     try {

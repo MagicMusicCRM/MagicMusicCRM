@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -66,29 +67,83 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
   required Map<String, dynamic> existing,
   required List<String> relationOptions,
   required bool isNew,
-}) async {
-  final nameCtrl = TextEditingController(
-    text: existing['name']?.toString() ?? '',
-  );
-  final phoneCtrl = TextEditingController(
-    text: existing['phone']?.toString() ?? '',
-  );
-  final emailCtrl = TextEditingController(
-    text: existing['email']?.toString() ?? '',
-  );
-  String relation = existing['relation']?.toString() ?? '';
-  final cs = Theme.of(context).colorScheme;
-  final saved = await showMagicDialog<bool>(
+}) {
+  return showMagicDialog<Map<String, dynamic>>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(isNew ? 'Новое контактное лицо' : 'Контактное лицо'),
+    builder: (_) => _ContactPersonDialog(
+      existing: existing,
+      relationOptions: relationOptions,
+      isNew: isNew,
+    ),
+  );
+}
+
+class _ContactPersonDialog extends StatefulWidget {
+  const _ContactPersonDialog({
+    required this.existing,
+    required this.relationOptions,
+    required this.isNew,
+  });
+
+  final Map<String, dynamic> existing;
+  final List<String> relationOptions;
+  final bool isNew;
+
+  @override
+  State<_ContactPersonDialog> createState() => _ContactPersonDialogState();
+}
+
+class _ContactPersonDialogState extends State<_ContactPersonDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _phone;
+  late final TextEditingController _email;
+  late String _relation;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(
+      text: widget.existing['name']?.toString() ?? '',
+    );
+    _phone = TextEditingController(
+      text: widget.existing['phone']?.toString() ?? '',
+    );
+    _email = TextEditingController(
+      text: widget.existing['email']?.toString() ?? '',
+    );
+    _relation = widget.existing['relation']?.toString() ?? '';
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    _email.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final person = <String, dynamic>{
+      'name': _name.text.trim(),
+      'relation': _relation,
+      'phone': _phone.text.trim(),
+      'email': _email.text.trim(),
+    }..removeWhere((_, value) => (value as String).isEmpty);
+    Navigator.pop(context, person);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: Text(widget.isNew ? 'Новое контактное лицо' : 'Контактное лицо'),
       content: SizedBox(
         width: 360,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: nameCtrl,
+              controller: _name,
               decoration: clientCardInputDecoration(
                 cs,
                 label: 'Имя',
@@ -96,9 +151,11 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
               ),
             ),
             const SizedBox(height: AppSpace.md),
-            DropdownButtonFormField<String>(
+            AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
-              initialValue: relationOptions.contains(relation) ? relation : '',
+              initialValue: widget.relationOptions.contains(_relation)
+                  ? _relation
+                  : '',
               isExpanded: true,
               decoration: clientCardInputDecoration(
                 cs,
@@ -107,16 +164,16 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
               ),
               items: [
                 const DropdownMenuItem(value: '', child: Text('Не выбрано')),
-                ...relationOptions.map(
+                ...widget.relationOptions.map(
                   (option) =>
                       DropdownMenuItem(value: option, child: Text(option)),
                 ),
               ],
-              onChanged: (value) => relation = value ?? '',
+              onChanged: (value) => _relation = value ?? '',
             ),
             const SizedBox(height: AppSpace.md),
             TextField(
-              controller: phoneCtrl,
+              controller: _phone,
               keyboardType: TextInputType.phone,
               decoration: clientCardInputDecoration(
                 cs,
@@ -126,7 +183,7 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
             ),
             const SizedBox(height: AppSpace.md),
             TextField(
-              controller: emailCtrl,
+              controller: _email,
               keyboardType: TextInputType.emailAddress,
               decoration: clientCardInputDecoration(
                 cs,
@@ -139,7 +196,7 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
+          onPressed: () => Navigator.pop(context),
           child: const Text('Отмена'),
         ),
         FilledButton(
@@ -147,25 +204,12 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
             backgroundColor: AppColor.gold,
             foregroundColor: AppColor.onGold,
           ),
-          onPressed: () => Navigator.pop(ctx, true),
+          onPressed: _save,
           child: const Text('Сохранить'),
         ),
       ],
-    ),
-  );
-  Map<String, dynamic>? person;
-  if (saved == true) {
-    person = <String, dynamic>{
-      'name': nameCtrl.text.trim(),
-      'relation': relation,
-      'phone': phoneCtrl.text.trim(),
-      'email': emailCtrl.text.trim(),
-    }..removeWhere((_, value) => (value as String).isEmpty);
+    );
   }
-  nameCtrl.dispose();
-  phoneCtrl.dispose();
-  emailCtrl.dispose();
-  return person;
 }
 
 /// Collected values from [showAddFamilyMemberSheet].
@@ -261,7 +305,7 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
                 ),
               ),
               const SizedBox(height: AppSpace.sm),
-              DropdownButtonFormField<String>(
+              AppDropdownButtonFormField<String>(
                 menuMaxHeight: 256,
                 initialValue: role,
                 isExpanded: true,
@@ -288,7 +332,7 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
                 ),
               ),
               const SizedBox(height: AppSpace.sm),
-              DropdownButtonFormField<String>(
+              AppDropdownButtonFormField<String>(
                 menuMaxHeight: 256,
                 initialValue: entityType,
                 isExpanded: true,

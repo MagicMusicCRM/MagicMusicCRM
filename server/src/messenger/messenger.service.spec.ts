@@ -1510,11 +1510,21 @@ describe("MessengerService", () => {
         transaction: jest.fn(async (w: (c: MockClient) => Promise<unknown>) =>
           w(client),
         ) as never,
+        query: jest.fn().mockResolvedValue({
+          rows: [
+            {
+              email: "teacher@example.com",
+              first_name: "Ирина",
+              last_name: "Петрова",
+              avatar_file_id: null,
+            },
+          ],
+        }),
       },
       policy: { canCreateDirectChat: jest.fn().mockResolvedValue(undefined) },
     });
 
-    await service.createDirectChat(
+    const result = await service.createDirectChat(
       { userId: "user-a", role: "teacher" },
       { type: "direct", targetUserId },
     );
@@ -1523,6 +1533,13 @@ describe("MessengerService", () => {
       String(call[0]).includes("values ('direct', $1)"),
     );
     expect(insert?.[1]).toEqual(["user-a", targetUserId]);
+    expect(result.partner).toEqual({
+      id: targetUserId,
+      email: "teacher@example.com",
+      firstName: "Ирина",
+      lastName: "Петрова",
+      avatarFileId: null,
+    });
   });
 
   describe("client-side staff-identity masking in administration chats", () => {

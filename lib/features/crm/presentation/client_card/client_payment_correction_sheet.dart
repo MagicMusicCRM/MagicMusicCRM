@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/utils/money_format.dart';
@@ -165,7 +166,7 @@ class _ClientPaymentCorrectionEditorState
             ),
           ),
           const SizedBox(height: AppSpace.md),
-          DropdownButtonFormField<ClientPaymentStatus>(
+          AppDropdownButtonFormField<ClientPaymentStatus>(
             menuMaxHeight: 256,
             key: const Key('payment-correction-status'),
             initialValue: _status,
@@ -197,7 +198,7 @@ class _ClientPaymentCorrectionEditorState
           ),
           if (paid) ...[
             const SizedBox(height: AppSpace.md),
-            DropdownButtonFormField<SubscriptionPaymentMethod>(
+            AppDropdownButtonFormField<SubscriptionPaymentMethod>(
               menuMaxHeight: 256,
               key: const Key('payment-correction-method'),
               initialValue: _method,

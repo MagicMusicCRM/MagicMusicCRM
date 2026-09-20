@@ -50,6 +50,12 @@ export class CommentSharingService {
         message: "Only CRM staff may change teacher comment sharing.",
       });
     }
+    if (!command.sharedWithTeacher) {
+      throw new BadRequestException({
+        code: "COMMENT_VISIBILITY_REQUIRED",
+        message: "Staff comments must remain visible to teachers.",
+      });
+    }
     if (!command.requestId || command.requestId.length > 128) {
       throw new BadRequestException({
         code: "REQUEST_ID_REQUIRED",
@@ -141,7 +147,6 @@ export class CommentSharingService {
           `
             update app.entity_comments
                set shared_with_teacher = $2,
-                   kind = case when $2 then 'teacher_note' else 'admin_comment' end,
                    version = $3
              where id = $1
                and deleted_at is null

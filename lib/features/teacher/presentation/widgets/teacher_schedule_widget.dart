@@ -37,7 +37,7 @@ class _TeacherScheduleWidgetState extends ConsumerState<TeacherScheduleWidget> {
       final profile = await ref.read(magicAuthServiceProvider).currentProfile();
       final teachers = await ref
           .read(magicCrmServiceProvider)
-          .listTeachers(q: profile.email, limit: 100);
+          .listTeachers(limit: 100);
       final teacher = teachers
           .where(
             (item) => item['profile_user_id']?.toString() == profile.userId,

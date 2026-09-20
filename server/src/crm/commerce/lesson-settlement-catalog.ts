@@ -76,7 +76,7 @@ async function loadFrozenLessonSettlementCatalog(
 
 async function loadEffectiveLessonSettlementCatalog(
   client: PoolClient,
-  branchId: string,
+  _branchId: string,
 ): Promise<LessonSettlementCatalog> {
   const result = await client.query<LessonSettlementCatalog>(
     `
@@ -84,27 +84,16 @@ async function loadEffectiveLessonSettlementCatalog(
         select id, effective_snapshot
         from app.crm_configuration_revisions
         where branch_id is null order by version desc limit 1
-      ), branch as (
-        select id, patch
-        from app.crm_configuration_revisions
-        where branch_id = $1 order by version desc limit 1
       )
       select
-        case when branch.patch ? 'lessonSettlementTypes'
-          then branch.id else school.id end as settlement_revision_id,
-        case when branch.patch ? 'teacherCompensationRules'
-          then branch.id else school.id end as compensation_revision_id,
-        coalesce(
-          branch.patch->'lessonSettlementTypes',
-          school.effective_snapshot->'lessonSettlementTypes'
-        ) as settlement_types,
-        coalesce(
-          branch.patch->'teacherCompensationRules',
-          school.effective_snapshot->'teacherCompensationRules'
-        ) as compensation_rules
-      from school left join branch on true
+        school.id as settlement_revision_id,
+        school.id as compensation_revision_id,
+        school.effective_snapshot->'lessonSettlementTypes'
+          as settlement_types,
+        school.effective_snapshot->'teacherCompensationRules'
+          as compensation_rules
+      from school
     `,
-    [branchId],
   );
   const catalog = result.rows[0];
   assertLessonSettlementCatalog(catalog, "COMMERCE_CATALOG_NOT_PUBLISHED");

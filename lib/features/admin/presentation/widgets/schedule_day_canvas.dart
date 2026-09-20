@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 part 'schedule_day_canvas_logic.dart';
 part 'schedule_day_canvas_widgets.dart';
 
-// ── Day-canvas geometry (08:00 → 00:00) ──────────────────────────────────────
+// Default working day; existing lessons can extend either edge.
 const int kDayStartHour = 8;
-const int kDayEndHour = 24; // exclusive bottom edge = 00:00
+const int kDayEndHour = 25;
+const int kDayViewportEndHour = 22;
 const double kHourHeight = 64;
 const double kTimeColWidth = 64;
 const double kMinRoomColWidth = 150; // floor before horizontal scroll engages
@@ -41,6 +44,7 @@ class ScheduleEntry {
   final String id;
   final String columnId; // room id, or [kUnassignedColumnId]
   final DateTime startLocal;
+  final DateTime? displayDate;
   final int durationMinutes;
   final String title;
   final String subtitle;
@@ -56,6 +60,7 @@ class ScheduleEntry {
     required this.id,
     required this.columnId,
     required this.startLocal,
+    this.displayDate,
     required this.durationMinutes,
     required this.title,
     required this.subtitle,
@@ -66,7 +71,24 @@ class ScheduleEntry {
     this.searchContext = false,
     this.relatedClient = false,
   });
+
+  int get startMinute {
+    final date = displayDate;
+    final dayOffset = date == null
+        ? 0
+        : DateTime.utc(
+            startLocal.year,
+            startLocal.month,
+            startLocal.day,
+          ).difference(DateTime.utc(date.year, date.month, date.day)).inDays;
+    return (dayOffset * 24 + startLocal.hour) * 60 + startLocal.minute;
+  }
 }
+
+/// Midnight lessons belong to the preceding evening in the extended grid.
+/// This is a display date only; commands retain the actual calendar date.
+DateTime scheduleDisplayDate(DateTime time) =>
+    DateTime(time.year, time.month, time.day - (time.hour < 1 ? 1 : 0));
 
 class _EntryLane {
   const _EntryLane(this.index, this.count);
@@ -75,9 +97,24 @@ class _EntryLane {
   final int count;
 }
 
+/// Keep the evening tail available, even when it contains no lessons.
+(int, int) scheduleVisibleHours(List<ScheduleEntry> entries) {
+  var start = kDayStartHour;
+  var end = kDayEndHour;
+  for (final entry in entries) {
+    final entryHour = entry.startMinute ~/ 60;
+    if (entryHour < start) start = entryHour;
+    final endMinute = entry.startMinute + entry.durationMinutes;
+    final endHour = (endMinute + 59) ~/ 60;
+    if (endHour > end) end = endHour;
+  }
+  return (start, end);
+}
+
 Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
-  List<ScheduleEntry> entries,
-) {
+  List<ScheduleEntry> entries, {
+  double minimumMinutes = 0,
+}) {
   final sorted = [...entries]
     ..sort((left, right) {
       final byStart = left.startLocal.compareTo(right.startLocal);
@@ -103,7 +140,10 @@ Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
   for (final entry in sorted) {
     if (clusterEnd != null && !entry.startLocal.isBefore(clusterEnd!)) flush();
     var lane = laneEnds.indexWhere((end) => !entry.startLocal.isBefore(end));
-    final end = entry.startLocal.add(Duration(minutes: entry.durationMinutes));
+    final duration = entry.durationMinutes < minimumMinutes
+        ? minimumMinutes.ceil()
+        : entry.durationMinutes;
+    final end = entry.startLocal.add(Duration(minutes: duration));
     if (lane < 0) {
       lane = laneEnds.length;
       laneEnds.add(end);
@@ -117,14 +157,19 @@ Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
   return result;
 }
 
-/// The day-view canvas: a read-first 2-axis time grid. Empty-slot taps create a
-/// lesson; existing cards open the explicit edit/transfer actions. Direct
-/// drag/drop mutations are intentionally absent.
+/// The day grid emits move proposals; persistence belongs to the editor flow.
 class ScheduleDayCanvas extends StatefulWidget {
+  final bool fitToViewport;
   final DateTime date; // branch-local selected day (date only)
   final List<ScheduleColumn> columns;
   final List<ScheduleEntry> entries;
   final bool allowCreate;
+  final Future<void> Function(
+    ScheduleEntry entry,
+    String roomId,
+    DateTime start,
+  )?
+  onProposeMove;
 
   /// Tap an empty hour → one-hour create.
   final void Function(String columnId, DateTime startLocal, int durationMinutes)
@@ -140,9 +185,11 @@ class ScheduleDayCanvas extends StatefulWidget {
     required this.columns,
     required this.entries,
     this.allowCreate = true,
+    this.onProposeMove,
     required this.onCreateSlot,
     required this.onOpenLesson,
     this.initialVerticalOffset = 0,
+    this.fitToViewport = true,
     this.onVerticalOffsetChanged,
   });
 
@@ -156,8 +203,20 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
   final ScrollController _bodyH = ScrollController();
   final ScrollController _headerH = ScrollController();
   final ScrollController _gutterV = ScrollController();
+  final _gridKey = GlobalKey();
+  final _viewportKey = GlobalKey();
+  Offset? _dragStart;
+  Offset? _dragEnd;
+  bool _movePending = false;
+  ScheduleEntry? _dragEntry;
+  void _updateCanvas(VoidCallback change) => setState(change);
 
-  double get _gridHeight => (kDayEndHour - kDayStartHour) * kHourHeight;
+  double _hourHeight = kHourHeight;
+  int _startHour = kDayStartHour;
+  int _endHour = kDayEndHour;
+  static const _edgeInset = 10.0;
+  double get _gridHeight =>
+      (_endHour - _startHour) * _hourHeight + 2 * _edgeInset;
 
   @override
   void initState() {
@@ -195,151 +254,190 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final cols = widget.columns;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Fill the available width when there are few rooms; fall back to a
-        // minimum width (→ horizontal scroll) only when many rooms can't fit.
-        final avail = (constraints.maxWidth - kTimeColWidth).clamp(
-          0.0,
-          double.infinity,
-        );
-        final fit = cols.isEmpty ? kMinRoomColWidth : avail / cols.length;
-        final colWidth = fit >= kMinRoomColWidth ? fit : kMinRoomColWidth;
-        final contentWidth = cols.length * colWidth;
-        return Column(
-          children: [
-            // ── Sticky header: corner + horizontally-slaved room headers ──────────
-            SizedBox(
-              height: kHeaderHeight,
-              child: Row(
-                children: [
-                  _GutterCell(
-                    width: kTimeColWidth,
-                    child: Text(
-                      'Время',
-                      style: TextStyle(
-                        color: cs.onSurfaceVariant,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      controller: _headerH,
-                      physics: const NeverScrollableScrollPhysics(),
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: contentWidth,
-                        child: Row(
-                          children: [
-                            for (final c in cols)
-                              _RoomHeader(column: c, width: colWidth),
-                          ],
+    // Synced headers and time labels must not acquire platform scrollbars.
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final range = scheduleVisibleHours(widget.entries);
+          _startHour = range.$1;
+          _endHour = range.$2;
+          final desktop = MediaQuery.sizeOf(context).width >= 720;
+          // Fill the available width when there are few rooms; fall back to a
+          // minimum width (→ horizontal scroll) only when many rooms can't fit.
+          final avail = (constraints.maxWidth - kTimeColWidth).clamp(
+            0.0,
+            double.infinity,
+          );
+          final fit = cols.isEmpty ? kMinRoomColWidth : avail / cols.length;
+          final colWidth = fit >= kMinRoomColWidth ? fit : kMinRoomColWidth;
+          final contentWidth = cols.length * colWidth;
+          final measuredHeaderHeight = _RoomHeader.heightFor(
+            context,
+            cols,
+            colWidth,
+          );
+          final headerHeight = !desktop && measuredHeaderHeight < kHeaderHeight
+              ? kHeaderHeight
+              : measuredHeaderHeight;
+          final availableHeight =
+              constraints.maxHeight - headerHeight - 1 - 2 * _edgeInset;
+          _hourHeight =
+              desktop && widget.fitToViewport && availableHeight.isFinite
+              ? (availableHeight / (kDayViewportEndHour - kDayStartHour)).clamp(
+                  MediaQuery.textScalerOf(context).scale(22).clamp(24.0, 120.0),
+                  120.0,
+                )
+              : kHourHeight;
+
+          return Column(
+            children: [
+              // ── Sticky header: corner + horizontally-slaved room headers ──────────
+              SizedBox(
+                height: headerHeight,
+                child: Row(
+                  children: [
+                    _GutterCell(
+                      width: kTimeColWidth,
+                      child: Text(
+                        'Время',
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _headerH,
+                        physics: const NeverScrollableScrollPhysics(),
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: contentWidth,
+                          child: Row(
+                            children: [
+                              for (final c in cols)
+                                _RoomHeader(column: c, width: colWidth),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Container(height: 1, color: cs.onSurfaceVariant.withAlpha(28)),
-            // ── Body: sticky gutter + 2-axis scrollable grid ──────────────────────
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Time gutter — vertically slaved to the body.
-                  SizedBox(
-                    width: kTimeColWidth,
-                    child: SingleChildScrollView(
-                      controller: _gutterV,
-                      physics: const NeverScrollableScrollPhysics(),
-                      child: SizedBox(
-                        height: _gridHeight,
-                        child: Stack(
-                          children: [
-                            for (
-                              int i = 0;
-                              i <= kDayEndHour - kDayStartHour;
-                              i++
-                            )
-                              Positioned(
-                                top: i * kHourHeight - 7,
-                                right: 8,
-                                child: Text(
-                                  '${(kDayStartHour + i) % 24 == 0 ? '00' : (kDayStartHour + i).toString().padLeft(2, '0')}:00',
-                                  style: TextStyle(
-                                    color: cs.onSurfaceVariant.withAlpha(160),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Grid body.
-                  Expanded(
-                    child: MagicDesktopScrollbar(
-                      axis: Axis.vertical,
-                      controller: _bodyV,
-                      builder: (context, verticalController) =>
-                          SingleChildScrollView(
-                            controller: verticalController,
-                            child: MagicDesktopScrollbar(
-                              axis: Axis.horizontal,
-                              controller: _bodyH,
-                              builder: (context, horizontalController) =>
-                                  SingleChildScrollView(
-                                    controller: horizontalController,
-                                    scrollDirection: Axis.horizontal,
-                                    child: SizedBox(
-                                      width: contentWidth,
-                                      height: _gridHeight,
-                                      child: Stack(
-                                        children: [
-                                          for (
-                                            int i = 0;
-                                            i <= kDayEndHour - kDayStartHour;
-                                            i++
-                                          )
-                                            Positioned(
-                                              top: i * kHourHeight,
-                                              left: 0,
-                                              width: contentWidth,
-                                              child: Container(
-                                                height: 1,
-                                                color: cs.onSurfaceVariant
-                                                    .withAlpha(16),
-                                              ),
-                                            ),
-                                          for (int i = 0; i < cols.length; i++)
-                                            Positioned(
-                                              left: i * colWidth,
-                                              top: 0,
-                                              width: colWidth,
-                                              height: _gridHeight,
-                                              child: _buildColumn(
-                                                cols[i],
-                                                colWidth,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
+              Container(height: 1, color: cs.onSurfaceVariant.withAlpha(28)),
+              // ── Body: sticky gutter + 2-axis scrollable grid ──────────────────────
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Time gutter — vertically slaved to the body.
+                    SizedBox(
+                      width: kTimeColWidth,
+                      child: SingleChildScrollView(
+                        controller: _gutterV,
+                        physics: const NeverScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: _gridHeight,
+                          child: Stack(
+                            children: [
+                              for (int i = 0; i <= _endHour - _startHour; i++)
+                                Positioned(
+                                  top:
+                                      _edgeInset +
+                                      i * _hourHeight -
+                                      MediaQuery.textScalerOf(
+                                            context,
+                                          ).scale(11) /
+                                          2,
+                                  right: 8,
+                                  child: Text(
+                                    '${((_startHour + i) % 24).toString().padLeft(2, '0')}:00',
+                                    style: TextStyle(
+                                      color: cs.onSurfaceVariant.withAlpha(160),
+                                      fontSize: 11,
+                                      height: 1,
                                     ),
                                   ),
-                            ),
+                                ),
+                            ],
                           ),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                    // Grid body.
+                    Expanded(
+                      child: MagicDesktopScrollbar(
+                        key: _viewportKey,
+                        axis: Axis.vertical,
+                        controller: _bodyV,
+                        builder: (context, verticalController) =>
+                            SingleChildScrollView(
+                              controller: verticalController,
+                              child: MagicDesktopScrollbar(
+                                axis: Axis.horizontal,
+                                controller: _bodyH,
+                                builder: (context, horizontalController) =>
+                                    SingleChildScrollView(
+                                      controller: horizontalController,
+                                      scrollDirection: Axis.horizontal,
+                                      child: SizedBox(
+                                        width: contentWidth,
+                                        height: _gridHeight,
+                                        child: Stack(
+                                          key: _gridKey,
+                                          children: [
+                                            for (
+                                              int i = 0;
+                                              i <= _endHour - _startHour;
+                                              i++
+                                            )
+                                              Positioned(
+                                                top:
+                                                    _edgeInset +
+                                                    i * _hourHeight,
+                                                left: 0,
+                                                width: contentWidth,
+                                                child: Container(
+                                                  height: 1,
+                                                  color: cs.onSurfaceVariant
+                                                      .withAlpha(16),
+                                                ),
+                                              ),
+                                            for (
+                                              int i = 0;
+                                              i < cols.length;
+                                              i++
+                                            )
+                                              Positioned(
+                                                left: i * colWidth,
+                                                top: 0,
+                                                width: colWidth,
+                                                height: _gridHeight,
+                                                child: _buildColumn(
+                                                  cols[i],
+                                                  colWidth,
+                                                ),
+                                              ),
+                                            if (_dragEntry != null)
+                                              _movePreview(colWidth),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                              ),
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }

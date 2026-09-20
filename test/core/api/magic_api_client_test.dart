@@ -325,6 +325,38 @@ void main() {
       expect(await store.read(), isNull);
     });
 
+    for (final failure in <int>[0, 503, 429, 403]) {
+      test(
+        'preserves session when refresh fails temporarily ($failure)',
+        () async {
+          final adapter = _FakeAdapter([
+            const _FakeResponse(path: '/profile/me', statusCode: 401, body: {}),
+            _FakeResponse(path: '/auth/refresh', statusCode: failure, body: {}),
+          ]);
+          const tokens = MagicApiTokens(
+            accessToken: 'old-access',
+            refreshToken: 'old-refresh',
+            tokenType: 'Bearer',
+            expiresIn: 900,
+          );
+          final store = MemoryMagicTokenStore(tokens);
+          final client = _client(adapter, store: store);
+          await expectLater(
+            client.get<Object?>('/profile/me'),
+            throwsA(
+              isA<MagicApiException>().having(
+                (e) => e.statusCode,
+                'status',
+                failure == 0 ? null : failure,
+              ),
+            ),
+          );
+          expect((await store.read())?.refreshToken, 'old-refresh');
+          expect((await store.read())?.accessToken, 'old-access');
+        },
+      );
+    }
+
     test('maps backend validation errors to typed exception', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
@@ -482,6 +514,13 @@ class _FakeAdapter implements HttpClientAdapter {
 
     final response = _responses.removeAt(0);
     expect(options.uri.path, response.path);
+    if (response.statusCode == 0) {
+      throw DioException(
+        requestOptions: options,
+        type: DioExceptionType.connectionError,
+        message: 'offline',
+      );
+    }
     if (response.delay > Duration.zero) {
       await Future<void>.delayed(response.delay);
     }

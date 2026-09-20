@@ -115,6 +115,158 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
     } finally { await cleanupFixture(pool, fixture); }
   });
 
+  it("settles a free trial and lets an admin pay the teacher without rewriting original facts", async () => {
+    const fixture = await createFixture(pool, database, settlement, "valid", {
+      trial: true, chargeType: "none", settlementTypeKey: "trial_lesson",
+    });
+    try {
+      await pool.query("update app.users set role = 'admin' where id = $1", [fixture.managerId]);
+      const worker = new LessonCompletionWorker(repository, completion);
+      expect(await worker.runOnce({ workerId: "trial-zero-pay" })).toMatchObject({ completed: 1 });
+      const original = await pool.query("select id, amount_minor::text from app.lesson_teacher_compensation_facts where lesson_id=$1", [fixture.lessonId]);
+      expect(original.rows).toHaveLength(1);
+      expect(original.rows[0].amount_minor).toBe("0");
+      const actor = { userId: fixture.managerId, role: "admin" as const };
+      const dto = { expectedVersion: 2, reasonText: "Клиент приобрёл абонемент", financialDecision: {
+        settlementTypeKey: "trial_lesson", teacherCompensationRuleKey: "standard",
+        teacherCompensationSource: "manual" as const,
+        clientDecisions: [{ clientId: fixture.studentId, chargeType: "none" as const }],
+      } };
+      const preview = await correction.preview(actor, fixture.lessonId, dto);
+      const command = { ...dto, previewToken: preview.previewToken, confirm: true as const };
+      const metadata = { idempotencyKey: `trial-pay-${randomUUID()}`, requestId: randomUUID() };
+      expect(await correction.commit(actor, fixture.lessonId, command, metadata)).toMatchObject({ version: 3, replayed: false });
+      expect(await correction.commit(actor, fixture.lessonId, command, metadata)).toMatchObject({ version: 3, replayed: true });
+      const clientFacts = await pool.query("select amount_minor::text, units::text, charge_type from app.lesson_client_charge_facts_effective where lesson_id=$1", [fixture.lessonId]);
+      expect(clientFacts.rows[0]).toMatchObject({ amount_minor: "0", charge_type: "none" });
+      expect(Number(clientFacts.rows[0].units)).toBe(0);
+      const teacher = await pool.query("select amount_minor::text from app.lesson_teacher_compensation_facts_effective where lesson_id=$1", [fixture.lessonId]);
+      expect(teacher.rows[0].amount_minor).toBe("90000");
+      const retained = await pool.query("select amount_minor::text from app.lesson_teacher_compensation_facts where id=$1", [original.rows[0].id]);
+      expect(retained.rows[0].amount_minor).toBe("0");
+    } finally { await cleanupFixture(pool, fixture); }
+  });
+
+  it.each([0, 79999])("holds automatic settlement with balance %s without charges or teacher accrual", async (balanceMinor) => {
+    const fixture = await createFixture(pool, database, settlement, "valid", { balanceMinor });
+    try {
+      const worker = new LessonCompletionWorker(repository, completion);
+      expect(await worker.runOnce({ workerId: "unfunded-completion" }))
+        .toMatchObject({ completed: 0, poison: 0, retry: 0, reviewRequired: 1 });
+      const evidence = await loadEvidence(pool, fixture.lessonId);
+      expect(evidence.lesson.lifecycle_state).toBe("settlement_pending");
+      expect(evidence.counts).toMatchObject({ client_facts: 0, teacher_facts: 0 });
+      expect((await pool.query("select state, failure_code from app.lesson_settlement_plans where lesson_id=$1", [fixture.lessonId])).rows[0])
+        .toEqual({ state: "review_required", failure_code: "LESSON_ACCOUNT_INSUFFICIENT_BALANCE" });
+      expect(await worker.runOnce({ workerId: "unfunded-retry" })).toMatchObject({ claimed: 0 });
+      expect(await worker.health()).toMatchObject({ status: "ok" });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it.each([0, 9999, 10000])("checks paid subscription units before automatic completion: paid %s", async (paidMinor) => {
+    const fixture = await createFixture(pool, database, settlement, "valid", { chargeType: "subscription" });
+    try {
+      // A twelve-lesson obligation costs 120000; one lesson needs 10000 paid.
+      await pool.query(`insert into app.subscription_obligation_facts
+        (student_id, issued_subscription_id, fact_type, direction, amount_minor, currency_code, source_type, source_ref)
+        values ($1,$2::uuid,'issue','debit',120000,'RUB','test.completion.issue',$2::uuid::text)`, [fixture.studentId, fixture.subscriptionId]);
+      if (paidMinor > 0) await pool.query(
+        "insert into app.payments(student_id, issued_subscription_id, branch_id, amount, currency) values($1,$2,$3,$4::numeric/100,'RUB')",
+        [fixture.studentId, fixture.subscriptionId, fixture.branchId, paidMinor],
+      );
+      const run = await new LessonCompletionWorker(repository, completion).runOnce({ workerId: "paid-subscription", maxAttempts: 1 });
+      const evidence = await loadEvidence(pool, fixture.lessonId);
+      if (paidMinor < 10000) {
+        expect(run).toMatchObject({ completed: 0, poison: 0, reviewRequired: 1 });
+        expect(evidence.lesson.lifecycle_state).toBe("settlement_pending");
+        expect(evidence.counts).toMatchObject({ client_facts: 0, teacher_facts: 0 });
+        expect((await pool.query("select failure_code from app.lesson_settlement_plans where lesson_id=$1", [fixture.lessonId])).rows[0].failure_code).toBe("LESSON_SUBSCRIPTION_PAYMENT_REQUIRED");
+      } else {
+        expect(run).toMatchObject({ completed: 1 });
+        expect(evidence.counts).toMatchObject({ client_facts: 1, teacher_facts: 1 });
+      }
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("automatically settles when the account covers the exact price", async () => {
+    const fixture = await createFixture(pool, database, settlement, "valid", { balanceMinor: 80000 });
+    try {
+      expect(await new LessonCompletionWorker(repository, completion).runOnce({ workerId: "exact-funding" }))
+        .toMatchObject({ completed: 1 });
+      expect((await pool.query("select balance_minor::text from app.commerce_student_account_projection where student_id=$1 and currency_code='RUB'", [fixture.studentId])).rows[0].balance_minor).toBe("0");
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("recovers a crash before funding review without losing its cause", async () => {
+    const fixture = await createFixture(pool, database, settlement, "valid", { balanceMinor: 0 });
+    try {
+      const interrupted = new LessonCompletionWorker(repository, {
+        complete: completion.complete.bind(completion),
+        markReviewRequired: async () => { throw new Error("Injected review crash"); },
+      } as unknown as LessonCompletionService);
+      await interrupted.runOnce({ workerId: "before-review-crash" });
+      const restarted = new LessonCompletionWorker(repository, completion);
+      await restarted.runOnce({ workerId: "after-review-crash" });
+      const evidence = await loadEvidence(pool, fixture.lessonId);
+      expect(evidence.lesson.lifecycle_state).toBe("settlement_pending");
+      expect(evidence.counts).toMatchObject({ client_facts: 0, teacher_facts: 0, audits: 1, outbox: 1 });
+      expect((await pool.query("select failure_code from app.lesson_settlement_plans where lesson_id=$1", [fixture.lessonId])).rows[0].failure_code)
+        .toBe("LESSON_ACCOUNT_INSUFFICIENT_BALANCE");
+      expect(await restarted.health()).toMatchObject({ status: "ok" });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("serializes two automatic completions funded by the same personal account", async () => {
+    const first = await createFixture(pool, database, settlement, "valid", { balanceMinor: 80000 });
+    const second = await createFixture(pool, database, settlement, "valid", { balanceMinor: 0 });
+    try {
+      await pool.query(
+        `insert into app.staff_branch_assignments(staff_member_id, branch_id)
+         select staff.id, $2 from app.staff_members staff
+         join app.profiles profile on profile.id=staff.profile_id where profile.user_id=$1`,
+        [second.managerId, first.branchId],
+      );
+      await database.transaction(async client => {
+        const plan = (await settlement.loadPlan(client, second.lessonId, true))!;
+        await settlement.replacePlan(client, {
+        ...plan, expectedVersion: plan.version, selectedBy: second.managerId,
+        reasonText: "Shared payer concurrency fixture",
+        decision: {
+          settlementTypeKey: "lesson", teacherCompensationRuleKey: "standard",
+          clientDecisions: [{ clientId: second.studentId, payerStudentId: first.studentId,
+            chargeType: "personal_account", basePriceMinor: "80000" }],
+        },
+        });
+      });
+      const outcomes = await Promise.all([
+        new LessonCompletionWorker(repository, completion).runOnce({ workerId: "shared-payer-a", limit: 1, maxAttempts: 1 }),
+        new LessonCompletionWorker(repository, completion).runOnce({ workerId: "shared-payer-b", limit: 1, maxAttempts: 1 }),
+      ]);
+      expect(outcomes.reduce((sum, result) => sum + result.completed, 0)).toBe(1);
+      expect(outcomes.reduce((sum, result) => sum + result.reviewRequired, 0)).toBe(1);
+      expect((await pool.query("select balance_minor::text from app.commerce_student_account_projection where student_id=$1 and currency_code='RUB'", [first.studentId])).rows[0].balance_minor).toBe("0");
+      const facts = await pool.query("select count(*)::int as count from app.lesson_teacher_compensation_facts where lesson_id=any($1::uuid[])", [[first.lessonId, second.lessonId]]);
+      expect(facts.rows[0].count).toBe(1);
+    } finally {
+      await pool.query(
+        `delete from app.staff_branch_assignments assignment using app.staff_members staff, app.profiles profile
+         where assignment.staff_member_id=staff.id and staff.profile_id=profile.id
+           and profile.user_id=$1 and assignment.branch_id=$2`,
+        [second.managerId, first.branchId],
+      );
+      await cleanupFixture(pool, second);
+      await cleanupFixture(pool, first);
+    }
+  });
+
   it("does not claim legacy lessons without an explicit settlement plan", async () => {
     const fixture = await createFixture(pool, database, settlement, "valid");
     try {
@@ -189,7 +341,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       expect(evidence.work.client_financial_fact_id).not.toBeNull();
       expect(evidence.work.teacher_financial_fact_id).not.toBeNull();
       expect(evidence.transition).toMatchObject({
-        worker_id: "completion-left",
+        worker_id: runs[0]!.completed === 1 ? "completion-left" : "completion-right",
         client_financial_fact_id: evidence.work.client_financial_fact_id,
         teacher_financial_fact_id: evidence.work.teacher_financial_fact_id,
       });
@@ -642,6 +794,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
         financialDecision: {
           settlementTypeKey: "free_lesson",
           teacherCompensationRuleKey: "none",
+          clientDecisions: [{ clientId: fixture.studentId }],
         },
         reasonText: "Сотрудник исправил ошибочный расчёт после проверки",
       };
@@ -842,8 +995,9 @@ async function createFixture(
   options: {
     trial?: boolean;
     explicitPrice?: boolean;
+    balanceMinor?: number;
     chargeType?: "subscription" | "personal_account" | "none";
-    settlementTypeKey?: "lesson" | "free_lesson";
+    settlementTypeKey?: "lesson" | "free_lesson" | "trial_lesson";
     scheduledEndOffsetSeconds?: number;
   } = {},
 ) {
@@ -919,6 +1073,13 @@ async function createFixture(
     [studentProfileId, branchId],
   );
   const studentId = student.rows[0]!.id;
+  if ((options.balanceMinor ?? 1000000) > 0) {
+    await pool.query(
+      `insert into app.payments(student_id, branch_id, amount, currency)
+       values ($1, $2, $3::numeric / 100, 'RUB')`,
+      [studentId, branchId, options.balanceMinor ?? 1000000],
+    );
+  }
   const subscription = await pool.query<{ id: string }>(
     `insert into app.subscriptions (
        student_id, lessons_total, lessons_used, starts_at, expires_at, status
@@ -998,7 +1159,7 @@ async function createFixture(
         branchId,
         decision: {
           settlementTypeKey,
-          teacherCompensationRuleKey: "standard",
+          teacherCompensationRuleKey: settlementTypeKey === "trial_lesson" ? "trial_lesson" : "standard",
           ...(options.explicitPrice ? { clientDecisions: [{ clientId: studentId, payerStudentId: studentId, chargeType: "personal_account" as const, basePriceMinor: "100001", discount: { type: "percent" as const, percent: 10, reason: "Скидка" }, surcharge: { amountMinor: "1999", reason: "Доплата" } }] } : {}),
         },
         selectedBy: managerId,
@@ -1292,6 +1453,8 @@ async function cleanupFixture(
     await client.query("delete from app.lessons where id = $1", [
       fixture.lessonId,
     ]);
+    await client.query("delete from app.subscription_obligation_facts where student_id = $1", [fixture.studentId]);
+    await client.query("delete from app.payments where student_id = $1", [fixture.studentId]);
     await client.query("delete from app.subscriptions where student_id = $1", [
       fixture.studentId,
     ]);

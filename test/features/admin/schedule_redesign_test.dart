@@ -267,7 +267,11 @@ void main() {
             await tester.pumpAndSettle();
             expectLesson('schedule-lesson-lesson-1');
           }
-          await tester.tap(find.text('По преподавателям'));
+          await tester.tap(
+            find.byKey(const ValueKey('schedule-day-mode-switcher')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('По преподавателям').last);
           await tester.pumpAndSettle();
           expectLesson('schedule-lesson-lesson-1');
         },
@@ -330,11 +334,13 @@ void main() {
       await tester.tap(find.text('День'));
       await tester.pumpAndSettle();
 
-      // The legend has exactly three color statuses and one independent type badge.
+      await tester.tap(find.byTooltip('Обозначения и занятость'));
+      await tester.pumpAndSettle();
+      // Lifecycle statuses stay separate from the compact settlement legend.
       expect(find.text('Забронировано'), findsOneWidget);
       expect(find.text('Завершено'), findsOneWidget);
       expect(find.text('Конфликт'), findsOneWidget);
-      expect(find.text('Пробное'), findsOneWidget);
+      expect(find.text('Уголки — тип списания'), findsOneWidget);
       expect(find.textContaining('Бесплат'), findsNothing);
       // …and the old per-cell instruction is gone (owner rule #10).
       expect(find.text('Нажмите,\nчтобы назначить'), findsNothing);
@@ -349,6 +355,8 @@ void main() {
       await tester.tap(find.text('День'));
       await tester.pumpAndSettle();
 
+      await tester.tap(find.byTooltip('Обозначения и занятость'));
+      await tester.pumpAndSettle();
       expect(find.text('Без занятий: 1'), findsOneWidget);
       expect(find.text('С занятиями: 1'), findsOneWidget);
       expect(find.textContaining('Свободно:'), findsNothing);
@@ -366,7 +374,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('День'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('По преподавателям'));
+      await tester.tap(
+        find.byKey(const ValueKey('schedule-day-mode-switcher')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('По преподавателям').last);
       await tester.pumpAndSettle();
 
       expect(find.byType(ScheduleTeacherTimeline), findsOneWidget);
@@ -390,7 +402,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('День'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('По преподавателям'));
+      await tester.tap(
+        find.byKey(const ValueKey('schedule-day-mode-switcher')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('По преподавателям').last);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('schedule-lesson-lesson-1')));
       await tester.pumpAndSettle();
@@ -400,7 +416,7 @@ void main() {
       expect(find.text('Новое занятие'), findsNothing);
       expect(find.text('Ольга Ученик'), findsNWidgets(2));
 
-      expect(find.text('Конфликт'), findsWidgets);
+      expect(find.text('Нужно проверить расчёт'), findsWidgets);
       expect(find.text('Изменить занятие'), findsOneWidget);
       expect(find.textContaining('Причина конфликта'), findsOneWidget);
       expect(find.textContaining('ConflictException'), findsNothing);

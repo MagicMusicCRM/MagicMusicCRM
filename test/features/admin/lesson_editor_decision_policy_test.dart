@@ -9,6 +9,76 @@ void main() {
   const policy = LessonEditorDecisionPolicy();
 
   test(
+    'trial selection clears funding and preserves a manual teacher rule',
+    () {
+      final references = _references(
+        settlements: [
+          _catalogItem(
+            key: 'trial_lesson',
+            hourShareBasisPoints: 0,
+            clientDurationMode: 'zero',
+            teacherDurationMode: 'full',
+            defaultTeacherCompensationRuleKey: 'trial_lesson',
+          ),
+        ],
+        compensationRules: [
+          _catalogItem(key: 'trial_lesson', mode: 'none'),
+          _catalogItem(key: 'standard', mode: 'standard'),
+        ],
+      );
+      final funded =
+          _draft(
+            clientChargeType: 'subscription',
+            subscriptionId: 'sub',
+          ).copyWith(
+            clientDecisions: [
+              {
+                'clientId': 'student-a',
+                'payerStudentId': 'student-a',
+                'chargeType': 'subscription',
+                'subscriptionId': 'sub',
+                'chargeDurationMinutes': 60,
+              },
+            ],
+          );
+      final trial = policy.settlementSelection(
+        funded,
+        references,
+        'trial_lesson',
+      );
+      expect(trial.isTrial, isTrue);
+      expect(trial.clientChargeType, 'none');
+      expect(trial.subscriptionId, isNull);
+      expect(trial.clientDecisions.single, {
+        'clientId': 'student-a',
+        'chargeType': 'none',
+        'chargeDurationMinutes': 0,
+      });
+      expect(trial.compensationRuleKey, 'trial_lesson');
+      expect(trial.teacherCreditedDurationMinutes, 60);
+      final manual = policy.compensationRuleSelection(
+        trial,
+        references,
+        'standard',
+      );
+      final reselected = policy.settlementSelection(
+        manual,
+        references,
+        'trial_lesson',
+      );
+      expect(reselected.compensationRuleKey, 'standard');
+      expect(reselected.teacherCompensationSource, 'manual');
+      expect(
+        policy.financialDecisionPayload(
+          reselected,
+          includeTeacherCompensation: false,
+        )['teacherCompensationRuleKey'],
+        'standard',
+      );
+    },
+  );
+
+  test(
     'payer and personal account pricing survive catalog and create payload',
     () {
       const decisions = [
@@ -137,11 +207,52 @@ void main() {
         expect(
           request.operation,
           state == 'scheduled'
-              ? LessonDecisionOperation.plannedSettlement
+              ? LessonDecisionOperation.edit
               : LessonDecisionOperation.correction,
         );
+        expect(request.lesson['id'], 'lesson-a');
         expect(request.successor, isNull);
       }
+    },
+  );
+
+  test('date or time change routes through reschedule', () {
+    final original = _draft();
+    final session = _editSession(original);
+
+    for (final movedDraft in [
+      original.copyWith(localStart: DateTime(2026, 8, 27, 13)),
+      original.copyWith(localStart: DateTime(2026, 8, 26, 14, 30)),
+    ]) {
+      final request = policy.editRequest(session: session, draft: movedDraft);
+
+      expect(request.operation, LessonDecisionOperation.reschedule);
+      expect(request.lesson['id'], 'lesson-a');
+      expect(request.successor, policy.schedulePayload(movedDraft));
+      expect(request.successorFinancialDecision, {
+        'settlementTypeKey': 'standard',
+        'teacherCompensationRuleKey': 'standard',
+      });
+    }
+  });
+
+  test(
+    'teacher-only change keeps the same lesson id and uses ordinary edit',
+    () {
+      final original = _draft();
+      final request = policy.editRequest(
+        session: _editSession(original),
+        draft: original.copyWith(teacherId: 'teacher-b'),
+      );
+
+      expect(request.operation, LessonDecisionOperation.edit);
+      expect(request.lesson['id'], 'lesson-a');
+      expect(request.successor, isNull);
+      expect(request.resources, {
+        'teacherId': 'teacher-b',
+        'branchId': 'branch-a',
+        'roomId': 'room-a',
+      });
     },
   );
 
@@ -168,6 +279,220 @@ void main() {
       false,
     );
     expect(result.draft.compensationRuleKey, 'standard');
+  });
+
+  test(
+    'settlement autofill runs once and explicit restore clears manual state',
+    () {
+      final references = _references(
+        settlements: [
+          _catalogItem(
+            key: 'paid_miss',
+            clientDurationMode: 'full',
+            teacherDurationMode: 'full',
+            defaultTeacherCompensationRuleKey: 'standard',
+          ),
+          _catalogItem(
+            key: 'unpaid_miss',
+            hourShareBasisPoints: 0,
+            clientDurationMode: 'zero',
+            teacherDurationMode: 'zero',
+            defaultTeacherCompensationRuleKey: 'none',
+          ),
+        ],
+        compensationRules: [
+          _catalogItem(key: 'none', mode: 'none'),
+          _catalogItem(key: 'standard', mode: 'standard'),
+          _catalogItem(key: 'fixed', mode: 'fixed', value: '250000'),
+        ],
+      );
+      final initial = _draft(
+        settlementTypeKey: 'paid_miss',
+        compensationRuleKey: null,
+      );
+      final paid = policy
+          .applyEdit(
+            initial,
+            references,
+            const LessonReferenceEdit(
+              LessonReferenceTarget.settlement,
+              'paid_miss',
+            ),
+          )
+          .draft;
+      final manualRule = policy
+          .applyEdit(
+            paid,
+            references,
+            const LessonReferenceEdit(
+              LessonReferenceTarget.compensationRule,
+              'fixed',
+            ),
+          )
+          .draft;
+      final manualValue = policy.compensationValueChange(
+        manualRule,
+        references,
+        '3000',
+      );
+      final manualMinutes = policy
+          .applyEdit(
+            manualValue,
+            references,
+            const LessonTeacherDurationEdit(45),
+          )
+          .draft;
+      final preserved = policy
+          .applyEdit(
+            manualMinutes,
+            references,
+            const LessonReferenceEdit(
+              LessonReferenceTarget.settlement,
+              'unpaid_miss',
+            ),
+          )
+          .draft;
+      final restored = policy
+          .applyEdit(
+            preserved,
+            references,
+            const LessonRestoreRecommendationEdit(),
+          )
+          .draft;
+
+      expect(paid.compensationRuleKey, 'standard');
+      expect(paid.teacherCreditedDurationMinutes, 60);
+      expect(paid.teacherCompensationSource, 'automatic');
+      expect(paid.compensationTouched, isFalse);
+      expect(preserved.compensationRuleKey, 'fixed');
+      expect(preserved.compensationValueMinor, '300000');
+      expect(preserved.teacherCreditedDurationMinutes, 45);
+      expect(preserved.teacherCompensationSource, 'manual');
+      expect(preserved.compensationTouched, isTrue);
+      expect(restored.compensationRuleKey, 'none');
+      expect(restored.teacherCreditedDurationMinutes, 0);
+      expect(restored.teacherCompensationSource, 'automatic');
+      expect(restored.compensationTouched, isFalse);
+    },
+  );
+
+  test(
+    'partial duration payload keeps client and teacher minutes independent',
+    () {
+      final draft =
+          _draft(
+            settlementTypeKey: 'partially_paid_lesson',
+            compensationRuleKey: 'percent',
+            plannedSettlementReason: 'Согласованы разные длительности',
+          ).copyWith(
+            teacherCreditedDurationMinutes: 45,
+            teacherCompensationSource: 'manual',
+            compensationTouched: true,
+            clientDecisions: const [
+              {
+                'clientId': 'student-a',
+                'chargeType': 'personal_account',
+                'basePriceMinor': '100000',
+                'chargeDurationMinutes': 30,
+              },
+            ],
+          );
+      final payload = policy.createPayload(
+        session: _createSession(draft),
+        draft: draft,
+        references: _references(
+          settlements: [
+            _catalogItem(
+              key: 'partially_paid_lesson',
+              clientDurationMode: 'manual',
+              teacherDurationMode: 'manual',
+              defaultTeacherCompensationRuleKey: 'percent',
+            ),
+          ],
+          compensationRules: [
+            _catalogItem(key: 'percent', mode: 'percent', value: '10000'),
+          ],
+        ),
+        canManageTeacherCompensation: true,
+      );
+
+      expect(payload['financialDecision'], {
+        'settlementTypeKey': 'partially_paid_lesson',
+        'clientDecisions': [
+          {
+            'clientId': 'student-a',
+            'chargeDurationMinutes': 30,
+            'chargeType': 'personal_account',
+            'basePriceMinor': '100000',
+          },
+        ],
+        'teacherCompensationRuleKey': 'percent',
+        'teacherCreditedDurationMinutes': 45,
+        'teacherCompensationSource': 'manual',
+      });
+    },
+  );
+
+  test('common full and zero settlements replace only inherited minutes', () {
+    final references = _references(
+      settlements: [
+        _catalogItem(
+          key: 'partial',
+          clientDurationMode: 'manual',
+          teacherDurationMode: 'manual',
+          defaultTeacherCompensationRuleKey: 'standard',
+        ),
+        _catalogItem(
+          key: 'full',
+          clientDurationMode: 'full',
+          teacherDurationMode: 'full',
+          defaultTeacherCompensationRuleKey: 'standard',
+        ),
+        _catalogItem(
+          key: 'zero',
+          clientDurationMode: 'zero',
+          teacherDurationMode: 'zero',
+          defaultTeacherCompensationRuleKey: 'none',
+        ),
+      ],
+      compensationRules: [
+        _catalogItem(key: 'standard', mode: 'standard'),
+        _catalogItem(key: 'none', mode: 'none'),
+      ],
+    );
+    final partial = _draft(settlementTypeKey: 'partial').copyWith(
+      clientDecisions: const [
+        {
+          'clientId': 'inherits-common',
+          'chargeType': 'personal_account',
+          'basePriceMinor': '100000',
+          'chargeDurationMinutes': 30,
+        },
+        {
+          'clientId': 'explicit-partial',
+          'settlementTypeKey': 'partial',
+          'chargeType': 'personal_account',
+          'basePriceMinor': '100000',
+          'chargeDurationMinutes': 30,
+        },
+      ],
+    );
+
+    for (final entry in [('full', 60), ('zero', 0)]) {
+      final changed = policy.settlementSelection(partial, references, entry.$1);
+
+      expect(
+        changed.clientDecisions.first['chargeDurationMinutes'],
+        entry.$2,
+        reason: entry.$1,
+      );
+      expect(
+        changed.clientDecisions.last['chargeDurationMinutes'],
+        30,
+        reason: '${entry.$1} explicit override',
+      );
+      expect(changed.clientDecisions.last['settlementTypeKey'], 'partial');
+    }
   });
 
   test(
@@ -327,6 +652,122 @@ void main() {
             )
             .isValid,
         isTrue,
+      );
+    });
+
+    test(
+      'requires valid client and teacher minutes for partial settlement',
+      () {
+        final settlement = _catalogItem(
+          key: 'partially_paid_lesson',
+          clientDurationMode: 'manual',
+          teacherDurationMode: 'manual',
+          defaultTeacherCompensationRuleKey: 'percent',
+        );
+        final rule = _catalogItem(
+          key: 'percent',
+          mode: 'percent',
+          value: '10000',
+        );
+        final references = _references(
+          settlements: [settlement],
+          compensationRules: [rule],
+        );
+        final missingClient =
+            _draft(
+              settlementTypeKey: settlement.key,
+              compensationRuleKey: rule.key,
+              compensationValueMinor: rule.value,
+            ).copyWith(
+              clientDecisions: const [
+                {
+                  'clientId': 'student-a',
+                  'chargeType': 'personal_account',
+                  'basePriceMinor': '100000',
+                },
+              ],
+            );
+        final invalidTeacher = missingClient.copyWith(
+          clientDecisions: const [
+            {
+              'clientId': 'student-a',
+              'chargeType': 'personal_account',
+              'basePriceMinor': '100000',
+              'chargeDurationMinutes': 30,
+            },
+          ],
+          teacherCreditedDurationMinutes: 61,
+        );
+        final valid = invalidTeacher.copyWith(
+          teacherCreditedDurationMinutes: 45,
+        );
+
+        expect(
+          policy
+              .validate(
+                session: _createSession(missingClient),
+                draft: missingClient,
+                references: references,
+              )
+              .message,
+          'Укажите длительность списания с клиента',
+        );
+        expect(
+          policy
+              .validate(
+                session: _createSession(invalidTeacher),
+                draft: invalidTeacher,
+                references: references,
+              )
+              .message,
+          'Зачёт преподавателю не может быть больше 60 мин',
+        );
+        expect(
+          policy
+              .validate(
+                session: _createSession(valid),
+                draft: valid,
+                references: references,
+              )
+              .isValid,
+          isTrue,
+        );
+      },
+    );
+
+    test('rejects fractional minute values without serializing them', () {
+      final settlement = _catalogItem(
+        key: 'partial',
+        clientDurationMode: 'manual',
+        teacherDurationMode: 'manual',
+        defaultTeacherCompensationRuleKey: 'standard',
+      );
+      final references = _references(settlements: [settlement]);
+      final draft = _draft(settlementTypeKey: settlement.key).copyWith(
+        teacherCreditedDurationMinutes: 45,
+        clientDecisions: const [
+          {
+            'clientId': 'student-a',
+            'chargeType': 'personal_account',
+            'basePriceMinor': '100000',
+            'chargeDurationMinutes': 30.5,
+          },
+        ],
+      );
+
+      expect(
+        policy
+            .validate(
+              session: _createSession(draft),
+              draft: draft,
+              references: references,
+            )
+            .message,
+        'Укажите длительность списания с клиента',
+      );
+      expect(
+        lessonClientDecisionsPayload(draft.clientDecisions).single,
+        isNot(contains('chargeDurationMinutes')),
       );
     });
   });
@@ -916,10 +1357,7 @@ void main() {
       expect(rescheduleRequest.successor, policy.schedulePayload(rescheduled));
       expect(correctionRequest.operation, LessonDecisionOperation.correction);
       expect(correctionRequest.successor, isNull);
-      expect(
-        plannedRequest.operation,
-        LessonDecisionOperation.plannedSettlement,
-      );
+      expect(plannedRequest.operation, LessonDecisionOperation.edit);
       expect(plannedRequest.initialSettlementTypeKey, 'standard');
       expect(plannedRequest.initialCompensationRuleKey, 'teacher-fixed');
       expect(plannedRequest.initialCompensationValueMinor, '250000');
@@ -934,7 +1372,7 @@ void main() {
         'successfully_completed': LessonDecisionOperation.correction,
         'completed': LessonDecisionOperation.correction,
         'done': LessonDecisionOperation.correction,
-        'planned': LessonDecisionOperation.plannedSettlement,
+        'planned': LessonDecisionOperation.edit,
         'settlement_pending': LessonDecisionOperation.settle,
       };
 
@@ -1201,6 +1639,23 @@ void main() {
   });
 
   group('compensation and snapshot boundaries', () {
+    test('editing compensation value marks recommendation manual', () {
+      final rule = _catalogItem(
+        key: 'teacher-percent',
+        mode: 'percent',
+        value: '10000',
+      );
+      final changed = policy.compensationValueChange(
+        _draft(compensationRuleKey: rule.key),
+        _references(compensationRules: [rule]),
+        '75',
+      );
+
+      expect(changed.compensationValueMinor, '7500');
+      expect(changed.compensationTouched, isTrue);
+      expect(changed.teacherCompensationSource, 'manual');
+    });
+
     test('keeps the percent boundary and money precision exact', () {
       expect(
         parseCompensationValueMinor(mode: 'percent', rawValue: '200'),
@@ -1258,6 +1713,9 @@ LessonDecisionCatalogItem _catalogItem({
   String value = '0',
   int hourShareBasisPoints = 10000,
   String fixedPenaltyMinor = '0',
+  String? clientDurationMode,
+  String? teacherDurationMode,
+  String? defaultTeacherCompensationRuleKey,
 }) => LessonDecisionCatalogItem(
   key: key,
   label: key,
@@ -1266,6 +1724,9 @@ LessonDecisionCatalogItem _catalogItem({
   value: value,
   hourShareBasisPoints: hourShareBasisPoints,
   fixedPenaltyMinor: fixedPenaltyMinor,
+  clientDurationMode: clientDurationMode,
+  teacherDurationMode: teacherDurationMode,
+  defaultTeacherCompensationRuleKey: defaultTeacherCompensationRuleKey,
 );
 
 LessonEditorDraft _draft({

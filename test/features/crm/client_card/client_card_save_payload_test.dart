@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -440,10 +441,15 @@ void main() {
     final lateLoad = Completer<void>();
     api.nextStudentCardGate = lateLoad;
     events.add(
-      const CrmChangedEvent(entity: 'task', action: 'updated', id: 'task-1'),
+      const CrmChangedEvent(
+        entity: 'student',
+        action: 'updated',
+        id: 'student-1',
+      ),
     );
     await tester.pump();
     await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Пётр');
+    api.student!['version'] = 3;
     lateLoad.complete();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -453,6 +459,8 @@ void main() {
       matching: find.byType(EditableText),
     );
     expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
+    await tester.pump(const Duration(seconds: 2));
+    expect(api.updateStudentBodies.first['expectedVersion'], 2);
   });
 
   testWidgets(
@@ -513,7 +521,7 @@ void main() {
   );
 
   testWidgets(
-    'late matching realtime echo keeps the editor mounted without global loading',
+    'background identity change preserves the editor and detects stale version on save',
     (tester) async {
       final events = StreamController<CrmChangedEvent>();
       addTearDown(events.close);
@@ -581,13 +589,18 @@ void main() {
       expect(tester.state<EditableTextState>(nameEditor), same(stateBefore));
       expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
 
+      api.studentPatchConflicts = 1;
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Фамилия'),
         'Сидоров',
       );
       await _waitForClientAutoSave(tester);
       expect(api.updateStudentBodies, hasLength(2));
-      expect(api.updateStudentBodies.last['expectedVersion'], 7);
+      expect(api.updateStudentBodies.last['expectedVersion'], 3);
+      expect(
+        find.textContaining('Карточку изменил другой сотрудник'),
+        findsOneWidget,
+      );
     },
   );
 
@@ -802,7 +815,7 @@ void main() {
     );
 
     // Статус-пикер — первый дропдаун вкладки «Инфо».
-    final statusPicker = find.byType(DropdownButtonFormField<String>).first;
+    final statusPicker = find.byType(AppDropdownButtonFormField<String>).first;
     await tester.ensureVisible(statusPicker);
     await tester.tap(statusPicker);
     await tester.pumpAndSettle();
@@ -1261,10 +1274,12 @@ Future<void> _chooseResponsible(WidgetTester tester) async {
 }
 
 Future<void> _chooseDropdownValue(WidgetTester tester, String label) async {
-  final dropdown = find.byType(DropdownButtonFormField<String>).first;
+  final dropdown = find.byType(AppDropdownButtonFormField<String>).first;
   await tester.ensureVisible(dropdown);
   await tester.tap(dropdown);
   await tester.pump(const Duration(milliseconds: 200));
+  // The menu opens after the editable anchor has completed its caret reveal.
+  await tester.pump();
   await tester.tap(find.text(label).last);
   await tester.pump(const Duration(milliseconds: 200));
 }

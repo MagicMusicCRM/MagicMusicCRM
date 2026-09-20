@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
 import type {
   LessonFinancialDecision,
+  LessonSettlementInput,
   LessonSettlementResult,
 } from "../commerce/lesson-settlement.port";
 import type { LessonSettlementCoverageSnapshot } from "../commerce/subscription-reservation.service";
@@ -57,6 +58,7 @@ export interface TransitionLessonRow {
   snapshot_trial: boolean | null;
   validation_state: "valid" | "legacy_incomplete" | null;
   participants: GroupParticipantSnapshot[];
+  excluded_participant_ids: string[];
 }
 
 export interface GroupLessonDraft {
@@ -91,33 +93,107 @@ export type TransitionSource = ExistingLessonDraft & {
     validationState: "valid" | "legacy_incomplete";
   } | null;
   participants: GroupParticipantSnapshot[];
+  excludedParticipantIds: string[];
 };
 
-/** Internal workflow contract. Transport DTO classes are adapters to this shape. */
-export interface TransitionPreviewDto {
+interface TransitionInputBase {
   expectedVersion: number;
   reasonCode?: string;
   reasonText?: string;
-  financialDecision: LessonFinancialDecision;
-  successor?: LessonDraftInput;
 }
 
-export interface TransitionCommandDto extends TransitionPreviewDto {
+export type FinancialTransitionPreviewDto = TransitionInputBase & {
+  operation: "cancel" | "settle";
+  financialDecision: LessonFinancialDecision;
+  sourceFinancialDecision?: never;
+  successorFinancialDecision?: never;
+  successor?: never;
+};
+
+export type NormalizedReschedulePreview = TransitionInputBase & {
+  operation: "reschedule";
+  successor: LessonDraftInput;
+  financialDecision?: never;
+  sourceFinancialDecision: LessonFinancialDecision;
+  successorFinancialDecision: LessonFinancialDecision;
+};
+
+/** Internal workflow contract. Transport DTO classes are adapters to this union. */
+export type TransitionPreviewDto =
+  | FinancialTransitionPreviewDto
+  | NormalizedReschedulePreview;
+
+export interface PreparedRescheduleFinancials {
+  sourceFinancialDecision: LessonFinancialDecision & {
+    teacherCompensationSource: "automatic" | "manual";
+  };
+  successorFinancialDecision: LessonFinancialDecision & {
+    teacherCompensationSource: "automatic" | "manual";
+  };
+}
+
+type ResolvedDecision = LessonFinancialDecision & {
+  teacherCompensationSource: "automatic" | "manual";
+};
+
+type ConfigurationRevisionIds = NonNullable<
+  LessonSettlementInput["configurationRevisionIds"]
+>;
+
+export type ResolvedFinancialTransitionDto = Omit<
+  FinancialTransitionPreviewDto,
+  "financialDecision"
+> & {
+  financialDecision: ResolvedDecision;
+  configurationRevisionIds: NonNullable<
+    LessonSettlementInput["configurationRevisionIds"]
+  >;
+};
+
+export type ResolvedRescheduleTransitionDto = Omit<
+  NormalizedReschedulePreview,
+  "sourceFinancialDecision" | "successorFinancialDecision"
+> & PreparedRescheduleFinancials & {
+  sourceConfigurationRevisionIds: ConfigurationRevisionIds;
+  successorConfigurationRevisionIds: ConfigurationRevisionIds;
+};
+
+export type ResolvedTransitionDto =
+  | ResolvedFinancialTransitionDto
+  | ResolvedRescheduleTransitionDto;
+
+type ConfirmedTransition<T> = T extends unknown ? T & {
   previewToken: string;
   confirm: true;
-}
+} : never;
 
-export interface CommittedTransition {
+export type TransitionCommandDto = ConfirmedTransition<TransitionPreviewDto>;
+
+interface CommittedTransitionBase {
   [key: string]: unknown;
   lessonId: string;
-  state: TerminalTransitionState;
-  successorId: string | null;
   transitionId: string;
   clientFinancialFactIds: string[];
   teacherFinancialFactId: string;
-  financialDecision: LessonFinancialDecision;
   transitionFingerprint: string;
 }
+
+export type CommittedTransition =
+  | (CommittedTransitionBase & {
+      state: "rescheduled";
+      successorId: string;
+      /** Build 210 response alias with successor semantics. */
+      financialDecision: LessonFinancialDecision;
+      sourceFinancialDecision: LessonFinancialDecision;
+      successorFinancialDecision: LessonFinancialDecision;
+    })
+  | (CommittedTransitionBase & {
+      state: "cancelled" | "successfully_completed";
+      successorId: null;
+      financialDecision: LessonFinancialDecision;
+      sourceFinancialDecision?: never;
+      successorFinancialDecision?: never;
+    });
 
 export interface CalculatedTransitionPreview extends LessonTransitionPreviewResult {
   transitionFingerprint?: string;
@@ -130,14 +206,21 @@ export interface BulkTransitionResultRef {
 }
 
 export interface LessonTransitionPreviewResult {
+  requestedLessonId?: string;
+  actionableLessonId?: string;
+  redirected?: boolean;
   operation: TransitionOperation;
   source: { id: string; version: number; state: string };
   successor: Record<string, unknown> | null;
-  financialDecision: TransitionPreviewDto["financialDecision"];
+  financialDecision?: LessonFinancialDecision;
+  sourceFinancialDecision?: LessonFinancialDecision;
+  successorFinancialDecision?: LessonFinancialDecision;
   violations: unknown[];
   canConfirm: boolean;
   confirmRequired: true;
   financialPreview?: unknown;
+  sourceFinancialPreview?: TransitionFinancialProjection;
+  successorPlannedSettlementPreview?: PlannedSettlementProjection;
   warnings?: string[];
   previewToken?: string;
   previewExpiresAt?: string;
@@ -150,6 +233,8 @@ export interface LessonTransitionCommandResult {
   clientFinancialFactIds: string[];
   teacherFinancialFactId: string;
   financialDecision: LessonFinancialDecision;
+  sourceFinancialDecision?: LessonFinancialDecision;
+  successorFinancialDecision?: LessonFinancialDecision;
   replayed: boolean;
 }
 
@@ -175,6 +260,12 @@ export type TransitionFinancialProjection = {
   teacherFact: Omit<LessonSettlementResult["teacherFact"], "id">;
 };
 
+export interface PlannedSettlementProjection {
+  financialDecision: LessonFinancialDecision;
+  settlementTypeLabel: string;
+  teacherCompensationLabel: string;
+}
+
 export interface TransitionFingerprintInput {
   operation: TransitionOperation;
   source: TransitionSource;
@@ -182,6 +273,7 @@ export interface TransitionFingerprintInput {
   dto: TransitionPreviewDto;
   coverage: LessonSettlementCoverageSnapshot;
   financial: TransitionFinancialProjection;
+  successorPlannedSettlement?: PlannedSettlementProjection;
 }
 
 export interface BulkFingerprintItem {
@@ -190,31 +282,70 @@ export interface BulkFingerprintItem {
   preview: Pick<CalculatedTransitionPreview, "transitionFingerprint">;
 }
 
-export interface CommitTransitionInput {
+interface CommitTransitionInputBase {
   actor: ActorContext;
   lessonId: string;
-  dto: TransitionPreviewDto;
-  operation: TransitionOperation;
-  successorId: string | null;
   nextVersion: number;
   expectedFingerprint?: string;
 }
+
+export type CommitTransitionInput =
+  | (CommitTransitionInputBase & {
+      dto: NormalizedReschedulePreview;
+      operation: "reschedule";
+      successorId: string;
+    })
+  | (CommitTransitionInputBase & {
+      dto: FinancialTransitionPreviewDto;
+      operation: "cancel" | "settle";
+      successorId: null;
+    });
 
 export interface TransitionCommitContext {
   client: PoolClient;
   input: CommitTransitionInput;
 }
 
-export interface BulkTransitionItem {
+interface BulkTransitionItemBase {
   lessonId: string;
-  operation: TransitionOperation;
   expectedVersion: number;
-  financialDecision: LessonFinancialDecision;
-  successor?: LessonDraftInput;
 }
+
+export type BulkTransitionItem =
+  | (BulkTransitionItemBase & {
+      operation: "cancel" | "settle";
+      financialDecision: LessonFinancialDecision;
+      successor?: never;
+      sourceFinancialDecision?: never;
+      successorFinancialDecision?: never;
+    })
+  | (BulkTransitionItemBase & {
+      operation: "reschedule";
+      financialDecision?: never;
+      successor: LessonDraftInput;
+      sourceFinancialDecision: LessonFinancialDecision;
+      successorFinancialDecision: LessonFinancialDecision;
+    });
+
+export type BulkTransitionInputItem =
+  | (BulkTransitionItemBase & {
+      operation: "cancel" | "settle";
+      financialDecision: LessonFinancialDecision;
+      successor?: never;
+      successorFinancialDecision?: never;
+      sourceFinancialDecision?: never;
+    })
+  | (BulkTransitionItemBase & {
+      operation: "reschedule";
+      successor: LessonDraftInput;
+      /** Build 210 request alias; normalized as successor-only. */
+      financialDecision?: LessonFinancialDecision;
+      successorFinancialDecision?: LessonFinancialDecision;
+      sourceFinancialDecision?: never;
+    });
 
 export interface BulkTransitionDto {
   reasonCode?: string;
   reasonText: string;
-  items: BulkTransitionItem[];
+  items: BulkTransitionInputItem[];
 }

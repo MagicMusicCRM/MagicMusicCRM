@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -393,7 +394,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final field = tester.widget<DropdownButtonFormField<String>>(
+      final field = tester.widget<AppDropdownButtonFormField<String>>(
         find.byKey(const ValueKey('lesson-settlement-type-field')),
       );
       expect(field.onChanged, isNotNull);
@@ -446,10 +447,12 @@ void main() {
     await tester.tap(find.text('Открыть занятие'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-sheet-desktop')), findsOneWidget);
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
     expect(find.byType(BackButton), findsNothing);
 
+    await tester.ensureVisible(find.text('Отмена'));
+    await tester.pump();
     await tester.tap(find.text('Отмена'));
     await tester.pumpAndSettle();
     expect(result.value, isNull);
@@ -473,7 +476,7 @@ void main() {
       const ValueKey('lesson-date-field'),
       const ValueKey('lesson-time-field'),
       const ValueKey('lesson-duration-field'),
-      const ValueKey('lesson-trial-toggle'),
+      const ValueKey('lesson-settlement-type-field'),
       const ValueKey('lesson-snapshot-preview'),
       const ValueKey('lesson-run-schedule-analyzer'),
     ]) {
@@ -607,13 +610,17 @@ void main() {
       find.byKey(const ValueKey('lesson-branch-field:$_branchAId')),
     );
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Филиал Б').last);
+    await tester.pump();
     await tester.pump();
     await tester.tap(
       find.byKey(const ValueKey('lesson-branch-field:$_branchBId')),
     );
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Филиал А').last);
+    await tester.pump();
     await tester.pump();
 
     expect(
@@ -684,13 +691,17 @@ void main() {
       find.byKey(const ValueKey('lesson-branch-field:$_branchAId')),
     );
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Филиал Б').last);
+    await tester.pump();
     await tester.pump();
     await tester.tap(
       find.byKey(const ValueKey('lesson-branch-field:$_branchBId')),
     );
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Филиал А').last);
+    await tester.pump();
     await tester.pump();
 
     client.roomResponses[_branchAId]!.complete(_roomResponse(_branchAId, 'А'));

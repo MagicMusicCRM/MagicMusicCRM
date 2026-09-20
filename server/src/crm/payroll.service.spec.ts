@@ -167,6 +167,280 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     ...over,
   });
 
+  it.each([
+    ["none", 30, null, 0, 0],
+    ["standard", 45, null, 0.75, 750],
+    ["fixed", 60, null, 1, 750],
+    ["hourly", 90, null, 1.5, 1125],
+    ["percent", 30, "7500", 0.38, 375],
+    ["percent", 60, "7500", 0.75, 750],
+    ["percent", 90, "7500", 1.13, 1125],
+  ])(
+    "derives credited hours from the effective %s compensation fact",
+    (
+      compensationType,
+      durationMinutes,
+      compensationActualValue,
+      creditedHours,
+      amount,
+    ) => {
+      const calculator = new PayrollAccrualCalculator();
+
+      expect(
+        calculator.computeLessonAccrual(
+          lessonRow({
+            duration_minutes: durationMinutes,
+            settlement_fact_id: `fact-${compensationType}`,
+            settled_amount_minor: amount * 100,
+            compensation_type: compensationType,
+            compensation_actual_value: compensationActualValue,
+          }) as import("./payroll/payroll.types").PayrollLessonRow,
+          new Map(),
+        ),
+      ).toMatchObject({
+        scheduledHours: durationMinutes / 60,
+        creditedHours,
+        amount,
+      });
+    },
+  );
+
+  it("counts one effective group compensation fact without multiplying credited hours", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          lessonRow({
+            group_id: "g-1",
+            group_name: "Вокал (группа)",
+            duration_minutes: 60,
+            settlement_fact_id: "fact-group-percent",
+            settled_amount_minor: 75000,
+            compensation_type: "percent",
+            compensation_actual_value: "7500",
+          }),
+        ],
+      },
+      { rows: [{ teacher_id: "t-1", rate: "9999", effective_from: "2026-01-01" }] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+
+    const report = await service.getTeacherStatsReport(directorActor, {
+      from: "2026-01-01",
+      to: "2027-01-01",
+    });
+
+    expect(report.items[0]).toMatchObject({
+      scheduledHoursTotal: 1,
+      hoursTotal: 0.75,
+      accruedTotal: 750,
+    });
+    expect(report.items[0]!.units).toEqual([
+      expect.objectContaining({
+        scheduledHoursTotal: 1,
+        hoursTotal: 0.75,
+        accruedTotal: 750,
+      }),
+    ]);
+  });
+
+  it("filters by effective teacher rule before aggregating totals", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [
+        lessonRow({ id: "trial", compensation_rule_key: "trial_lesson", compensation_type: "none", settlement_fact_id: "trial-fact", settled_amount_minor: 0 }),
+        lessonRow({ id: "paid", compensation_rule_key: "standard", compensation_type: "standard", settlement_fact_id: "paid-fact", settled_amount_minor: 90000 }),
+      ] },
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+    const report = await service.getTeacherStatsReport(directorActor, {
+      from: "2026-01-01", to: "2027-01-01", compensationRuleKey: "trial_lesson",
+    });
+    expect(report.totals).toMatchObject({ completedLessons: 1, accruedTotal: 0 });
+    expect(report.items[0].units[0].lessonIds).toEqual(["trial"]);
+  });
+
+  it("keeps explicit same-value sources separate and falls back only for legacy facts", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          lessonRow({
+            id: "l-explicit-manual",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-explicit-manual",
+            settled_amount_minor: 100000,
+            compensation_type: "fixed",
+            compensation_rule_key: "fixed",
+            compensation_rule_label: "Фиксированная сумма",
+            compensation_actual_value: "100000",
+            teacher_snapshot_rate: 1000,
+            compensation_source: "manual",
+            compensation_override_reason: null,
+          }),
+          lessonRow({
+            id: "l-explicit-automatic",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-explicit-automatic",
+            settled_amount_minor: 100000,
+            compensation_type: "fixed",
+            compensation_rule_key: "fixed",
+            compensation_rule_label: "Фиксированная сумма",
+            compensation_actual_value: "100000",
+            teacher_snapshot_rate: 1000,
+            compensation_source: "automatic",
+            compensation_override_reason: null,
+          }),
+          lessonRow({
+            id: "l-legacy-manual",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-legacy-manual",
+            settled_amount_minor: 100000,
+            compensation_type: "fixed",
+            compensation_rule_key: "fixed",
+            compensation_rule_label: "Фиксированная сумма",
+            compensation_actual_value: "100000",
+            teacher_snapshot_rate: 1000,
+            compensation_source: null,
+            compensation_override_reason: "Историческая ручная корректировка",
+          }),
+          lessonRow({
+            id: "l-legacy-automatic",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-legacy-automatic",
+            settled_amount_minor: 100000,
+            compensation_type: "fixed",
+            compensation_rule_key: "fixed",
+            compensation_rule_label: "Фиксированная сумма",
+            compensation_actual_value: "100000",
+            teacher_snapshot_rate: 1000,
+            compensation_source: null,
+            compensation_override_reason: null,
+          }),
+        ],
+      },
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+
+    const report = await service.getTeacherStatsReport(directorActor, {
+      from: "2026-01-01",
+      to: "2027-01-01",
+    });
+    const sourceByLesson = new Map(
+      report.items[0]!.units.flatMap((unit) =>
+        unit.lessonIds.map((lessonId) => [lessonId, unit.compensationSource] as const),
+      ),
+    );
+
+    expect(sourceByLesson).toEqual(new Map([
+      ["l-explicit-manual", "manual"],
+      ["l-explicit-automatic", "automatic"],
+      ["l-legacy-manual", "manual"],
+      ["l-legacy-automatic", "automatic"],
+    ]));
+  });
+
+  it("separates settled lessons with different effective standard rates", async () => {
+    const { service } = createServiceWithQueryResults([
+      {
+        rows: [
+          lessonRow({
+            id: "l-700",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-700",
+            settled_amount_minor: 70000,
+            compensation_type: "standard",
+            compensation_rule_key: "standard",
+            compensation_rule_label: "Полная стандартная ставка",
+            teacher_snapshot_rate: 700,
+          }),
+          lessonRow({
+            id: "l-900",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-900",
+            settled_amount_minor: 90000,
+            compensation_type: "standard",
+            compensation_rule_key: "standard",
+            compensation_rule_label: "Полная стандартная ставка",
+            teacher_snapshot_rate: 900,
+          }),
+        ],
+      },
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+
+    const report = await service.getTeacherStatsReport(directorActor, {
+      from: "2026-01-01",
+      to: "2027-01-01",
+    });
+    const item = report.items[0]!;
+
+    expect(item.units).toEqual([
+      expect.objectContaining({ rate: 700, accruedTotal: 700, hoursTotal: 1 }),
+      expect.objectContaining({ rate: 900, accruedTotal: 900, hoursTotal: 1 }),
+    ]);
+    expect(item).toMatchObject({
+      scheduledHoursTotal: 2,
+      hoursTotal: 2,
+      accruedTotal: 1600,
+    });
+    expect(report.totals).toMatchObject({ accruedTotal: 1600 });
+
+    const { service: exportService } = createServiceWithQueryResults([
+      {
+        rows: [
+          lessonRow({
+            id: "l-700",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-700",
+            settled_amount_minor: 70000,
+            compensation_type: "standard",
+            compensation_rule_key: "standard",
+            compensation_rule_label: "Полная стандартная ставка",
+            teacher_snapshot_rate: 700,
+          }),
+          lessonRow({
+            id: "l-900",
+            student_id: "s-1",
+            student_name: "Мария Иванова",
+            settlement_fact_id: "fact-900",
+            settled_amount_minor: 90000,
+            compensation_type: "standard",
+            compensation_rule_key: "standard",
+            compensation_rule_label: "Полная стандартная ставка",
+            teacher_snapshot_rate: 900,
+          }),
+        ],
+      },
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Преподаватель", salary: null }] },
+    ]);
+    const bytes = Buffer.from(
+      await exportService.exportTeacherStatsReport(directorActor, {
+        from: "2026-01-01",
+        to: "2027-01-01",
+      }),
+    );
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
+    const sheet = workbook.worksheets[0]!;
+    expect([sheet.getCell("I2").value, sheet.getCell("I3").value]).toEqual([
+      "700",
+      "900",
+    ]);
+    expect([sheet.getCell("J2").value, sheet.getCell("J3").value]).toEqual([
+      700,
+      900,
+    ]);
+  });
+
   it('reports accrued totals by the historical compensation rule, including unpaid lessons', async () => {
     const { service } = createServiceWithQueryResults([
       { rows: [
@@ -412,6 +686,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(individualUnit?.unitName).toBe("Мария Иванова");
     expect(report.totals).toEqual({
       hoursTotal: 3,
+      scheduledHoursTotal: 3,
       completedLessons: 3,
       payableLessons: 3,
       noAccrualLessons: 0,
@@ -689,7 +964,10 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
 
   it("экспортирует месячные начисления в валидный XLSX без выплат", async () => {
     const { service } = createServiceWithQueryResults([
-      { rows: [lessonRow({ id: "l-1", student_id: "s-1", is_trial: true })] },
+      { rows: [lessonRow({
+        id: "l-1", student_id: "s-1", is_trial: true,
+        compensation_source: "manual", compensation_override_reason: null,
+      })] },
       {
         rows: [{ teacher_id: "t-1", rate: "0", effective_from: "2026-01-01" }],
       },
@@ -717,16 +995,19 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       "Дни",
       "Занятий",
       "Оплачиваемых занятий",
-      "Часы",
+      "По расписанию, астр.ч.",
+      "Зачтено преподавателю, астр.ч.",
       "Ставка за астр. час",
       "Начислено",
       "Тип начисления",
+      "Источник",
     ]);
     expect(sheet.getCell("A2").value).toBe('\'=Иван "Гитарист"; Петров');
     expect(sheet.getCell("D2").value).toBe("2026-07-05 (1 астр.ч.)");
-    expect(sheet.getCell("H2").value).toBe("Входит в оклад");
-    expect(sheet.getCell("I2").value).toBe(0);
-    expect(sheet.getCell("J2").value).toBe('Почасовая ставка');
+    expect(sheet.getCell("I2").value).toBe("Входит в оклад");
+    expect(sheet.getCell("J2").value).toBe(0);
+    expect(sheet.getCell("K2").value).toBe('Почасовая ставка');
+    expect(sheet.getCell("L2").value).toBe('Вручную');
     expect(headers.map((value) => String(value))).not.toContain("Оплачено");
     expect(headers.map((value) => String(value))).not.toContain("Доплаты");
     expect(headers.map((value) => String(value))).not.toContain("Вычеты");

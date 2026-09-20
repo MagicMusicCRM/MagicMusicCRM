@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 /// Schedule lesson filters (пробные / конфликты / педагог) and the removal of
@@ -37,6 +38,17 @@ class _FakeScheduleApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     final iso = _today().toIso8601String();
+    if (path == '/crm/configuration/lesson-decisions') {
+      return <String, dynamic>{
+            'settlementTypes': [
+              {'stableKey': 'trial_lesson', 'label': 'Пробный урок'},
+            ],
+            'teacherCompensationRules': [
+              {'stableKey': 'none', 'label': 'Без оплаты'},
+            ],
+          }
+          as T;
+    }
     if (path == '/crm/branches') {
       return <String, dynamic>{
             'items': [
@@ -77,6 +89,8 @@ class _FakeScheduleApiClient extends MagicApiClient {
           [
             {
               'id': 'lesson-normal',
+              'settlementTypeKey': 'lesson',
+              'teacherCompensationRuleKey': 'standard',
               'studentId': 'student-a',
               'studentName': 'Анна Обычная',
               'teacherId': 'teacher-a',
@@ -91,6 +105,8 @@ class _FakeScheduleApiClient extends MagicApiClient {
             },
             {
               'id': 'lesson-trial',
+              'settlementTypeKey': 'trial_lesson',
+              'teacherCompensationRuleKey': 'none',
               'studentId': 'student-b',
               'studentName': 'Борис Пробный',
               'teacherId': 'teacher-b',
@@ -104,6 +120,15 @@ class _FakeScheduleApiClient extends MagicApiClient {
               'isTrial': true,
             },
           ].where((lesson) {
+            final types = query['settlementTypes']?.toString().split(',');
+            final pay = query['compensationRules']?.toString().split(',');
+            if (types != null && !types.contains(lesson['settlementTypeKey'])) {
+              return false;
+            }
+            if (pay != null &&
+                !pay.contains(lesson['teacherCompensationRuleKey'])) {
+              return false;
+            }
             return requestedBranchId == null ||
                 lesson['branchId'] == requestedBranchId;
           }).toList();
@@ -127,10 +152,24 @@ class _FakeScheduleApiClient extends MagicApiClient {
   }
 }
 
-Widget _host(Widget child, {_FakeScheduleApiClient? api}) {
+Widget _host(
+  Widget child, {
+  _FakeScheduleApiClient? api,
+  bool financialAccess = false,
+}) {
   return ProviderScope(
     overrides: [
       magicApiClientProvider.overrideWithValue(api ?? _FakeScheduleApiClient()),
+      if (financialAccess)
+        capabilitySnapshotProvider.overrideWith(
+          (ref) async => const CapabilitySnapshot(
+            accountId: 'admin',
+            role: 'admin',
+            accessVersion: 1,
+            capabilities: {'schedule.lesson.read.branch'},
+            scopes: {},
+          ),
+        ),
     ],
     child: MaterialApp(
       theme: ThemeData(platform: TargetPlatform.windows),
@@ -150,6 +189,71 @@ Future<void> _enterTodayDayView(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'desktop financial filters reach API, hide nonmatches and clear',
+    (tester) async {
+      tester.view.physicalSize = const Size(1440, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = _FakeScheduleApiClient();
+      await tester.pumpWidget(
+        _host(const ScheduleWidget(), api: api, financialAccess: true),
+      );
+      await tester.pumpAndSettle();
+      await _enterTodayDayView(tester);
+      await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('financial-filter-Списание клиента')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('financial-filter-Списание клиента')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('type-filter-trial_lesson')),
+      );
+      await tester.tap(find.byKey(const ValueKey('type-filter-trial_lesson')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Закрыть список'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('financial-filter-Оплата преподавателю')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('financial-filter-Оплата преподавателю')),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Без оплаты'));
+      await tester.tap(find.text('Без оплаты'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Готово'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('schedule-filter-apply')),
+      );
+      await tester.tap(find.byKey(const ValueKey('schedule-filter-apply')));
+      await tester.pumpAndSettle();
+      expect(api.matrixQueries.last['settlementTypes'], 'trial_lesson');
+      expect(api.matrixQueries.last['compensationRules'], 'none');
+      expect(find.text('Анна Обычная'), findsNothing);
+      expect(find.text('Борис Пробный'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Сбросить'));
+      await tester.tap(find.text('Сбросить'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('schedule-filter-apply')),
+      );
+      await tester.tap(find.byKey(const ValueKey('schedule-filter-apply')));
+      await tester.pumpAndSettle();
+      expect(api.matrixQueries.last.containsKey('settlementTypes'), isFalse);
+      expect(api.matrixQueries.last.containsKey('compensationRules'), isFalse);
+      expect(find.text('Анна Обычная'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('«Только пробные» hides the non-trial lesson', (tester) async {
     tester.view.physicalSize = const Size(360, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -304,9 +408,21 @@ void main() {
       ),
       isTrue,
     );
+    final selectedDate = availabilityByBranch[_branchId]!['date'];
+    final nextDate = DateTime.parse(
+      selectedDate.toString(),
+    ).add(const Duration(days: 1));
+    final nextDateKey = nextDate.toIso8601String().substring(0, 10);
+    final eveningQueries = api.matrixQueries.where(
+      (query) => [selectedDate, nextDateKey].contains(query['localDate']),
+    );
     expect(
-      api.matrixQueries.last['localDate'],
-      availabilityByBranch[_branchId]!['date'],
+      eveningQueries.map((query) => query['localDate']),
+      containsAll([selectedDate, nextDateKey]),
+    );
+    expect(
+      eveningQueries.every((query) => !query.containsKey('branchId')),
+      isTrue,
     );
 
     final restoredApi = _FakeScheduleApiClient(multipleBranches: true);

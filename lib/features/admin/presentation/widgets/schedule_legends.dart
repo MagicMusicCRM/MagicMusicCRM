@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
@@ -60,19 +62,73 @@ class _ScheduleLessonLegend extends StatelessWidget {
 
     return Padding(
       padding: padding,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final token in LessonStateToken.values) ...[
-              statusChip(token),
-              const SizedBox(width: 8),
-            ],
-            const LessonTrialBadge(),
-            const SizedBox(width: 8),
-            const LessonSubscriptionBadge(),
-          ],
-        ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final token in LessonStateToken.values) statusChip(token),
+          TextButton.icon(
+            icon: const Icon(Icons.info_outline, size: 16),
+            label: const Text('Уголки — тип списания'),
+            onPressed: () => showMagicDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Тип списания с клиента'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Фон и значок показывают статус занятия. Цветной уголок — тип списания.',
+                    ),
+                    const SizedBox(height: 12),
+                    for (final key in const [
+                      'lesson',
+                      'trial_lesson',
+                      'partially_paid_lesson',
+                      'free_lesson',
+                      'paid_miss',
+                      'partially_paid_miss',
+                      'unpaid_miss',
+                      'penalty_lesson',
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: LessonSettlementCorner(
+                                settlementTypeKey: key,
+                                child: const SizedBox.expand(),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                LessonSettlementCorner.labelFor(key)!,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Понятно'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const LessonSubscriptionBadge(),
+        ],
       ),
     );
   }

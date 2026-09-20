@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'schedule_shared.dart';
@@ -32,7 +33,7 @@ Future<int?> showBranchTimezoneDialog(
               ),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
+            AppDropdownButtonFormField<int>(
               menuMaxHeight: 256,
               initialValue: selected,
               decoration: const InputDecoration(labelText: 'Смещение'),

@@ -321,6 +321,7 @@ extension MagicCrmCore on MagicCrmService {
     String? firstName,
     String? lastName,
     String? phone,
+    bool clearPhone = false,
     String? email,
     bool clearEmail = false,
     String? status,
@@ -334,6 +335,7 @@ extension MagicCrmCore on MagicCrmService {
     if (firstName != null) data['firstName'] = firstName.trim();
     if (lastName != null) data['lastName'] = lastName.trim();
     if (phone != null) data['phone'] = phone.trim();
+    if (clearPhone) data['clearPhone'] = true;
     if (email != null) data['email'] = email.trim();
     if (clearEmail) data['clearEmail'] = true;
     if (status != null) data['status'] = status.trim();
@@ -636,6 +638,7 @@ extension MagicCrmCore on MagicCrmService {
   /// ставка, начислено/оплачено.
   /// unitType: individual | group | trial | individual_trial | group_trial.
   Future<Map<String, dynamic>> getTeacherStatsReport({
+    String? compensationRuleKey,
     String? from,
     String? to,
     String? branchId,
@@ -648,6 +651,7 @@ extension MagicCrmCore on MagicCrmService {
     return _api.get<Map<String, dynamic>>(
       '/crm/reports/teacher-stats',
       queryParameters: _teacherStatsQuery(
+        compensationRuleKey: compensationRuleKey,
         from: from,
         to: to,
         branchId: branchId,
@@ -662,6 +666,7 @@ extension MagicCrmCore on MagicCrmService {
 
   /// The XLSX report; the caller validates and saves the bytes.
   Future<List<int>> exportTeacherStatsReport({
+    String? compensationRuleKey,
     String? from,
     String? to,
     String? branchId,
@@ -674,6 +679,7 @@ extension MagicCrmCore on MagicCrmService {
     return _api.downloadBytes(
       '/crm/reports/teacher-stats/export',
       queryParameters: _teacherStatsQuery(
+        compensationRuleKey: compensationRuleKey,
         from: from,
         to: to,
         branchId: branchId,
@@ -687,6 +693,7 @@ extension MagicCrmCore on MagicCrmService {
   }
 
   Map<String, dynamic> _teacherStatsQuery({
+    String? compensationRuleKey,
     String? from,
     String? to,
     String? branchId,
@@ -697,6 +704,9 @@ extension MagicCrmCore on MagicCrmService {
     String? category,
   }) {
     final queryParameters = <String, dynamic>{};
+    if (compensationRuleKey != null) {
+      queryParameters['compensationRuleKey'] = compensationRuleKey;
+    }
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;
     if (branchId != null) queryParameters['branchId'] = branchId;
@@ -800,7 +810,14 @@ extension MagicCrmCore on MagicCrmService {
     addString('lastName', lastName);
     addString('phone', phone);
     addString('email', email);
-    addString('position', position);
+    if (position != null) {
+      final trimmedPosition = position.trim();
+      if (trimmedPosition.isEmpty) {
+        data['clearPosition'] = true;
+      } else {
+        data['position'] = trimmedPosition;
+      }
+    }
     addString('status', status);
     if (branchIds != null) data['branchIds'] = branchIds;
     if (customDataPatch != null && customDataPatch.isNotEmpty) {

@@ -167,9 +167,8 @@ void main() {
     // The rate is a dropdown: open it, then pick the preset.
     await tester.tap(find.text('Ставка педагога (по умолчанию)').last);
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView).last, const Offset(0, -200));
-    await tester.pumpAndSettle();
     final salaried = find.text('Входит в оклад').last;
+    await tester.ensureVisible(salaried);
     await tester.tap(salaried);
     await tester.pumpAndSettle();
 

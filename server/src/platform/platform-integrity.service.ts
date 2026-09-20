@@ -60,6 +60,7 @@ export class PlatformIntegrityService {
         };
       }
 
+      await command.beforeVersionAdvance?.(client);
       const version = await this.repository.advanceVersion(
         client,
         command.aggregateType,

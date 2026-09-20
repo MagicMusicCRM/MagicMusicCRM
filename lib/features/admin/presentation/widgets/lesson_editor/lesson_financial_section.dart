@@ -1,12 +1,13 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import '../lesson_decision/lesson_decision_models.dart';
 import '../lesson_decision/lesson_decision_sections.dart';
 import '../lesson_form_rules.dart';
 import 'lesson_client_funding_fields.dart';
 import 'lesson_editor_feedback.dart';
 import 'lesson_editor_models.dart';
+import 'lesson_financial_autofill.dart';
 
 class LessonFinancialSectionModel {
   const LessonFinancialSectionModel({
@@ -17,7 +18,9 @@ class LessonFinancialSectionModel {
     required this.requiresCompensationValue,
     required this.compensationNeedsReason,
     required this.canManageTeacherCompensation,
+    this.canSelectTrialCompensation = false,
     this.allowsNoFunding = false,
+    this.requiresChangeReason = false,
   });
 
   final LessonEditorSession session;
@@ -27,7 +30,9 @@ class LessonFinancialSectionModel {
   final bool requiresCompensationValue;
   final bool compensationNeedsReason;
   final bool canManageTeacherCompensation;
+  final bool canSelectTrialCompensation;
   final bool allowsNoFunding;
+  final bool requiresChangeReason;
 }
 
 class LessonFinancialSection extends StatelessWidget {
@@ -74,6 +79,21 @@ class LessonFinancialSection extends StatelessWidget {
     );
   }
 
+  List<LessonDecisionParticipant> _participants() {
+    final client = model.draft.client;
+    if (client == null) return const [];
+    if (model.session.isGroupEdit) {
+      return funding?.groupParticipants ?? const [];
+    }
+    return [
+      LessonDecisionParticipant(
+        id: client.id,
+        name: client.label,
+        isStudent: client.type == 'student',
+      ),
+    ];
+  }
+
   Map<String, List<LessonDecisionSubscription>> _subscriptionCache(
     LessonClientRef client,
   ) {
@@ -110,18 +130,33 @@ class LessonFinancialSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 8),
-        _TrialControl(model: model, actions: actions),
         _CompletionControl(model: model, actions: actions),
         const SizedBox(height: 16),
         _DecisionFields(model: model, actions: actions),
         if (model.canManageTeacherCompensation)
           _CompensationOverride(model: model, actions: actions),
         const SizedBox(height: 16),
-        ?fundingFields ?? _fundingFields(),
+        if (model.draft.settlementTypeKey == 'trial_lesson')
+          const Text(
+            'Пробный урок бесплатен для клиента. Абонемент и личный счёт не расходуются.',
+          )
+        else
+          ?fundingFields ?? _fundingFields(),
+        _PartialDurationControls(
+          model: model,
+          participants: _participants(),
+          actions: actions,
+        ),
         if (model.session.isEdit) ...[
           const SizedBox(height: 16),
           TextFormField(
             key: const Key('lesson-edit-reason'),
+            validator: (value) {
+              return model.requiresChangeReason &&
+                      (value ?? '').trim().length < 3
+                  ? 'Укажите причину изменения (от 3 символов)'
+                  : null;
+            },
             initialValue: model.draft.plannedSettlementReason,
             enabled: !model.isSaving,
             minLines: 2,
@@ -146,29 +181,127 @@ class LessonFinancialSection extends StatelessWidget {
   }
 }
 
-class _TrialControl extends StatelessWidget {
-  const _TrialControl({required this.model, required this.actions});
+class _PartialDurationControls extends StatelessWidget {
+  const _PartialDurationControls({
+    required this.model,
+    required this.participants,
+    required this.actions,
+  });
 
   final LessonFinancialSectionModel model;
+  final List<LessonDecisionParticipant> participants;
   final LessonEditorActions actions;
 
   @override
   Widget build(BuildContext context) {
-    final locked = model.session.isEdit;
-    return SwitchListTile(
-      key: const ValueKey('lesson-trial-toggle'),
-      value: model.draft.isTrial,
-      activeThumbColor: AppTheme.primaryGold,
-      contentPadding: EdgeInsets.zero,
-      title: const Text('Пробное занятие'),
-      subtitle: Text(
-        locked
-            ? 'Маркер зафиксирован при создании'
-            : 'Не зависит от типа клиента и способа списания',
-      ),
-      onChanged: locked
-          ? null
-          : (value) => actions.edit(LessonTrialEdit(value)),
+    final draft = model.draft;
+    final catalog = model.references.catalog;
+    final commonSettlement = _catalogItem(
+      catalog?.settlementTypes,
+      draft.settlementTypeKey,
+    );
+    final teacherManual =
+        model.canManageTeacherCompensation &&
+        commonSettlement?.teacherDurationMode == 'manual';
+    final clientFields = <Widget>[];
+    for (final participant in participants) {
+      final decision = draft.clientDecisions
+          .where((row) => row['clientId'] == participant.id)
+          .firstOrNull;
+      final settlement = _catalogItem(
+        catalog?.settlementTypes,
+        decision?['settlementTypeKey']?.toString() ?? draft.settlementTypeKey,
+      );
+      if (settlement?.clientDurationMode != 'manual') continue;
+      final minutes = lessonDecisionIntegerMinutes(
+        decision?['chargeDurationMinutes'],
+      );
+      clientFields.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: KeyedSubtree(
+            key: ValueKey(
+              'lesson-client-duration-model-${participant.id}-'
+              '${settlement?.key}-${draft.recommendationRevision}',
+            ),
+            child: TextFormField(
+              key: ValueKey('lesson-client-duration-${participant.id}'),
+              initialValue: minutes?.toString() ?? '',
+              enabled: !model.isSaving,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: participants.length > 1
+                    ? 'Списать с клиента ${participant.name}, мин *'
+                    : 'Списать с клиента, мин *',
+                helperText: minutes == null
+                    ? 'Укажите от 0 до ${draft.durationMinutes} мин'
+                    : formatLessonMinutes(minutes),
+              ),
+              validator: (value) => partialDurationError(
+                value,
+                lessonDurationMinutes: draft.durationMinutes,
+              ),
+              onChanged: (value) => actions.edit(
+                LessonClientDurationEdit(participant.id, int.tryParse(value)),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (clientFields.isEmpty && !teacherManual && !draft.compensationTouched) {
+      return const SizedBox.shrink();
+    }
+    final teacherMinutes = draft.teacherCreditedDurationMinutes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...clientFields,
+        if (teacherManual) ...[
+          const SizedBox(height: 16),
+          KeyedSubtree(
+            key: ValueKey(
+              'teacher-duration-model-${commonSettlement?.key}-'
+              '${draft.recommendationRevision}',
+            ),
+            child: TextFormField(
+              key: const ValueKey('teacher-credited-duration-minutes'),
+              initialValue: teacherMinutes?.toString() ?? '',
+              enabled: !model.isSaving,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: 'Засчитать преподавателю, мин *',
+                helperText: teacherMinutes == null
+                    ? 'Укажите от 0 до ${draft.durationMinutes} мин'
+                    : formatLessonMinutes(teacherMinutes),
+              ),
+              validator: (value) => partialDurationError(
+                value,
+                lessonDurationMinutes: draft.durationMinutes,
+              ),
+              onChanged: (value) =>
+                  actions.edit(LessonTeacherDurationEdit(int.tryParse(value))),
+            ),
+          ),
+        ],
+        if (draft.compensationTouched &&
+            draft.settlementTypeKey != 'trial_lesson') ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('lesson-restore-financial-recommendation'),
+              onPressed: model.isSaving
+                  ? null
+                  : () => actions.edit(const LessonRestoreRecommendationEdit()),
+              icon: const Icon(Icons.restart_alt_rounded),
+              label: const Text('Применить рекомендуемое правило'),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -213,7 +346,11 @@ class _DecisionFields extends StatelessWidget {
   Widget build(BuildContext context) {
     final draft = model.draft;
     final catalog = model.references.catalog;
-    final settlement = DropdownButtonFormField<String>(
+    final canSelectTrialRule =
+        model.session.isEdit &&
+        draft.settlementTypeKey == 'trial_lesson' &&
+        model.canSelectTrialCompensation;
+    final settlement = AppDropdownButtonFormField<String>(
       menuMaxHeight: 256,
       isExpanded: true,
       key: const ValueKey('lesson-settlement-type-field'),
@@ -233,23 +370,27 @@ class _DecisionFields extends StatelessWidget {
             ),
           ),
       ],
-      onChanged: model.session.isEdit && model.isSaving
+      onChanged: model.isSaving
           ? null
           : (value) => actions.edit(
               LessonReferenceEdit(LessonReferenceTarget.settlement, value),
             ),
     );
-    if (!model.canManageTeacherCompensation) return settlement;
+    if (!model.canManageTeacherCompensation && !canSelectTrialRule) {
+      return settlement;
+    }
     return _ResponsivePair(
       first: settlement,
-      second: DropdownButtonFormField<String>(
+      second: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         isExpanded: true,
         key: const ValueKey('lesson-compensation-rule-field'),
         initialValue: draft.compensationRuleKey,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Правило оплаты преподавателю *',
-          helperText: 'Значение можно задать отдельно для этого занятия',
+          helperText: canSelectTrialRule && !model.canManageTeacherCompensation
+              ? 'Ручной выбор сохранится для этого занятия'
+              : 'Значение можно задать отдельно для этого занятия',
         ),
         items: [
           for (final item in catalog?.compensationRules ?? const [])
@@ -324,6 +465,9 @@ class _CompensationOverride extends StatelessWidget {
             ),
             child: TextFormField(
               key: const ValueKey('lesson-compensation-override-reason-field'),
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Укажите причину индивидуального значения оплаты преподавателю'
+                  : null,
               initialValue: draft.plannedSettlementReason,
               enabled: !model.isSaving,
               minLines: 2,
@@ -354,8 +498,12 @@ class _ResponsivePair extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 520) {
-          return Column(children: [first, const SizedBox(height: 12), second]);
+        final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        if (constraints.maxWidth < 520 * textScale) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [first, const SizedBox(height: 12), second],
+          );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,

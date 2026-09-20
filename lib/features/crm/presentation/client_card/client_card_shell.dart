@@ -24,7 +24,7 @@ class ClientCardShell extends StatelessWidget {
   final Widget? blacklistBanner;
   final ClientCardWorkspaceBuilder desktopWorkspaceBuilder;
   final ClientCardWorkspaceBuilder compactWorkspaceBuilder;
-  final Widget actionBar;
+  final Widget? actionBar;
   final Future<void> Function() onCloseRequested;
 
   @override
@@ -61,7 +61,7 @@ class ClientCardShell extends StatelessWidget {
             height: 1,
             color: colors.outlineVariant.withValues(alpha: 0.6),
           ),
-          actionBar,
+          ?actionBar,
         ],
       ),
     );

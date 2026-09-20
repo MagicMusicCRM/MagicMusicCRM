@@ -9,11 +9,16 @@ import type {
   SchedulePlanTrayQuery,
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
+import type {
+  SchedulePlanRowRemovalCommandDto,
+  SchedulePlanRowRemovalPreviewDto,
+} from "../dto/schedule-plan-row-removal.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
 import { SchedulePlanEndService } from "./schedule-plan-end.service";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
 import { SchedulePlanQueryService } from "./schedule-plan-query.service";
+import { SchedulePlanRowRemovalService } from "./schedule-plan-row-removal.service";
 
 @Injectable()
 export class SchedulePlanService {
@@ -22,6 +27,7 @@ export class SchedulePlanService {
     private readonly previews: SchedulePlanConstraintPreviewService,
     private readonly mutations: SchedulePlanMutationService,
     private readonly ending: SchedulePlanEndService,
+    private readonly rowRemovals: SchedulePlanRowRemovalService,
   ) {}
 
   list(actor: ActorContext, query: SchedulePlanQuery) {
@@ -58,6 +64,31 @@ export class SchedulePlanService {
     metadata: LessonCommandMetadata,
   ) {
     return this.ending.end(actor, planId, dto, metadata);
+  }
+
+  previewRemoveRow(
+    actor: ActorContext,
+    planId: string,
+    seriesId: string,
+    dto: SchedulePlanRowRemovalPreviewDto,
+  ) {
+    return this.rowRemovals.previewRemoveRow(actor, planId, seriesId, dto);
+  }
+
+  removeRow(
+    actor: ActorContext,
+    planId: string,
+    seriesId: string,
+    dto: SchedulePlanRowRemovalCommandDto,
+    metadata: LessonCommandMetadata,
+  ) {
+    return this.rowRemovals.removeRow(
+      actor,
+      planId,
+      seriesId,
+      dto,
+      metadata,
+    );
   }
 
   tray(actor: ActorContext, planId: string, query: SchedulePlanTrayQuery) {

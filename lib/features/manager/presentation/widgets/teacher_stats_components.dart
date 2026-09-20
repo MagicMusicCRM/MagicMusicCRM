@@ -1,5 +1,11 @@
 part of 'teacher_stats_view.dart';
 
+String _teacherName(Map<String, dynamic> teacher) {
+  final value = '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
+      .trim();
+  return value.isEmpty ? 'Без имени' : value;
+}
+
 extension _TeacherStatsViewSections on TeacherStatsView {
   Widget _unitRow(BuildContext context, Map<String, dynamic> unit) {
     final meta = _unitMeta(unit);
@@ -47,6 +53,12 @@ extension _TeacherStatsViewSections on TeacherStatsView {
                       unit['compensationLabel'].toString(),
                       style: const TextStyle(fontSize: 12),
                     ),
+                  Text(
+                    TeacherStatsCompensationSource.label(
+                      unit['compensationSource'],
+                    ),
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ],
               ),
             ),
@@ -55,14 +67,19 @@ extension _TeacherStatsViewSections on TeacherStatsView {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  unit['compensationKey'] == null ||
-                          unit['compensationKey'] == 'hourly'
-                      ? '${controller.hours(unit['hoursTotal'])} × ${controller.rateLabel(unit['rate'])}'
-                      : controller.hours(unit['hoursTotal']),
+                  'По расписанию: ${controller.hours(unit['scheduledHoursTotal'])}',
                   style: const TextStyle(fontSize: 12.5),
                 ),
                 Text(
-                  controller.rub(unit['accruedTotal']),
+                  'Зачтено преподавателю: ${controller.hours(unit['hoursTotal'])}',
+                  style: const TextStyle(fontSize: 12.5),
+                ),
+                Text(
+                  'Стандартная ставка: ${controller.rateLabel(unit['rate'])}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  'Начислено: ${controller.rub(unit['accruedTotal'])}',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ],
@@ -253,7 +270,8 @@ extension _TeacherStatsViewSections on TeacherStatsView {
           '${controller.integer(value['completedLessons'])} занятий · '
           '${controller.integer(value['payableLessons'])} оплачиваемых',
         ),
-        Text(controller.hours(value['hoursTotal'])),
+        Text('По расписанию: ${controller.hours(value['scheduledHoursTotal'])}'),
+        Text('Зачтено преподавателю: ${controller.hours(value['hoursTotal'])}'),
         Text('начислено ${controller.rub(value['accruedTotal'])}'),
       ],
     );

@@ -120,7 +120,14 @@ describe("CrmStudentsController", () => {
       status: "active",
     };
 
-    await expect(controller.createStudent(actor, dto)).resolves.toEqual({
+    await expect(
+      controller.createStudent(
+        actor,
+        dto,
+        "create-student-0001",
+        "request-student-0001",
+      ),
+    ).resolves.toEqual({
       id: "student-a",
     });
     expect(clientWrites.validateStudentCreate).toHaveBeenCalledWith(dto);
@@ -134,6 +141,10 @@ describe("CrmStudentsController", () => {
         customDataPatch: { branchId: "branch-a" },
       },
       expect.objectContaining({ branchId: "branch-a" }),
+      {
+        idempotencyKey: "create-student-0001",
+        requestId: "request-student-0001",
+      },
     );
   });
 

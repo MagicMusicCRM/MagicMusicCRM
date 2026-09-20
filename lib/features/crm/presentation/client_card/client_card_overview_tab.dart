@@ -78,6 +78,7 @@ extension _ClientCardOverviewTab on _ClientCardState {
               // Epoch key, not value key — see _buildClientTextField.
               key: ValueKey('client-phone-$_editorEpoch'),
               initialCanonical: _clientPhone,
+              enabled: _canWriteClient,
               decoration: _inputDecoration(cs, label: 'Телефон', isDense: true),
               onCanonicalChanged: (c) {
                 _updateClientCore('phone', c.isEmpty ? null : c);

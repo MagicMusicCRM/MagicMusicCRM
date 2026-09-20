@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -273,7 +274,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                         prefixIcon: Icon(Icons.currency_ruble_rounded),
                       ),
                     ),
-                    DropdownButtonFormField<SubscriptionPaymentMethod>(
+                    AppDropdownButtonFormField<SubscriptionPaymentMethod>(
                       menuMaxHeight: 256,
                       key: const Key('payment-method'),
                       initialValue: _method,
@@ -299,7 +300,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                               _changed();
                             },
                     ),
-                    DropdownButtonFormField<ClientPaymentStatus>(
+                    AppDropdownButtonFormField<ClientPaymentStatus>(
                       menuMaxHeight: 256,
                       key: const Key('payment-status'),
                       isExpanded: true,
@@ -359,7 +360,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                 },
               ),
               const SizedBox(height: AppSpace.md),
-              DropdownButtonFormField<String>(
+              AppDropdownButtonFormField<String>(
                 menuMaxHeight: 256,
                 key: const Key('payment-subscription'),
                 initialValue: _subscriptionId,
@@ -690,7 +691,7 @@ class _ClientPaymentTransitionFormState
           ),
           if (paid) ...[
             const SizedBox(height: AppSpace.sm),
-            DropdownButtonFormField<SubscriptionPaymentMethod>(
+            AppDropdownButtonFormField<SubscriptionPaymentMethod>(
               menuMaxHeight: 256,
               initialValue: _method,
               decoration: const InputDecoration(labelText: 'Способ оплаты'),
@@ -1186,7 +1187,7 @@ class _ClientPaymentAdjustmentFormState
                   style: const TextStyle(color: AppColor.text2),
                 ),
               const SizedBox(height: AppSpace.md),
-              DropdownButtonFormField<PaymentAdjustmentKind>(
+              AppDropdownButtonFormField<PaymentAdjustmentKind>(
                 menuMaxHeight: 256,
                 key: const Key('adjustment-kind'),
                 initialValue: _kind,
@@ -1211,7 +1212,7 @@ class _ClientPaymentAdjustmentFormState
               ),
               if (_kind == PaymentAdjustmentKind.correction) ...[
                 const SizedBox(height: AppSpace.md),
-                DropdownButtonFormField<String>(
+                AppDropdownButtonFormField<String>(
                   menuMaxHeight: 256,
                   key: const Key('adjustment-direction'),
                   initialValue: _direction,

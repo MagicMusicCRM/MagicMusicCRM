@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -246,8 +247,8 @@ typedef _DraftCallbacks = ({
   ValueChanged<String?> audienceTarget,
 });
 
-DropdownButtonFormField<String> _dropdown(WidgetTester tester, Key key) =>
-    tester.widget<DropdownButtonFormField<String>>(find.byKey(key));
+AppDropdownButtonFormField<String> _dropdown(WidgetTester tester, Key key) =>
+    tester.widget<AppDropdownButtonFormField<String>>(find.byKey(key));
 
 SegmentedButton<String> _audienceTypeControl(WidgetTester tester) => tester
     .widget<SegmentedButton<String>>(find.byType(SegmentedButton<String>));
@@ -312,7 +313,7 @@ void main() {
       find.byKey(const Key('shared-task-title')),
       'Изменённый заголовок',
     );
-    await tester.enterText(find.byType(TextField).at(1), 'Изменённое описание');
+    await tester.enterText(find.widgetWithText(TextField, 'Описание'), 'Изменённое описание');
 
     await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
     await tester.pumpAndSettle();

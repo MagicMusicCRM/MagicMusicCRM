@@ -65,8 +65,9 @@ class _TeacherPayrollApi extends MagicApiClient {
                 'currentRate': 900,
                 'completedLessons': 2,
                 'payableLessons': 2,
-                'hoursTotal': 2,
-                'accruedTotal': 1800,
+                'scheduledHoursTotal': 2,
+                'hoursTotal': 1.5,
+                'accruedTotal': 1350,
                 'bonusTotal': 0,
                 'deductionTotal': 0,
                 'paidTotal': 1000,
@@ -77,6 +78,8 @@ class _TeacherPayrollApi extends MagicApiClient {
                     'groupId': null,
                     'unitName': 'Анна Смирнова',
                     'rate': 900,
+                    'compensationLabel': 'Процент от стандартной ставки',
+                    'compensationSource': 'manual',
                     'days': [
                       {'date': '2026-08-04', 'hours': 1},
                       {'date': '2026-08-11', 'hours': 1},
@@ -87,8 +90,9 @@ class _TeacherPayrollApi extends MagicApiClient {
                     'compensationLocked': true,
                     'completedLessons': 2,
                     'payableLessons': 2,
-                    'hoursTotal': 2,
-                    'accruedTotal': 1800,
+                    'scheduledHoursTotal': 2,
+                    'hoursTotal': 1.5,
+                    'accruedTotal': 1350,
                   },
                 ],
               },
@@ -96,8 +100,9 @@ class _TeacherPayrollApi extends MagicApiClient {
             'totals': {
               'completedLessons': 2,
               'payableLessons': 2,
-              'hoursTotal': 2,
-              'accruedTotal': 1800,
+              'scheduledHoursTotal': 2,
+              'hoursTotal': 1.5,
+              'accruedTotal': 1350,
               'bonusTotal': 0,
               'deductionTotal': 0,
               'paidTotal': 1000,
@@ -268,6 +273,10 @@ void main() {
     );
     expect(find.byIcon(Icons.lock_outline_rounded), findsNothing);
     expect(find.byType(Checkbox), findsOneWidget);
+    expect(find.text('По расписанию: 2 астр.ч.'), findsWidgets);
+    expect(find.text('Зачтено преподавателю: 1.50 астр.ч.'), findsWidgets);
+    expect(find.text('Источник: вручную'), findsOneWidget);
+    expect(find.textContaining('Начислено:'), findsWidgets);
 
     await tester.tap(find.text('Экспорт'));
     await tester.pumpAndSettle();

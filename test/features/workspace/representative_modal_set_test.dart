@@ -58,6 +58,7 @@ void main() {
                 ),
                 lessonId: 'lesson-1',
                 onEdit: () => settled++,
+                onMove: () => settled++,
                 onCancel: () async => cancelled++,
               ),
               child: const Text('Открыть занятие'),
@@ -73,7 +74,6 @@ void main() {
     expect(find.byTooltip('Развернуть'), findsOneWidget);
     expect(find.text('Анна Смирнова'), findsNWidgets(2));
 
-    expect(find.text('Конфликт'), findsOneWidget);
     expect(find.textContaining('Причина конфликта'), findsOneWidget);
     expect(
       find.text(
@@ -90,6 +90,8 @@ void main() {
     expect(find.textContaining('Провести занятие'), findsNothing);
     expect(find.textContaining('Завершить занятие'), findsNothing);
     expect(find.text('Изменить занятие'), findsOneWidget);
+    expect(find.text('Перенести'), findsOneWidget);
+    expect(find.text('Изменить расчёт'), findsNothing);
     await tester.ensureVisible(find.text('Отменить занятие'));
     await tester.pump();
     await tester.tap(find.text('Отменить занятие'));

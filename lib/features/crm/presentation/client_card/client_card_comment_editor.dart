@@ -1,7 +1,7 @@
 part of 'client_card.dart';
 
 extension _ClientCardCommentEditor on _ClientCardState {
-  /// Staff может выбрать поток комментария; педагог всегда пишет teacher_note.
+  /// Staff выбирает видимость единого комментария для преподавателей.
   bool get _canPickCommentKind {
     final role = _currentActorRole();
     final isStaff =
@@ -22,8 +22,8 @@ extension _ClientCardCommentEditor on _ClientCardState {
             spacing: AppSpace.sm,
             children: [
               for (final (kind, label) in const [
-                ('admin_comment', 'Комментарий админа'),
-                ('teacher_note', 'Для педагога'),
+                ('admin_comment', 'Только администраторам'),
+                ('teacher_note', 'Администраторам и преподавателям'),
               ])
                 ChoiceChip(
                   label: Text(label, style: const TextStyle(fontSize: 12)),
@@ -40,7 +40,7 @@ extension _ClientCardCommentEditor on _ClientCardState {
           const SizedBox(height: AppSpace.xs),
           Text(
             _commentKind == 'teacher_note'
-                ? 'Комментарий увидит и педагог'
+                ? 'Комментарий увидят преподаватели с доступом к карточке'
                 : 'Комментарий виден только админам',
             style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
           ),
@@ -144,22 +144,12 @@ extension _ClientCardCommentEditor on _ClientCardState {
     MagicToast.show(
       context,
       kind == 'teacher_note'
-          ? 'Комментарий добавлен (для педагога)'
+          ? 'Комментарий добавлен и виден преподавателям'
           : 'Комментарий добавлен',
       type: MagicToastType.success,
     );
     _emitState(() {
-      if (target.$1 == 'student') {
-        _studentComments = mergeByIdSorted([
-          [created],
-          _studentComments,
-        ], dateKey: 'created_at');
-      } else if (target.$1 == 'lead' && _leadCard != null) {
-        _leadCard!['comments'] = mergeByIdSorted([
-          [created],
-          _list(_leadCard!['comments']),
-        ], dateKey: 'created_at');
-      }
+      _readController.recordComment(target.$1, created);
       _commentsRefreshKey++;
       _commentKind = 'admin_comment';
     });

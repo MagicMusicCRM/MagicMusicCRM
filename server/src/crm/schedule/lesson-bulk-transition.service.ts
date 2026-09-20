@@ -2,6 +2,7 @@ import { Injectable, UnprocessableEntityException } from "@nestjs/common";
 import type { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
@@ -48,6 +49,9 @@ export class LessonBulkTransitionService {
     this.policy.assertCanWriteCrm(actor);
     const items = normalizeBulkTransitionItems(dto);
     return this.database.transaction(async (client) => {
+      if (this.needsSettlementCoordinationGate(items)) {
+        await acquireLessonSettlementCoordinationGate(client);
+      }
       const calculated: Array<{
         lessonId: string;
         operation: (typeof items)[number]["operation"];
@@ -139,6 +143,9 @@ export class LessonBulkTransitionService {
           type: "schedule.lessons.changed",
           payload: { entityIds: items.map((item) => item.lessonId) },
         },
+        ...(this.needsSettlementCoordinationGate(items)
+          ? { beforeVersionAdvance: acquireLessonSettlementCoordinationGate }
+          : {}),
         mutate: async (client) => {
           const signed = this.previewTokens.verifyLessonTransition(
             dto.previewToken,
@@ -146,21 +153,28 @@ export class LessonBulkTransitionService {
           this.assertBulkPreview(signed, actor, previewId);
           const committed: CommittedTransition[] = [];
           for (const item of items) {
-            committed.push(
-              await this.commits.commit(client, {
+            const common = {
                 actor,
                 lessonId: item.lessonId,
-                dto: bulkTransitionItemDto(dto, item),
-                operation: item.operation,
-                successorId:
-                  item.operation === "reschedule"
-                    ? stableTransitionId(
-                        `schedule.lesson.bulk-successor\0${bulkId}\0${item.lessonId}`,
-                      )
-                    : null,
                 nextVersion: item.expectedVersion + 1,
-              }),
-            );
+            };
+            if (item.operation === "reschedule") {
+              committed.push(await this.commits.commit(client, {
+                ...common,
+                dto: bulkTransitionItemDto(dto, item),
+                operation: "reschedule",
+                successorId: stableTransitionId(
+                  `schedule.lesson.bulk-successor\0${bulkId}\0${item.lessonId}`,
+                ),
+              }));
+              continue;
+            }
+            committed.push(await this.commits.commit(client, {
+              ...common,
+              dto: bulkTransitionItemDto(dto, item),
+              operation: item.operation,
+              successorId: null,
+            }));
           }
           this.assertBulkFingerprint(
             signed.transitionFingerprint,
@@ -188,6 +202,15 @@ export class LessonBulkTransitionService {
       items: mutation.resultRef.items,
       replayed: mutation.replayed,
     };
+  }
+
+  private needsSettlementCoordinationGate(
+    items: ReturnType<typeof normalizeBulkTransitionItems>,
+  ): boolean {
+    return (
+      items.length > 1 ||
+      items.some((item) => item.operation === "reschedule")
+    );
   }
 
   private assertBulkPreview(

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'people_search_action.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -160,6 +161,8 @@ class _ProductionWorkspaceHostState
     );
     final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
     return ProductionWorkspaceView(
+      peopleSearchAction: const PeopleSearchAction(),
+      desktopPeopleSearch: const PeopleSearchAction(inline: true),
       controller: _controller,
       tabBuilder: widget.tabBuilder,
       navigationFor: (tab, {required isDesktop}) => _workspaceNavigation(
@@ -263,7 +266,8 @@ class _WorkspaceSectionEffect {
       final section = sectionKeyForTab(selected);
       if (section == null) {
         _lastMarkedSection = null;
-      } else if (section != _lastMarkedSection) {
+      } else if (section != _lastMarkedSection &&
+          _canMarkWorkspaceSectionSeen(snapshot, section)) {
         _lastMarkedSection = section;
         unawaited(
           ref
@@ -279,6 +283,14 @@ class _WorkspaceSectionEffect {
       }
     });
   }
+}
+
+bool _canMarkWorkspaceSectionSeen(CapabilitySnapshot snapshot, String section) {
+  if (section != 'clients') return true;
+  if (snapshot.role == 'teacher') {
+    return snapshot.allows('crm.client.read.basic');
+  }
+  return snapshot.allows('crm.client.write');
 }
 
 void _bindWorkspaceProviders(

@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -300,7 +301,7 @@ void main() {
         statuses: const <StatusRecord>[(statusId, 'В работе', Colors.blue)],
       );
 
-      final status = find.byType(DropdownButtonFormField<String>).first;
+      final status = find.byType(AppDropdownButtonFormField<String>).first;
       await tester.ensureVisible(status);
       await tester.tap(status);
       await tester.pumpAndSettle();

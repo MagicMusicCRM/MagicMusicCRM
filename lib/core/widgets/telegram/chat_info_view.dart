@@ -418,7 +418,7 @@ class _MemberRow extends StatelessWidget {
         ? 'Администратор группы'
         : chatInfoRoleLabel(member['user_role']?.toString() ?? 'client');
     final userId = member['user_id']?.toString();
-    final canOpen = model.access.canOpenMember(userId);
+    final canOpen = model.access.canOpenMemberRecord(member);
     final canRemove = model.access.canRemoveMember(member);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),

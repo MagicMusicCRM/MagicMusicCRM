@@ -319,7 +319,7 @@ class _MessageListViewState extends State<_MessageListView> {
                       msg['message_type'] == 'text' && msg['deleted_at'] == null
                       ? () => widget.onForward?.call(msg)
                       : null,
-                  onPin: () => widget.onPin?.call(msg),
+                  onPin: widget.onPin == null ? null : () => widget.onPin!(msg),
                   onReact: (emoji) => widget.onReact?.call(msg['id'], emoji),
                   reactions: widget.reactionsMap?[msg['id'].toString()],
                   isHighlighted: _highlightedMessageId == msg['id'].toString(),

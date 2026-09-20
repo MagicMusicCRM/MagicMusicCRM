@@ -51,9 +51,14 @@ class LessonEditorDraft {
     this.settlementTypeKey,
     this.compensationRuleKey,
     this.compensationValueMinor,
+    this.teacherCreditedDurationMinutes,
+    this.teacherCompensationSource,
+    this.compensationTouched = false,
+    this.recommendationRevision = 0,
     this.plannedSettlementReason = '',
     this.notes = '',
     this.clientDecisions = const [],
+    this.utcOffsetMinutes = 180,
   });
 
   final DateTime localStart;
@@ -69,9 +74,14 @@ class LessonEditorDraft {
   final String? settlementTypeKey;
   final String? compensationRuleKey;
   final String? compensationValueMinor;
+  final int? teacherCreditedDurationMinutes;
+  final String? teacherCompensationSource;
+  final bool compensationTouched;
+  final int recommendationRevision;
   final String plannedSettlementReason;
   final String notes;
   final List<Map<String, dynamic>> clientDecisions;
+  final int utcOffsetMinutes;
 
   LessonEditorDraft copyWith({
     DateTime? localStart,
@@ -87,9 +97,14 @@ class LessonEditorDraft {
     Object? settlementTypeKey = _lessonEditorAbsent,
     Object? compensationRuleKey = _lessonEditorAbsent,
     Object? compensationValueMinor = _lessonEditorAbsent,
+    Object? teacherCreditedDurationMinutes = _lessonEditorAbsent,
+    Object? teacherCompensationSource = _lessonEditorAbsent,
+    bool? compensationTouched,
+    int? recommendationRevision,
     String? plannedSettlementReason,
     String? notes,
     List<Map<String, dynamic>>? clientDecisions,
+    int? utcOffsetMinutes,
   }) => LessonEditorDraft(
     localStart: localStart ?? this.localStart,
     durationMinutes: durationMinutes ?? this.durationMinutes,
@@ -121,10 +136,22 @@ class LessonEditorDraft {
         identical(compensationValueMinor, _lessonEditorAbsent)
         ? this.compensationValueMinor
         : compensationValueMinor as String?,
+    teacherCreditedDurationMinutes:
+        identical(teacherCreditedDurationMinutes, _lessonEditorAbsent)
+        ? this.teacherCreditedDurationMinutes
+        : teacherCreditedDurationMinutes as int?,
+    teacherCompensationSource:
+        identical(teacherCompensationSource, _lessonEditorAbsent)
+        ? this.teacherCompensationSource
+        : teacherCompensationSource as String?,
+    compensationTouched: compensationTouched ?? this.compensationTouched,
+    recommendationRevision:
+        recommendationRevision ?? this.recommendationRevision,
     plannedSettlementReason:
         plannedSettlementReason ?? this.plannedSettlementReason,
     notes: notes ?? this.notes,
     clientDecisions: clientDecisions ?? this.clientDecisions,
+    utcOffsetMinutes: utcOffsetMinutes ?? this.utcOffsetMinutes,
   );
 
   LessonEditorDraft withDate(DateTime value) => copyWith(
@@ -210,6 +237,23 @@ final class LessonDurationEdit extends LessonEditorEdit {
   const LessonDurationEdit(this.value);
 
   final int value;
+}
+
+final class LessonTeacherDurationEdit extends LessonEditorEdit {
+  const LessonTeacherDurationEdit(this.value);
+
+  final int? value;
+}
+
+final class LessonClientDurationEdit extends LessonEditorEdit {
+  const LessonClientDurationEdit(this.clientId, this.value);
+
+  final String clientId;
+  final int? value;
+}
+
+final class LessonRestoreRecommendationEdit extends LessonEditorEdit {
+  const LessonRestoreRecommendationEdit();
 }
 
 final class LessonNotesEdit extends LessonEditorEdit {
@@ -412,6 +456,9 @@ LessonDecisionCatalogItem _frozenCatalogItem(LessonDecisionCatalogItem item) =>
       value: item.value,
       hourShareBasisPoints: item.hourShareBasisPoints,
       fixedPenaltyMinor: item.fixedPenaltyMinor,
+      clientDurationMode: item.clientDurationMode,
+      teacherDurationMode: item.teacherDurationMode,
+      defaultTeacherCompensationRuleKey: item.defaultTeacherCompensationRuleKey,
     );
 
 Map<String, dynamic> _frozenRaw(Map<String, dynamic> row) => Map.unmodifiable({

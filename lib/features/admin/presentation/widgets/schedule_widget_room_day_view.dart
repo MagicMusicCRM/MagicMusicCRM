@@ -32,7 +32,7 @@ extension _ScheduleRoomDayView on _ScheduleWidgetState {
   // ── Day view by Rooms (2-axis canvas — KVA-195) ────────────────────────────
   Widget _buildDayViewByRoom() {
     final rooms = _filteredRooms;
-    final dayLessons = _lessonsForDate(_selectedDate);
+    final dayLessons = _lessonsForDate(_selectedDate, extendedEvening: true);
 
     // Lessons whose room is NOT among the rendered room columns (no room_id, a
     // room missing from the loaded list, or a different branch) get a synthetic
@@ -104,6 +104,7 @@ extension _ScheduleRoomDayView on _ScheduleWidgetState {
           id: l['id']?.toString() ?? '',
           columnId: columnId,
           startLocal: start,
+          displayDate: _selectedDate,
           durationMinutes: _durationMinutes(l),
           title: title,
           subtitle: teacher,
@@ -120,6 +121,7 @@ extension _ScheduleRoomDayView on _ScheduleWidgetState {
     }
 
     return ScheduleDayCanvas(
+      fitToViewport: _fitDayToViewport,
       key: ValueKey(
         'day-${_selectedDate.year}-${_selectedDate.month}-${_selectedDate.day}'
         '-${_selectedBranchId ?? ''}-${columns.length}',
@@ -132,6 +134,7 @@ extension _ScheduleRoomDayView on _ScheduleWidgetState {
       columns: columns,
       entries: entries,
       allowCreate: widget.canWrite,
+      onProposeMove: widget.canWrite ? _proposeDayMove : null,
       onCreateSlot: _openQuickCreate,
       onOpenLesson: _showLessonDetails,
       initialVerticalOffset: _dayScrollOffset,

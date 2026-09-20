@@ -42,6 +42,9 @@ export function toStudentDto(row: StudentRow) {
     leadId: row.lead_id,
     sourceId: row.source_id ?? null,
     sourceName: row.source_name ?? null,
+    ...(row.branch_id !== undefined
+      ? { branchId: row.branch_id, branchName: row.branch_name ?? null }
+      : {}),
     status: row.status,
     customData: row.custom_data ?? {},
     profileId: row.profile_id,

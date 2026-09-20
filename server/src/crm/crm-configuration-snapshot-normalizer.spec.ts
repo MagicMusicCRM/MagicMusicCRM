@@ -36,6 +36,9 @@ function validRawSnapshot(): Record<string, unknown> {
         label: "Занятие",
         colorToken: "success",
         hourShareBasisPoints: 10000,
+        clientDurationMode: "full",
+        teacherDurationMode: "full",
+        defaultTeacherCompensationRuleKey: "standard",
         allowedContexts: ["settle"],
         active: true,
         order: 0,
@@ -233,6 +236,44 @@ describe("normalizeCrmConfigurationSnapshot", () => {
     });
   });
 
+  it("rejects an unsupported settlement duration mode", () => {
+    const raw = validRawSnapshot();
+    rows(raw, "lessonSettlementTypes")[0].clientDurationMode = "fraction";
+
+    expect(invalidResponse(raw)).toEqual({
+      code: "INVALID_SETTLEMENT_DURATION_MODE",
+      field: "lessonSettlementTypes.0.clientDurationMode",
+      message: "Допустимы zero, full и manual.",
+    });
+  });
+
+  it("preserves the system-owned settlement policy metadata", () => {
+    const normalized = normalizeCrmConfigurationSnapshot(validRawSnapshot());
+
+    expect(normalized.lessonSettlementTypes[0]).toMatchObject({
+      clientDurationMode: "full",
+      teacherDurationMode: "full",
+      defaultTeacherCompensationRuleKey: "standard",
+    });
+  });
+
+  it("reads the legacy 0109 settlement shape without rewriting history", () => {
+    const raw = validRawSnapshot();
+    const legacy = rows(raw, "lessonSettlementTypes")[0]!;
+    delete legacy.clientDurationMode;
+    delete legacy.teacherDurationMode;
+    delete legacy.defaultTeacherCompensationRuleKey;
+
+    const normalized = normalizeCrmConfigurationSnapshot(raw);
+
+    expect(normalized.lessonSettlementTypes[0]).toMatchObject({
+      stableKey: "lesson",
+      clientDurationMode: "full",
+      teacherDurationMode: "full",
+      defaultTeacherCompensationRuleKey: "standard",
+    });
+  });
+
   it("requires at least one active lesson settlement type", () => {
     const raw = validRawSnapshot();
     rows(raw, "lessonSettlementTypes")[0].active = false;
@@ -292,6 +333,9 @@ describe("normalizeCrmConfigurationSnapshot", () => {
       label: "Бесплатно",
       colorToken: "warning",
       hourShareBasisPoints: 0,
+      clientDurationMode: "zero",
+      teacherDurationMode: "zero",
+      defaultTeacherCompensationRuleKey: "none",
       allowedContexts: ["settle", "cancel"],
       active: true,
       order: 0,

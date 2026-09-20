@@ -16,6 +16,10 @@ import {
 // молча значило бы поменять цифры под теми, кто на него смотрит.
 export class TeacherStatsQuery {
   @IsOptional()
+  @IsString()
+  compensationRuleKey?: string;
+
+  @IsOptional()
   @IsDateString()
   from?: string;
 

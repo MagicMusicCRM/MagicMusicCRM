@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:magic_music_crm/core/models/subscription_purchase.dart';
@@ -228,7 +229,7 @@ class SubscriptionIssueInstallmentSection extends StatelessWidget {
         if (draft.fundingMode == SubscriptionFundingMode.installment) ...[
           const SubscriptionIssueSectionTitle('График рассрочки'),
           const SizedBox(height: AppSpace.md),
-          DropdownButtonFormField<int>(
+          AppDropdownButtonFormField<int>(
             menuMaxHeight: 256,
             key: const Key('subscription-installment-count'),
             initialValue: draft.installmentCount,

@@ -38,6 +38,10 @@ export class UpdateStudentDto {
   phone?: string;
 
   @IsOptional()
+  @IsBoolean()
+  clearPhone?: boolean;
+
+  @IsOptional()
   @IsEmail()
   @MaxLength(255)
   email?: string;

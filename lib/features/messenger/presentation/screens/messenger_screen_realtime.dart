@@ -51,6 +51,7 @@ extension _MessengerRealtime on _MessengerScreenState {
             _sortMessagesChronologically();
           });
           _fetchReactionsForCurrentMessages();
+          _fetchPinnedMessages();
           _markMessagesRead();
         }
       }

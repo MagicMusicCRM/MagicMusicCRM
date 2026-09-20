@@ -1,9 +1,23 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
 import * as ts from "typescript";
+import {
+  LessonReschedulePreviewDto,
+  normalizeRescheduleDto,
+} from "../dto/lesson-transition.dto";
+import type {
+  BulkTransitionInputItem,
+  NormalizedReschedulePreview,
+  TransitionPreviewDto,
+} from "./lesson-transition.types";
 import {
   bulkTransitionFingerprint,
   normalizeBulkTransitionItems,
+  plannedSettlementProjection,
+  targetTransitionState,
+  transitionFingerprint,
 } from "./lesson-transition.rules";
 
 const readSource = (name: string) =>
@@ -22,11 +36,56 @@ const moduleSource = readFileSync(resolve(__dirname, "..", "crm.module.ts"), "ut
 const otherNewSources = [
   readSource("lesson-command-metadata.ts"),
   readSource("lesson-transition-group-draft.ts"),
+  readSource("lesson-reschedule-financial-preparation.ts"),
+  readSource("lesson-transition-source-rules.ts"),
   readSource("lesson-transition.types.ts"),
   readSource("lesson-transition.rules.ts"),
 ];
 const transitionTypesSource = readSource("lesson-transition.types.ts");
 const requiredFieldValidatorSource = readSource("lesson-required-field.validator.ts");
+const constraintSource = readSource("constraint-engine.repository.ts");
+
+const compileBoundaryDecision = {
+  settlementTypeKey: "free_lesson",
+  teacherCompensationRuleKey: "none",
+};
+const compileBoundarySuccessor = {} as never;
+const validCompileBoundaryReschedule = {
+  operation: "reschedule",
+  expectedVersion: 1,
+  reasonText: "reason",
+  successor: compileBoundarySuccessor,
+  sourceFinancialDecision: compileBoundaryDecision,
+  successorFinancialDecision: compileBoundaryDecision,
+} satisfies NormalizedReschedulePreview;
+void validCompileBoundaryReschedule;
+
+const invalidClientBulkSourceDecision: BulkTransitionInputItem = {
+  lessonId: "00000000-0000-4000-8000-000000000001",
+  operation: "reschedule",
+  expectedVersion: 1,
+  successor: compileBoundarySuccessor,
+  // @ts-expect-error client bulk inputs cannot provide the server-owned source decision
+  sourceFinancialDecision: compileBoundaryDecision,
+  successorFinancialDecision: compileBoundaryDecision,
+};
+void invalidClientBulkSourceDecision;
+
+// @ts-expect-error normalized reschedules cannot carry the legacy financialDecision alias
+const invalidNormalizedRescheduleAlias: TransitionPreviewDto = {
+  ...validCompileBoundaryReschedule,
+  financialDecision: compileBoundaryDecision,
+};
+void invalidNormalizedRescheduleAlias;
+
+// @ts-expect-error cancel inputs cannot carry reschedule successor fields
+const invalidCancelSuccessor: TransitionPreviewDto = {
+  operation: "cancel",
+  expectedVersion: 1,
+  financialDecision: compileBoundaryDecision,
+  successorFinancialDecision: compileBoundaryDecision,
+};
+void invalidCancelSuccessor;
 
 const sourceNloc = (source: string) => {
   const withoutBlockComments = source.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -242,6 +301,130 @@ const facadeContractErrors = (source: string): string[] => {
 };
 
 describe("Lesson transition owner boundaries", () => {
+  const successor = {
+    scheduledAt: "2026-09-05T10:00:00.000Z",
+    durationMinutes: 60,
+  };
+  const paidDecision = {
+    settlementTypeKey: "partial_lesson",
+    clientDecisions: [{
+      clientId: "00000000-0000-4000-8000-000000000002",
+      chargeDurationMinutes: 30,
+    }],
+    teacherCompensationRuleKey: "standard",
+    teacherCreditedDurationMinutes: 45,
+  };
+
+  it("removes cancelled lessons from teacher and room occupancy before settlement", () => {
+    expect(targetTransitionState("cancel")).toBe("cancelled");
+    expect(sources.commit).toMatch(
+      /await this\.updateSource\([\s\S]+await this\.settlement\.settle\(/,
+    );
+    expect(
+      constraintSource.match(/lesson\.lifecycle_state = 'scheduled'/g),
+    ).toHaveLength(3);
+  });
+
+  it("rejects a client-supplied source financial decision for reschedule", async () => {
+    const errors = await validate(
+      plainToInstance(LessonReschedulePreviewDto, {
+        expectedVersion: 3,
+        reasonText: "Перенос по просьбе клиента",
+        sourceFinancialDecision: paidDecision,
+        successor,
+        successorFinancialDecision: paidDecision,
+      }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+
+    expect(errors).toContainEqual(
+      expect.objectContaining({ property: "sourceFinancialDecision" }),
+    );
+  });
+
+  it("treats the build-210 financial decision as successor-only", () => {
+    const normalized = normalizeRescheduleDto({
+      expectedVersion: 3,
+      reasonText: "Перенос",
+      successor,
+      financialDecision: paidDecision,
+    });
+
+    expect(normalized.successorFinancialDecision).toEqual(paidDecision);
+    expect(normalized.sourceFinancialDecision).toMatchObject({
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      clientDecisions: [{
+        clientId: paidDecision.clientDecisions[0]!.clientId,
+        chargeDurationMinutes: 0,
+      }],
+    });
+  });
+
+  it("accepts identical successor aliases and rejects ambiguous decisions", () => {
+    expect(normalizeRescheduleDto({
+      expectedVersion: 3,
+      reasonText: "Перенос",
+      successor,
+      successorFinancialDecision: paidDecision,
+      financialDecision: {
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationRuleKey: "standard",
+        clientDecisions: [{
+          chargeDurationMinutes: 30,
+          clientId: paidDecision.clientDecisions[0]!.clientId,
+        }],
+        settlementTypeKey: "partial_lesson",
+      },
+    }).successorFinancialDecision).toEqual(paidDecision);
+
+    expect(() => normalizeRescheduleDto({
+      expectedVersion: 3,
+      reasonText: "Перенос",
+      successor,
+      successorFinancialDecision: paidDecision,
+      financialDecision: {
+        ...paidDecision,
+        teacherCreditedDurationMinutes: 30,
+      },
+    })).toThrow(expect.objectContaining({
+      response: expect.objectContaining({
+        code: "LESSON_RESCHEDULE_DECISION_AMBIGUOUS",
+      }),
+      status: 422,
+    }));
+  });
+
+  it("preserves independent partial durations in direct and bulk reschedules", () => {
+    expect(normalizeRescheduleDto({
+      expectedVersion: 3,
+      reasonText: "Перенос",
+      successor,
+      successorFinancialDecision: paidDecision,
+    }).successorFinancialDecision).toMatchObject({
+      clientDecisions: [expect.objectContaining({ chargeDurationMinutes: 30 })],
+      teacherCreditedDurationMinutes: 45,
+    });
+
+    const [item] = normalizeBulkTransitionItems({
+      reasonText: "Перенос",
+      items: [{
+        lessonId: "00000000-0000-4000-8000-000000000001",
+        operation: "reschedule",
+        expectedVersion: 3,
+        successor,
+        successorFinancialDecision: paidDecision,
+      }],
+    });
+    expect(item).toMatchObject({
+      operation: "reschedule",
+      successorFinancialDecision: {
+        clientDecisions: [expect.objectContaining({ chargeDurationMinutes: 30 })],
+        teacherCreditedDurationMinutes: 45,
+      },
+    });
+  });
+
   it("keeps internal transition contracts independent from transport DTOs", () => {
     expect([
       transitionTypesSource,
@@ -366,5 +549,166 @@ describe("Lesson transition owner boundaries", () => {
     expect(bulkTransitionFingerprint(dto, items)).toBe(
       bulkTransitionFingerprint(dto, items),
     );
+  });
+
+  it("binds signed reschedule fingerprints to both decisions and projections", () => {
+    const sourceFinancialDecision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+      teacherCompensationSource: "automatic" as const,
+    };
+    const successorFinancialDecision = {
+      ...paidDecision,
+      teacherCompensationSource: "manual" as const,
+    };
+    const input = {
+      operation: "reschedule" as const,
+      source: {
+        id: "00000000-0000-4000-8000-000000000001",
+        version: 3,
+        lifecycleState: "scheduled",
+      } as never,
+      successor: {
+        kind: "individual",
+        clientRef: { type: "student", id: paidDecision.clientDecisions[0]!.clientId },
+        teacherId: "00000000-0000-4000-8000-000000000003",
+        branchId: "00000000-0000-4000-8000-000000000004",
+        roomId: "00000000-0000-4000-8000-000000000005",
+        scheduledAt: successor.scheduledAt,
+        durationMinutes: 60,
+        endAt: "2026-09-05T11:00:00.000Z",
+        isTrial: false,
+        notes: "Первоначальная заметка",
+        completionType: "regular",
+        clientChargeType: "personal_account",
+        clientChargeValue: 1200,
+        subscriptionId: null,
+        teacherCompensationType: "hourly",
+        teacherCompensationValue: 800,
+      } as never,
+      dto: {
+        operation: "reschedule" as const,
+        expectedVersion: 3,
+        reasonText: "Перенос",
+        successor,
+        sourceFinancialDecision,
+        successorFinancialDecision,
+      },
+      coverage: { reservations: [{ id: "reservation-1" }] } as never,
+      financial: {
+        clientFacts: [{ amountMinor: "0" }],
+        teacherFact: { amountMinor: "0" },
+      } as never,
+      successorPlannedSettlement: plannedSettlementProjection(
+        successorFinancialDecision,
+      ),
+    };
+    const fingerprint = transitionFingerprint(input);
+    const persistedSuccessorChanges = [
+      { clientRef: { type: "lead", id: "00000000-0000-4000-8000-000000000010" } },
+      { teacherId: "00000000-0000-4000-8000-000000000011" },
+      { branchId: "00000000-0000-4000-8000-000000000012" },
+      { roomId: "00000000-0000-4000-8000-000000000013" },
+      { scheduledAt: "2026-09-06T10:00:00.000Z" },
+      { durationMinutes: 30 },
+      { endAt: "2026-09-05T10:30:00.000Z" },
+      { isTrial: true },
+      { notes: "Подменённая заметка" },
+      { completionType: "trial" },
+      { clientChargeType: "subscription" },
+      { clientChargeValue: 600 },
+      { subscriptionId: "00000000-0000-4000-8000-000000000014" },
+      { teacherCompensationType: "fixed" },
+      { teacherCompensationValue: 900 },
+    ];
+    const changed = [
+      {
+        ...input,
+        source: {
+          ...(input.source as unknown as Record<string, unknown>),
+          version: 4,
+        } as never,
+      },
+      ...persistedSuccessorChanges.map((change) => ({
+        ...input,
+        successor: {
+          ...(input.successor as unknown as Record<string, unknown>),
+          ...change,
+        },
+      })),
+      { ...input, coverage: { reservations: [{ id: "reservation-2" }] } as never },
+      {
+        ...input,
+        dto: {
+          ...input.dto,
+          sourceFinancialDecision: {
+            ...sourceFinancialDecision,
+            teacherCompensationRuleKey: "standard",
+          },
+        },
+      },
+      {
+        ...input,
+        dto: {
+          ...input.dto,
+          successorFinancialDecision: {
+            ...successorFinancialDecision,
+            teacherCreditedDurationMinutes: 30,
+          },
+        },
+      },
+      {
+        ...input,
+        financial: {
+          ...(input.financial as unknown as Record<string, unknown>),
+          teacherFact: { amountMinor: "1" },
+        } as never,
+      },
+      {
+        ...input,
+        successorPlannedSettlement: {
+          ...input.successorPlannedSettlement,
+          settlementTypeLabel: "Другой безопасный ярлык",
+        },
+      },
+    ];
+    expect(changed.map((value) => transitionFingerprint(value as never)))
+      .toEqual(changed.map(() => expect.not.stringMatching(fingerprint)));
+
+    const groupInput = {
+      ...input,
+      successor: {
+        kind: "group" as const,
+        groupId: "00000000-0000-4000-8000-000000000020",
+        teacherId: "00000000-0000-4000-8000-000000000003",
+        branchId: "00000000-0000-4000-8000-000000000004",
+        roomId: "00000000-0000-4000-8000-000000000005",
+        scheduledAt: successor.scheduledAt,
+        durationMinutes: 60,
+        endAt: "2026-09-05T11:00:00.000Z",
+        isTrial: false,
+        notes: "Групповая заметка",
+        completionType: "regular",
+        teacherCompensationType: "hourly" as const,
+        teacherCompensationValue: 800,
+        participants: [{
+          studentId: paidDecision.clientDecisions[0]!.clientId,
+          chargeType: "subscription" as const,
+          chargeValue: 1,
+          subscriptionId: "00000000-0000-4000-8000-000000000021",
+        }],
+      },
+    };
+    const groupFingerprint = transitionFingerprint(groupInput as never);
+    expect(transitionFingerprint({
+      ...groupInput,
+      successor: {
+        ...groupInput.successor,
+        participants: [{
+          ...groupInput.successor.participants[0]!,
+          chargeValue: 2,
+        }],
+      },
+    } as never)).not.toBe(groupFingerprint);
   });
 });

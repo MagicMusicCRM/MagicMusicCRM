@@ -3,6 +3,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import 'lesson_decision_models.dart';
+import '../lesson_editor/lesson_transition_error.dart';
 
 typedef LessonDecisionCommitted =
     Future<void> Function(Map<String, dynamic> result);
@@ -13,13 +14,18 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     required this.operation,
     required this.lesson,
     required this.canManageTeacherCompensation,
+    this.canSelectTrialCompensation = false,
     this.successor,
     this.resources,
-    this.initialSettlementTypeKey,
-    this.initialCompensationRuleKey,
-    this.initialCompensationValueMinor,
+    String? initialSettlementTypeKey,
+    String? initialCompensationRuleKey,
+    String? initialCompensationValueMinor,
+    this.reloadStaleLesson = true,
     this.afterCommit,
   }) : _crm = crm,
+       _initialSettlementTypeKey = initialSettlementTypeKey,
+       _initialCompensationRuleKey = initialCompensationRuleKey,
+       _initialCompensationValueMinor = initialCompensationValueMinor,
        _expectedVersion = (lesson['version'] as num?)?.toInt();
 
   final MagicCrmService _crm;
@@ -29,16 +35,78 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   final Map<String, dynamic> lesson;
   @override
   final bool canManageTeacherCompensation;
+  final bool canSelectTrialCompensation;
   @override
   final Map<String, dynamic>? successor;
-  @override
-  final String? initialSettlementTypeKey;
-  @override
-  final String? initialCompensationRuleKey;
-  @override
-  final String? initialCompensationValueMinor;
+  final String? _initialSettlementTypeKey;
+  final String? _initialCompensationRuleKey;
+  final String? _initialCompensationValueMinor;
+  final bool reloadStaleLesson;
   final LessonDecisionCommitted? afterCommit;
   final Map<String, dynamic>? resources;
+
+  Map<String, dynamic>? get _initialFinancialDecision {
+    final value = lesson['financial_decision'] ?? lesson['financialDecision'];
+    return value is Map ? Map<String, dynamic>.from(value) : null;
+  }
+
+  @override
+  String? get initialSettlementTypeKey =>
+      operation == LessonDecisionOperation.cancel
+      ? 'unpaid_miss'
+      : _initialSettlementTypeKey ??
+            _initialFinancialDecision?['settlementTypeKey']?.toString();
+
+  @override
+  String? get initialCompensationRuleKey =>
+      operation == LessonDecisionOperation.cancel
+      ? 'none'
+      : _initialCompensationRuleKey ??
+            _initialFinancialDecision?['teacherCompensationRuleKey']
+                ?.toString();
+
+  @override
+  String? get initialCompensationValueMinor =>
+      operation == LessonDecisionOperation.cancel
+      ? null
+      : _initialCompensationValueMinor ??
+            _initialFinancialDecision?['teacherCompensationValueMinor']
+                ?.toString();
+
+  @override
+  int? get initialTeacherCreditedDurationMinutes =>
+      operation == LessonDecisionOperation.cancel
+      ? 0
+      : lessonDecisionIntegerMinutes(
+          _initialFinancialDecision?['teacherCreditedDurationMinutes'],
+        );
+
+  @override
+  String? get initialTeacherCompensationSource =>
+      operation == LessonDecisionOperation.cancel
+      ? 'automatic'
+      : _initialFinancialDecision?['teacherCompensationSource']?.toString();
+
+  @override
+  List<Map<String, dynamic>> get initialClientDecisions {
+    final stored = [
+      for (final item
+          in _initialFinancialDecision?['clientDecisions'] as List? ?? const [])
+        if (item is Map)
+          Map<String, dynamic>.unmodifiable(
+            normalizeLessonClientDecision(Map<String, dynamic>.from(item)),
+          ),
+    ];
+    if (stored.isNotEmpty) return List.unmodifiable(stored);
+    return List.unmodifiable([
+      for (final participant in settlementClients)
+        if (!participant.isStudent)
+          Map<String, dynamic>.unmodifiable({
+            'clientId': participant.id,
+            'chargeType': 'none',
+          }),
+    ]);
+  }
 
   @override
   bool get isGroupLesson {
@@ -84,26 +152,45 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   List<LessonDecisionParticipant> get settlementClients {
     if (isGroupLesson) return groupParticipants;
     final clientType = (lesson['client_type'] ?? lesson['clientType'])
-        ?.toString();
-    if (clientType != null && clientType != 'student') return const [];
-    final id =
-        (lesson['student_id'] ??
-                lesson['studentId'] ??
-                lesson['client_id'] ??
-                lesson['clientId'])
-            ?.toString();
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    final leadId = (lesson['lead_id'] ?? lesson['leadId'])?.toString();
+    final isLead =
+        clientType == 'lead' ||
+        (clientType == null && leadId?.isNotEmpty == true);
+    if (clientType != null && clientType != 'student' && !isLead) {
+      return const [];
+    }
+    final id = isLead
+        ? (leadId ?? lesson['client_id'] ?? lesson['clientId'])?.toString()
+        : (lesson['student_id'] ??
+                  lesson['studentId'] ??
+                  lesson['client_id'] ??
+                  lesson['clientId'])
+              ?.toString();
     if (id == null || id.isEmpty) return const [];
     final name =
-        (lesson['student_name'] ??
-                lesson['studentName'] ??
-                lesson['client_name'] ??
-                lesson['clientName'])
+        (isLead
+                ? (lesson['lead_name'] ??
+                      lesson['leadName'] ??
+                      lesson['client_name'] ??
+                      lesson['clientName'])
+                : (lesson['student_name'] ??
+                      lesson['studentName'] ??
+                      lesson['client_name'] ??
+                      lesson['clientName']))
             ?.toString()
             .trim();
     return [
       LessonDecisionParticipant(
         id: id,
-        name: name?.isNotEmpty == true ? name! : 'Ученик',
+        name: name?.isNotEmpty == true
+            ? name!
+            : isLead
+            ? 'Лид'
+            : 'Ученик',
+        isStudent: !isLead,
       ),
     ];
   }
@@ -133,15 +220,42 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   int? _expectedVersion;
 
   @override
-  MagicApiException? recoverStaleCommit(Object error) {
+  Future<MagicApiException?> recoverStaleCommit(
+    Object error, {
+    bool reloadLesson = true,
+  }) async {
     if (error is! MagicApiException || error.details is! Map) return null;
     final details = Map<String, dynamic>.from(error.details! as Map);
     final code = details['code']?.toString();
     if (code != 'STALE_LESSON_VERSION' &&
+        code != 'LESSON_VERSION_STALE' &&
+        code != 'LESSON_ALREADY_RESCHEDULED' &&
         code != 'LESSON_TRANSITION_PREVIEW_STALE') {
       return null;
     }
-    if (code == 'STALE_LESSON_VERSION') {
+    if (reloadLesson) {
+      try {
+        final current = await _crm.reloadActionableLesson(
+          lesson,
+          actionableLessonId: lessonTransitionActionableLessonId(error),
+        );
+        lesson
+          ..clear()
+          ..addAll(current);
+        final rawVersion = current['version'];
+        _expectedVersion = rawVersion is num
+            ? rawVersion.toInt()
+            : int.tryParse(rawVersion?.toString() ?? '');
+      } catch (_) {
+        final rawVersion = details['currentVersion'];
+        final currentVersion = rawVersion is num
+            ? rawVersion.toInt()
+            : int.tryParse(rawVersion?.toString() ?? '');
+        if (currentVersion != null && currentVersion > 0) {
+          _expectedVersion = currentVersion;
+        }
+      }
+    } else {
       final rawVersion = details['currentVersion'];
       final currentVersion = rawVersion is num
           ? rawVersion.toInt()
@@ -152,15 +266,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     }
     _previewPayload = null;
     _commitIdentity = null;
-    return MagicApiException(
-      statusCode: error.statusCode,
-      details: details,
-      message: code == 'STALE_LESSON_VERSION'
-          ? 'Версия обновлена другим сотрудником. Проверьте параметры и '
-                'нажмите «Рассчитать» ещё раз.'
-          : 'Условия расчёта изменились после предварительного просмотра. '
-                'Проверьте параметры и нажмите «Рассчитать» ещё раз.',
-    );
+    return mapLessonTransitionError(error);
   }
 
   @override
@@ -253,6 +359,8 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     required String settlementTypeKey,
     required String compensationRuleKey,
     String? compensationValueMinor,
+    int? teacherCreditedDurationMinutes,
+    String? teacherCompensationSource,
     List<Map<String, dynamic>> clientDecisions = const [],
   }) async {
     final expectedVersion = _expectedVersion;
@@ -261,28 +369,44 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     }
     final payload = <String, dynamic>{
       'expectedVersion': expectedVersion,
-      if (operation != LessonDecisionOperation.plannedSettlement &&
-          operation != LessonDecisionOperation.correction)
+      if (operation.apiKey != 'planned-settlement' &&
+          operation.apiKey != 'settlement-correction')
         'reasonCode': 'manual',
       'reasonText': reason.trim(),
-      'financialDecision': {
+      operation == LessonDecisionOperation.reschedule
+          ? 'successorFinancialDecision'
+          : 'financialDecision': {
         'settlementTypeKey': settlementTypeKey,
         if (clientDecisions.isNotEmpty)
           'clientDecisions': lessonClientDecisionsPayload(clientDecisions),
-        if (canManageTeacherCompensation) ...{
+        if (canManageTeacherCompensation ||
+            (canSelectTrialCompensation &&
+                settlementTypeKey == 'trial_lesson')) ...{
           'teacherCompensationRuleKey': compensationRuleKey,
           'teacherCompensationValueMinor': ?compensationValueMinor,
+          'teacherCreditedDurationMinutes': ?teacherCreditedDurationMinutes,
+          'teacherCompensationSource': ?teacherCompensationSource,
         },
       },
       if (operation == LessonDecisionOperation.reschedule)
         'successor': successor ?? const <String, dynamic>{},
       if (resources != null) 'resources': resources,
     };
-    final response = await _crm.previewLessonDecision(
-      lessonId: lesson['id'].toString(),
-      operationKey: operation.apiKey,
-      data: payload,
-    );
+    late final Map<String, dynamic> response;
+    try {
+      response = await _crm.previewLessonDecision(
+        lessonId: lesson['id'].toString(),
+        operationKey: operation.apiKey,
+        data: payload,
+      );
+    } catch (error) {
+      final recovered = await recoverStaleCommit(
+        error,
+        reloadLesson: reloadStaleLesson,
+      );
+      if (recovered != null) throw recovered;
+      throw mapLessonTransitionFailure(error);
+    }
     _previewPayload = payload;
     _commitIdentity = MagicMutationIdentity.create(
       'lesson-${operation.apiKey}-${lesson['id']}',
@@ -307,7 +431,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
       operationKey: operation.apiKey,
       data: data,
       identity: identity,
-      usePut: operation == LessonDecisionOperation.plannedSettlement,
+      usePut: operation.apiKey == 'planned-settlement',
     );
     await afterCommit?.call(result);
     return result;

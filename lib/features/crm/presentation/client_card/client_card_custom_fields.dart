@@ -22,7 +22,10 @@ extension _ClientCardCustomFields on _ClientCardState {
           isDense: true,
         ).copyWith(errorText: errorText),
         keyboardType: keyboard,
-        onChanged: (v) => onChanged(v.trim().isEmpty ? null : v),
+        readOnly: !_canWriteClient,
+        onChanged: _canWriteClient
+            ? (v) => onChanged(v.trim().isEmpty ? null : v)
+            : null,
       ),
     );
   }

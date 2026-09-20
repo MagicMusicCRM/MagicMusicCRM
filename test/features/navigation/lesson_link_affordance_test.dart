@@ -107,6 +107,7 @@ void main() {
                         },
                       ],
                       onEdit: () => adjusted = true,
+                      onMove: () => adjusted = true,
                       onCancel: () async {},
                     ),
                     child: const Text('Открыть занятие'),
@@ -132,23 +133,36 @@ void main() {
         expect(find.text('Без аудитории'), findsOneWidget);
         expect(find.byTooltip('Открыть в новой вкладке'), findsNothing);
         expect(find.text('Изменить занятие'), findsOneWidget);
+        await tester.ensureVisible(
+          find.byKey(const Key('lesson-settlement-history')),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('lesson-settlement-history')));
         await tester.pumpAndSettle();
         expect(find.text('План расчёта · заменён'), findsOneWidget);
         expect(find.text('Корректировка · действующий'), findsOneWidget);
         expect(find.textContaining('free_lesson'), findsNothing);
-        expect(find.text('Списание: Без списания · преподаватель: Стандартная ставка'), findsOneWidget);
+        expect(
+          find.text(
+            'Списание: Без списания · преподаватель: Стандартная ставка',
+          ),
+          findsOneWidget,
+        );
         expect(
           find.text('Причина: Согласовано бесплатное занятие'),
           findsOneWidget,
         );
 
+        await tester.ensureVisible(linkedText);
+        await tester.pumpAndSettle();
         await tester.tap(linkedText);
         await tester.pumpAndSettle();
         expect(opened?.entityId, 'student-1');
         expect(target, EntityOpenTarget.current);
 
         await tester.tap(find.text('Открыть занятие'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Изменить занятие'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Изменить занятие'));
         await tester.pumpAndSettle();

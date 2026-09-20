@@ -1,3 +1,5 @@
+import { ExpenseApi } from "./dto/expense-api.decorator";
+import { ExpenseResponseDto, ExpensePageDto, ExpenseDeleteResponseDto } from "./dto/expense-response.dto";
 import {
   Body,
   Controller,
@@ -17,7 +19,7 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
-import { ExpenseQuery } from "./dto/expense.query";
+import { ExpenseQuery, ExpenseVersionQuery } from "./dto/expense.query";
 import { UpsertExpenseDto } from "./dto/upsert-expense.dto";
 import { UpdateExpenseDto } from "./dto/update-expense.dto";
 import { UpsertSubscriptionPackageDto } from "./dto/upsert-subscription-package.dto";
@@ -67,41 +69,66 @@ export class CrmFinanceController {
   createPayment(
     @CurrentActor() actor: ActorContext,
     @Body() dto: CreatePaymentDto,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
   ) {
-    return this.finance.createPayment(actor, dto);
+    return this.finance.createPayment(actor, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Get("expenses")
+  @ExpenseApi("listExpenses", ExpensePageDto)
   listExpenses(
     @CurrentActor() actor: ActorContext,
     @Query() query: ExpenseQuery,
-  ) {
+  ): Promise<ExpensePageDto> {
     return this.finance.listExpenses(actor, query);
   }
 
   @Post("expenses")
+  @ExpenseApi("createExpense", ExpenseResponseDto, 201, true)
   createExpense(
     @CurrentActor() actor: ActorContext,
     @Body() dto: UpsertExpenseDto,
-  ) {
-    return this.finance.createExpense(actor, dto);
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+  ): Promise<ExpenseResponseDto> {
+    return this.finance.createExpense(actor, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Patch("expenses/:id")
+  @ExpenseApi("updateExpense", ExpenseResponseDto, 200, true, true)
   updateExpense(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateExpenseDto,
-  ) {
-    return this.finance.updateExpense(actor, id, dto);
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+  ): Promise<ExpenseResponseDto> {
+    return this.finance.updateExpense(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Delete("expenses/:id")
+  @ExpenseApi("deleteExpense", ExpenseDeleteResponseDto, 200, true, true)
   deleteExpense(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
-  ) {
-    return this.finance.deleteExpense(actor, id);
+    @Query() query: ExpenseVersionQuery,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+  ): Promise<ExpenseDeleteResponseDto> {
+    return this.finance.deleteExpense(actor, id, query.expectedVersion, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Get("subscription-packages")

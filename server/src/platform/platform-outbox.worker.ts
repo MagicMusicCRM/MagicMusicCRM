@@ -152,7 +152,8 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
     this.realtime.emitCrmChanged({
       entity,
       action: actionFor(event),
-      id: event.type === "schedule.lessons.changed" ? null : eventId(event),
+      id: event.type === "schedule.lessons.changed" ||
+          event.type === "crm.lesson_teacher_rate.changed" ? null : eventId(event),
       branchId: optionalString(event.payload.branchId),
       affectedUserIds: stringList(event.payload.affectedUserIds),
     } satisfies CrmChangedPayload);
@@ -223,6 +224,10 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
         select adjustment.student_id
         from app.account_adjustments adjustment
         where adjustment.id = $1
+        union
+        select adjustment.counterparty_student_id as student_id
+        from app.account_adjustments adjustment
+        where adjustment.id = $1 and adjustment.counterparty_student_id is not null
       `;
     }
     if (source === null) return [];
@@ -253,6 +258,8 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
 }
 
 function entityFor(event: ClaimedOutboxEvent): CrmEntity {
+  if (event.type === "crm.lesson_teacher_rate.changed") return "lesson";
+  if (event.type === "commerce.expense.changed") return "expense";
   if (event.type === "organization.branch.changed") return "branch";
   if (event.type === "organization.room.changed") return "room";
   if (event.type === "organization.group.changed") return "group";

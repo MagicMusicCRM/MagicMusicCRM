@@ -123,7 +123,7 @@ describe("MyProfileService", () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 
-  it("passes blank profile fields as null beside SQL coalesce", async () => {
+  it("clears explicitly submitted optional profile fields", async () => {
     const { service, database } = createService();
     database.query.mockResolvedValueOnce({ rows: [profileRow] });
 
@@ -136,9 +136,9 @@ describe("MyProfileService", () => {
     expect(database.query).toHaveBeenNthCalledWith(
       1,
       expect.stringMatching(
-        /first_name = coalesce\(\$2[\s\S]*last_name = coalesce\(\$3[\s\S]*phone = coalesce\(\$4/,
+        /first_name = coalesce\(\$2[\s\S]*last_name = case when \$8::boolean[\s\S]*phone = case when \$9::boolean/,
       ),
-      [actor.userId, null, null, null, null, null, null],
+      [actor.userId, null, null, null, null, null, null, true, true],
     );
   });
 

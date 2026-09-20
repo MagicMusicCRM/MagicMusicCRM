@@ -4,13 +4,16 @@ import {
   ArrayUnique,
   IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  Min,
   ValidateNested,
 } from "class-validator";
+import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { IssueSubscriptionDiscountDto, IssueSubscriptionSurchargeDto } from "./issue-subscription.dto";
 
 const stableKey = /^[A-Za-z0-9._:-]{1,120}$/;
@@ -23,6 +26,11 @@ export class LessonClientFinancialDecisionDto {
   @IsString()
   @Matches(stableKey)
   settlementTypeKey?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  chargeDurationMinutes?: number;
 
   @IsOptional()
   @IsUUID()
@@ -68,6 +76,15 @@ export class ConfiguredLessonFinancialDecisionDto {
   clientDecisions?: LessonClientFinancialDecisionDto[];
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  teacherCreditedDurationMinutes?: number;
+
+  @IsOptional()
+  @IsIn(["automatic", "manual"])
+  teacherCompensationSource?: "automatic" | "manual";
+
+  @IsOptional()
   @IsString()
   @Matches(stableKey)
   teacherCompensationRuleKey!: string;
@@ -78,3 +95,17 @@ export class ConfiguredLessonFinancialDecisionDto {
   @Matches(/^\d+$/)
   teacherCompensationValueMinor?: string;
 }
+
+const canonicalClientDecision = (decision: LessonClientFinancialDecisionDto) => ({
+  ...decision,
+});
+
+/** Compares rolling-contract aliases without depending on JSON property order. */
+export const lessonFinancialDecisionCanonicalHash = (
+  decision: ConfiguredLessonFinancialDecisionDto,
+): string => fingerprintPayload({
+  ...decision,
+  clientDecisions: [...(decision.clientDecisions ?? [])]
+    .sort((left, right) => left.clientId.localeCompare(right.clientId))
+    .map(canonicalClientDecision),
+});

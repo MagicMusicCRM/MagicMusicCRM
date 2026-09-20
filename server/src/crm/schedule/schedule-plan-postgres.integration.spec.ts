@@ -1,13 +1,19 @@
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
+import { AuditService } from "../../audit/audit.service";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { ClientArchiveService } from "../clients/client-archive.service";
 import { ClientReferenceService } from "../clients/client-reference.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { SchedulePlanArchiveService } from "./schedule-plan-archive.service";
+import { StudentLessonTimelineRepository } from "./student-lesson-timeline.repository";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
@@ -16,12 +22,18 @@ import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
+import { ScheduleSeriesService } from "./schedule-series.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
-import { SchedulePlanDefinitionService } from "./schedule-plan-definition.service";
+import {
+  schedulePlanStableId,
+  SchedulePlanDefinitionService,
+} from "./schedule-plan-definition.service";
 import { SchedulePlanEndService } from "./schedule-plan-end.service";
+import { FuturePlanLessonCancellationService } from "./future-plan-lesson-cancellation.service";
+import { SchedulePlanRowRemovalService } from "./schedule-plan-row-removal.service";
 import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
 import { SchedulePlanQueryService } from "./schedule-plan-query.service";
 import { SchedulePlanRepository } from "./schedule-plan.repository";
@@ -47,7 +59,11 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   let materializer: ScheduleSeriesMaterializerService;
   let constraints: ScheduleConstraintEngine;
   let reservations: SubscriptionReservationService;
+  let planArchives: SchedulePlanArchiveService;
   let lifecycle: LessonLifecycleRepository;
+  let settlement: LessonSettlementService;
+  let archives: ClientArchiveService;
+  let legacySeries: ScheduleSeriesService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
@@ -78,6 +94,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       database,
       new PlatformIntegrityRepository(),
     );
+    archives = new ClientArchiveService(database, platform, policy, realtime);
     const series = new LessonSeriesCommandService(
       platform,
       policy,
@@ -88,8 +105,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       reservations,
     );
     const repository = new SchedulePlanRepository(database);
+    planArchives = new SchedulePlanArchiveService(database, platform, policy, repository);
     const definition = new SchedulePlanDefinitionService(repository);
-    const settlement = new LessonSettlementService(database);
+    settlement = new LessonSettlementService(database);
     const previewTokens = new SubscriptionPreviewTokenService({
       get: (key: string, fallback: string) =>
         key === "COMMERCE_PREVIEW_SECRET"
@@ -104,6 +122,36 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       settlement,
       previewTokens,
     );
+    legacySeries = new ScheduleSeriesService(
+      database,
+      new AuditService(database),
+      policy,
+      realtime,
+      materializer,
+    );
+    const futureCancellations = new FuturePlanLessonCancellationService(
+      repository,
+      lifecycle,
+      reservations,
+    );
+    const ending = new SchedulePlanEndService(
+      platform,
+      policy,
+      repository,
+      database,
+      previewTokens,
+      futureCancellations,
+      definition,
+    );
+    const rowRemovals = new SchedulePlanRowRemovalService(
+      platform,
+      policy,
+      repository,
+      database,
+      previewTokens,
+      futureCancellations,
+      ending,
+    );
     plans = new SchedulePlanService(
       new SchedulePlanQueryService(repository),
       previews,
@@ -113,20 +161,11 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         repository,
         series,
         materializer,
-        settlement,
         definition,
         previews,
       ),
-      new SchedulePlanEndService(
-        platform,
-        policy,
-        repository,
-        database,
-        previewTokens,
-        lifecycle,
-        reservations,
-        definition,
-      ),
+      ending,
+      rowRemovals,
     );
   });
 
@@ -135,36 +174,941 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it.each([false, true])("archives cancelled individual plans without erasing history; financial blocker=%s", async (withPayment) => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const metadata = () => ({ idempotencyKey: randomUUID(), requestId: randomUUID() });
+    try {
+      const created = await plans.create(actor, {
+        kind: "individual", title: "Archive regression", studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0], activeFrom: fixture.effectiveFrom, activeUntil: fixture.until60,
+        rows: [row(fixture, isoWeekday(addDays(fixture.effectiveFrom, 1)), "10:00")],
+      }, metadata());
+      expect((await planArchives.preview(actor, created.id)).canConfirm).toBe(false);
+      expect((await planArchives.previewRestore(actor, created.id)).canConfirm).toBe(false);
+      const end = { expectedVersion: created.version, lastDate: fixture.effectiveFrom, reasonText: "Incorrect schedule" };
+      const endPreview = await plans.previewEnd(actor, created.id, end);
+      await plans.end(actor, created.id, { ...end, confirm: true, previewToken: endPreview.previewToken }, metadata());
+      const before = await pool.query("select id, lifecycle_state from app.lessons where series_id = $1 order by id", [created.seriesIds[0]]);
+      expect(before.rows.length).toBeGreaterThan(0);
+      if (withPayment) await pool.query(`insert into app.payments(student_id, amount, currency, payment_date, lesson_id)
+        values($1, 100, 'RUB', current_date, $2)`, [fixture.studentIds[0], before.rows[0].id]);
+      const preview = await planArchives.preview(actor, created.id);
+      const command = { expectedVersion: preview.version, impactFingerprint: preview.impactFingerprint, confirm: true as const, reasonText: "Test series" };
+      const key = metadata();
+      if (withPayment) {
+        expect(preview.canConfirm).toBe(false);
+        await expect(planArchives.archive(actor, created.id, command, key)).rejects.toMatchObject({ status: 422 });
+      } else {
+        expect(preview.canConfirm).toBe(true);
+        await expect(planArchives.archive(actor, created.id, { ...command, impactFingerprint: "0".repeat(64) }, metadata()))
+          .rejects.toMatchObject({ status: 409 });
+        const first = await planArchives.archive(actor, created.id, command, key);
+        expect((await planArchives.archive(actor, created.id, command, key)).replayed).toBe(true);
+        expect(first.hiddenLessons).toBe(before.rows.length);
+        expect((await plans.list(actor, { studentId: fixture.studentIds[0], includeEnded: true })).items).toHaveLength(0);
+        expect((await plans.list(actor, { studentId: fixture.studentIds[0], includeEnded: true, includeArchived: true })).items[0]?.archivedAt).toBeTruthy();
+        const timeline = await new StudentLessonTimelineRepository(database).listPage(actor, fixture.studentIds[0]!, "next", {
+          scheduledAt: "2000-01-01T00:00:00Z", id: "00000000-0000-0000-0000-000000000000",
+        }, 100);
+        expect(timeline).toHaveLength(0);
+        await expect(pool.query(`insert into app.payments(student_id, amount, currency, payment_date, lesson_id)
+          values($1, 100, 'RUB', current_date, $2)`, [fixture.studentIds[0], before.rows[0].id])).rejects.toMatchObject({ code: "23514" });
+        const restorePreview = await planArchives.previewRestore(actor, created.id);
+        expect(restorePreview.canConfirm).toBe(true);
+        expect(restorePreview.lessonCount).toBe(before.rows.length);
+        const restore = { ...command, expectedVersion: restorePreview.version,
+          impactFingerprint: restorePreview.impactFingerprint, reasonText: "Archived by mistake" };
+        await expect(planArchives.restore(actor, created.id, { ...restore, reasonText: " " }, metadata()))
+          .rejects.toMatchObject({ status: 422 });
+        await expect(planArchives.restore(actor, created.id, { ...restore, impactFingerprint: "0".repeat(64) }, metadata()))
+          .rejects.toMatchObject({ status: 409 });
+        const factsBefore = await pool.query(`select to_jsonb(f) as fact from app.lesson_client_charge_facts f
+          where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)]);
+        const teachersBefore = await pool.query(`select to_jsonb(f) as fact from app.lesson_teacher_compensation_facts f
+          where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)]);
+        const restoreKey = metadata();
+        const results = await Promise.all([
+          planArchives.restore(actor, created.id, restore, restoreKey),
+          planArchives.restore(actor, created.id, restore, restoreKey),
+        ]);
+        expect(results.filter(result => result.replayed)).toHaveLength(1);
+        const restored = results[0]!;
+        expect(restored.restoredLessons).toBe(before.rows.length);
+        expect((await planArchives.restore(actor, created.id, restore, restoreKey)).replayed).toBe(true);
+        await expect(planArchives.restore(actor, created.id, restore, metadata())).rejects.toMatchObject({ status: 409 });
+        expect((await plans.list(actor, { studentId: fixture.studentIds[0], includeEnded: true })).items)
+          .toEqual([expect.objectContaining({ id: created.id, status: "ended", archivedAt: null })]);
+        const visible = await new StudentLessonTimelineRepository(database).listPage(actor, fixture.studentIds[0]!, "next", {
+          scheduledAt: "2000-01-01T00:00:00Z", id: "00000000-0000-0000-0000-000000000000",
+        }, 100);
+        expect(visible).toHaveLength(before.rows.length);
+        expect(visible.every(lesson => lesson.lifecycle_state === "cancelled")).toBe(true);
+        expect((await pool.query(`select to_jsonb(f) as fact from app.lesson_client_charge_facts f
+          where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)])).rows).toEqual(factsBefore.rows);
+        expect((await pool.query(`select to_jsonb(f) as fact from app.lesson_teacher_compensation_facts f
+          where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)])).rows).toEqual(teachersBefore.rows);
+        const audit = await pool.query(`select action, reason_text from app.audit_events
+          where entity_id=$1 and action in ('crm.schedule_plan_archived','crm.schedule_plan_restored') order by action`, [created.id]);
+        expect(audit.rows).toEqual([
+          { action: "crm.schedule_plan_archived", reason_text: "Test series" },
+          { action: "crm.schedule_plan_restored", reason_text: "Archived by mistake" },
+        ]);
+        const state = await pool.query("select status, end_reason, archived_at, archived_by, archive_reason from app.schedule_plans where id=$1", [created.id]);
+        expect(state.rows[0]).toEqual({ status: "ended", end_reason: "Incorrect schedule", archived_at: null, archived_by: null, archive_reason: null });
+      }
+      const after = await pool.query("select id, lifecycle_state from app.lessons where series_id = $1 order by id", [created.seriesIds[0]]);
+      expect(after.rows).toEqual(before.rows);
+    } finally { await cleanup(pool, fixture); }
+  });
+
+  it.each(["manager", "admin"] as const)(
+    "restricts %s plan reads and commands to assigned branches",
+    async (role) => {
+      const own = await createFixture(pool);
+      const other = await createFixture(pool);
+      const owner = { userId: own.managerId, role: "manager" as const };
+      const outsider = { userId: other.managerId, role };
+      await pool.query("update app.users set role=$2 where id=$1", [
+        outsider.userId,
+        role,
+      ]);
+      try {
+        const draft = {
+          kind: "individual" as const,
+          title: "Branch scope regression",
+          studentId: own.studentIds[0]!,
+          subscriptionId: own.subscriptionIds[0]!,
+          activeFrom: own.effectiveFrom,
+          activeUntil: own.until60,
+          rows: [row(own, isoWeekday(own.effectiveFrom), "10:00")],
+        };
+        const created = await plans.create(owner, draft, {
+          idempotencyKey: randomUUID(),
+          requestId: randomUUID(),
+        });
+        const visible = await plans.list(outsider, {
+          studentId: own.studentIds[0],
+        });
+        expect(visible.items).toEqual([]);
+        expect((await plans.tray(outsider, created.id, {})).items).toEqual([]);
+        const end = {
+          expectedVersion: 1,
+          lastDate: own.effectiveFrom,
+          reasonText: "Проверка доступа",
+        };
+        const edit = {
+          expectedVersion: 1,
+          effectiveFrom: own.effectiveFrom,
+          rows: [{ ...draft.rows[0]!, seriesId: created.seriesIds[0]! }],
+        };
+        await expect(
+          plans.previewEnd(outsider, created.id, end),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(planArchives.preview(outsider, created.id)).rejects.toMatchObject({ status: 404 });
+        await expect(planArchives.preview({ ...outsider, role: "director" }, created.id)).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.previewRemoveRow(outsider, created.id, created.seriesIds[0]!, {
+            expectedVersion: 1,
+            effectiveFrom: own.effectiveFrom,
+            reasonText: "Проверка доступа",
+          }),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.previewUpdateConstraints(outsider, created.id, edit),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(planArchives.previewRestore(outsider, created.id)).rejects.toMatchObject({ status: 404 });
+        await expect(planArchives.restore(outsider, created.id, {
+          expectedVersion: 1, impactFingerprint: "0".repeat(64), reasonText: "Foreign branch", confirm: true,
+        }, { idempotencyKey: randomUUID(), requestId: randomUUID() })).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.previewConstraints(outsider, draft),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.create(outsider, draft, {
+            idempotencyKey: randomUUID(),
+            requestId: randomUUID(),
+          }),
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          plans.update(outsider, created.id, edit, {
+            idempotencyKey: randomUUID(),
+            requestId: randomUUID(),
+          }),
+        ).rejects.toMatchObject({ status: 404 });
+        // A stale wider JWT role must not restore global resource access.
+        expect(
+          (
+            await plans.list(
+              { ...outsider, role: "director" },
+              { studentId: own.studentIds[0] },
+            )
+          ).items,
+        ).toEqual([]);
+        const before = (
+          await pool.query(
+            "select version,status from app.schedule_plans where id=$1",
+            [created.id],
+          )
+        ).rows;
+        expect(before).toEqual([{ version: "1", status: "active" }]);
+        // Revocation after a valid preview must invalidate commit too.
+        const preview = await plans.previewEnd(owner, created.id, end);
+        await pool.query(
+          `update app.staff_branch_assignments set deleted_at=now()
+          where staff_member_id in (select entity_id from app.user_crm_links
+            where user_id=$1 and entity_type='staff')`,
+          [owner.userId],
+        );
+        await expect(
+          plans.end(
+            owner,
+            created.id,
+            { ...end, confirm: true, previewToken: preview.previewToken },
+            { idempotencyKey: randomUUID(), requestId: randomUUID() },
+          ),
+        ).rejects.toMatchObject({ status: 404 });
+        expect(
+          (
+            await pool.query(
+              "select version,status from app.schedule_plans where id=$1",
+              [created.id],
+            )
+          ).rows,
+        ).toEqual(before);
+      } finally {
+        await cleanup(pool, other);
+        await cleanup(pool, own);
+      }
+    },
+  );
+
+  it("preserves individual unpaid and resource exceptions when a recurring policy changes", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(
+      pool,
+      fixture.branchId,
+    );
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    await pool.query("update app.users set role='director' where id=$1", [
+      fixture.managerId,
+    ]);
+    try {
+      const template = row(fixture, isoWeekday(fixture.effectiveFrom), "10:00");
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Preserve individual decisions",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+          rows: [template],
+        },
+        { idempotencyKey: randomUUID(), requestId: randomUUID() },
+      );
+      const ordered = await pool.query<{ id: string }>(
+        "select id from app.lessons where series_id=$1 and deleted_at is null order by scheduled_at",
+        [created.seriesIds[0]],
+      );
+      const unpaidId = ordered.rows[0]!.id;
+      const replacementId = ordered.rows[1]!.id;
+      await database.transaction(async (client) => {
+        const current = (await settlement.loadPlan(client, unpaidId))!;
+        const prepared = await settlement.preparePlan(
+          client,
+          fixture.branchId,
+          {
+            ...current.decision,
+            settlementTypeKey: "unpaid_miss",
+            teacherCompensationRuleKey: "none",
+            clientDecisions: [
+              {
+                clientId: fixture.studentIds[0]!,
+                chargeType: "subscription",
+                subscriptionId: fixture.subscriptionIds[0]!,
+              },
+            ],
+          },
+        );
+        await settlement.replacePlan(client, {
+          ...prepared,
+          lessonId: unpaidId,
+          expectedVersion: current.version,
+          selectedBy: actor.userId,
+          reasonText: "Индивидуальный пропуск",
+        });
+        await reservations.releaseForLessons(client, [unpaidId]);
+        await client.query(
+          "update app.lessons set teacher_id=$2, room_id=$3 where id=$1",
+          [replacementId, additional.teacherId, additional.roomId],
+        );
+      });
+      const snapshot = async () =>
+        (
+          await pool.query(
+            `select lesson.id,
+          lesson.teacher_id, lesson.room_id, decision.decision, decision.version,
+          (select coalesce(sum(units),0)::text from app.lesson_reservations
+            where lesson_id=lesson.id and state='reserved') as reserved
+        from app.lessons lesson join app.lesson_settlement_plans decision on decision.lesson_id=lesson.id
+        where lesson.id=any($1::uuid[]) and lesson.deleted_at is null order by lesson.id`,
+            [[unpaidId, replacementId]],
+          )
+        ).rows;
+      const before = await snapshot();
+      const dto = {
+        expectedVersion: created.version,
+        effectiveFrom: fixture.effectiveFrom,
+        activeUntil: fixture.until60,
+        rows: [
+          {
+            ...template,
+            seriesId: created.seriesIds[0],
+            financialDecision: {
+              ...template.financialDecision,
+              teacherCompensationSource: "automatic" as const,
+            },
+          },
+        ],
+      };
+      const preview = await plans.previewUpdateConstraints(
+        actor,
+        created.id,
+        dto,
+      );
+      expect(preview.rows.flatMap((item) => item.failures)).toEqual([]);
+      const updated = await plans.update(actor, created.id, dto, {
+        idempotencyKey: randomUUID(),
+        requestId: randomUUID(),
+      });
+      await database.transaction((client) =>
+        materializer.materializePlanSeries(client, updated.seriesIds[0]!),
+      );
+      expect(await snapshot()).toEqual(before);
+      const live = await pool.query<{ count: number }>(
+        `select count(*)::int as count
+        from app.lessons lesson join app.schedule_series series on series.id=lesson.series_id
+        where series.plan_id=$1 and lesson.deleted_at is null`,
+        [created.id],
+      );
+      expect(live.rows[0]!.count).toBe(ordered.rows.length);
+    } finally {
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
   it("materializes canonical completion and hourly teacher snapshot, preserving a lesson's edited personal-account funding", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     try {
-      await pool.query("insert into app.teacher_rates (teacher_id, rate, effective_from) values ($1, 1200, '2020-01-01')", [fixture.teacherId]);
-      const dto = { kind: "individual" as const, title: "Оплата занятия", studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0], activeFrom: fixture.today, activeUntil: null, rows: [{ ...row(fixture, 1, "10:00"), durationMinutes: 45 }] };
-      const created = await plans.create(actor, dto, { idempotencyKey: `funding-plan-${randomUUID()}`, requestId: randomUUID() });
+      await pool.query(
+        "insert into app.teacher_rates (teacher_id, rate, effective_from) values ($1, 1200, '2020-01-01')",
+        [fixture.teacherId],
+      );
+      const fundingRow = row(fixture, 1, "10:00");
+      const dto = {
+        kind: "individual" as const,
+        title: "Оплата занятия",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: null,
+        rows: [
+          {
+            ...fundingRow,
+            durationMinutes: 45,
+            financialDecision: {
+              ...fundingRow.financialDecision,
+              clientDecisions: [
+                {
+                  clientId: fixture.studentIds[0]!,
+                  chargeDurationMinutes: 45,
+                },
+              ],
+            },
+          },
+        ],
+      };
+      const created = await plans.create(actor, dto, {
+        idempotencyKey: `funding-plan-${randomUUID()}`,
+        requestId: randomUUID(),
+      });
       const lessonId = created.lessonIds[0]!;
-      const snapshots = await pool.query("select completion_type, teacher_compensation_type, teacher_compensation_value::text from app.lesson_snapshots where lesson_id=$1", [lessonId]);
-      expect(snapshots.rows[0]).toMatchObject({ completion_type: "standard.success", teacher_compensation_type: "hourly", teacher_compensation_value: "1200.00" });
+      const snapshots = await pool.query(
+        "select completion_type, teacher_compensation_type, teacher_compensation_value::text from app.lesson_snapshots where lesson_id=$1",
+        [lessonId],
+      );
+      expect(snapshots.rows[0]).toMatchObject({
+        completion_type: "standard.success",
+        teacher_compensation_type: "hourly",
+        teacher_compensation_value: "1200.00",
+      });
       await database.transaction(async (client) => {
         const service = new LessonSettlementService(database);
         const current = (await service.loadPlan(client, lessonId))!;
-        const decision = { ...current.decision, clientDecisions: [{ clientId: fixture.studentIds[0]!, payerStudentId: fixture.studentIds[0]!, chargeType: "personal_account" as const, basePriceMinor: "60000" }] };
-        const prepared = await service.preparePlan(client, fixture.branchId, decision);
-        await service.replacePlan(client, { ...prepared, lessonId, expectedVersion: current.version, selectedBy: actor.userId, reasonText: "Личный счёт" });
+        const decision = {
+          ...current.decision,
+          clientDecisions: [
+            {
+              clientId: fixture.studentIds[0]!,
+              payerStudentId: fixture.studentIds[0]!,
+              chargeType: "personal_account" as const,
+              basePriceMinor: "60000",
+            },
+          ],
+        };
+        const prepared = await service.preparePlan(
+          client,
+          fixture.branchId,
+          decision,
+        );
+        await service.replacePlan(client, {
+          ...prepared,
+          lessonId,
+          expectedVersion: current.version,
+          selectedBy: actor.userId,
+          reasonText: "Личный счёт",
+        });
         await reservations.releaseForLessons(client, [lessonId]);
         await materializer.allocatePlanReservations(client, [lessonId]);
-        const reserved = await client.query("select count(*)::int as count from app.lesson_reservations where lesson_id=$1 and state='reserved'", [lessonId]);
+        const reserved = await client.query(
+          "select count(*)::int as count from app.lesson_reservations where lesson_id=$1 and state='reserved'",
+          [lessonId],
+        );
         expect(reserved.rows[0].count).toBe(0);
         await client.query("savepoint priced_plan_preview");
         try {
-          await client.query("update app.lessons set lifecycle_state='successfully_completed' where id=$1", [lessonId]);
-          const settled = await service.settle(client, lessonId, { context: "settle", decision });
+          await client.query(
+            "update app.lessons set lifecycle_state='successfully_completed' where id=$1",
+            [lessonId],
+          );
+          const settled = await service.settle(client, lessonId, {
+            context: "settle",
+            decision,
+          });
           expect(settled.clientFact.amountMinor).toBe("60000");
           expect(settled.teacherFact.amountMinor).toBe("90000");
-        } finally { await client.query("rollback to savepoint priced_plan_preview"); }
+        } finally {
+          await client.query("rollback to savepoint priced_plan_preview");
+        }
       });
     } finally {
-      await pool.query("delete from app.teacher_rates where teacher_id=$1", [fixture.teacherId]);
+      await pool.query("delete from app.teacher_rates where teacher_id=$1", [
+        fixture.teacherId,
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("freezes fractional plan decisions and reserves the resolved client minutes", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Частичная оплата",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [
+            {
+              ...row(fixture, 1, "10:00"),
+              plannedSettlementReason: "Согласовано директором",
+              financialDecision: {
+                settlementTypeKey: "partially_paid_lesson",
+                teacherCompensationRuleKey: "percent",
+                teacherCreditedDurationMinutes: 45,
+                teacherCompensationSource: "manual" as const,
+                clientDecisions: [
+                  {
+                    clientId: fixture.studentIds[0]!,
+                    chargeDurationMinutes: 30,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          idempotencyKey: `plan-partial-${randomUUID()}`,
+          requestId: randomUUID(),
+        },
+      );
+      const series = await pool.query<{
+        planned_financial_decision: Record<string, unknown>;
+      }>(
+        "select planned_financial_decision from app.schedule_series where id = $1",
+        [created.seriesIds[0]],
+      );
+      expect(series.rows[0]!.planned_financial_decision).toMatchObject({
+        settlementTypeKey: "partially_paid_lesson",
+        teacherCreditedDurationMinutes: 45,
+        teacherCompensationSource: "manual",
+        clientDecisions: [
+          { clientId: fixture.studentIds[0], chargeDurationMinutes: 30 },
+        ],
+      });
+      const reservations = await pool.query<{ units: string }>(
+        `select reservation.units::text as units
+         from app.lesson_reservations reservation
+         join app.lessons lesson on lesson.id = reservation.lesson_id
+         where lesson.series_id = $1 order by reservation.id`,
+        [created.seriesIds[0]],
+      );
+      expect(reservations.rows.length).toBeGreaterThan(0);
+      expect(reservations.rows.map((item) => item.units)).toEqual(
+        reservations.rows.map(() => "0.50"),
+      );
+
+      const fixed = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Ручная фиксированная оплата",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [{
+            ...row(fixture, 2, "14:00"),
+            plannedSettlementReason: "Согласовано директором",
+            financialDecision: {
+              settlementTypeKey: "lesson",
+              teacherCompensationRuleKey: "fixed",
+              teacherCompensationValueMinor: "125000",
+              teacherCompensationSource: "manual" as const,
+              clientDecisions: [{ clientId: fixture.studentIds[0]! }],
+            },
+          }],
+        },
+        {
+          idempotencyKey: `plan-manual-fixed-${randomUUID()}`,
+          requestId: randomUUID(),
+        },
+      );
+      const fixedSeries = await pool.query<{
+        planned_financial_decision: Record<string, unknown>;
+      }>(
+        "select planned_financial_decision from app.schedule_series where id = $1",
+        [fixed.seriesIds[0]],
+      );
+      expect(fixedSeries.rows[0]!.planned_financial_decision).toMatchObject({
+        teacherCompensationRuleKey: "fixed",
+        teacherCompensationValueMinor: "125000",
+        teacherCreditedDurationMinutes: 60,
+        teacherCompensationSource: "manual",
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects missing, duplicate, and unrelated clients before creating new plan rows", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const participants = fixture.studentIds.map((studentId, index) => ({
+      studentId,
+      subscriptionId: fixture.subscriptionIds[index]!,
+    }));
+    const groupDto = (clientDecisions: Array<{ clientId: string }>) => ({
+      kind: "group" as const,
+      title: "Проверка клиентов решения",
+      groupId: fixture.groupId,
+      activeFrom: fixture.today,
+      activeUntil: fixture.until60,
+      participants,
+      rows: [
+        {
+          ...row(fixture, 2, "11:00"),
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            clientDecisions,
+          } as ConfiguredLessonFinancialDecisionDto,
+        },
+      ],
+    });
+    try {
+      await expect(
+        plans.create(
+          actor,
+          {
+            kind: "individual",
+            title: "Нет решения ученика",
+            studentId: fixture.studentIds[0],
+            subscriptionId: fixture.subscriptionIds[0],
+            activeFrom: fixture.today,
+            activeUntil: fixture.until60,
+            rows: [row(fixture, 1, "10:00", { omitClientDecisions: true })],
+          },
+          {
+            idempotencyKey: `plan-client-missing-${randomUUID()}`,
+            requestId: randomUUID(),
+          },
+        ),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "CLIENT_DECISION_MISSING" },
+      });
+      await expect(
+        plans.create(actor, groupDto([{ clientId: fixture.studentIds[0]! }]), {
+          idempotencyKey: `plan-group-client-missing-${randomUUID()}`,
+          requestId: randomUUID(),
+        }),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "CLIENT_DECISION_MISSING" },
+      });
+      await expect(
+        plans.create(
+          actor,
+          groupDto([
+            { clientId: fixture.studentIds[0]! },
+            { clientId: fixture.studentIds[0]! },
+          ]),
+          {
+            idempotencyKey: `plan-group-client-duplicate-${randomUUID()}`,
+            requestId: randomUUID(),
+          },
+        ),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "DUPLICATE_CLIENT_DECISION" },
+      });
+      await expect(
+        plans.create(
+          actor,
+          groupDto([
+            { clientId: fixture.studentIds[0]! },
+            { clientId: randomUUID() },
+          ]),
+          {
+            idempotencyKey: `plan-group-client-unrelated-${randomUUID()}`,
+            requestId: randomUUID(),
+          },
+        ),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "UNKNOWN_LESSON_CLIENT" },
+      });
+      const inserted = await pool.query<{ count: string }>(
+        `select count(*)::text from app.schedule_plans
+         where title in ('Нет решения ученика', 'Проверка клиентов решения')`,
+      );
+      expect(inserted.rows[0]!.count).toBe("0");
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("previews a recurring row through the atomic resolved plan operation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const resolveSpy = jest.spyOn(settlement, "resolvePlannedPlan");
+    try {
+      const preview = await plans.previewConstraints(actor, {
+        kind: "individual",
+        title: "Единый снимок каталога",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [{
+          ...row(fixture, 1, "10:00"),
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            clientDecisions: [{ clientId: fixture.studentIds[0]! }],
+          } as ConfiguredLessonFinancialDecisionDto,
+        }],
+      });
+
+      expect(preview.valid).toBe(true);
+      expect(resolveSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      resolveSpy.mockRestore();
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("resolves sparse operational recurring rows once and persists that prepared revision", async () => {
+    const fixture = await createFixture(pool);
+    const originalResolve = settlement.resolvePlannedPlan.bind(settlement);
+    const preparedPlans: Awaited<ReturnType<typeof originalResolve>>[] = [];
+    const resolveSpy = jest
+      .spyOn(settlement, "resolvePlannedPlan")
+      .mockImplementation(async (...args) => {
+        const prepared = await originalResolve(...args);
+        preparedPlans.push(prepared);
+        return prepared;
+      });
+    const scenarios = [
+      {
+        role: "manager" as const,
+        settlementTypeKey: "free_lesson",
+        weekday: 1,
+      },
+      { role: "admin" as const, settlementTypeKey: "unpaid_miss", weekday: 2 },
+    ];
+    try {
+      for (const scenario of scenarios) {
+        const actor = { userId: fixture.managerId, role: scenario.role };
+        const financialDecision = {
+          settlementTypeKey: scenario.settlementTypeKey,
+          clientDecisions: [
+            {
+              clientId: fixture.studentIds[0]!,
+              settlementTypeKey: scenario.settlementTypeKey,
+              chargeType: "none" as const,
+            },
+          ],
+        } as ConfiguredLessonFinancialDecisionDto;
+        const dto = {
+          kind: "individual" as const,
+          title: `Sparse ${scenario.role} ${scenario.settlementTypeKey}`,
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [
+            {
+              ...row(fixture, scenario.weekday, "14:00"),
+              financialDecision,
+            },
+          ],
+        };
+
+        preparedPlans.length = 0;
+        resolveSpy.mockClear();
+        const preview = await plans.previewConstraints(actor, dto);
+        expect(preview.valid).toBe(true);
+        expect(resolveSpy).toHaveBeenCalledTimes(1);
+        expect(resolveSpy.mock.calls[0]![1].decision).toEqual(
+          financialDecision,
+        );
+        expect(preparedPlans[0]!.decision).toMatchObject({
+          teacherCompensationRuleKey: "none",
+          teacherCreditedDurationMinutes: 0,
+          teacherCompensationSource: "automatic",
+        });
+
+        preparedPlans.length = 0;
+        resolveSpy.mockClear();
+        const created = await plans.create(actor, dto, {
+          idempotencyKey: `sparse-${scenario.role}-${scenario.settlementTypeKey}-${randomUUID()}`,
+          requestId: randomUUID(),
+        });
+        expect(resolveSpy).toHaveBeenCalledTimes(1);
+        const persisted = await pool.query<{
+          decision: ConfiguredLessonFinancialDecisionDto;
+          settlement_revision_id: string;
+          compensation_revision_id: string;
+        }>(
+          `select planned_financial_decision as decision,
+             settlement_revision_id, compensation_revision_id
+           from app.schedule_series where id = $1`,
+          [created.seriesIds[0]],
+        );
+        expect(persisted.rows[0]!.decision).toMatchObject({
+          teacherCompensationRuleKey: "none",
+          teacherCreditedDurationMinutes: 0,
+          teacherCompensationSource: "automatic",
+        });
+        expect(persisted.rows[0]!.settlement_revision_id).toBe(
+          preparedPlans[0]!.settlementRevisionId,
+        );
+        expect(persisted.rows[0]!.compensation_revision_id).toBe(
+          preparedPlans[0]!.compensationRevisionId,
+        );
+      }
+    } finally {
+      resolveSpy.mockRestore();
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects an unauthorized recurring teacher override without any write", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const requestId = `schedule-plan-rbac-${randomUUID()}`;
+    const idempotencyKey = `forbidden-recurring-${randomUUID()}`;
+    const title = `Forbidden override ${randomUUID()}`;
+    try {
+      await expect(
+        plans.create(
+          actor,
+          {
+            kind: "individual",
+            title,
+            studentId: fixture.studentIds[0],
+            subscriptionId: fixture.subscriptionIds[0],
+            activeFrom: fixture.today,
+            activeUntil: fixture.until60,
+            rows: [
+              {
+                ...row(fixture, 3, "15:00"),
+                financialDecision: {
+                  settlementTypeKey: "free_lesson",
+                  teacherCompensationRuleKey: "standard",
+                  clientDecisions: [
+                    {
+                      clientId: fixture.studentIds[0]!,
+                      settlementTypeKey: "free_lesson",
+                      chargeType: "none",
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          {
+            idempotencyKey,
+            requestId,
+          },
+        ),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: { code: "TEACHER_COMPENSATION_PERMISSION_REQUIRED" },
+      });
+      const writes = await pool.query<{
+        plans: string;
+        series: string;
+        lessons: string;
+        audits: string;
+        outbox: string;
+        idempotency: string;
+        aggregate_versions: string;
+      }>(
+        `select
+          (select count(*)::text from app.schedule_plans where title = $1) as plans,
+          (select count(*)::text from app.schedule_series series
+             join app.schedule_plans plan on plan.id = series.plan_id
+             where plan.title = $1) as series,
+          (select count(*)::text from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             join app.schedule_plans plan on plan.id = series.plan_id
+             where plan.title = $1) as lessons,
+          (select count(*)::text from app.audit_events where request_id = $2) as audits,
+           (select count(*)::text from app.platform_outbox_events
+              where request_id = $2) as outbox,
+           (select count(*)::text from app.idempotency_records
+              where actor_key = $3 and operation = 'schedule.plan.create'
+                and idempotency_key = $4) as idempotency,
+           (select count(*)::text from app.aggregate_versions
+              where aggregate_type = 'schedule:plan'
+                and aggregate_id = $5) as aggregate_versions`,
+        [
+          title,
+          requestId,
+          `user:${actor.userId}`,
+          idempotencyKey,
+          schedulePlanStableId(
+            `schedule.plan.create\0${actor.userId}\0${idempotencyKey}`,
+          ),
+        ],
+      );
+      expect(writes.rows[0]).toEqual({
+        plans: "0",
+        series: "0",
+        lessons: "0",
+        audits: "0",
+        outbox: "0",
+        idempotency: "0",
+        aggregate_versions: "0",
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects omitted recurring manual duration with typed 422 and no writes", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const requestId = `schedule-plan-manual-duration-${randomUUID()}`;
+    const idempotencyKey = `manual-duration-recurring-${randomUUID()}`;
+    const title = `Missing manual duration ${randomUUID()}`;
+    const writeShape = () =>
+      pool.query<{
+        plans: string;
+        series: string;
+        lessons: string;
+        settlement_plans: string;
+        corrections: string;
+        client_facts: string;
+        teacher_facts: string;
+        reservations: string;
+        audits: string;
+        outbox: string;
+        idempotency: string;
+        aggregate_versions: string;
+      }>(
+        `select
+        (select count(*)::text from app.schedule_plans) as plans,
+        (select count(*)::text from app.schedule_series) as series,
+        (select count(*)::text from app.lessons) as lessons,
+        (select count(*)::text from app.lesson_settlement_plans) as settlement_plans,
+        (select count(*)::text from app.lesson_settlement_corrections) as corrections,
+        (select count(*)::text from app.lesson_client_charge_facts) as client_facts,
+        (select count(*)::text from app.lesson_teacher_compensation_facts) as teacher_facts,
+        (select count(*)::text from app.lesson_reservations) as reservations,
+        (select count(*)::text from app.audit_events where request_id = $1) as audits,
+        (select count(*)::text from app.platform_outbox_events where request_id = $1) as outbox,
+        (select count(*)::text from app.idempotency_records
+           where actor_key = $2 and idempotency_key = $3) as idempotency,
+        (select count(*)::text from app.aggregate_versions) as aggregate_versions`,
+        [requestId, `user:${actor.userId}`, idempotencyKey],
+      );
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        actor.userId,
+      ]);
+      const before = (await writeShape()).rows[0];
+      const request = plans.create(
+        actor,
+        {
+          kind: "individual",
+          title,
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [
+            {
+              ...row(fixture, 3, "15:00"),
+              plannedSettlementReason:
+                "Частичная оплата согласована директором",
+              financialDecision: {
+                settlementTypeKey: "partially_paid_lesson",
+                teacherCompensationRuleKey: "percent",
+                teacherCompensationSource: "manual" as const,
+                clientDecisions: [
+                  {
+                    clientId: fixture.studentIds[0]!,
+                    chargeDurationMinutes: 30,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        { idempotencyKey, requestId },
+      );
+
+      await expect(request).rejects.toMatchObject({
+        status: 422,
+        response: {
+          code: "TEACHER_PARTIAL_DURATION_REQUIRED",
+          field: "teacherCreditedDurationMinutes",
+        },
+      });
+      expect((await writeShape()).rows[0]).toEqual(before);
+    } finally {
       await cleanup(pool, fixture);
     }
   });
@@ -174,7 +1118,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const key = `plan-individual-${randomUUID()}`;
     let additional:
-      Awaited<ReturnType<typeof createAdditionalPlanResource>> | undefined;
+      | Awaited<ReturnType<typeof createAdditionalPlanResource>>
+      | undefined;
     try {
       additional = await createAdditionalPlanResource(pool, fixture.branchId);
       const dto = {
@@ -285,87 +1230,568 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("lists both saved rule ranges and projects a one-day resource override", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const sourceRow = row(fixture, isoWeekday(fixture.today), "10:00");
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "История диапазонов",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-timeline-create-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updated = await plans.update(
+        actor,
+        created.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+          rows: [
+            {
+              ...sourceRow,
+              seriesId: created.seriesIds[0],
+              beginTime: "11:00",
+            },
+          ],
+        },
+        {
+          idempotencyKey: `plan-timeline-update-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const overridden = await pool.query<{ id: string }>(
+        `update app.lessons
+         set teacher_id = $2, room_id = $3, updated_at = now()
+         where id = (
+           select lesson.id from app.lessons lesson
+           where lesson.series_id = $1 and lesson.deleted_at is null
+           order by lesson.series_date, lesson.id limit 1
+         ) returning id`,
+        [updated.seriesIds[0], additional.teacherId, additional.roomId],
+      );
+
+      const projection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+        includeEnded: true,
+      });
+      const projectedPlan = projection.items.find((item) => item.id === created.id)!;
+      const recurringRules = projectedPlan.ruleTimeline.filter(
+        (entry) => entry.kind === "recurring_rule",
+      );
+
+      expect(projectedPlan.rows).toEqual([
+        expect.objectContaining({ id: updated.seriesIds[0], active: true }),
+      ]);
+      expect(recurringRules).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: created.seriesIds[0],
+            activeFrom: fixture.today,
+            activeUntil: addDays(fixture.effectiveFrom, -1),
+          }),
+          expect.objectContaining({
+            id: updated.seriesIds[0],
+            activeFrom: fixture.effectiveFrom,
+            activeUntil: fixture.until60,
+          }),
+        ]),
+      );
+      expect(projectedPlan.exceptions).toEqual([
+        expect.objectContaining({
+          lessonId: overridden.rows[0]!.id,
+          sourceSeriesId: updated.seriesIds[0],
+          teacherId: additional.teacherId,
+          roomId: additional.roomId,
+          changedFields: ["teacherId", "roomId"],
+        }),
+      ]);
+    } finally {
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
+  it("keeps a naturally expired finite series in history but removes it from editable rows", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Истёкшее правило",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, isoWeekday(fixture.today), "10:00")],
+        },
+        {
+          idempotencyKey: `plan-expired-row-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const expiredUntil = addDays(fixture.today, -1);
+      await pool.query(
+        `update app.schedule_series
+         set valid_from = $2::date - 1, valid_until = $2::date,
+           deleted_at = null, superseded_by = null
+         where id = $1`,
+        [created.seriesIds[0], expiredUntil],
+      );
+
+      const projection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+        includeEnded: true,
+      });
+      const projectedPlan = projection.items.find(
+        (item) => item.id === created.id,
+      )!;
+
+      expect(projectedPlan.rows).toEqual([]);
+      expect(projectedPlan.ruleTimeline).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: created.seriesIds[0],
+            status: "expired",
+            sortBucket: 3,
+            sortAt: expiredUntil,
+          }),
+        ]),
+      );
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("projects only the deepest lesson in a multi-hop reschedule chain", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    let sourceLessonId: string | undefined;
+    let successorBId: string | undefined;
+    let successorCId: string | undefined;
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Цепочка переносов",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, isoWeekday(fixture.today), "10:00")],
+        },
+        {
+          idempotencyKey: `plan-reschedule-chain-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      sourceLessonId = created.lessonIds[0]!;
+      const successorB = await pool.query<{ id: string }>(
+        `insert into app.lessons (
+           student_id, group_id, teacher_id, branch_id, room_id,
+           scheduled_at, duration_minutes, status, created_by, predecessor_id
+         )
+         select student_id, group_id, teacher_id, branch_id, room_id,
+           scheduled_at + interval '1 day', duration_minutes, 'scheduled',
+           $2, id
+         from app.lessons where id = $1
+         returning id`,
+        [sourceLessonId, fixture.managerId],
+      );
+      successorBId = successorB.rows[0]!.id;
+      await pool.query(
+        `update app.lessons
+         set successor_id = $2, lifecycle_state = 'rescheduled'
+         where id = $1`,
+        [sourceLessonId, successorBId],
+      );
+      const successorC = await pool.query<{ id: string }>(
+        `insert into app.lessons (
+           student_id, group_id, teacher_id, branch_id, room_id,
+           scheduled_at, duration_minutes, status, created_by, predecessor_id
+         )
+         select student_id, group_id, teacher_id, branch_id, room_id,
+           scheduled_at + interval '1 day', duration_minutes, 'scheduled',
+           $2, id
+         from app.lessons where id = $1
+         returning id`,
+        [successorBId, fixture.managerId],
+      );
+      successorCId = successorC.rows[0]!.id;
+      await pool.query(
+        `update app.lessons
+         set successor_id = $2, lifecycle_state = 'rescheduled'
+         where id = $1`,
+        [successorBId, successorCId],
+      );
+
+      const projection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+      });
+      const projectedPlan = projection.items.find(
+        (item) => item.id === created.id,
+      )!;
+
+      expect(projectedPlan.exceptions.map((entry) => entry.lessonId)).toEqual([
+        successorCId,
+      ]);
+    } finally {
+      if (sourceLessonId) {
+        await pool.query(
+          "update app.lessons set successor_id = null where id = $1",
+          [sourceLessonId],
+        );
+      }
+      if (successorBId) {
+        await pool.query(
+          "update app.lessons set successor_id = null where id = $1",
+          [successorBId],
+        );
+      }
+      if (successorCId) {
+        await pool.query("delete from app.lessons where id = $1", [
+          successorCId,
+        ]);
+      }
+      if (successorBId) {
+        await pool.query("delete from app.lessons where id = $1", [
+          successorBId,
+        ]);
+      }
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("uses the branch-local date for rule and exception expiry around UTC midnight", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const boundary = await pool.query<{
+        timezone_name: string;
+        local_today: string;
+        utc_today: string;
+      }>(
+        `with selected as (
+           select case
+             when extract(hour from timezone('UTC', now())) < 10
+               then 'Pacific/Honolulu'
+             else 'Pacific/Kiritimati'
+           end as timezone_name
+         )
+         select timezone_name,
+           timezone(timezone_name, now())::date::text as local_today,
+           timezone('UTC', now())::date::text as utc_today
+         from selected`,
+      );
+      const {
+        timezone_name: timezoneName,
+        local_today: localToday,
+        utc_today: utcToday,
+      } = boundary.rows[0]!;
+      expect(localToday).not.toBe(utcToday);
+      const boundaryDate = localToday < utcToday ? localToday : utcToday;
+      const expectedStatus = localToday > boundaryDate ? "expired" : "active";
+      expect(utcToday > boundaryDate ? "expired" : "active").not.toBe(
+        expectedStatus,
+      );
+
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Локальная дата филиала",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, isoWeekday(fixture.today), "10:00")],
+        },
+        {
+          idempotencyKey: `plan-local-date-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const exceptionLessonId = created.lessonIds[0]!;
+      await pool.query(
+        "update app.branches set timezone_name = $2 where id = $1",
+        [fixture.branchId, timezoneName],
+      );
+      await pool.query(
+        `update app.schedule_series
+         set valid_from = $2::date - 1, valid_until = $2::date
+         where id = $1`,
+        [created.seriesIds[0], boundaryDate],
+      );
+      await pool.query(
+        `update app.lessons
+         set scheduled_at = ($2::date + time '11:00') at time zone $3,
+           updated_at = now()
+         where id = $1`,
+        [exceptionLessonId, boundaryDate, timezoneName],
+      );
+
+      const projection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+        includeEnded: true,
+      });
+      const projectedPlan = projection.items.find(
+        (item) => item.id === created.id,
+      )!;
+      const projectedRule = projectedPlan.ruleTimeline.find(
+        (entry) => entry.id === created.seriesIds[0],
+      );
+      const projectedException = projectedPlan.exceptions.find(
+        (entry) => entry.lessonId === exceptionLessonId,
+      );
+
+      expect(projectedRule).toMatchObject({ status: expectedStatus });
+      expect(projectedException).toMatchObject({
+        scheduledDate: boundaryDate,
+        status: expectedStatus,
+      });
+      expect(projectedPlan.rows).toHaveLength(
+        expectedStatus === "active" ? 1 : 0,
+      );
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("creates all 13 September-to-December Fridays and reserves only the first 12", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     try {
-      await pool.query("update app.subscriptions set lessons_total = 12 where id = $1", [fixture.subscriptionIds[0]]);
+      await pool.query(
+        "update app.subscriptions set lessons_total = 12 where id = $1",
+        [fixture.subscriptionIds[0]],
+      );
       const dto = {
-        kind: "individual" as const, title: "Пятницы сентября — декабря",
-        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
-        activeFrom: "2026-09-01", activeUntil: "2026-12-01",
+        kind: "individual" as const,
+        title: "Пятницы сентября — декабря",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: "2026-09-01",
+        activeUntil: "2026-12-01",
         rows: [row(fixture, 5, "10:00")],
       };
       const preview = await plans.previewConstraints(actor, dto);
       expect(preview.valid).toBe(true);
-      const historical = (preview as unknown as { historical: { confirmRequired: boolean; previewToken?: string } }).historical;
-      const created = await plans.create(actor, {
-        ...dto,
-        ...(historical.confirmRequired ? { confirmHistorical: true, previewToken: historical.previewToken } : {}),
-      } as never, { idempotencyKey: `full-fridays-${randomUUID()}`, requestId: `request-${randomUUID()}` });
+      const historical = (
+        preview as unknown as {
+          historical: { confirmRequired: boolean; previewToken?: string };
+        }
+      ).historical;
+      const created = await plans.create(
+        actor,
+        {
+          ...dto,
+          ...(historical.confirmRequired
+            ? { confirmHistorical: true, previewToken: historical.previewToken }
+            : {}),
+        } as never,
+        {
+          idempotencyKey: `full-fridays-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
       const lessons = await pool.query<{ day: string; covered: boolean }>(
         `select lesson.series_date::text as day,
           exists(select 1 from app.lesson_reservations reservation where reservation.lesson_id = lesson.id and reservation.state = 'reserved') as covered
          from app.lessons lesson where lesson.id = any($1::uuid[]) order by lesson.scheduled_at`,
         [created.lessonIds],
       );
-      expect(lessons.rows.map(item => item.day)).toEqual([
-        "2026-09-04", "2026-09-11", "2026-09-18", "2026-09-25",
-        "2026-10-02", "2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30",
-        "2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27",
+      expect(lessons.rows.map((item) => item.day)).toEqual([
+        "2026-09-04",
+        "2026-09-11",
+        "2026-09-18",
+        "2026-09-25",
+        "2026-10-02",
+        "2026-10-09",
+        "2026-10-16",
+        "2026-10-23",
+        "2026-10-30",
+        "2026-11-06",
+        "2026-11-13",
+        "2026-11-20",
+        "2026-11-27",
       ]);
-      expect(lessons.rows.map(item => item.covered)).toEqual([
-        true, true, true, true, true, true, true, true, true, true, true, true, false,
+      expect(lessons.rows.map((item) => item.covered)).toEqual([
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
       ]);
-      const listed = await plans.list(actor, { studentId: fixture.studentIds[0] });
-      expect(listed.items.find(item => item.id === created.id)).toMatchObject({
-        scheduledLessonCount: 13, coveredLessonCount: 12,
+      const listed = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
       });
-      const tray = await plans.tray(actor, created.id, { limit: 40,
-        cursor: Buffer.from(JSON.stringify({ scheduledAt: '2026-09-01T00:00:00Z', id: randomUUID() })).toString('base64url'),
-        direction: 'next' });
-      expect(tray.items.filter(item => item.settlementMarkers.some(marker => marker.key === 'subscription_reserved'))).toHaveLength(12);
-      expect(await database.transaction(client => materializer.materializePlanSeries(client, created.seriesIds[0]!))).toBe(0);
-    } finally { await cleanup(pool, fixture); }
+      expect(listed.items.find((item) => item.id === created.id)).toMatchObject(
+        {
+          scheduledLessonCount: 13,
+          coveredLessonCount: 12,
+        },
+      );
+      const tray = await plans.tray(actor, created.id, {
+        limit: 40,
+        cursor: Buffer.from(
+          JSON.stringify({
+            scheduledAt: "2026-09-01T00:00:00Z",
+            id: randomUUID(),
+          }),
+        ).toString("base64url"),
+        direction: "next",
+      });
+      expect(
+        tray.items.filter((item) =>
+          item.settlementMarkers.some(
+            (marker) => marker.key === "subscription_reserved",
+          ),
+        ),
+      ).toHaveLength(12);
+      expect(
+        await database.transaction((client) =>
+          materializer.materializePlanSeries(client, created.seriesIds[0]!),
+        ),
+      ).toBe(0);
+    } finally {
+      await cleanup(pool, fixture);
+    }
   });
 
-  it.each([[182, 26], [365, 53]])("materializes the entire %i-day plan (%i Fridays)", async (days, count) => {
-    const fixture = await createFixture(pool);
-    const actor = { userId: fixture.managerId, role: "manager" as const };
-    try {
-      const weekday = new Date(`${fixture.today}T00:00:00Z`).getUTCDay();
-      const start = addDays(fixture.today, (5 - weekday + 7) % 7 + 7);
-      const created = await plans.create(actor, {
-        kind: "individual", title: "Длительное расписание",
-        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
-        activeFrom: start, activeUntil: addDays(start, days - 1),
-        rows: [row(fixture, 5, "10:00")],
-      }, { idempotencyKey: `long-plan-${randomUUID()}`, requestId: `request-${randomUUID()}` });
-      expect(created.lessonIds).toHaveLength(count);
-    } finally { await cleanup(pool, fixture); }
-  });
+  it.each([
+    [182, 26],
+    [365, 53],
+  ])(
+    "materializes the entire %i-day plan (%i Fridays)",
+    async (days, count) => {
+      const fixture = await createFixture(pool);
+      const actor = { userId: fixture.managerId, role: "manager" as const };
+      try {
+        const weekday = new Date(`${fixture.today}T00:00:00Z`).getUTCDay();
+        const start = addDays(fixture.today, ((5 - weekday + 7) % 7) + 7);
+        const created = await plans.create(
+          actor,
+          {
+            kind: "individual",
+            title: "Длительное расписание",
+            studentId: fixture.studentIds[0],
+            subscriptionId: fixture.subscriptionIds[0],
+            activeFrom: start,
+            activeUntil: addDays(start, days - 1),
+            rows: [row(fixture, 5, "10:00")],
+          },
+          {
+            idempotencyKey: `long-plan-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        );
+        expect(created.lessonIds).toHaveLength(count);
+      } finally {
+        await cleanup(pool, fixture);
+      }
+    },
+  );
 
   it("reserves the earliest lessons across multiple weekdays", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     try {
-      await pool.query('update app.subscriptions set lessons_total = 3 where id = $1', [fixture.subscriptionIds[0]]);
-      const created = await plans.create(actor, {
-        kind: 'individual', title: 'Два дня недели', studentId: fixture.studentIds[0],
-        subscriptionId: fixture.subscriptionIds[0], activeFrom: fixture.today,
-        activeUntil: addDays(fixture.today, 27), rows: [row(fixture, 5, '10:00'), row(fixture, 1, '10:00')],
-      }, { idempotencyKey: `two-days-${randomUUID()}`, requestId: `request-${randomUUID()}` });
+      await pool.query(
+        "update app.subscriptions set lessons_total = 3 where id = $1",
+        [fixture.subscriptionIds[0]],
+      );
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Два дня недели",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: addDays(fixture.today, 27),
+          rows: [row(fixture, 5, "10:00"), row(fixture, 1, "10:00")],
+        },
+        {
+          idempotencyKey: `two-days-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
       const covered = await pool.query<{ covered: boolean }>(
         `select exists(select 1 from app.lesson_reservations r where r.lesson_id = l.id and r.state = 'reserved') as covered
-         from app.lessons l where l.id = any($1::uuid[]) order by l.scheduled_at`, [created.lessonIds]);
-      expect(covered.rows.map(item => item.covered)).toEqual([true, true, true, false, false, false, false, false]);
-    } finally { await cleanup(pool, fixture); }
+         from app.lessons l where l.id = any($1::uuid[]) order by l.scheduled_at`,
+        [created.lessonIds],
+      );
+      expect(covered.rows.map((item) => item.covered)).toEqual([
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+      ]);
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("gives earlier lessons priority across plans created in reverse date order", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      await pool.query("update app.subscriptions set lessons_total = 2 where id = $1", [fixture.subscriptionIds[0]]);
+      const create = (offset: number) => plans.create(actor, {
+        kind: "individual", title: "Приоритет ближайших занятий",
+        studentId: fixture.studentIds[0], subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: addDays(fixture.today, offset), activeUntil: addDays(fixture.today, offset + 13),
+        rows: [row(fixture, 1, "10:00")],
+      }, { idempotencyKey: randomUUID(), requestId: randomUUID() });
+      const later = await create(14);
+      const original = await pool.query<{ id: string }>(
+        "select id from app.lesson_reservations where lesson_id = any($1::uuid[]) and state = 'reserved'", [later.lessonIds]);
+      expect(original.rows).toHaveLength(2);
+      const earlier = await create(0);
+      const covered = await pool.query<{ id: string; covered: boolean }>(
+        `select l.id, exists(select 1 from app.lesson_reservations r where r.lesson_id = l.id and r.state = 'reserved') as covered
+         from app.lessons l where l.id = any($1::uuid[]) order by l.scheduled_at, l.id`,
+        [[...earlier.lessonIds, ...later.lessonIds]]);
+      expect(covered.rows.map((item) => item.covered)).toEqual([true, true, false, false]);
+      const history = await pool.query<{ state: string }>(
+        "select state from app.lesson_reservations where id = any($1::uuid[])", [original.rows.map((item) => item.id)]);
+      expect(history.rows.map((item) => item.state)).toEqual(["released", "released"]);
+    } finally {
+      await cleanup(pool, fixture);
+    }
   });
 
   it("reviews and confirms historical occurrences without directly using subscription units", async () => {
     const fixture = await createFixture(pool);
     let additional:
-      Awaited<ReturnType<typeof createAdditionalPlanResource>> | undefined;
+      | Awaited<ReturnType<typeof createAdditionalPlanResource>>
+      | undefined;
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const activeFrom = addDays(fixture.today, -21);
     const activeUntil = addDays(fixture.today, 21);
@@ -1138,39 +2564,21 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       expect(immutable.rows[0]!.subscription_id).toBe(
         fixture.subscriptionIds[0],
       );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0147_lesson_reservation_history",
+      const rollback0142 = readFileSync(
+        resolve(
+          process.cwd(),
+          "db/migrations/0142_schedule_plan_series_subscription_snapshot.down.sql",
+        ),
+        "utf8",
       );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0146_lesson_funding_payer",
+      await expect(pool.query(rollback0142)).rejects.toThrow(
+        /0142 rollback is unsafe/,
       );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0145_student_contact_email",
+      const migrationStillApplied = await pool.query<{ applied: boolean }>(
+        `select exists (select 1 from app_schema_migrations
+          where id = '0142_schedule_plan_series_subscription_snapshot') as applied`,
       );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0144_direct_subscription_payment_isolation",
-      );
-      expect(await new MigrationRunner(pool).down()).toBe(
-        "0143_payment_record_link_permission",
-      );
-      try {
-        await expect(new MigrationRunner(pool).down()).rejects.toThrow(
-          /0142 rollback is unsafe/,
-        );
-        const migrationStillApplied = await pool.query<{ applied: boolean }>(
-          `select exists (select 1 from app_schema_migrations
-            where id = '0142_schedule_plan_series_subscription_snapshot') as applied`,
-        );
-        expect(migrationStillApplied.rows[0]!.applied).toBe(true);
-      } finally {
-        expect(await new MigrationRunner(pool).up()).toEqual([
-          "0143_payment_record_link_permission",
-          "0144_direct_subscription_payment_isolation",
-          "0145_student_contact_email",
-          "0146_lesson_funding_payer",
-          "0147_lesson_reservation_history",
-        ]);
-      }
+      expect(migrationStillApplied.rows[0]!.applied).toBe(true);
     } finally {
       await cleanup(pool, fixture);
     }
@@ -1502,7 +2910,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         studentId,
         subscriptionId: fixture.subscriptionIds[index]!,
       }));
-      const groupRow = row(fixture, 3, "18:00");
+      const groupRow = row(fixture, 3, "18:00", {
+        clientIds: fixture.studentIds,
+      });
       const movableGroup = await plans.create(
         actor,
         {
@@ -1832,7 +3242,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   it("rolls a group prefix back on reservation failure and inserts non-overlapping old-start assignments", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
-    const sourceRow = row(fixture, 3, "14:00");
+    const sourceRow = row(fixture, 3, "14:00", {
+      clientIds: fixture.studentIds,
+    });
     const newStart = addDays(fixture.today, -14);
     const prefixUntil = addDays(fixture.today, -1);
     const participants = fixture.studentIds.map((studentId, index) => ({
@@ -1886,7 +3298,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         [fixture.subscriptionIds[0]],
       );
       const beforeFailure = await planPersistenceShape(pool, created.id);
-      const allocationFailure = jest.spyOn(reservations, 'allocate').mockRejectedValueOnce(new Error('injected reservation failure'));
+      const allocationFailure = jest
+        .spyOn(reservations, "reconcile")
+        .mockRejectedValueOnce(new Error("injected reservation failure"));
       await expect(
         plans.update(
           actor,
@@ -1901,7 +3315,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
             requestId: `request-${randomUUID()}`,
           },
         ),
-      ).rejects.toThrow('injected reservation failure');
+      ).rejects.toThrow("injected reservation failure");
       allocationFailure.mockRestore();
       expect(await planPersistenceShape(pool, created.id)).toEqual(
         beforeFailure,
@@ -2190,7 +3604,10 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         activeFrom: fixture.today,
         activeUntil: fixture.until400,
         participants: participantAssignments,
-        rows: [row(fixture, 3, "14:00"), row(fixture, 3, "14:30")],
+        rows: [
+          row(fixture, 3, "14:00", { clientIds: fixture.studentIds }),
+          row(fixture, 3, "14:30", { clientIds: fixture.studentIds }),
+        ],
       });
       expect(groupPreview.valid).toBe(false);
       expect(
@@ -2210,7 +3627,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           activeFrom: fixture.today,
           activeUntil: fixture.until400,
           participants: participantAssignments,
-          rows: [row(fixture, 3, "14:00")],
+          rows: [
+            row(fixture, 3, "14:00", { clientIds: fixture.studentIds }),
+          ],
         },
         {
           idempotencyKey: `plan-group-${randomUUID()}`,
@@ -2295,7 +3714,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           effectiveFrom: fixture.effectiveFrom,
           rows: [
             {
-              ...row(fixture, 3, "15:00"),
+              ...row(fixture, 3, "15:00", {
+                clientIds: fixture.studentIds,
+              }),
               seriesId: created.seriesIds[0],
             },
           ],
@@ -2316,6 +3737,120 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         [created.id, fixture.effectiveFrom],
       );
       expect(assignments.rows[0]).toEqual({ historical: "4", current: "2" });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("materializes each group participant's frozen payer and partial minutes once", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const participants = fixture.studentIds.map((studentId, index) => ({
+        studentId,
+        subscriptionId: fixture.subscriptionIds[index]!,
+      }));
+      const created = await plans.create(
+        actor,
+        {
+          kind: "group",
+          title: "Разные плательщики",
+          groupId: fixture.groupId,
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          participants,
+          rows: [
+            {
+              ...row(fixture, 3, "14:00"),
+              plannedSettlementReason: "Согласовано директором",
+              financialDecision: {
+                settlementTypeKey: "partially_paid_lesson",
+                teacherCompensationRuleKey: "percent",
+                teacherCreditedDurationMinutes: 45,
+                teacherCompensationSource: "manual" as const,
+                clientDecisions: [
+                  {
+                    clientId: fixture.studentIds[0]!,
+                    payerStudentId: fixture.studentIds[1]!,
+                    subscriptionId: fixture.subscriptionIds[1]!,
+                    chargeType: "subscription" as const,
+                    chargeDurationMinutes: 30,
+                  },
+                  {
+                    clientId: fixture.studentIds[1]!,
+                    payerStudentId: fixture.studentIds[0]!,
+                    subscriptionId: fixture.subscriptionIds[0]!,
+                    chargeType: "subscription" as const,
+                    chargeDurationMinutes: 45,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          idempotencyKey: `plan-group-partial-${randomUUID()}`,
+          requestId: randomUUID(),
+        },
+      );
+      const materialized = await pool.query<{
+        student_id: string;
+        subscription_id: string;
+        charge_value: string;
+      }>(
+        `select participant.student_id, participant.subscription_id,
+           participant.charge_value::text
+         from app.lesson_snapshot_participants participant
+         join app.lessons lesson on lesson.id = participant.lesson_id
+         where lesson.series_id = $1
+         order by participant.lesson_id, participant.student_id`,
+        [created.seriesIds[0]],
+      );
+      expect(materialized.rows.length).toBeGreaterThan(0);
+      for (const lessonId of created.lessonIds) {
+        const reservations = await pool.query<{ units: string }>(
+          "select units::text from app.lesson_reservations where lesson_id = $1 order by units",
+          [lessonId],
+        );
+        expect(reservations.rows.map((item) => item.units)).toEqual([
+          "0.50",
+          "0.75",
+        ]);
+      }
+      const firstLessonParticipants = materialized.rows.slice(0, 2);
+      expect(
+        firstLessonParticipants.map((item) => ({
+          studentId: item.student_id,
+          subscriptionId: item.subscription_id,
+          units: item.charge_value,
+        })),
+      ).toEqual(
+        expect.arrayContaining([
+          {
+            studentId: fixture.studentIds[0],
+            subscriptionId: fixture.subscriptionIds[1],
+            units: "0.50",
+          },
+          {
+            studentId: fixture.studentIds[1],
+            subscriptionId: fixture.subscriptionIds[0],
+            units: "0.75",
+          },
+        ]),
+      );
+      const plansPerLesson = await pool.query<{ count: string }>(
+        `select count(*)::text
+         from app.lesson_settlement_plans settlement
+         join app.lessons lesson on lesson.id = settlement.lesson_id
+         where lesson.series_id = $1`,
+        [created.seriesIds[0]],
+      );
+      expect(plansPerLesson.rows[0]!.count).toBe(
+        String(created.lessonIds.length),
+      );
     } finally {
       await cleanup(pool, fixture);
     }
@@ -2763,6 +4298,351 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("removes one recurring row atomically while preserving terminal and changed lessons", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Удаление одной строки",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [
+            row(fixture, isoWeekday(fixture.effectiveFrom), "10:00"),
+            row(fixture, isoWeekday(addDays(fixture.effectiveFrom, 1)), "11:00"),
+          ],
+        },
+        {
+          idempotencyKey: `row-remove-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const seriesId = created.seriesIds[0]!;
+      const effectiveFrom = fixture.effectiveFrom;
+      const candidates = await pool.query<{
+        id: string;
+        lifecycle_state: string;
+      }>(
+        `select lesson.id, lesson.lifecycle_state
+         from app.lessons lesson
+         join app.schedule_series series on series.id = lesson.series_id
+         join app.branches branch on branch.id = series.branch_id
+         where lesson.series_id = $1
+           and timezone(branch.timezone_name, lesson.scheduled_at)::date >= $2::date
+         order by lesson.scheduled_at, lesson.id`,
+        [seriesId, effectiveFrom],
+      );
+      expect(candidates.rows.length).toBeGreaterThan(4);
+      const changedLessonId = candidates.rows[0]!.id;
+      const terminalLessonId = candidates.rows[1]!.id;
+      const racedChangedLessonId = candidates.rows[2]!.id;
+      await pool.query(
+        "update app.lessons set teacher_id = $2, updated_at = now() where id = $1",
+        [changedLessonId, additional.teacherId],
+      );
+      await pool.query(
+        "update app.lessons set lifecycle_state = 'cancelled', updated_at = now() where id = $1",
+        [terminalLessonId],
+      );
+      await pool.query(
+        "update app.lesson_reservations set state = 'released', updated_at = now() where lesson_id = $1",
+        [terminalLessonId],
+      );
+
+      const base = {
+        expectedVersion: 1,
+        effectiveFrom,
+        reasonText: "Смена преподавателя",
+      };
+      const stale = await plans.previewRemoveRow(
+        actor,
+        created.id,
+        seriesId,
+        base,
+      );
+      expect(stale.impact).toMatchObject({
+        terminalLessonsPreserved: 1,
+        changedLessonsPreserved: 1,
+        endsPlan: false,
+      });
+      await pool.query(
+        "update app.lessons set duration_minutes = duration_minutes - 15, updated_at = now() where id = $1",
+        [racedChangedLessonId],
+      );
+      await expect(
+        plans.removeRow(
+          actor,
+          created.id,
+          seriesId,
+          {
+            ...base,
+            previewToken: stale.previewToken,
+            confirm: true,
+          },
+          {
+            idempotencyKey: `row-remove-stale-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toMatchObject({
+        status: 422,
+        response: { code: "SCHEDULE_PLAN_ROW_PREVIEW_INVALID" },
+      });
+      const afterStale = await pool.query<{
+        version: number;
+        valid_until: string | null;
+        deleted_at: Date | null;
+        cancelled: number;
+        audits: number;
+      }>(
+        `select plan.version::int as version, series.valid_until::text,
+           series.deleted_at,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = series.id
+               and lesson.lifecycle_state = 'cancelled') as cancelled,
+           (select count(*)::int from app.audit_events audit
+             where audit.entity_id = plan.id::text
+               and audit.action = 'crm.schedule_plan_row_removed') as audits
+         from app.schedule_plans plan
+         join app.schedule_series series on series.id = $2
+         where plan.id = $1`,
+        [created.id, seriesId],
+      );
+      expect(afterStale.rows[0]).toMatchObject({
+        version: 1,
+        valid_until: fixture.until60,
+        deleted_at: null,
+        cancelled: 1,
+        audits: 0,
+      });
+
+      const preview = await plans.previewRemoveRow(
+        actor,
+        created.id,
+        seriesId,
+        base,
+      );
+      expect(preview.impact).toMatchObject({
+        terminalLessonsPreserved: 1,
+        changedLessonsPreserved: 2,
+        endsPlan: false,
+      });
+      expect(preview.impact.futureUnfinishedLessons).toBeGreaterThan(0);
+      expect(preview.impact.activeReservationsToRelease).toBe(
+        preview.impact.futureUnfinishedLessons,
+      );
+      const command = {
+        ...base,
+        previewToken: preview.previewToken,
+        confirm: true as const,
+      };
+      const idempotencyKey = `row-remove-commit-${randomUUID()}`;
+      const removed = await plans.removeRow(
+        actor,
+        created.id,
+        seriesId,
+        command,
+        {
+          idempotencyKey,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const replay = await plans.removeRow(
+        actor,
+        created.id,
+        seriesId,
+        command,
+        {
+          idempotencyKey,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      expect(removed).toMatchObject({
+        status: "active",
+        version: 2,
+        endsPlan: false,
+        cancelledLessons: preview.impact.futureUnfinishedLessons,
+        releasedReservations: preview.impact.activeReservationsToRelease,
+        preservedTerminalLessons: 1,
+        preservedChangedLessons: 2,
+        replayed: false,
+      });
+      expect(replay).toEqual({ ...removed, replayed: true });
+
+      const evidence = await pool.query<{
+        plan_version: number;
+        valid_until: string;
+        deleted_lessons: number;
+        eligible_still_open: number;
+        system_transitions: number;
+        invalid_transition_facts: number;
+        reserved_cancelled: number;
+        changed_states: string[];
+        changed_reserved: number;
+        audit_count: number;
+        outbox_count: number;
+      }>(
+        `select plan.version::int as plan_version, series.valid_until::text,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = series.id and lesson.deleted_at is not null)
+             as deleted_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.branches branch on branch.id = series.branch_id
+             where lesson.series_id = series.id
+               and timezone(branch.timezone_name, lesson.scheduled_at)::date >= $3::date
+               and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
+               and lesson.id <> all($4::uuid[])) as eligible_still_open,
+           (select count(*)::int from app.lesson_transitions transition
+             join app.lessons lesson on lesson.id = transition.lesson_id
+             where lesson.series_id = series.id
+               and transition.reason_code = 'schedule.plan.row.remove'
+               and transition.reason_text = 'Строка постоянного расписания удалена')
+             as system_transitions,
+           (select count(*)::int from app.lesson_transitions transition
+             join app.lessons lesson on lesson.id = transition.lesson_id
+             where lesson.series_id = series.id
+               and transition.reason_code = 'schedule.plan.row.remove'
+               and (
+                 transition.financial_decision->>'settlementTypeKey' <> 'free_lesson'
+                 or transition.financial_decision->>'teacherCompensationRuleKey' <> 'none'
+                 or exists (
+                   select 1 from jsonb_array_elements(
+                     transition.financial_decision->'clientDecisions'
+                   ) decision
+                   where decision->>'chargeType' <> 'none'
+                     or (decision->>'chargeDurationMinutes')::int <> 0
+                 )
+               )) as invalid_transition_facts,
+           (select count(*)::int from app.lesson_reservations reservation
+             join app.lessons lesson on lesson.id = reservation.lesson_id
+             where lesson.series_id = series.id
+               and lesson.lifecycle_state = 'cancelled'
+               and reservation.state = 'reserved') as reserved_cancelled,
+           array(select lesson.lifecycle_state from app.lessons lesson
+             where lesson.id = any($4::uuid[]) order by lesson.id) as changed_states,
+           (select count(*)::int from app.lesson_reservations reservation
+             where reservation.lesson_id = any($4::uuid[])
+               and reservation.state = 'reserved') as changed_reserved,
+           (select count(*)::int from app.audit_events audit
+             where audit.entity_id = plan.id::text
+               and audit.action = 'crm.schedule_plan_row_removed') as audit_count,
+           (select count(*)::int from app.platform_outbox_events event
+             where event.aggregate_type = 'schedule:plan'
+               and event.aggregate_id = plan.id::text
+               and event.event_type = 'schedule.plan.changed') as outbox_count
+         from app.schedule_plans plan
+         join app.schedule_series series on series.id = $2
+         where plan.id = $1`,
+        [
+          created.id,
+          seriesId,
+          effectiveFrom,
+          [changedLessonId, racedChangedLessonId],
+        ],
+      );
+      expect(evidence.rows[0]).toEqual({
+        plan_version: 2,
+        valid_until: addDays(effectiveFrom, -1),
+        deleted_lessons: 0,
+        eligible_still_open: 0,
+        system_transitions: removed.cancelledLessons,
+        invalid_transition_facts: 0,
+        reserved_cancelled: 0,
+        changed_states: ["scheduled", "scheduled"],
+        changed_reserved: 2,
+        audit_count: 1,
+        outbox_count: 2,
+      });
+      const terminal = await pool.query<{ lifecycle_state: string }>(
+        "select lifecycle_state from app.lessons where id = $1",
+        [terminalLessonId],
+      );
+      expect(terminal.rows[0]?.lifecycle_state).toBe("cancelled");
+    } finally {
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
+  it("turns final-row removal into the complete shared plan-end result", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Последняя строка",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [row(fixture, isoWeekday(fixture.effectiveFrom), "12:00")],
+        },
+        {
+          idempotencyKey: `last-row-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const base = {
+        expectedVersion: 1,
+        effectiveFrom: fixture.effectiveFrom,
+        reasonText: "Завершение курса",
+      };
+      const preview = await plans.previewRemoveRow(
+        actor,
+        created.id,
+        created.seriesIds[0]!,
+        base,
+      );
+      expect(preview.impact.endsPlan).toBe(true);
+      const result = await plans.removeRow(
+        actor,
+        created.id,
+        created.seriesIds[0]!,
+        { ...base, previewToken: preview.previewToken, confirm: true },
+        {
+          idempotencyKey: `last-row-remove-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      expect(result).toMatchObject({
+        status: "ended",
+        endsPlan: true,
+        version: 2,
+        replayed: false,
+      });
+      const persisted = await pool.query<{
+        status: string;
+        active_until: string;
+        end_reason: string;
+        row_transitions: number;
+      }>(
+        `select plan.status, plan.active_until::text, plan.end_reason,
+           (select count(*)::int from app.lesson_transitions transition
+             join app.lessons lesson on lesson.id = transition.lesson_id
+             where lesson.series_id = $2
+               and transition.reason_code = 'schedule.plan.row.remove'
+               and transition.reason_text = 'Строка постоянного расписания удалена')
+             as row_transitions
+         from app.schedule_plans plan where plan.id = $1`,
+        [created.id, created.seriesIds[0]],
+      );
+      expect(persisted.rows[0]).toEqual({
+        status: "ended",
+        active_until: addDays(fixture.effectiveFrom, -1),
+        end_reason: base.reasonText,
+        row_transitions: result.cancelledLessons,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("pages a bounded plan tray without duplicates and does not leak it to another client", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
@@ -3078,6 +4958,1041 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       await cleanup(pool, fixture);
     }
   });
+
+  it("preserves stale, ended and period precedence before locked semantic validation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const sourceRow = row(fixture, isoWeekday(fixture.effectiveFrom), "15:00");
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Plan validation precedence",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-precedence-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const invalidSubscriptionId = randomUUID();
+      const invalidRow = {
+        ...sourceRow,
+        seriesId: created.seriesIds[0],
+        roomId: randomUUID(),
+      };
+      const attempt = (
+        suffix: string,
+        input: {
+          expectedVersion: number;
+          effectiveFrom: string;
+          activeUntil: string | null;
+        },
+      ) =>
+        plans.update(
+          actor,
+          created.id,
+          {
+            ...input,
+            subscriptionId: invalidSubscriptionId,
+            rows: [invalidRow],
+          },
+          {
+            idempotencyKey: `plan-precedence-${suffix}-${randomUUID()}`,
+            requestId: `request-${randomUUID()}`,
+          },
+        );
+
+      await expect(
+        attempt("stale", {
+          expectedVersion: 99,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_VERSION_STALE" },
+      });
+      await expect(
+        attempt("period", {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: addDays(fixture.effectiveFrom, -1),
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_PERIOD_INVALID" },
+      });
+      await pool.query(
+        `update app.schedule_plans
+         set status = 'ended', ended_at = now(), ended_by = $2,
+             end_reason = 'test.validation-precedence'
+         where id = $1`,
+        [created.id, actor.userId],
+      );
+      await expect(
+        attempt("ended", {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "SCHEDULE_PLAN_ENDED" },
+      });
+      const evidence = await pool.query<{
+        version: number;
+        aggregate_version: number;
+        update_idempotency: number;
+        update_audit: number;
+        outbox: number;
+      }>(
+        `select plan.version::int as version,
+           (select version::int from app.aggregate_versions
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text) as aggregate_version,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $2 and operation = 'schedule.plan.update')
+             as update_idempotency,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $3
+               and action = 'crm.schedule_plan_updated'
+               and entity_id = plan.id::text) as update_audit,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text
+               and event_type = 'schedule.plan.changed') as outbox
+         from app.schedule_plans plan where plan.id = $1`,
+        [created.id, `user:${actor.userId}`, actor.userId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        version: 1,
+        aggregate_version: 1,
+        update_idempotency: 0,
+        update_audit: 0,
+        outbox: 1,
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("serializes archive before a plan update and rejects the tombstoned client without writes", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let updatePromise: Promise<unknown> | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const sourceRow = row(fixture, isoWeekday(fixture.effectiveFrom), "18:00");
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Archive-first plan update",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `archive-plan-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const futureEligible = await pool.query<{ count: number }>(
+        `select count(*)::int as count from app.lessons
+         where id = any($1::uuid[]) and scheduled_at >= now()
+           and lifecycle_state in ('scheduled', 'settlement_pending')`,
+        [created.lessonIds],
+      );
+      const updateIdempotencyKey = `archive-plan-update-${randomUUID()}`;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select id from app.schedule_plans where id = $1 for update",
+        [created.id],
+      );
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentIds[0]!,
+        expectedVersion: 1,
+        reason: "test.plan-update-archive-first",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedBy(pool, blockerPid);
+      updatePromise = plans.update(
+        actor,
+        created.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+          subscriptionId: fixture.subscriptionIds[0],
+          rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+        },
+        {
+          idempotencyKey: updateIdempotencyKey,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updatePid = await waitForBlockedBy(pool, archivePid);
+      await waitForSpecificBlock(pool, updatePid, archivePid);
+      await blocker.query("commit");
+      const [archiveResult, updateResult] = await Promise.allSettled([
+        archivePromise,
+        updatePromise,
+      ]);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 422,
+          response: { code: "ARCHIVED_CLIENT_REFERENCE" },
+        },
+      });
+      const evidence = await pool.query<{
+        status: string;
+        plan_version: number;
+        aggregate_version: number;
+        series_count: number;
+        continuation_count: number;
+        lesson_count: number;
+        cancelled_count: number;
+        idempotency: number;
+        update_audit: number;
+        plan_outbox: number;
+      }>(
+        `select plan.status, plan.version::int as plan_version,
+           (select version::int from app.aggregate_versions
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text) as aggregate_version,
+           (select count(*)::int from app.schedule_series
+             where plan_id = plan.id) as series_count,
+           (select count(*)::int from app.schedule_series
+             where plan_id = plan.id and id <> $2) as continuation_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id) as lesson_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id
+               and lesson.lifecycle_state = 'cancelled') as cancelled_count,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $3 and operation = 'schedule.plan.update'
+               and idempotency_key = $4) as idempotency,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $5
+               and action = 'crm.schedule_plan_updated'
+               and entity_id = plan.id::text) as update_audit,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text
+               and event_type = 'schedule.plan.changed') as plan_outbox
+         from app.schedule_plans plan where plan.id = $1`,
+        [
+          created.id,
+          created.seriesIds[0],
+          `user:${actor.userId}`,
+          updateIdempotencyKey,
+          actor.userId,
+        ],
+      );
+      expect(evidence.rows[0]).toEqual({
+        status: "ended",
+        plan_version: 2,
+        aggregate_version: 2,
+        series_count: 1,
+        continuation_count: 0,
+        lesson_count: created.lessonIds.length,
+        cancelled_count: futureEligible.rows[0]!.count,
+        idempotency: 0,
+        update_audit: 0,
+        plan_outbox: 1,
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        updatePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("orders legacy update and materializer locks without a row-blocker deadlock", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let updatePromise: Promise<unknown> | undefined;
+    let materializerPromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const inserted = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '18:00', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = inserted.rows[0]!.id;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select id from app.schedule_series where id = $1 for update",
+        [legacySeriesId],
+      );
+
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        teacherId: additional.teacherId,
+        roomId: additional.roomId,
+        effectiveFrom: fixture.effectiveFrom,
+      });
+      const updatePid = await waitForBlockedBy(pool, blockerPid);
+      await waitForSpecificBlock(pool, updatePid, blockerPid);
+
+      materializerPromise = database.transaction((client) =>
+        materializer.materializePlanSeries(client, legacySeriesId!),
+      );
+      const materializerPid = await waitForBlockedBy(pool, updatePid);
+      await waitForSpecificBlock(pool, materializerPid, updatePid);
+
+      await blocker.query("commit");
+      const [updateResult, materializerResult] = await Promise.allSettled([
+        updatePromise,
+        materializerPromise,
+      ]);
+      expect(updateResult.status).toBe("fulfilled");
+      expect(materializerResult.status).toBe("fulfilled");
+
+      const evidence = await pool.query<{
+        series_count: number;
+        superseded_count: number;
+        old_historical_live_lessons: number;
+        old_historical_wrong_resources: number;
+        old_future_live_lessons: number;
+        continuation_live_lessons: number;
+        wrong_continuation_resources: number;
+        duplicate_dates: number;
+      }>(
+        `select count(*)::int as series_count,
+           count(*) filter (where superseded_by is not null)::int
+             as superseded_count,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = $2 and lesson.deleted_at is null
+               and lesson.series_date < $5::date)
+             as old_historical_live_lessons,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = $2 and lesson.deleted_at is null
+               and lesson.series_date < $5::date
+               and (lesson.teacher_id <> $6 or lesson.room_id <> $7))
+             as old_historical_wrong_resources,
+           (select count(*)::int from app.lessons lesson
+             where lesson.series_id = $2 and lesson.deleted_at is null
+               and lesson.series_date >= $5::date)
+             as old_future_live_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series continuation
+               on continuation.id = lesson.series_id
+             where continuation.created_by = $1
+               and continuation.plan_id is null
+               and continuation.id <> $2
+               and lesson.deleted_at is null) as continuation_live_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series continuation
+               on continuation.id = lesson.series_id
+             where continuation.created_by = $1
+               and continuation.plan_id is null
+               and continuation.id <> $2
+               and lesson.deleted_at is null
+               and (lesson.teacher_id <> $3 or lesson.room_id <> $4))
+             as wrong_continuation_resources,
+           (select count(*)::int from (
+             select lesson.series_id, lesson.series_date
+             from app.lessons lesson
+             join app.schedule_series target on target.id = lesson.series_id
+             where target.created_by = $1 and target.plan_id is null
+               and lesson.deleted_at is null
+             group by lesson.series_id, lesson.series_date
+             having count(*) > 1
+           ) duplicates) as duplicate_dates
+         from app.schedule_series
+         where created_by = $1 and plan_id is null`,
+        [
+          fixture.managerId,
+          legacySeriesId,
+          additional.teacherId,
+          additional.roomId,
+          fixture.effectiveFrom,
+          fixture.teacherId,
+          fixture.roomId,
+        ],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        series_count: 2,
+        superseded_count: 1,
+        old_historical_wrong_resources: 0,
+        old_future_live_lessons: 0,
+        wrong_continuation_resources: 0,
+        duplicate_dates: 0,
+      });
+      expect(evidence.rows[0]!.old_historical_live_lessons).toBeGreaterThan(0);
+      expect(evidence.rows[0]!.continuation_live_lessons).toBeGreaterThan(0);
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        updatePromise ?? Promise.resolve(),
+        materializerPromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
+  it("fails a nested legacy group materialization when membership grows after the outer reread", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const lessonBlocker = await pool.connect();
+    const drift = await pool.connect();
+    let updatePromise: Promise<unknown> | undefined;
+    let driftSeriesPromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    let initialLessonCount = 0;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      await pool.query(
+        `update app.group_students set left_at = now()
+         where group_id = $1 and student_id = $2`,
+        [fixture.groupId, fixture.studentIds[1]],
+      );
+      const inserted = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           group_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '18:30', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.groupId,
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = inserted.rows[0]!.id;
+      await materializer.materializeSeries(legacySeriesId);
+      const initialLessons = await pool.query<{ count: number }>(
+        "select count(*)::int as count from app.lessons where series_id = $1",
+        [legacySeriesId],
+      );
+      initialLessonCount = initialLessons.rows[0]!.count;
+
+      await lessonBlocker.query("begin");
+      const lessonBlockerPid = await backendPid(lessonBlocker);
+      const blockedLesson = await lessonBlocker.query<{ id: string }>(
+        `select id from app.lessons
+         where series_id = $1 and series_date >= $2::date
+           and deleted_at is null and status = 'scheduled'
+         order by series_date limit 1 for update`,
+        [legacySeriesId, fixture.effectiveFrom],
+      );
+      expect(blockedLesson.rows).toHaveLength(1);
+
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        effectiveFrom: fixture.effectiveFrom,
+      });
+      const updatePid = await waitForBlockedBy(pool, lessonBlockerPid);
+      await waitForSpecificBlock(pool, updatePid, lessonBlockerPid);
+
+      // addGroupStudent commits without a schedule advisory lock. The nested
+      // materializer must observe this new participant without acquiring its
+      // key while the outer edit already owns the old series lock.
+      await pool.query(
+        `update app.group_students set left_at = null
+         where group_id = $1 and student_id = $2`,
+        [fixture.groupId, fixture.studentIds[1]],
+      );
+      await drift.query("begin");
+      const driftPid = await backendPid(drift);
+      await drift.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`client:student:${fixture.studentIds[1]}`],
+      );
+      driftSeriesPromise = drift.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`series:${legacySeriesId}`],
+      );
+      await waitForSpecificBlock(pool, driftPid, updatePid);
+
+      await lessonBlocker.query("commit");
+      const [updateResult, driftResult] = await Promise.allSettled([
+        updatePromise,
+        driftSeriesPromise,
+      ]);
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 409,
+          response: { code: "SCHEDULE_SERIES_LOCK_SET_CHANGED" },
+        },
+      });
+      expect(driftResult.status).toBe("fulfilled");
+      const failures = [updateResult, driftResult]
+        .filter((result) => result.status === "rejected")
+        .map((result) => result.reason as { code?: string; status?: number });
+      expect(failures.some((failure) => failure.code === "40P01")).toBe(false);
+      expect(failures.some((failure) => failure.status === 500)).toBe(false);
+      await drift.query("commit");
+
+      const evidence = await pool.query<{
+        valid_until: string;
+        version: number;
+        superseded_by: string | null;
+        deleted_at: Date | null;
+        series_count: number;
+        lesson_count: number;
+        update_audit: number;
+        outbox: number;
+        idempotency: number;
+      }>(
+        `select source.valid_until::text, source.version::int,
+           source.superseded_by, source.deleted_at,
+           (select count(*)::int from app.schedule_series candidate
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as series_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series candidate on candidate.id = lesson.series_id
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as lesson_count,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $2
+               and action = 'crm.schedule_series_updated'
+               and entity_id = source.id::text) as update_audit,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_id = source.id::text) as outbox,
+           (select count(*)::int from app.idempotency_records
+             where actor_key in ($2::text, 'user:' || $2::text)
+               and operation like 'schedule.series%') as idempotency
+         from app.schedule_series source where source.id = $1`,
+        [legacySeriesId, fixture.managerId],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        valid_until: fixture.until60,
+        version: 1,
+        superseded_by: null,
+        deleted_at: null,
+        series_count: 1,
+        lesson_count: initialLessonCount,
+        update_audit: 0,
+        outbox: 0,
+        idempotency: 0,
+      });
+    } finally {
+      await lessonBlocker.query("rollback").catch(() => undefined);
+      await Promise.allSettled([
+        updatePromise ?? Promise.resolve(),
+        driftSeriesPromise ?? Promise.resolve(),
+      ]);
+      await drift.query("rollback").catch(() => undefined);
+      lessonBlocker.release();
+      drift.release();
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects a legacy update when its pre-read resources change before the row lock", async () => {
+    const fixture = await createFixture(pool);
+    const additional = await createAdditionalPlanResource(pool, fixture.branchId);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let updatePromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const inserted = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '17:00', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = inserted.rows[0]!.id;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [`branch:${fixture.branchId}`],
+      );
+
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        effectiveFrom: fixture.effectiveFrom,
+        beginTime: "17:30",
+      });
+      const updatePid = await waitForBlockedBy(pool, blockerPid);
+      await waitForSpecificBlock(pool, updatePid, blockerPid);
+      await pool.query(
+        `update app.schedule_series
+         set teacher_id = $2, version = version + 1
+         where id = $1`,
+        [legacySeriesId, additional.teacherId],
+      );
+      await blocker.query("commit");
+
+      await expect(updatePromise).rejects.toMatchObject({
+        status: 409,
+        response: { code: "SCHEDULE_SERIES_VERSION_STALE" },
+      });
+      const evidence = await pool.query<{
+        version: number;
+        teacher_id: string;
+        superseded_by: string | null;
+        series_count: number;
+        lesson_count: number;
+        update_audit: number;
+      }>(
+        `select series.version::int as version, series.teacher_id,
+           series.superseded_by,
+           (select count(*)::int from app.schedule_series candidate
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as series_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series candidate on candidate.id = lesson.series_id
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as lesson_count,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $2
+               and action = 'crm.schedule_series_updated'
+               and entity_id = series.id::text) as update_audit
+         from app.schedule_series series where series.id = $1`,
+        [legacySeriesId, fixture.managerId],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        version: 2,
+        teacher_id: additional.teacherId,
+        superseded_by: null,
+        series_count: 1,
+        lesson_count: 0,
+        update_audit: 0,
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([updatePromise ?? Promise.resolve()]);
+      await cleanup(pool, fixture, additional);
+    }
+  });
+
+  it("serializes archive before a legacy series update and leaves no continuation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let updatePromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    let legacyLessonId: string | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const insertedSeries = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '18:00', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = insertedSeries.rows[0]!.id;
+      const insertedLesson = await pool.query<{ id: string }>(
+        `insert into app.lessons (
+           student_id, teacher_id, room_id, branch_id, series_id, series_date,
+           scheduled_at, duration_minutes, status, created_by
+         ) values ($1, $2, $3, $4, $5, $6::date,
+           now() + interval '21 days', 60, 'scheduled', $7) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          legacySeriesId,
+          fixture.effectiveFrom,
+          fixture.managerId,
+        ],
+      );
+      legacyLessonId = insertedLesson.rows[0]!.id;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select id from app.schedule_series where id = $1 for update",
+        [legacySeriesId],
+      );
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentIds[0]!,
+        expectedVersion: 1,
+        reason: "test.legacy-series-update-archive-first",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedBy(pool, blockerPid);
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        effectiveFrom: fixture.effectiveFrom,
+        beginTime: "19:00",
+      });
+      const updatePid = await waitForBlockedBy(pool, archivePid);
+      await waitForSpecificBlock(pool, updatePid, archivePid);
+      await blocker.query("commit");
+      const [archiveResult, updateResult] = await Promise.allSettled([
+        archivePromise,
+        updatePromise,
+      ]);
+      expect(archiveResult.status).toBe("fulfilled");
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          status: 422,
+          response: { code: "ARCHIVED_CLIENT_REFERENCE" },
+        },
+      });
+      const evidence = await pool.query<{
+        series_version: number;
+        superseded_by: string | null;
+        series_count: number;
+        lifecycle_state: string;
+        lesson_count: number;
+        update_audit: number;
+        idempotency: number;
+        schedule_outbox: number;
+      }>(
+        `select series.version::int as series_version, series.superseded_by,
+           (select count(*)::int from app.schedule_series candidate
+             where candidate.created_by = $2 and candidate.plan_id is null)
+             as series_count,
+           lesson.lifecycle_state,
+           (select count(*)::int from app.lessons candidate
+             where candidate.series_id = series.id) as lesson_count,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $2
+               and action = 'crm.schedule_series_updated'
+               and entity_id = series.id::text) as update_audit,
+           (select count(*)::int from app.idempotency_records
+             where actor_key in ($2::text, 'user:' || $2::text)
+               and operation like 'schedule.series%') as idempotency,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_id = series.id::text
+               and aggregate_type like 'schedule:%') as schedule_outbox
+         from app.schedule_series series
+         join app.lessons lesson on lesson.id = $3
+         where series.id = $1`,
+        [legacySeriesId, actor.userId, legacyLessonId],
+      );
+      expect(evidence.rows[0]).toEqual({
+        series_version: 2,
+        superseded_by: null,
+        series_count: 1,
+        lifecycle_state: "cancelled",
+        lesson_count: 1,
+        update_audit: 0,
+        idempotency: 0,
+        schedule_outbox: 0,
+      });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        updatePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("lets a plan update commit before archive reconciles its continuation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let updatePromise: Promise<unknown> | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const sourceRow = row(fixture, isoWeekday(fixture.effectiveFrom), "17:00");
+      const created = await plans.create(
+        actor,
+        {
+          kind: "individual",
+          title: "Plan update wins archive race",
+          studentId: fixture.studentIds[0],
+          subscriptionId: fixture.subscriptionIds[0],
+          activeFrom: fixture.today,
+          activeUntil: fixture.until60,
+          rows: [sourceRow],
+        },
+        {
+          idempotencyKey: `plan-update-first-source-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updateIdempotencyKey = `plan-update-first-${randomUUID()}`;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select id from app.schedule_plans where id = $1 for update",
+        [created.id],
+      );
+      updatePromise = plans.update(
+        actor,
+        created.id,
+        {
+          expectedVersion: 1,
+          effectiveFrom: fixture.effectiveFrom,
+          activeUntil: fixture.until60,
+          subscriptionId: fixture.subscriptionIds[0],
+          rows: [{ ...sourceRow, seriesId: created.seriesIds[0] }],
+        },
+        {
+          idempotencyKey: updateIdempotencyKey,
+          requestId: `request-${randomUUID()}`,
+        },
+      );
+      const updatePid = await waitForBlockedBy(pool, blockerPid);
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentIds[0]!,
+        expectedVersion: 1,
+        reason: "test.plan-update-first",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedBy(pool, updatePid);
+      await waitForSpecificBlock(pool, archivePid, updatePid);
+      await blocker.query("commit");
+      const [updateResult, archiveResult] = await Promise.allSettled([
+        updatePromise,
+        archivePromise,
+      ]);
+      expect(updateResult.status).toBe("fulfilled");
+      expect(archiveResult.status).toBe("fulfilled");
+      const evidence = await pool.query<{
+        status: string;
+        plan_version: number;
+        aggregate_version: number;
+        series_count: number;
+        live_lessons: number;
+        uncancelled_live_lessons: number;
+        idempotency: number;
+        update_audit: number;
+        plan_outbox: number;
+      }>(
+        `select plan.status, plan.version::int as plan_version,
+           (select version::int from app.aggregate_versions
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text) as aggregate_version,
+           (select count(*)::int from app.schedule_series
+             where plan_id = plan.id) as series_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id and lesson.deleted_at is null)
+             as live_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id and lesson.deleted_at is null
+               and lesson.lifecycle_state <> 'cancelled')
+             as uncancelled_live_lessons,
+           (select count(*)::int from app.idempotency_records
+             where actor_key = $2 and operation = 'schedule.plan.update'
+               and idempotency_key = $3) as idempotency,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $4
+               and action = 'crm.schedule_plan_updated'
+               and entity_id = plan.id::text) as update_audit,
+           (select count(*)::int from app.platform_outbox_events
+             where aggregate_type = 'schedule:plan'
+               and aggregate_id = plan.id::text
+               and event_type = 'schedule.plan.changed') as plan_outbox
+         from app.schedule_plans plan where plan.id = $1`,
+        [
+          created.id,
+          `user:${actor.userId}`,
+          updateIdempotencyKey,
+          actor.userId,
+        ],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        status: "ended",
+        plan_version: 3,
+        aggregate_version: 3,
+        series_count: 1,
+        uncancelled_live_lessons: 0,
+        idempotency: 1,
+        update_audit: 1,
+        plan_outbox: 2,
+      });
+      expect(evidence.rows[0]!.live_lessons).toBeGreaterThan(0);
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        updatePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("lets a legacy series update commit before archive reconciles its continuation", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "director" as const };
+    const blocker = await pool.connect();
+    let archivePromise: Promise<unknown> | undefined;
+    let updatePromise: Promise<unknown> | undefined;
+    let legacySeriesId: string | undefined;
+    try {
+      await pool.query("update app.users set role = 'director' where id = $1", [
+        fixture.managerId,
+      ]);
+      const insertedSeries = await pool.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from, valid_until, created_by
+         ) values ($1, $2, $3, $4, $5, '16:00', 60,
+           $6::date, $7::date, $8) returning id`,
+        [
+          fixture.studentIds[0],
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+          isoWeekday(fixture.effectiveFrom),
+          fixture.today,
+          fixture.until60,
+          fixture.managerId,
+        ],
+      );
+      legacySeriesId = insertedSeries.rows[0]!.id;
+      await blocker.query("begin");
+      const blockerPid = await backendPid(blocker);
+      await blocker.query(
+        "select id from app.schedule_series where id = $1 for update",
+        [legacySeriesId],
+      );
+      updatePromise = legacySeries.updateScheduleSeries(actor, legacySeriesId, {
+        effectiveFrom: fixture.effectiveFrom,
+        beginTime: "16:30",
+      });
+      const updatePid = await waitForBlockedBy(pool, blockerPid);
+      archivePromise = archives.archive(actor, {
+        type: "student",
+        id: fixture.studentIds[0]!,
+        expectedVersion: 1,
+        reason: "test.legacy-series-update-first",
+        confirm: true,
+      });
+      const archivePid = await waitForBlockedBy(pool, updatePid);
+      await waitForSpecificBlock(pool, archivePid, updatePid);
+      await blocker.query("commit");
+      const [updateResult, archiveResult] = await Promise.allSettled([
+        updatePromise,
+        archivePromise,
+      ]);
+      expect(updateResult.status).toBe("fulfilled");
+      expect(archiveResult.status).toBe("fulfilled");
+      const evidence = await pool.query<{
+        series_count: number;
+        superseded_count: number;
+        live_lessons: number;
+        uncancelled_live_lessons: number;
+        update_audit: number;
+        idempotency: number;
+      }>(
+        `select
+           count(*)::int as series_count,
+           count(*) filter (where superseded_by is not null)::int
+             as superseded_count,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series target on target.id = lesson.series_id
+             where target.created_by = $1 and target.plan_id is null
+               and lesson.deleted_at is null) as live_lessons,
+           (select count(*)::int from app.lessons lesson
+             join app.schedule_series target on target.id = lesson.series_id
+             where target.created_by = $1 and target.plan_id is null
+               and lesson.deleted_at is null
+               and lesson.lifecycle_state <> 'cancelled')
+             as uncancelled_live_lessons,
+           (select count(*)::int from app.audit_events
+             where actor_user_id = $1
+               and action = 'crm.schedule_series_updated'
+               and entity_id = $2::text) as update_audit,
+           (select count(*)::int from app.idempotency_records
+             where actor_key in ($1::text, 'user:' || $1::text)
+               and operation like 'schedule.series%') as idempotency
+         from app.schedule_series
+         where created_by = $1 and plan_id is null`,
+        [actor.userId, legacySeriesId],
+      );
+      expect(evidence.rows[0]).toMatchObject({
+        series_count: 2,
+        superseded_count: 1,
+        uncancelled_live_lessons: 0,
+        update_audit: 1,
+        idempotency: 0,
+      });
+      expect(evidence.rows[0]!.live_lessons).toBeGreaterThan(0);
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await Promise.allSettled([
+        archivePromise ?? Promise.resolve(),
+        updatePromise ?? Promise.resolve(),
+      ]);
+      await cleanup(pool, fixture);
+    }
+  });
 });
 
 async function seriesLessonCount(client: PoolClient, seriesId: string) {
@@ -3223,7 +6138,12 @@ function row(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   weekday: number,
   beginTime: string,
-  resources: { teacherId?: string; roomId?: string } = {},
+  resources: {
+    teacherId?: string;
+    roomId?: string;
+    clientIds?: string[];
+    omitClientDecisions?: boolean;
+  } = {},
 ) {
   return {
     teacherId: resources.teacherId ?? fixture.teacherId,
@@ -3234,6 +6154,15 @@ function row(
     durationMinutes: 60,
     financialDecision: {
       settlementTypeKey: "lesson",
+      ...(resources.omitClientDecisions
+        ? {}
+        : {
+            clientDecisions: (resources.clientIds ?? [fixture.studentIds[0]!])
+              .map((clientId) => ({
+                clientId,
+                chargeDurationMinutes: 60,
+              })),
+          }),
     } as ConfiguredLessonFinancialDecisionDto,
   };
 }
@@ -3336,6 +6265,18 @@ async function createFixture(pool: Pool) {
   const teacherProfileId = profiles.rows.find(
     (profile) => profile.user_id === teacherUserId,
   )!.id;
+  const staff = await pool.query<{ id: string }>(
+    "insert into app.staff_members(profile_id) values ($1) returning id",
+    [profiles.rows.find((profile) => profile.user_id === managerId)!.id],
+  );
+  await pool.query(
+    "insert into app.user_crm_links(user_id,entity_type,entity_id) values ($1,'staff',$2)",
+    [managerId, staff.rows[0]!.id],
+  );
+  await pool.query(
+    "insert into app.staff_branch_assignments(staff_member_id,branch_id) values ($1,$2)",
+    [staff.rows[0]!.id, branchId],
+  );
   const teacher = await pool.query<{ id: string }>(
     "insert into app.teachers (profile_id) values ($1) returning id",
     [teacherProfileId],
@@ -3411,8 +6352,20 @@ async function cleanup(
     await client.query("begin");
     await client.query("set local session_replication_role = replica");
     await client.query(
-      "delete from app.idempotency_records where actor_key = $1",
-      [`user:${fixture.managerId}`],
+      "delete from app.idempotency_records where actor_key = any($1::text[])",
+      [[`user:${fixture.managerId}`, fixture.managerId]],
+    );
+    await client.query(
+      `delete from app.platform_outbox_events
+       where aggregate_type = 'crm:student'
+         and aggregate_id = any($1::text[])`,
+      [fixture.studentIds],
+    );
+    await client.query(
+      `delete from app.aggregate_versions
+       where aggregate_type = 'crm:student'
+         and aggregate_id = any($1::text[])`,
+      [fixture.studentIds],
     );
     await client.query(
       `delete from app.platform_outbox_events where aggregate_type = 'schedule:plan'
@@ -3430,6 +6383,13 @@ async function cleanup(
     );
     await client.query(
       `delete from app.lesson_reservations where lesson_id in (
+         select lesson.id from app.lessons lesson join app.schedule_series series
+           on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
+         where plan.created_by = $1)`,
+      [fixture.managerId],
+    );
+    await client.query(
+      `delete from app.lesson_teacher_compensation_facts where lesson_id in (
          select lesson.id from app.lessons lesson join app.schedule_series series
            on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
          where plan.created_by = $1)`,
@@ -3475,6 +6435,37 @@ async function cleanup(
          select lesson.id from app.lessons lesson join app.schedule_series series
            on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
          where plan.created_by = $1)`,
+      [fixture.managerId],
+    );
+    const legacyLessonIds = `select lesson.id from app.lessons lesson
+      join app.schedule_series series on series.id = lesson.series_id
+      where series.plan_id is null and series.created_by = $1`;
+    for (const table of [
+      "lesson_reservations",
+      "lesson_teacher_compensation_facts",
+      "lesson_client_charge_facts",
+      "lesson_settlement_plan_revisions",
+      "lesson_settlement_corrections",
+      "lesson_settlement_plans",
+      "lesson_transitions",
+      "lesson_participant_exclusions",
+      "lesson_snapshot_participants",
+      "lesson_snapshots",
+    ]) {
+      await client.query(
+        `delete from app.${table} where lesson_id in (${legacyLessonIds})`,
+        [fixture.managerId],
+      );
+    }
+    await client.query(
+      `delete from app.lessons where series_id in (
+         select id from app.schedule_series
+         where plan_id is null and created_by = $1)`,
+      [fixture.managerId],
+    );
+    await client.query(
+      `delete from app.schedule_series
+       where plan_id is null and created_by = $1`,
       [fixture.managerId],
     );
     await client.query(
@@ -3529,6 +6520,19 @@ async function cleanup(
     await client.query("delete from app.rooms where id = any($1::uuid[])", [
       roomIds,
     ]);
+    await client.query(
+      `delete from app.staff_branch_assignments where staff_member_id in
+      (select id from app.staff_members where profile_id=any($1::uuid[]))`,
+      [fixture.profileIds],
+    );
+    await client.query(
+      "delete from app.user_crm_links where user_id=$1 and entity_type='staff'",
+      [fixture.managerId],
+    );
+    await client.query(
+      "delete from app.staff_members where profile_id=any($1::uuid[])",
+      [fixture.profileIds],
+    );
     await client.query("delete from app.profiles where id = any($1::uuid[])", [
       [
         ...fixture.profileIds,

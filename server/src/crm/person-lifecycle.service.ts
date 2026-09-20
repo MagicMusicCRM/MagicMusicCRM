@@ -542,7 +542,9 @@ export class PersonLifecycleService {
       if (input.personType === "teacher") {
         await client.query(
           `update app.teacher_branches assignment
-           set active_until = null, version = version + 1, updated_at = now()
+           set active_until = null,
+               version = assignment.version + 1,
+               updated_at = now()
            from app.branches branch
            where assignment.teacher_id = $1
              and assignment.branch_id = any($2::uuid[])

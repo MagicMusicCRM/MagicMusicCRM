@@ -9,50 +9,11 @@ import {
   TeacherMovementTotals,
   TeacherRateEntry,
   TeacherReportRow,
-  TeacherStatsUnitType,
+  TeacherStatsAccumulator,
+  TeacherStatsReportPeriod,
+  TeacherStatsReportTotals,
+  TeacherStatsUnitAccumulator,
 } from "./payroll.types";
-
-interface ReportPeriod {
-  from: string;
-  to: string;
-}
-
-interface UnitAccumulator {
-  compensationKey: string;
-  compensationLabel: string;
-  unitType: TeacherStatsUnitType;
-  groupId: string | null;
-  studentId: string | null;
-  unitName: string;
-  teacherRate: number | null;
-  days: Map<string, number>;
-  lessonIds: string[];
-  editableLessonIds: string[];
-  settledLessons: number;
-  completedLessons: number;
-  payableLessons: number;
-  hoursTotal: number;
-  accruedTotal: number;
-}
-
-interface TeacherAccumulator {
-  completedLessons: number;
-  payableLessons: number;
-  hoursTotal: number;
-  accruedTotal: number;
-  units: Map<string, UnitAccumulator>;
-}
-
-interface ReportTotals {
-  completedLessons: number;
-  payableLessons: number;
-  hoursTotal: number;
-  accruedTotal: number;
-  bonusTotal: number;
-  deductionTotal: number;
-  paidTotal: number;
-  periodBalance: number;
-}
 
 @Injectable()
 export class TeacherStatsReportService {
@@ -113,7 +74,7 @@ export class TeacherStatsReportService {
     };
   }
 
-  private resolvePeriod(query: TeacherStatsQuery): ReportPeriod {
+  private resolvePeriod(query: TeacherStatsQuery): TeacherStatsReportPeriod {
     const now = new Date();
     const from =
       query.from ??
@@ -138,6 +99,11 @@ export class TeacherStatsReportService {
     lessons: PayrollLessonRow[],
     query: TeacherStatsQuery,
   ): PayrollLessonRow[] {
+    if (query.compensationRuleKey) {
+      lessons = lessons.filter((lesson) =>
+        (lesson.compensation_rule_key ?? lesson.compensation_type ?? "hourly") ===
+          query.compensationRuleKey);
+    }
     if (!query.unitType) return lessons;
     if (query.unitType === "trial") {
       return lessons.filter((lesson) => lesson.is_trial);
@@ -160,15 +126,16 @@ export class TeacherStatsReportService {
     });
   }
 
-  private initializeTeachers(ids: string[]): Map<string, TeacherAccumulator> {
+  private initializeTeachers(ids: string[]): Map<string, TeacherStatsAccumulator> {
     return new Map(ids.map((id) => [id, this.emptyTeacher()]));
   }
 
-  private emptyTeacher(): TeacherAccumulator {
+  private emptyTeacher(): TeacherStatsAccumulator {
     return {
       completedLessons: 0,
       payableLessons: 0,
       hoursTotal: 0,
+      scheduledHoursTotal: 0,
       accruedTotal: 0,
       units: new Map(),
     };
@@ -176,7 +143,7 @@ export class TeacherStatsReportService {
 
   private accumulateLessons(
     lessons: PayrollLessonRow[],
-    teachers: Map<string, TeacherAccumulator>,
+    teachers: Map<string, TeacherStatsAccumulator>,
     names: Map<string, string>,
     rates: Map<string, TeacherRateEntry[]>,
   ): void {
@@ -188,7 +155,7 @@ export class TeacherStatsReportService {
 
   private accumulateLesson(
     lesson: PayrollLessonRow,
-    teachers: Map<string, TeacherAccumulator>,
+    teachers: Map<string, TeacherStatsAccumulator>,
     rates: Map<string, TeacherRateEntry[]>,
   ): void {
     const accrual = this.calculator.computeLessonAccrual(lesson, rates);
@@ -196,12 +163,17 @@ export class TeacherStatsReportService {
     teachers.set(lesson.teacher_id, teacher);
     const compensationKey =
       lesson.compensation_rule_key ?? lesson.compensation_type ?? "hourly";
+    const compensationSource = this.compensationSource(lesson);
     const key = JSON.stringify([
       this.calculator.unitKeyFor(lesson),
       compensationKey,
       lesson.compensation_rule_label,
+      lesson.compensation_override_reason ?? null,
+      compensationSource,
+      accrual.rate,
     ]);
-    const unit = teacher.units.get(key) ?? this.newUnit(lesson, accrual.rate);
+    const unit = teacher.units.get(key) ??
+      this.newUnit(lesson, accrual.rate, compensationSource);
     teacher.units.set(key, unit);
     unit.lessonIds.push(lesson.id);
     if (lesson.settlement_fact_id == null)
@@ -214,14 +186,20 @@ export class TeacherStatsReportService {
       teacher.payableLessons += 1;
     }
     const day = this.calculator.toDateOnly(lesson.scheduled_at);
-    unit.days.set(day, (unit.days.get(day) ?? 0) + accrual.hours);
-    unit.hoursTotal += accrual.hours;
+    unit.days.set(day, (unit.days.get(day) ?? 0) + accrual.creditedHours);
+    unit.hoursTotal += accrual.creditedHours;
+    unit.scheduledHoursTotal += accrual.scheduledHours;
     unit.accruedTotal += accrual.amount;
-    teacher.hoursTotal += accrual.hours;
+    teacher.hoursTotal += accrual.creditedHours;
+    teacher.scheduledHoursTotal += accrual.scheduledHours;
     teacher.accruedTotal += accrual.amount;
   }
 
-  private newUnit(lesson: PayrollLessonRow, rate: number): UnitAccumulator {
+  private newUnit(
+    lesson: PayrollLessonRow,
+    rate: number,
+    compensationSource: "automatic" | "manual",
+  ): TeacherStatsUnitAccumulator {
     const labels: Record<string, string> = {
       none: "Не оплачивать",
       standard: "Полная стандартная ставка",
@@ -235,6 +213,7 @@ export class TeacherStatsReportService {
       compensationLabel:
         lesson.compensation_rule_label ??
         labels[lesson.compensation_type ?? "hourly"] ?? "Тип не указан",
+      compensationSource,
       unitType: this.calculator.unitTypeFor(lesson),
       groupId: lesson.group_id,
       studentId: lesson.group_id ? null : lesson.student_id,
@@ -252,17 +231,25 @@ export class TeacherStatsReportService {
       completedLessons: 0,
       payableLessons: 0,
       hoursTotal: 0,
+      scheduledHoursTotal: 0,
       accruedTotal: 0,
     };
   }
 
+  private compensationSource(
+    lesson: PayrollLessonRow,
+  ): "automatic" | "manual" {
+    return lesson.compensation_source ??
+      (lesson.compensation_override_reason == null ? "automatic" : "manual");
+  }
+
   private projectTeachers(
-    teachers: Map<string, TeacherAccumulator>,
+    teachers: Map<string, TeacherStatsAccumulator>,
     names: Map<string, string>,
     salaries: Map<string, number | null>,
     rates: Map<string, TeacherRateEntry[]>,
     movements: Map<string, TeacherMovementTotals>,
-    totals: ReportTotals,
+    totals: TeacherStatsReportTotals,
   ) {
     return [...teachers.entries()].map(([teacherId, teacher]) => {
       const movement = movements.get(teacherId) ?? {
@@ -286,6 +273,7 @@ export class TeacherStatsReportService {
         payableLessons: teacher.payableLessons,
         noAccrualLessons: teacher.completedLessons - teacher.payableLessons,
         hoursTotal: this.calculator.round2(teacher.hoursTotal),
+        scheduledHoursTotal: this.calculator.round2(teacher.scheduledHoursTotal),
         accruedTotal: this.calculator.round2(teacher.accruedTotal),
         compensationTypes: this.compensationTypes(teacher),
         bonusTotal: this.calculator.round2(movement.bonus),
@@ -299,10 +287,11 @@ export class TeacherStatsReportService {
     });
   }
 
-  private projectUnit(unit: UnitAccumulator, currentRate: number) {
+  private projectUnit(unit: TeacherStatsUnitAccumulator, currentRate: number) {
     return {
       compensationKey: unit.compensationKey,
       compensationLabel: unit.compensationLabel,
+      compensationSource: unit.compensationSource,
       unitType: unit.unitType,
       groupId: unit.groupId,
       studentId: unit.studentId,
@@ -322,6 +311,7 @@ export class TeacherStatsReportService {
       payableLessons: unit.payableLessons,
       noAccrualLessons: unit.completedLessons - unit.payableLessons,
       hoursTotal: this.calculator.round2(unit.hoursTotal),
+      scheduledHoursTotal: this.calculator.round2(unit.scheduledHoursTotal),
       accruedTotal: this.calculator.round2(unit.accruedTotal),
     };
   }
@@ -336,7 +326,7 @@ export class TeacherStatsReportService {
     return current;
   }
 
-  private compensationTypes(teacher: TeacherAccumulator) {
+  private compensationTypes(teacher: TeacherStatsAccumulator) {
     const types = new Map<string, {
       key: string;
       label: string;
@@ -362,14 +352,15 @@ export class TeacherStatsReportService {
   }
 
   private addTeacherTotals(
-    totals: ReportTotals,
-    teacher: TeacherAccumulator,
+    totals: TeacherStatsReportTotals,
+    teacher: TeacherStatsAccumulator,
     movement: TeacherMovementTotals,
     periodBalance: number,
   ): void {
     totals.completedLessons += teacher.completedLessons;
     totals.payableLessons += teacher.payableLessons;
     totals.hoursTotal += teacher.hoursTotal;
+    totals.scheduledHoursTotal += teacher.scheduledHoursTotal;
     totals.accruedTotal += teacher.accruedTotal;
     totals.bonusTotal += movement.bonus;
     totals.deductionTotal += movement.deduction;
@@ -377,9 +368,10 @@ export class TeacherStatsReportService {
     totals.periodBalance += periodBalance;
   }
 
-  private projectTotals(totals: ReportTotals) {
+  private projectTotals(totals: TeacherStatsReportTotals) {
     return {
       hoursTotal: this.calculator.round2(totals.hoursTotal),
+      scheduledHoursTotal: this.calculator.round2(totals.scheduledHoursTotal),
       completedLessons: totals.completedLessons,
       payableLessons: totals.payableLessons,
       noAccrualLessons: totals.completedLessons - totals.payableLessons,
@@ -391,11 +383,12 @@ export class TeacherStatsReportService {
     };
   }
 
-  private emptyTotals(): ReportTotals {
+  private emptyTotals(): TeacherStatsReportTotals {
     return {
       completedLessons: 0,
       payableLessons: 0,
       hoursTotal: 0,
+      scheduledHoursTotal: 0,
       accruedTotal: 0,
       bonusTotal: 0,
       deductionTotal: 0,
@@ -404,7 +397,7 @@ export class TeacherStatsReportService {
     };
   }
 
-  private emptyReport(period: ReportPeriod, query: TeacherStatsQuery) {
+  private emptyReport(period: TeacherStatsReportPeriod, query: TeacherStatsQuery) {
     return {
       ...period,
       movementsScope: this.movementsScope(query),

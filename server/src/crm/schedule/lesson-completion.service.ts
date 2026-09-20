@@ -110,7 +110,7 @@ export class LessonCompletionService {
             failureCode,
           );
         }
-        await this.work.markReviewRequired(client, claim);
+        await this.work.markReviewRequired(client, claim, failureCode);
         return { lessonId: claim.lessonId, state: "settlement_pending" };
       },
     });
@@ -153,6 +153,7 @@ export class LessonCompletionService {
     }
 
     const settled = await this.settlement.settle(client, claim.lessonId, {
+      requireAvailableFunding: true,
       context: "settle",
       decision: plan.decision,
       reasonText: plan.reasonText ?? undefined,

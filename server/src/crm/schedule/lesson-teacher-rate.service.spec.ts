@@ -48,6 +48,21 @@ describe("LessonTeacherRateService", () => {
   };
 
   describe("bulk teacher rate", () => {
+    it("allows restoring the inherited rate for settled lessons", async () => {
+      const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a", locked: true }] },
+        { rows: [{ id: "lesson-a" }] },
+        { rows: [] },
+      ]);
+      await expect(service.setLessonsTeacherRate(
+        { userId: "director-a", role: "director" },
+        { lessonIds: ["lesson-a"], teacherRate: null,
+          reasonText: "Вернуть стандартную ставку", expectedVersion: 0 },
+        metadata,
+      )).resolves.toMatchObject({ updated: 1, correctedSettled: 1 });
+      expect(query.mock.calls[1][1][1]).toBeNull();
+      expect(String(query.mock.calls[2][0])).toContain("app.teacher_rates");
+    });
     it.each([
       ["client", false],
       ["teacher", false],
@@ -284,7 +299,10 @@ describe("LessonTeacherRateService", () => {
         lessonIds: ["lesson-a"],
       });
 
-      expect(String(query.mock.calls[2][0])).toContain("supersedes_fact_id");
+      const correctionSql = String(query.mock.calls[2][0]);
+      expect(correctionSql).toContain("supersedes_fact_id");
+      expect(correctionSql).toContain("compensation_source");
+      expect(correctionSql).toContain("'manual'");
       expect(platform.executeVersionedMutation).toHaveBeenCalledTimes(1);
     });
   });

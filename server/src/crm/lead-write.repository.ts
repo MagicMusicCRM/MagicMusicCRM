@@ -32,6 +32,8 @@ export interface LeadWriteResult {
   customFieldChanges: AuditFieldChangeInput[];
 }
 
+type QueryExecutor = Pick<DatabaseService, "query">;
+
 @Injectable()
 export class LeadWriteRepository {
   constructor(
@@ -44,37 +46,57 @@ export class LeadWriteRepository {
     dto: UpsertLeadDto,
     validated?: ValidatedLeadCreate,
   ) {
+    return this.database.transaction((client) =>
+      this.createInTransaction(client, actor, dto, validated),
+    );
+  }
+
+  async createInTransaction(
+    client: PoolClient,
+    actor: ActorContext,
+    dto: UpsertLeadDto,
+    validated?: ValidatedLeadCreate,
+  ) {
     const branchId = extractBranchId(dto.customDataPatch);
-    const statusId = await this.resolveStatusId(dto.statusId);
+    const statusId = await this.resolveStatusId(dto.statusId, client);
     const initialCustomData = sanitizeJsonObject(dto.customDataPatch);
-    const lead = await this.database.transaction(async (client) => {
-      await this.assertInitialTransition(client, branchId, statusId);
-      const customData = await this.prepareCustomData(
+    await this.assertInitialTransition(client, branchId, statusId);
+    const customData = await this.prepareCustomData(
+      client,
+      dto,
+      initialCustomData,
+      true,
+    );
+    const lead = await this.insertLead(
+      client,
+      actor,
+      dto,
+      validated,
+      branchId,
+      statusId,
+      customData,
+    );
+    if (validated) {
+      await saveTypedClientValues(
         client,
-        dto,
-        initialCustomData,
-        true,
+        "lead",
+        lead.id,
+        validated.customFields,
       );
-      const inserted = await this.insertLead(
-        client,
-        actor,
-        dto,
-        validated,
-        branchId,
-        statusId,
-        customData,
-      );
-      if (validated) {
-        await saveTypedClientValues(
-          client,
-          "lead",
-          inserted.id,
-          validated.customFields,
-        );
-      }
-      return inserted;
-    });
+    }
     return { lead, branchId };
+  }
+
+  async findCreated(leadId: string): Promise<LeadRow | undefined> {
+    const result = await this.database.query<LeadRow>(
+      `select id, version, status_id, null::text as status_name, first_name,
+         last_name, phone, email, source, source_id, notes, assigned_to,
+         blacklisted, blacklist_reason, custom_data, created_by, created_at,
+         updated_at
+       from app.leads where id = $1 and deleted_at is null limit 1`,
+      [leadId],
+    );
+    return result.rows[0];
   }
 
   async update(
@@ -126,19 +148,22 @@ export class LeadWriteRepository {
     });
   }
 
-  private async resolveStatusId(raw: string | null | undefined) {
+  private async resolveStatusId(
+    raw: string | null | undefined,
+    executor: QueryExecutor = this.database,
+  ) {
     const value = raw?.trim();
     if (!value) return null;
     const uuid =
       /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
     if (uuid.test(value)) {
-      const result = await this.database.query<{ id: string }>(
+      const result = await executor.query<{ id: string }>(
         "select id from app.lead_statuses where id = $1 limit 1",
         [value],
       );
       return result.rows[0]?.id ?? null;
     }
-    const result = await this.database.query<{ id: string }>(
+    const result = await executor.query<{ id: string }>(
       `select min(id::text)::uuid as id
        from app.lead_statuses
        where stage_key = $1 or lower(btrim(name)) = lower(btrim($1))
@@ -302,7 +327,7 @@ export class LeadWriteRepository {
                              else coalesce($2, status_id) end,
           first_name = coalesce($3, first_name),
           last_name = coalesce($4, last_name),
-          phone = coalesce($5, phone),
+          phone = case when $16::boolean then null else coalesce($5, phone) end,
           email = case when $15::boolean then null
                        else coalesce($6, email) end,
           source = coalesce($7, source),
@@ -339,6 +364,7 @@ export class LeadWriteRepository {
         dto.clearAssignedTo ?? false,
         dto.sourceId ?? null,
         dto.clearEmail ?? false,
+        dto.clearPhone ?? false,
       ],
     );
     return result.rows[0] ?? null;

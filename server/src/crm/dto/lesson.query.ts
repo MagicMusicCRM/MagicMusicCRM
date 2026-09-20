@@ -6,11 +6,39 @@ import {
   IsInt,
   IsOptional,
   IsUUID,
+  IsString,
+  MaxLength,
   Max,
   Min,
 } from 'class-validator';
 
 export class LessonQuery {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  settlementTypeKey?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  compensationRuleKey?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  offset?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  includeClosed?: boolean;
+
   @IsOptional()
   @IsUUID()
   lessonId?: string;
@@ -26,6 +54,10 @@ export class LessonQuery {
   @IsOptional()
   @IsUUID()
   studentId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  groupId?: string;
 
   @IsOptional()
   @IsUUID()

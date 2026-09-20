@@ -1,5 +1,9 @@
 import { Transform, Type } from "class-transformer";
 import {
+  IsArray,
+  ArrayMaxSize,
+  IsString,
+  MaxLength,
   IsBoolean,
   IsDateString,
   IsIn,
@@ -12,6 +16,22 @@ import {
 } from "class-validator";
 
 export class ScheduleMatrixQuery {
+  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.split(',').filter(Boolean) : value)
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(120, { each: true })
+  settlementTypes?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.split(',').filter(Boolean) : value)
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(120, { each: true })
+  compensationRules?: string[];
+
   @IsOptional()
   @IsDateString()
   from?: string;

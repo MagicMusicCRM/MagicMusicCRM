@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
@@ -34,10 +35,16 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
   @override
   void initState() {
     super.initState();
+    final focus = ref.read(crmSectionFocusProvider);
+    if (focus?.section == 'clients' &&
+        focus?.filters['segment'] == 'students') {
+      _segment = 1;
+    }
     // Wire the shared controller's side effects to this host and preload the
     // branch list so the strip is ready the instant the students phase opens.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(crmSectionFocusProvider.notifier).consume('clients');
       final controller = ref.read(leadTransferControllerProvider);
       _transferController = controller;
       controller.configure(

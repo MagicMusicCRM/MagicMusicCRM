@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -510,7 +511,7 @@ void main() {
     await tester.ensureVisible(disciplineChip);
     await tester.tap(disciplineChip);
     await tester.pumpAndSettle();
-    final rateSelector = find.byType(DropdownButtonFormField<String>).last;
+    final rateSelector = find.byType(AppDropdownButtonFormField<String>).last;
     await tester.ensureVisible(rateSelector);
     await tester.tap(rateSelector);
     await tester.pumpAndSettle();
@@ -639,7 +640,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Название группы *'),
       'Вокал 1',
     );
-    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.tap(find.byType(AppDropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Сокол').last);
     await tester.pumpAndSettle();
@@ -764,7 +765,7 @@ void main() {
     expect(
       find.descendant(
         of: accessDialog,
-        matching: find.byType(DropdownButtonFormField<String>),
+        matching: find.byType(AppDropdownButtonFormField<String>),
       ),
       findsNothing,
     );

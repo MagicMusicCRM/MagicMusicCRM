@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/models/subscription_purchase.dart';
@@ -200,29 +201,22 @@ class _SubscriptionPeriodFields extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _dateField(
-            context,
-            key: 'subscription-starts-${_date(draft.startsAt)}',
-            label: 'Начало действия',
-            value: draft.startsAt,
-            onPicked: setStartsAt,
-          ),
-        ),
-        const SizedBox(width: AppSpace.sm),
-        Expanded(
-          child: _dateField(
-            context,
-            key: 'subscription-expires-${_date(draft.expiresAt)}',
-            label: 'Окончание (включительно)',
-            value: draft.expiresAt,
-            onPicked: setExpiresAt,
-            validator: (_) => validateExpiresAt(),
-          ),
-        ),
-      ],
+    return SubscriptionIssueAdaptivePair(
+      first: _dateField(
+        context,
+        key: 'subscription-starts-${_date(draft.startsAt)}',
+        label: 'Начало действия',
+        value: draft.startsAt,
+        onPicked: setStartsAt,
+      ),
+      second: _dateField(
+        context,
+        key: 'subscription-expires-${_date(draft.expiresAt)}',
+        label: 'Окончание (включительно)',
+        value: draft.expiresAt,
+        onPicked: setExpiresAt,
+        validator: (_) => validateExpiresAt(),
+      ),
     );
   }
 
@@ -282,13 +276,9 @@ class _SubscriptionActualPaymentFields extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _amountField(context)),
-            const SizedBox(width: AppSpace.sm),
-            Expanded(child: _paymentDateField(context)),
-          ],
+        SubscriptionIssueAdaptivePair(
+          first: _amountField(context),
+          second: _paymentDateField(context),
         ),
         const SizedBox(height: AppSpace.md),
         _methodField(context),
@@ -358,7 +348,7 @@ class _SubscriptionActualPaymentFields extends StatelessWidget {
   );
 
   Widget _methodField(BuildContext context) =>
-      DropdownButtonFormField<SubscriptionPaymentMethod>(
+      AppDropdownButtonFormField<SubscriptionPaymentMethod>(
         menuMaxHeight: 256,
         key: const Key('subscription-payment-method'),
         initialValue: draft.paymentMethod,

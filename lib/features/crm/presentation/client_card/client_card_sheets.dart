@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -375,7 +376,7 @@ Future<HomeworkInput?> showAssignHomeworkSheet(
               ),
               if (lessons.isNotEmpty) ...[
                 const SizedBox(height: AppSpace.md),
-                DropdownButtonFormField<String>(
+                AppDropdownButtonFormField<String>(
                   menuMaxHeight: 256,
                   key: const ValueKey('homework-lesson'),
                   initialValue: lessonId,

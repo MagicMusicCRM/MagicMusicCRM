@@ -298,7 +298,8 @@ class SubscriptionIssueAdaptivePair extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 360) {
+        final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        if (constraints.maxWidth < 520 * textScale) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

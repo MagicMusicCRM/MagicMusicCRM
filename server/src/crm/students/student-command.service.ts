@@ -11,6 +11,8 @@ import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import type { VersionedMutationMetadata } from "../../platform/versioned-mutation-metadata";
 import { APPEAL_KEY, resolveAppealDate } from "../appeal-date";
 import { extractBranchId } from "../branch-scope";
 import type {
@@ -55,24 +57,67 @@ export class StudentCommandService {
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeBus,
     private readonly mutations: StudentMutationExecutor,
+    private readonly integrity?: PlatformIntegrityService,
   ) {}
 
   async createStudent(
     actor: ActorContext,
     dto: CreateStudentDto,
     validated?: ValidatedStudentCreate,
+    metadata?: VersionedMutationMetadata,
   ) {
     this.policy.assertCanWriteCrm(actor);
     const command = await this.prepareCreate(dto, validated);
     try {
-      const student = await this.mutations.create(command);
+      let student: StudentRow;
+      let replayed = false;
+      if (metadata) {
+        if (!this.integrity) {
+          throw new Error("PlatformIntegrityService is required for idempotent client creation.");
+        }
+        let firstStudent: StudentRow | undefined;
+        const mutation = await this.integrity.executeVersionedMutation<{
+          studentId: string;
+        }>({
+          actorKey: actor.userId,
+          actorUserId: actor.userId,
+          operation: "crm.student.create",
+          idempotencyKey: metadata.idempotencyKey,
+          requestId: metadata.requestId,
+          payload: { dto, validated },
+          aggregateType: "client_create_command",
+          aggregateId: metadata.idempotencyKey,
+          expectedVersion: 0,
+          audit: {
+            action: "crm.student_create_committed",
+            entityType: "client_create_command",
+            entityId: metadata.idempotencyKey,
+          },
+          outbox: { type: "crm.student.create.committed" },
+          mutate: async (client) => {
+            firstStudent = await this.mutations.createInTransaction(
+              client,
+              command,
+            );
+            return { studentId: firstStudent.id };
+          },
+        });
+        replayed = mutation.replayed;
+        student = firstStudent ?? (await findStudent(
+          this.database,
+          String(mutation.resultRef.studentId),
+        ))!;
+        if (!student) throw new NotFoundException("Созданный ученик не найден.");
+      } else {
+        student = await this.mutations.create(command);
+      }
       const claimedVersion = await this.ensureFallbackResponsible(
         actor,
         student.id,
         command.requestedResponsibleId,
       );
       if (claimedVersion !== null) student.version = claimedVersion;
-      await this.publishCreated(actor, student, command);
+      if (!replayed) await this.publishCreated(actor, student, command);
       return {
         ...toStudentDto(student),
         ...(validated ? { warnings: validated.warnings } : {}),
@@ -272,6 +317,7 @@ export class StudentCommandService {
       phone: trimOptional(dto.phone),
       email: trimOptional(dto.email)?.toLowerCase() ?? null,
       clearEmail: dto.clearEmail ?? false,
+      clearPhone: dto.clearPhone ?? false,
       status: dto.status === undefined ? null : dto.status.trim(),
       customDataPatch,
       requestedResponsibleId,

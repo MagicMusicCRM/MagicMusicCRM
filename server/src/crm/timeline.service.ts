@@ -31,6 +31,7 @@ interface CommentRow {
   author_id: string | null;
   author_first_name: string | null;
   author_last_name: string | null;
+  author_role?: string | null;
   body: string;
   kind: string;
   shared_with_teacher?: boolean;
@@ -261,6 +262,7 @@ export class TimelineService {
       `
         select c.id, c.entity_type, c.entity_id, c.author_id, c.kind,
           p.first_name as author_first_name, p.last_name as author_last_name,
+          u.role::text as author_role,
           c.body, c.shared_with_teacher, c.version, c.created_at,
           l.scheduled_at as lesson_at
         from app.entity_comments c
@@ -318,9 +320,12 @@ export class TimelineService {
     const body = dto.body.trim();
     if (!body)
       throw new BadRequestException("Комментарий не может быть пустым.");
-    const kind =
+    const requestedKind =
       dto.kind ?? (dto.progress === true ? "progress" : "admin_comment");
-    await this.assertCanCreateEntityComment(actor, dto, kind);
+    await this.assertCanCreateEntityComment(actor, dto, requestedKind);
+    const kind = requestedKind === "teacher_note" ? "admin_comment" : requestedKind;
+    const sharedWithTeacher =
+      requestedKind === "teacher_note" || actor.role === "teacher";
     const result = await this.database.query<CommentRow>(
       `
         insert into app.entity_comments (
@@ -329,6 +334,7 @@ export class TimelineService {
         values ($1::app.crm_entity_type, $2, $3, $4, $5, $6)
         returning id, entity_type, entity_id, author_id,
           null::text as author_first_name, null::text as author_last_name,
+          $7::text as author_role,
           body, kind, shared_with_teacher, version, created_at
       `,
       [
@@ -337,7 +343,8 @@ export class TimelineService {
         actor.userId,
         body,
         kind,
-        kind === "teacher_note" || actor.role === "teacher",
+        sharedWithTeacher,
+        actor.role,
       ],
     );
     const comment = result.rows[0];
@@ -452,6 +459,7 @@ export class TimelineService {
       entityId: row.entity_id,
       authorId: row.author_id,
       authorName: authorName || null,
+      authorRole: row.author_role ?? null,
       body: row.body,
       kind: row.kind,
       // Back-compat flag for clients still keying off `progress`.
@@ -476,7 +484,7 @@ export class TimelineService {
     if (isManagerOrAdminRole(role)) {
       return ["admin_comment", "teacher_note", "progress"];
     }
-    if (role === "teacher") return ["teacher_note", "progress"];
+    if (role === "teacher") return ["admin_comment", "teacher_note", "progress"];
     return ["progress"];
   }
 }

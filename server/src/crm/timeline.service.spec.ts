@@ -176,6 +176,7 @@ describe("TimelineService", () => {
           entityId: "student-a",
           authorId: "teacher-a",
           authorName: "Иван Петров",
+          authorRole: null,
           body: "Хорошая динамика",
           kind: "progress",
           progress: true,
@@ -200,7 +201,7 @@ describe("TimelineService", () => {
     ]);
   });
 
-  it("limits teachers to teacher_note + progress (never admin comments)", async () => {
+  it("shows teachers shared unified comments and progress", async () => {
     const teacherActor = { userId: "teacher-a", role: "teacher" as const };
     const { service, query, policy } = createServiceWithQueryResults([
       {
@@ -233,11 +234,12 @@ describe("TimelineService", () => {
       profileUserId: "client-a",
       teacherUserIds: ["teacher-a"],
     });
-    // Teacher sees their notes + progress, but NOT admin_comment.
+    // Visibility is controlled by shared_with_teacher, independent of the
+    // legacy kind retained for compatibility with existing rows.
     expect(query.mock.calls[1][1]).toEqual([
       "student",
       "student-a",
-      ["teacher_note", "progress"],
+      ["admin_comment", "teacher_note", "progress"],
       5,
       // Комментарии к занятиям не запрашивали — флаг false.
       false,
@@ -370,6 +372,7 @@ describe("TimelineService", () => {
       entityId: "student-a",
       authorId: "manager-a",
       authorName: null,
+      authorRole: null,
       body: "Позвонить родителю",
       kind: "admin_comment",
       progress: false,
@@ -386,6 +389,7 @@ describe("TimelineService", () => {
       "Позвонить родителю",
       "admin_comment",
       false,
+      "manager",
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -460,6 +464,7 @@ describe("TimelineService", () => {
       "Хорошая динамика",
       "progress",
       true,
+      "teacher",
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -45,6 +45,13 @@ class AppPalette {
 class AppColor {
   AppColor._();
 
+  // Settlement markers are independent of lesson lifecycle colors.
+  static const Color settlementTrial = Color(0xFF713FBD);
+  static const Color settlementPartial = Color(0xFFAD6B00);
+  static const Color settlementFree = Color(0xFF00796D);
+  static const Color settlementPaidMiss = Color(0xFFB72D58);
+  static const Color settlementUnpaid = Color(0xFF374151);
+
   // ── Surfaces and borders ─────────────────────────────────────────────────
   static const Color bg = AppPalette.paper125;
   static const Color surface = AppPalette.paper0;

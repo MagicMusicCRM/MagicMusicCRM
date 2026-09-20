@@ -368,6 +368,33 @@ describe("schedule read branch scope (PostgreSQL)", () => {
         expect(item.settlementTypeKey).toBe("free_lesson");
         expect(item.teacherCompensationRuleKey).toBe("none");
       }
+      const filter = { lessonId: assignedLessonId, settlementTypeKey: "free_lesson",
+        compensationRuleKey: "none", branchId: assignedBranchId, includeClosed: true };
+      expect((await schedule.listLessons(manager, filter)).items).toHaveLength(1);
+      expect((await schedule.listLessons(manager, { ...filter, offset: 1 })).items).toHaveLength(0);
+      expect((await schedule.listLessons(manager, { ...filter, settlementTypeKey: "lesson" })).items).toHaveLength(0);
+      expect((await schedule.listLessons(manager, { ...filter, branchId: outsideBranchId })).items).toHaveLength(0);
+      expect((await schedule.listLessons(teacher, filter)).items).toHaveLength(0);
+      const financialFilters = {
+        from: '2026-08-30T00:00:00.000Z', to: '2026-08-31T00:00:00.000Z',
+        settlementTypes: ['trial_lesson', 'free_lesson'], compensationRules: ['none'],
+        limit: 1,
+      };
+      expect((await schedule.getScheduleMatrix(manager, financialFilters)).items
+        .map(item => item.id)).toEqual([assignedLessonId]);
+      expect((await schedule.getScheduleMatrix(manager, {
+        ...financialFilters, compensationRules: ['standard'],
+      })).items).toHaveLength(0);
+      expect((await schedule.getScheduleMatrix(teacher, financialFilters)).items).toHaveLength(0);
+      expect((await schedule.getScheduleMatrix(manager, {
+        ...financialFilters, branchId: outsideBranchId,
+      })).items).toHaveLength(0);
+      expect((await schedule.getScheduleMonthSummary(manager, financialFilters)).items)
+        .toEqual([expect.objectContaining({ count: 1 })]);
+      expect((await schedule.getScheduleMonthSummary(manager, {
+        ...financialFilters, compensationRules: ['standard'],
+      })).items).toHaveLength(0);
+      expect((await schedule.getScheduleMonthSummary(teacher, financialFilters)).items).toHaveLength(0);
     } finally {
       await client.query("rollback to savepoint financial_read_correction");
     }

@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
@@ -164,7 +165,7 @@ class _BranchRoomFields extends StatelessWidget {
     final draft = model.draft;
     final rooms = model.eligibleRooms;
     return _ResponsivePair(
-      first: DropdownButtonFormField<String>(
+      first: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: ValueKey('lesson-branch-field:${draft.branchId}'),
         initialValue: draft.branchId,
@@ -266,8 +267,12 @@ class _ResponsivePair extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 520) {
-          return Column(children: [first, const SizedBox(height: 12), second]);
+        final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        if (constraints.maxWidth < 520 * textScale) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [first, const SizedBox(height: 12), second],
+          );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,

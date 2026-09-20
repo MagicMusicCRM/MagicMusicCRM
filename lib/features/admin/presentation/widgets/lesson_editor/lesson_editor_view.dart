@@ -46,6 +46,7 @@ class LessonEditorViewModel {
     required this.isAnalyzing,
     required this.validationMessage,
     required this.canManageTeacherCompensation,
+    this.canSelectTrialCompensation = false,
     this.loadErrorMessage,
     this.scheduleAnalysisError,
     this.canSave = true,
@@ -56,6 +57,7 @@ class LessonEditorViewModel {
     LessonEditorProgressViewState progress,
     LessonEditorFeedbackViewState feedback,
     bool canManageTeacherCompensation, {
+    bool canSelectTrialCompensation = false,
     bool canSave = true,
   }) => LessonEditorViewModel(
     session: editor.$1,
@@ -68,6 +70,7 @@ class LessonEditorViewModel {
     isAnalyzing: progress.$4,
     validationMessage: feedback.$1,
     canManageTeacherCompensation: canManageTeacherCompensation,
+    canSelectTrialCompensation: canSelectTrialCompensation,
     loadErrorMessage: feedback.$2,
     scheduleAnalysisError: feedback.$3,
   );
@@ -84,13 +87,18 @@ class LessonEditorViewModel {
   final String? loadErrorMessage;
   final String? scheduleAnalysisError;
   final bool canManageTeacherCompensation;
+  final bool canSelectTrialCompensation;
 }
 
 class LessonEditorView extends StatelessWidget {
   const LessonEditorView({
     required this.model,
     required this.actions,
+    this.formKey,
     this.pageMode = false,
+    this.embeddedSurface = false,
+    this.focusDateTime = false,
+    this.showCompletedMoveWarning = false,
     this.title,
     this.scrollController,
     this.now,
@@ -108,7 +116,12 @@ class LessonEditorView extends StatelessWidget {
     LessonEditorFeedbackViewState feedback, {
     required LessonEditorActions actions,
     required bool canManageTeacherCompensation,
+    bool canSelectTrialCompensation = false,
+    GlobalKey<FormState>? formKey,
     bool pageMode = false,
+    bool embeddedSurface = false,
+    bool focusDateTime = false,
+    bool showCompletedMoveWarning = false,
     String? title,
     ScrollController? scrollController,
     DateTime? now,
@@ -125,10 +138,15 @@ class LessonEditorView extends StatelessWidget {
       progress,
       feedback,
       canManageTeacherCompensation,
+      canSelectTrialCompensation: canSelectTrialCompensation,
       canSave: canSave,
     ),
     actions: actions,
+    formKey: formKey,
     pageMode: pageMode,
+    embeddedSurface: embeddedSurface,
+    focusDateTime: focusDateTime,
+    showCompletedMoveWarning: showCompletedMoveWarning,
     title: title,
     scrollController: scrollController,
     now: now,
@@ -142,7 +160,11 @@ class LessonEditorView extends StatelessWidget {
 
   final LessonEditorViewModel model;
   final LessonEditorActions actions;
+  final GlobalKey<FormState>? formKey;
   final bool pageMode;
+  final bool embeddedSurface;
+  final bool focusDateTime;
+  final bool showCompletedMoveWarning;
   final String? title;
   final ScrollController? scrollController;
   final DateTime? now;
@@ -161,7 +183,15 @@ class LessonEditorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stateSurface = _stateSurface();
-    return stateSurface ?? _loadedSurface(context);
+    if (stateSurface != null) return stateSurface;
+    final content = _loadedSurface(context);
+    return formKey == null
+        ? content
+        : Form(
+            key: formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: content,
+          );
   }
 
   Widget? _stateSurface() {
@@ -180,6 +210,31 @@ class LessonEditorView extends StatelessWidget {
       model.references.catalog?.compensationRules,
       model.draft.compensationRuleKey,
     );
+    final content = _editorContent(
+      context,
+      policy: policy,
+      selectedSettlement: selectedSettlement,
+      selectedRule: selectedRule,
+    );
+    final actionsRow = LessonEditorActionsRow(
+      isEdit: model.session.isEdit,
+      confirming: financialPreview?.canConfirm == true,
+      isSaving: model.isSaving,
+      canSave: model.canSave,
+      actions: actions,
+    );
+    if (embeddedSurface) {
+      return Column(
+        key: const ValueKey('lesson-editor-adaptive-content'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          content,
+          const SizedBox(height: AppSpace.lg),
+          actionsRow,
+        ],
+      );
+    }
     final width = MediaQuery.sizeOf(context).width;
     final dialog = AlertDialog(
       insetPadding: pageMode ? EdgeInsets.zero : null,
@@ -207,122 +262,154 @@ class LessonEditorView extends StatelessWidget {
         height: pageMode ? double.maxFinite : null,
         child: SingleChildScrollView(
           controller: scrollController,
-          child: AbsorbPointer(
-            absorbing: model.isSaving,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                LessonParticipantSection(
-                  model: LessonParticipantSectionModel(
-                    session: model.session,
-                    draft: model.draft,
-                    references: model.references,
-                  ),
-                  onSearchClients: actions.searchClients,
-                  onClientChanged: actions.selectClient,
-                  onBranchChanged: (value) => actions.edit(
-                    LessonReferenceEdit(LessonReferenceTarget.branch, value),
-                  ),
-                  onRoomChanged: (value) => actions.edit(
-                    LessonReferenceEdit(LessonReferenceTarget.room, value),
-                  ),
-                  onTeacherChanged: (value) => actions.edit(
-                    LessonReferenceEdit(LessonReferenceTarget.teacher, value),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                LessonScheduleSection(
-                  model: LessonScheduleSectionModel.fromEditor(
-                    draft: model.draft,
-                    analysis: model.analysis,
-                    isAnalyzing: model.isAnalyzing,
-                    isEdit: model.session.isEdit,
-                    now: now,
-                    errorMessage: model.scheduleAnalysisError,
-                    isSaving: model.isSaving,
-                  ),
-                  onAnalyze: actions.analyzeSchedule,
-                  onApplySuggestion: actions.applySuggestion,
-                  onOpenConstraint: actions.openConstraint,
-                  onDateRequested: actions.selectDate,
-                  onTimeRequested: actions.selectTime,
-                  onDurationChanged: (value) =>
-                      actions.edit(LessonDurationEdit(value)),
-                ),
-                LessonFinancialSection(
-                  fundingFields: fundingFields,
-                  financialPreview: financialPreview,
-                  funding: funding,
-                  knownPayers: knownPayers,
-                  model: LessonFinancialSectionModel(
-                    session: model.session,
-                    draft: model.draft,
-                    references: model.references,
-                    isSaving: model.isSaving,
-                    requiresCompensationValue: policy.requiresCompensationValue(
-                      selectedRule,
-                    ),
-                    compensationNeedsReason: policy.compensationNeedsReason(
-                      draft: model.draft,
-                      rule: selectedRule,
-                    ),
-                    canManageTeacherCompensation:
-                        model.canManageTeacherCompensation,
-                    allowsNoFunding: policy.isNoCharge(selectedSettlement),
-                  ),
-                  actions: actions,
-                ),
-                if (model.session.isEdit) ...[
-                  const SizedBox(height: AppSpace.md),
-                  TextFormField(
-                    key: const Key('lesson-notes-input'),
-                    initialValue: model.draft.notes,
-                    onChanged: (value) => actions.edit(LessonNotesEdit(value)),
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Заметка',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                ],
-                LessonEditorFeedback(
-                  model: LessonEditorFeedbackModel(
-                    session: model.session,
-                    draft: model.draft,
-                    validationMessage: model.validationMessage,
-                    settlementLabel: selectedSettlement?.label ?? 'Не выбран',
-                    clientSnapshotValue: policy.clientChargeSnapshotLabel(
-                      draft: model.draft,
-                      references: model.references,
-                    ),
-                    compensationLabel: selectedRule?.label ?? 'Не выбрано',
-                    teacherSnapshotValue: policy
-                        .teacherCompensationSnapshotLabel(
-                          draft: model.draft,
-                          references: model.references,
-                        ),
-                    canManageTeacherCompensation:
-                        model.canManageTeacherCompensation,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          child: content,
         ),
       ),
-      actions: [
-        LessonEditorActionsRow(
-          isEdit: model.session.isEdit,
-          confirming: financialPreview?.canConfirm == true,
-          isSaving: model.isSaving,
-          canSave: model.canSave,
-          actions: actions,
-        ),
-      ],
+      actions: [actionsRow],
     );
     return pageMode ? SafeArea(child: dialog) : dialog;
   }
+
+  Widget _editorContent(
+    BuildContext context, {
+    required LessonEditorDecisionPolicy policy,
+    required LessonDecisionCatalogItem? selectedSettlement,
+    required LessonDecisionCatalogItem? selectedRule,
+  }) => AbsorbPointer(
+    absorbing: model.isSaving,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LessonParticipantSection(
+          model: LessonParticipantSectionModel(
+            session: model.session,
+            draft: model.draft,
+            references: model.references,
+          ),
+          onSearchClients: actions.searchClients,
+          onClientChanged: actions.selectClient,
+          onBranchChanged: (value) => actions.edit(
+            LessonReferenceEdit(LessonReferenceTarget.branch, value),
+          ),
+          onRoomChanged: (value) => actions.edit(
+            LessonReferenceEdit(LessonReferenceTarget.room, value),
+          ),
+          onTeacherChanged: (value) => actions.edit(
+            LessonReferenceEdit(LessonReferenceTarget.teacher, value),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Focus(
+          autofocus: focusDateTime,
+          child: KeyedSubtree(
+            key: const ValueKey('lesson-editor-date-time-section'),
+            child: LessonScheduleSection(
+              model: LessonScheduleSectionModel.fromEditor(
+                draft: model.draft,
+                analysis: model.analysis,
+                isAnalyzing: model.isAnalyzing,
+                isEdit: model.session.isEdit,
+                now: now,
+                errorMessage: model.scheduleAnalysisError,
+                isSaving: model.isSaving,
+              ),
+              onAnalyze: actions.analyzeSchedule,
+              onApplySuggestion: actions.applySuggestion,
+              onOpenConstraint: actions.openConstraint,
+              onDateRequested: actions.selectDate,
+              onTimeRequested: actions.selectTime,
+              onDurationChanged: (value) =>
+                  actions.edit(LessonDurationEdit(value)),
+            ),
+          ),
+        ),
+        if (showCompletedMoveWarning) ...[
+          const SizedBox(height: AppSpace.md),
+          Container(
+            key: const ValueKey('completed-reschedule-notice'),
+            padding: const EdgeInsets.all(AppSpace.md),
+            decoration: BoxDecoration(
+              color: AppColor.warningSoft,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              border: Border.all(color: AppColor.warning),
+            ),
+            child: const Text(
+              'Завершённое занятие будет перенесено через добавочную '
+              'корректировку: прежние списание и оплата преподавателю '
+              'останутся в истории и будут отменены новыми записями.',
+            ),
+          ),
+        ],
+        LessonFinancialSection(
+          fundingFields: fundingFields,
+          financialPreview: financialPreview,
+          funding: funding,
+          knownPayers: knownPayers,
+          model: LessonFinancialSectionModel(
+            session: model.session,
+            draft: model.draft,
+            references: model.references,
+            isSaving: model.isSaving,
+            requiresCompensationValue: policy.requiresCompensationValue(
+              selectedRule,
+            ),
+            compensationNeedsReason: policy.compensationNeedsReason(
+              draft: model.draft,
+              rule: selectedRule,
+            ),
+            canManageTeacherCompensation: model.canManageTeacherCompensation,
+            canSelectTrialCompensation: model.canSelectTrialCompensation,
+            allowsNoFunding: policy.isNoCharge(selectedSettlement),
+            requiresChangeReason:
+                model.session.isEdit &&
+                (policy.hasScheduleChanges(
+                      session: model.session,
+                      draft: model.draft,
+                    ) ||
+                    policy.hasFinancialChanges(
+                      session: model.session,
+                      draft: model.draft,
+                    ) ||
+                    model.session.snapshot?.rawLesson['lifecycle_state'] ==
+                        'settlement_pending'),
+          ),
+          actions: actions,
+        ),
+        if (model.session.isEdit) ...[
+          const SizedBox(height: AppSpace.md),
+          TextFormField(
+            key: const Key('lesson-notes-input'),
+            initialValue: model.draft.notes,
+            onChanged: (value) => actions.edit(LessonNotesEdit(value)),
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Заметка',
+              alignLabelWithHint: true,
+            ),
+          ),
+        ],
+        LessonEditorFeedback(
+          model: LessonEditorFeedbackModel(
+            session: model.session,
+            draft: model.draft,
+            validationMessage: model.validationMessage,
+            settlementLabel: selectedSettlement?.label ?? 'Не выбран',
+            clientSnapshotValue: policy.clientChargeSnapshotLabel(
+              draft: model.draft,
+              references: model.references,
+            ),
+            compensationLabel: selectedRule?.label ?? 'Не выбрано',
+            teacherSnapshotValue: policy.teacherCompensationSnapshotLabel(
+              draft: model.draft,
+              references: model.references,
+            ),
+            canManageTeacherCompensation: model.canManageTeacherCompensation,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _loadingSurface() {
     const loading = Center(
@@ -335,6 +422,12 @@ class LessonEditorView extends StatelessWidget {
         ],
       ),
     );
+    if (embeddedSurface) {
+      return const Padding(
+        padding: EdgeInsets.all(AppSpace.xl),
+        child: loading,
+      );
+    }
     return pageMode
         ? Scaffold(
             appBar: AppBar(title: Text(_title)),
@@ -359,6 +452,9 @@ class LessonEditorView extends StatelessWidget {
         ],
       ),
     );
+    if (embeddedSurface) {
+      return Padding(padding: const EdgeInsets.all(AppSpace.xl), child: error);
+    }
     return pageMode
         ? Scaffold(
             appBar: AppBar(title: Text(_title)),

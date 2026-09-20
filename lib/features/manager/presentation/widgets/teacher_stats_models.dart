@@ -2,6 +2,14 @@ import 'package:flutter/foundation.dart';
 
 const _unsetTeacherStatsFilter = Object();
 
+abstract final class TeacherStatsCompensationSource {
+  static const automatic = 'automatic';
+  static const manual = 'manual';
+
+  static String label(dynamic source) =>
+      source == manual ? 'Источник: вручную' : 'Источник: автоматически';
+}
+
 @immutable
 class TeacherStatsQuery {
   const TeacherStatsQuery({
@@ -13,6 +21,7 @@ class TeacherStatsQuery {
     this.status,
     this.discipline,
     this.category,
+    this.compensationRuleKey,
   });
 
   final DateTime from;
@@ -23,6 +32,7 @@ class TeacherStatsQuery {
   final String? status;
   final String? discipline;
   final String? category;
+  final String? compensationRuleKey;
 
   TeacherStatsQuery copyWith({
     DateTime? from,
@@ -33,6 +43,7 @@ class TeacherStatsQuery {
     Object? status = _unsetTeacherStatsFilter,
     Object? discipline = _unsetTeacherStatsFilter,
     Object? category = _unsetTeacherStatsFilter,
+    Object? compensationRuleKey = _unsetTeacherStatsFilter,
   }) {
     return TeacherStatsQuery(
       from: from ?? this.from,
@@ -55,6 +66,10 @@ class TeacherStatsQuery {
       category: identical(category, _unsetTeacherStatsFilter)
           ? this.category
           : category as String?,
+      compensationRuleKey:
+          identical(compensationRuleKey, _unsetTeacherStatsFilter)
+          ? this.compensationRuleKey
+          : compensationRuleKey as String?,
     );
   }
 }

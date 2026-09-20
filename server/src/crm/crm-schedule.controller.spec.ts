@@ -1,4 +1,7 @@
-import { ServiceUnavailableException } from "@nestjs/common";
+import {
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { V4DomainFlagsService } from "../platform/rollout/v4/domain-flags";
 import { CrmScheduleController } from "./crm-schedule.controller";
 
@@ -35,6 +38,8 @@ describe("CrmScheduleController rollout boundary", () => {
     const lessonCommands = {
       create: jest.fn().mockResolvedValue({ path: "v4" }),
       update: jest.fn().mockResolvedValue({ path: "v4" }),
+      previewSettlementPlan: jest.fn(),
+      updateSettlementPlan: jest.fn(),
       previewConstraints: jest
         .fn()
         .mockResolvedValue({ valid: true, violations: [] }),
@@ -47,6 +52,16 @@ describe("CrmScheduleController rollout boundary", () => {
         valid: true,
         rows: [],
       }),
+      previewRemoveRow: jest.fn().mockResolvedValue({ previewToken: "signed" }),
+      removeRow: jest.fn().mockResolvedValue({ endsPlan: false }),
+    };
+    const settlementCorrections = {
+      preview: jest.fn(),
+      commit: jest.fn(),
+      history: jest.fn(),
+    };
+    const studentLessonTimeline = {
+      list: jest.fn().mockResolvedValue({ items: [] }),
     };
     const flags = {
       get: jest.fn(() => ({ effectivePath })),
@@ -65,7 +80,8 @@ describe("CrmScheduleController rollout boundary", () => {
         lessonTransitions as never,
         flags,
         schedulePlans as never,
-        {} as never,
+        settlementCorrections as never,
+        studentLessonTimeline as never,
       ),
       lessonMutations,
       lessonTeacherRates,
@@ -74,6 +90,8 @@ describe("CrmScheduleController rollout boundary", () => {
       scheduleSeries,
       lessonCommands,
       schedulePlans,
+      settlementCorrections,
+      studentLessonTimeline,
     };
   }
 
@@ -133,6 +151,32 @@ describe("CrmScheduleController rollout boundary", () => {
     expect(lessonCommands.previewConstraints).toHaveBeenCalledWith(actor, dto);
   });
 
+  it("keeps missing manual duration as a typed 422 at HTTP command boundaries", async () => {
+    const {
+      controller: subject,
+      lessonCommands,
+      settlementCorrections,
+    } = controller("v4");
+    const error = new UnprocessableEntityException({
+      code: "TEACHER_PARTIAL_DURATION_REQUIRED",
+      field: "teacherCreditedDurationMinutes",
+    });
+    lessonCommands.previewSettlementPlan.mockRejectedValueOnce(error);
+    settlementCorrections.preview.mockRejectedValueOnce(error);
+
+    await expect(
+      subject.previewLessonSettlementPlan(actor, "lesson-a", {} as never),
+    ).rejects.toBe(error);
+    await expect(
+      subject.previewLessonSettlementCorrection(actor, "lesson-a", {} as never),
+    ).rejects.toBe(error);
+    expect(error.getStatus()).toBe(422);
+    expect(error.getResponse()).toEqual({
+      code: "TEACHER_PARTIAL_DURATION_REQUIRED",
+      field: "teacherCreditedDurationMinutes",
+    });
+  });
+
   it("routes Plan update preview through the authoritative Plan service", async () => {
     const { controller: subject, schedulePlans } = controller("v4");
     const dto = { expectedVersion: 2, effectiveFrom: "2026-08-20" } as never;
@@ -161,6 +205,65 @@ describe("CrmScheduleController rollout boundary", () => {
     expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(
       actor,
       {},
+    );
+  });
+
+  it("routes signed recurring-row preview and commit with command metadata", async () => {
+    const { controller: subject, schedulePlans } = controller("v4");
+    const preview = {
+      expectedVersion: 4,
+      effectiveFrom: "2026-09-04",
+      reasonText: "Смена преподавателя",
+    };
+    const command = {
+      ...preview,
+      previewToken: "signed",
+      confirm: true,
+    };
+
+    await subject.previewSchedulePlanRowRemoval(
+      actor,
+      "plan-a",
+      "series-a",
+      preview as never,
+    );
+    await subject.removeSchedulePlanRow(
+      actor,
+      "plan-a",
+      "series-a",
+      "row-remove-key",
+      "row-remove-request",
+      command as never,
+    );
+
+    expect(schedulePlans.previewRemoveRow).toHaveBeenCalledWith(
+      actor,
+      "plan-a",
+      "series-a",
+      preview,
+    );
+    expect(schedulePlans.removeRow).toHaveBeenCalledWith(
+      actor,
+      "plan-a",
+      "series-a",
+      command,
+      {
+        idempotencyKey: "row-remove-key",
+        requestId: "row-remove-request",
+      },
+    );
+  });
+
+  it("routes the canonical student lesson timeline through its query service", async () => {
+    const { controller: subject, studentLessonTimeline } = controller("v4");
+    const query = { direction: "next", cursor: "opaque", limit: 24 } as never;
+
+    await subject.studentLessonTimeline(actor, "student-a", query);
+
+    expect(studentLessonTimeline.list).toHaveBeenCalledWith(
+      actor,
+      "student-a",
+      query,
     );
   });
 

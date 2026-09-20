@@ -2,7 +2,6 @@ import { Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
-import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
 import type {
   CreateSchedulePlanDto,
@@ -10,6 +9,7 @@ import type {
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
+import { acquireLessonSettlementCoordinationGate } from "../commerce/lesson-settlement-locks";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { extendSchedulePlanBackwards } from "./schedule-plan-backdate-mutation";
 import { moveSchedulePlanStartForward } from "./schedule-plan-forward-start-mutation";
@@ -21,22 +21,15 @@ import {
 } from "./schedule-plan-definition.service";
 import { assertSchedulePlanMetadata as assertMetadata } from "./schedule-plan-definition.service";
 import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
+import type { PreparedSchedulePlanRow } from "./schedule-plan-preview.types";
+import type {
+  SchedulePlanMutationReference as MutationReference,
+  SchedulePlanMutationResult,
+} from "./schedule-plan-mutation.types";
 import { SchedulePlanRepository } from "./schedule-plan.repository";
 import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
-export interface SchedulePlanMutationResult {
-  id: string;
-  seriesIds: string[];
-  lessonIds: string[];
-  version: number;
-  replayed: boolean;
-}
-
-interface MutationReference extends Record<string, unknown> {
-  planId: string;
-  seriesIds: string[];
-  lessonIds: string[];
-}
+export type { SchedulePlanMutationResult } from "./schedule-plan-mutation.types";
 
 @Injectable()
 export class SchedulePlanMutationService {
@@ -46,7 +39,6 @@ export class SchedulePlanMutationService {
     private readonly repository: SchedulePlanRepository,
     private readonly series: LessonSeriesCommandService,
     private readonly materializer: ScheduleSeriesMaterializerService,
-    private readonly settlement: LessonSettlementService,
     private readonly definition: SchedulePlanDefinitionService,
     private readonly previews: SchedulePlanConstraintPreviewService,
   ) {}
@@ -57,6 +49,7 @@ export class SchedulePlanMutationService {
     metadata: LessonCommandMetadata,
   ): Promise<SchedulePlanMutationResult> {
     this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     assertMetadata(metadata);
     const normalized = this.definition.normalizeCreate(dto);
     const planId = this.definition.planId(
@@ -109,8 +102,10 @@ export class SchedulePlanMutationService {
     metadata: LessonCommandMetadata,
   ): Promise<SchedulePlanMutationResult> {
     this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanSupplyTeacherCompensation(actor, dto.rows);
     assertMetadata(metadata);
     this.definition.assertRows(dto.rows);
+    let prepared: PreparedSchedulePlanUpdate | undefined;
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
@@ -132,8 +127,24 @@ export class SchedulePlanMutationService {
         type: "schedule.plan.changed",
         payload: { entityId: planId, state: "updated" },
       },
+      beforeVersionAdvance: async (client) => {
+        await acquireLessonSettlementCoordinationGate(client);
+        prepared = await this.definition.prepareUpdate(
+          client,
+          planId,
+          dto,
+          actor,
+        );
+      },
       mutate: (client, version) =>
-        this.updateInTransaction(client, actor, planId, version, dto),
+        this.updateInTransaction(
+          client,
+          actor,
+          planId,
+          version,
+          dto,
+          prepared!,
+        ),
     });
     return this.result(
       planId,
@@ -156,20 +167,37 @@ export class SchedulePlanMutationService {
       normalized.kind === "individual"
         ? [normalized.studentId!]
         : normalized.participants.map((participant) => participant.studentId);
-    await this.definition.lockAndValidate(client, {
-      planId,
-      kind: normalized.kind,
-      studentId: normalized.studentId,
-      groupId: normalized.groupId,
-      subscriptionId: normalized.subscriptionId,
-      participants: normalized.participants,
-      rows: normalized.rows,
-    });
+    await this.definition.lockAndValidate(
+      client,
+      {
+        planId,
+        kind: normalized.kind,
+        studentId: normalized.studentId,
+        groupId: normalized.groupId,
+        subscriptionId: normalized.subscriptionId,
+        participants: normalized.participants,
+        rows: normalized.rows,
+      },
+      actor,
+    );
+    await this.series.assertPlanExpansionBounds(
+      client,
+      normalized.rows,
+      normalized.activeFrom,
+      normalized.activeUntil,
+    );
+    const preparedRows = await this.previews.prepareRows(
+      client,
+      actor,
+      normalized.rows,
+      studentIds,
+    );
     const includePast = await this.previews.assertCreateHistoricalConfirmation(
       client,
       actor,
       normalized,
       dto,
+      preparedRows,
     );
     await this.repository.insertPlan(client, {
       id: planId,
@@ -201,6 +229,7 @@ export class SchedulePlanMutationService {
       normalized,
       studentIds,
       includePast,
+      preparedRows,
     );
   }
 
@@ -210,14 +239,28 @@ export class SchedulePlanMutationService {
     planId: string,
     version: number,
     dto: UpdateSchedulePlanDto,
+    prepared: PreparedSchedulePlanUpdate,
   ): Promise<MutationReference> {
-    const prepared = await this.definition.prepareUpdate(client, planId, dto);
+    await this.series.assertPlanExpansionBounds(
+      client,
+      dto.rows,
+      prepared.effectiveFrom,
+      prepared.activeUntil,
+    );
+    const preparedRows = await this.previews.prepareRows(
+      client,
+      actor,
+      dto.rows,
+      prepared.studentIds,
+      prepared,
+    );
     const includePast = await this.previews.assertUpdateHistoricalConfirmation(
       client,
       actor,
       planId,
       dto,
       prepared,
+      preparedRows,
     );
     if (prepared.mode === "extend_backwards") {
       return extendSchedulePlanBackwards({
@@ -231,8 +274,9 @@ export class SchedulePlanMutationService {
         series: this.series,
         materializer: this.materializer,
         definition: this.definition,
-        insertSeries: (input, storedDecision) =>
-          this.insertSeries(client, input, actor, storedDecision),
+        preparedRows,
+        insertSeries: (input, preparedRow) =>
+          this.insertSeries(client, input, preparedRow),
       });
     }
     await lockSchedulePlanSeries(
@@ -271,6 +315,7 @@ export class SchedulePlanMutationService {
       version,
       dto.rows,
       prepared,
+      preparedRows,
     );
     const replaceableDates = await this.retirePreviousSeries(
       client,
@@ -298,10 +343,12 @@ export class SchedulePlanMutationService {
     normalized: NormalizedSchedulePlanCreate,
     studentIds: string[],
     includePast: boolean,
+    preparedRows: PreparedSchedulePlanRow[],
   ): Promise<MutationReference> {
     const seriesIds: string[] = [];
     const lessonIds: string[] = [];
-    for (const [index, row] of normalized.rows.entries()) {
+    for (const [index, preparedRow] of preparedRows.entries()) {
+      const row = preparedRow.row;
       await this.series.validatePlanRow(
         client,
         row,
@@ -325,7 +372,7 @@ export class SchedulePlanMutationService {
           version,
           subscriptionId: normalized.subscriptionId,
         },
-        actor,
+        preparedRow,
       );
       await this.materializer.materializePlanSeries(client, seriesId, {
         includePast,
@@ -345,6 +392,7 @@ export class SchedulePlanMutationService {
     version: number,
     rows: SchedulePlanRowDto[],
     prepared: PreparedSchedulePlanUpdate,
+    preparedRows: PreparedSchedulePlanRow[],
   ) {
     const seriesIds: string[] = [];
     for (const [index, row] of rows.entries()) {
@@ -358,14 +406,12 @@ export class SchedulePlanMutationService {
           groupId: prepared.plan.group_id,
           validFrom: prepared.effectiveFrom,
           validUntil: prepared.activeUntil,
-          row,
+          row: preparedRows[index]!.row,
           actorUserId: actor.userId,
           version,
           subscriptionId: prepared.subscriptionId,
         },
-        actor,
-        prepared.activeSeries.find((series) => series.id === row.seriesId)
-          ?.planned_financial_decision ?? null,
+        preparedRows[index]!,
       );
       seriesIds.push(seriesId);
     }
@@ -378,50 +424,13 @@ export class SchedulePlanMutationService {
       Parameters<SchedulePlanRepository["insertSeries"]>[1],
       "settlementPlan"
     >,
-    actor: ActorContext,
-    storedDecision: SchedulePlanRowDto["financialDecision"] | null = null,
+    preparedRow: PreparedSchedulePlanRow,
   ) {
-    const financialDecision = await this.authorizedFinancialDecision(
-      client,
-      actor,
-      input.row,
-      storedDecision,
-    );
-    const settlementPlan = await this.settlement.preparePlan(
-      client,
-      input.row.branchId,
-      financialDecision,
-      actor.userId,
-    );
     await this.repository.insertSeries(client, {
       ...input,
-      row: { ...input.row, financialDecision },
-      settlementPlan,
+      row: preparedRow.row,
+      settlementPlan: preparedRow.settlementPlan,
     });
-  }
-
-  private authorizedFinancialDecision(
-    client: PoolClient,
-    actor: ActorContext,
-    row: SchedulePlanRowDto,
-    storedDecision: SchedulePlanRowDto["financialDecision"] | null,
-  ) {
-    if (this.policy.canManageTeacherCompensation(actor)) {
-      return Promise.resolve(row.financialDecision);
-    }
-    if (storedDecision) {
-      return Promise.resolve({
-        ...row.financialDecision,
-        teacherCompensationRuleKey: storedDecision.teacherCompensationRuleKey,
-        teacherCompensationValueMinor:
-          storedDecision.teacherCompensationValueMinor,
-      });
-    }
-    return this.settlement.applyDefaultTeacherCompensation(
-      client,
-      row.branchId,
-      row.financialDecision,
-    );
   }
 
   private async retirePreviousSeries(
@@ -474,15 +483,7 @@ export class SchedulePlanMutationService {
     replaceableDates: Map<string, string[]>,
   ) {
     const lessonIds: string[] = [];
-    for (const [index, row] of rows.entries()) {
-      await this.series.validatePlanRow(
-        client,
-        row,
-        prepared.effectiveFrom,
-        prepared.activeUntil,
-        prepared.studentIds,
-        includePast,
-      );
+    for (const [index] of rows.entries()) {
       const seriesId = seriesIds[index]!;
       await this.materializer.materializePlanSeries(client, seriesId, {
         includePast,

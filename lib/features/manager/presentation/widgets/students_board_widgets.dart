@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -230,7 +231,7 @@ class _StudentsToolbar extends StatelessWidget {
                 color: Theme.of(context).colorScheme.outlineVariant,
               ),
             ),
-            child: DropdownButtonFormField<String>(
+            child: AppDropdownButtonFormField<String>(
               menuMaxHeight: 256,
               key: ValueKey('branch:${state.selectedBranchId}'),
               initialValue: state.selectedBranchId,

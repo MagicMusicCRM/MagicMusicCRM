@@ -358,6 +358,7 @@ class SubscriptionReplacementPackage {
 
 class SubscriptionReplacementUsage {
   const SubscriptionReplacementUsage({
+    this.newAvailableUnits,
     required this.usedUnits,
     required this.reservedLessonCount,
     required this.reservedUnits,
@@ -370,6 +371,7 @@ class SubscriptionReplacementUsage {
   });
 
   final String usedUnits;
+  final String? newAvailableUnits;
   final int reservedLessonCount;
   final String reservedUnits;
   final int transferableReservationCount;
@@ -381,6 +383,7 @@ class SubscriptionReplacementUsage {
 
   factory SubscriptionReplacementUsage.fromJson(Map<String, dynamic> json) {
     return SubscriptionReplacementUsage(
+      newAvailableUnits: json['newAvailableUnits']?.toString(),
       usedUnits: json['usedUnits'].toString(),
       reservedLessonCount: _replacementInt(json['reservedLessonCount']),
       reservedUnits: json['reservedUnits'].toString(),
@@ -423,6 +426,9 @@ class SubscriptionReplacementPosition {
 
 class SubscriptionReplacementFinancial {
   const SubscriptionReplacementFinancial({
+    this.usedValueMinor,
+    this.remainingValueMinor,
+    this.priorConsumedValueMinor,
     required this.currencyCode,
     required this.oldFinalMinor,
     required this.newFinalMinor,
@@ -432,6 +438,9 @@ class SubscriptionReplacementFinancial {
   });
 
   final String currencyCode;
+  final BigInt? usedValueMinor;
+  final BigInt? remainingValueMinor;
+  final BigInt? priorConsumedValueMinor;
   final BigInt oldFinalMinor;
   final BigInt newFinalMinor;
   final BigInt actualPaidMinor;
@@ -440,6 +449,15 @@ class SubscriptionReplacementFinancial {
 
   factory SubscriptionReplacementFinancial.fromJson(Map<String, dynamic> json) {
     return SubscriptionReplacementFinancial(
+      usedValueMinor: json['usedValueMinor'] == null
+          ? null
+          : _replacementMinor(json['usedValueMinor']),
+      remainingValueMinor: json['remainingValueMinor'] == null
+          ? null
+          : _replacementMinor(json['remainingValueMinor']),
+      priorConsumedValueMinor: json['priorConsumedValueMinor'] == null
+          ? null
+          : _replacementMinor(json['priorConsumedValueMinor']),
       currencyCode: json['currencyCode'].toString(),
       oldFinalMinor: _replacementMinor(json['oldFinalMinor']),
       newFinalMinor: _replacementMinor(json['newFinalMinor']),
@@ -1193,8 +1211,11 @@ extension MagicCrmFinance on MagicCrmService {
   /// Like [listPayments] but also returns the server-side period totals
   /// (`totalAmount`, `totalCount`) over the full filtered set, so the UI can
   /// show a correct «Итого» rather than summing a truncated page.
-  Future<({List<Payment> items, num totalAmount, int totalCount})>
+  Future<
+    ({List<Payment> items, num totalAmount, int totalCount, String? nextCursor})
+  >
   listPaymentsWithTotal({
+    String? cursor,
     String? from,
     String? to,
     String? studentId,
@@ -1202,6 +1223,7 @@ extension MagicCrmFinance on MagicCrmService {
     int limit = 100,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
+    if (cursor != null) queryParameters['cursor'] = cursor;
     if (studentId != null) queryParameters['studentId'] = studentId;
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;
@@ -1218,6 +1240,7 @@ extension MagicCrmFinance on MagicCrmService {
     final totalCount = response['totalCount'];
     return (
       items: items,
+      nextCursor: response['nextCursor'] as String?,
       totalAmount: totalAmount is num
           ? totalAmount
           : num.tryParse(totalAmount?.toString() ?? '') ?? 0,
@@ -1247,6 +1270,7 @@ extension MagicCrmFinance on MagicCrmService {
 
   // ── Expenses (P5-5) ─────────────────────────────────────────────────────
   Future<Map<String, dynamic>> listExpenses({
+    String? cursor,
     String? branchId,
     String? category,
     String? from,
@@ -1254,6 +1278,7 @@ extension MagicCrmFinance on MagicCrmService {
     int? limit,
   }) async {
     final q = <String, dynamic>{};
+    if (cursor != null) q['cursor'] = cursor;
     if (branchId != null) q['branchId'] = branchId;
     if (category != null) q['category'] = category;
     if (from != null) q['from'] = from;
@@ -1267,37 +1292,65 @@ extension MagicCrmFinance on MagicCrmService {
     required String category,
     String? description,
     String? branchId,
+    String? occurredAt,
+    MagicMutationIdentity? identity,
   }) async {
     final data = <String, dynamic>{'amount': amount, 'category': category};
     if (description != null && description.trim().isNotEmpty) {
       data['description'] = description.trim();
     }
     if (branchId != null && branchId.isNotEmpty) data['branchId'] = branchId;
+    if (occurredAt != null) data['occurredAt'] = occurredAt;
+    if (identity != null) {
+      return _api.postIdempotent<Map<String, dynamic>>(
+        '/crm/expenses',
+        identity: identity,
+        data: data,
+      );
+    }
     return _api.post<Map<String, dynamic>>('/crm/expenses', data: data);
   }
 
   Future<Map<String, dynamic>> updateExpense({
     required String expenseId,
+    required int expectedVersion,
     required num amount,
     required String category,
     String? description,
     String? branchId,
+    String? occurredAt,
+    MagicMutationIdentity? identity,
   }) {
     final data = <String, dynamic>{
+      'expectedVersion': expectedVersion,
       'amount': amount,
       'category': category,
       // An explicit empty string clears an existing optional description.
       'description': description?.trim() ?? '',
     };
     if (branchId != null && branchId.isNotEmpty) data['branchId'] = branchId;
+    if (occurredAt != null) data['occurredAt'] = occurredAt;
+    if (identity != null) {
+      return _api.patchIdempotent<Map<String, dynamic>>(
+        '/crm/expenses/$expenseId',
+        identity: identity,
+        data: data,
+      );
+    }
     return _api.patch<Map<String, dynamic>>(
       '/crm/expenses/$expenseId',
       data: data,
     );
   }
 
-  Future<Map<String, dynamic>> deleteExpense(String expenseId) {
-    return _api.delete<Map<String, dynamic>>('/crm/expenses/$expenseId');
+  Future<Map<String, dynamic>> deleteExpense(
+    String expenseId, {
+    required int expectedVersion,
+  }) {
+    return _api.delete<Map<String, dynamic>>(
+      '/crm/expenses/$expenseId',
+      queryParameters: {'expectedVersion': expectedVersion},
+    );
   }
 
   // ── Subscription packages (P5b) ─────────────────────────────────────────

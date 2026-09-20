@@ -589,7 +589,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                 ),
               ),
               const SizedBox(height: AppSpace.sm),
-              DropdownButtonFormField<String>(
+              AppDropdownButtonFormField<String>(
                 menuMaxHeight: 256,
                 key: const ValueKey('field-type'),
                 initialValue: _type,
@@ -663,7 +663,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: AppDropdownButtonFormField<String>(
                       menuMaxHeight: 256,
                       initialValue: _category,
                       decoration: const InputDecoration(labelText: 'Категория'),
@@ -685,7 +685,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                   ),
                   const SizedBox(width: AppSpace.sm),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: AppDropdownButtonFormField<String>(
                       menuMaxHeight: 256,
                       key: const ValueKey('field-width'),
                       initialValue: _width,
@@ -711,7 +711,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
               ),
               if (selection) ...[
                 const SizedBox(height: AppSpace.sm),
-                DropdownButtonFormField<String?>(
+                AppDropdownButtonFormField<String?>(
                   menuMaxHeight: 256,
                   key: ValueKey(_optionSetKey),
                   initialValue: _optionSetKey,

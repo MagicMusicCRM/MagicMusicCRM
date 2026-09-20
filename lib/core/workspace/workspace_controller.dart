@@ -466,6 +466,42 @@ class WorkspaceController extends ChangeNotifier {
     });
   }
 
+  /// Removes callbacks owned by a widget that is leaving the tree without
+  /// notifying listeners during Flutter's dispose phase. The saved form state
+  /// remains on the tab so a dirty draft can be restored later.
+  void detachForm(
+    String tabId,
+    String formKey, {
+    bool? dirty,
+    int? expectedVersion,
+    Map<String, Object?>? draft,
+  }) {
+    _formActions.remove(_formActionKey(tabId, formKey));
+    final index = _state.tabs.indexWhere((tab) => tab.tabId == tabId);
+    if (index < 0) return;
+    final tab = _state.tabs[index];
+    final current = tab.forms[formKey];
+    if (current == null) return;
+    final tabs = [..._state.tabs];
+    if (dirty != true) {
+      final forms = {...tab.forms}..remove(formKey);
+      tabs[index] = tab.copyWith(forms: forms);
+      _state = _state.copyWith(tabs: tabs);
+      return;
+    }
+    tabs[index] = tab.copyWith(
+      forms: {
+        ...tab.forms,
+        formKey: current.copyWith(
+          dirty: true,
+          expectedVersion: expectedVersion,
+          draft: draft,
+        ),
+      },
+    );
+    _state = _state.copyWith(tabs: tabs);
+  }
+
   Future<void> saveDirtyForms(WorkspaceTabState tab) async {
     for (final form in tab.forms.values.where((form) => form.dirty)) {
       final save = _formActions[_formActionKey(tab.tabId, form.formKey)]?.save;

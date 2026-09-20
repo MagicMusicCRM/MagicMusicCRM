@@ -1,6 +1,30 @@
 part of 'client_card.dart';
 
 extension _ClientCardStudent on _ClientCardState {
+  Widget _studentFinanceGuard(ColorScheme cs, Widget Function() child) {
+    return _studentGuard(
+      cs,
+      () => _commerceLoadError == null
+          ? child()
+          : Padding(
+              padding: const EdgeInsets.all(AppSpace.xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Не удалось загрузить финансы'),
+                  const SizedBox(height: AppSpace.md),
+                  Text(_commerceLoadError!, textAlign: TextAlign.center),
+                  TextButton(
+                    onPressed: () =>
+                        _readController.refreshCommerce(_studentId),
+                    child: const Text('Обновить финансы'),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
   // Wraps any student tab body with the shared loading / error / not-found
   // states so per-tab isolation reuses one place.
   Widget _studentGuard(ColorScheme cs, Widget Function() child) {
@@ -182,7 +206,7 @@ extension _ClientCardStudent on _ClientCardState {
 
   // ── Student tab: Оплаты ──────────────────────────────────────────────────
   Widget _buildPaymentsTab(ColorScheme cs, {bool embedded = false}) {
-    return _studentGuard(
+    return _studentFinanceGuard(
       cs,
       () => _paymentsView(
         cs,
@@ -981,7 +1005,7 @@ extension _ClientCardStudent on _ClientCardState {
   Widget _buildStatusPicker(ColorScheme cs, StatusRecord current) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: DropdownButtonFormField<String>(
+      child: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         // Легаси-фолбэк 'new' (лид «Без статуса») и имена статусов в списке
         // UUID-значений не встречаются — такой «статус» показываем как пустой
@@ -1016,12 +1040,23 @@ extension _ClientCardStudent on _ClientCardState {
             ),
           );
         }).toList(),
-        onChanged: (v) {
+        onChanged: !_canWriteClient
+            ? null
+            : (v) async {
           if (v != null) {
+            String? reason;
+            if (_statusRequiresReason[v] == true) {
+              reason = await showMagicDialog<String>(
+                context: context,
+                builder: (_) => const _LeadStatusReasonDialog(),
+              );
+              if (reason == null || !mounted) return;
+            }
             _emitState(() {
               _leadData['status'] = v;
+              _pendingLeadStatusComment = reason;
               _edited = true;
-              _leadStatusEditRevision = _editRevision;
+              _draft.leadStatusEdit = _draft.revision;
             });
           }
         },
@@ -1061,7 +1096,7 @@ extension _ClientCardStudent on _ClientCardState {
     );
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: DropdownButtonFormField<String>(
+      child: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: ValueKey('student-funnel-status-${funnel.scopeVersion}-$current'),
         initialValue: current.isEmpty ? null : current,
@@ -1091,10 +1126,56 @@ extension _ClientCardStudent on _ClientCardState {
           _emitState(() {
             _student?['status'] = value;
             _edited = true;
-            _studentStatusEditRevision = _editRevision;
+            _draft.studentStatusEdit = _draft.revision;
           });
         },
       ),
     );
   }
+}
+
+class _LeadStatusReasonDialog extends StatefulWidget {
+  const _LeadStatusReasonDialog();
+
+  @override
+  State<_LeadStatusReasonDialog> createState() => _LeadStatusReasonDialogState();
+}
+
+class _LeadStatusReasonDialogState extends State<_LeadStatusReasonDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Причина смены статуса'),
+    content: TextField(
+      key: const ValueKey('lead-status-reason'),
+      controller: _controller,
+      autofocus: true,
+      maxLength: 500,
+      maxLines: 3,
+      onChanged: (_) => setState(() {}),
+      decoration: const InputDecoration(
+        labelText: 'Причина *',
+        hintText: 'Укажите, почему меняется статус',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(
+        onPressed: _controller.text.trim().isEmpty
+            ? null
+            : () => Navigator.pop(context, _controller.text.trim()),
+        child: const Text('Продолжить'),
+      ),
+    ],
+  );
 }

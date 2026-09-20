@@ -2,6 +2,68 @@ import { ConflictException } from "@nestjs/common";
 import { LeadCommandService } from "./lead-command.service";
 
 describe("LeadCommandService", () => {
+  it("replays an acknowledged create key without inserting or publishing twice", async () => {
+    const actor = { userId: "manager-a", role: "manager" as const };
+    const lead = {
+      id: "lead-a",
+      version: 1,
+      status_id: null,
+      status_name: null,
+      first_name: "Анна",
+      last_name: null,
+      phone: null,
+      email: null,
+      source: null,
+      notes: null,
+      assigned_to: "owner-a",
+      custom_data: {},
+      created_by: actor.userId,
+      created_at: "2026-09-12T00:00:00.000Z",
+      updated_at: "2026-09-12T00:00:00.000Z",
+    };
+    const writes = {
+      createInTransaction: jest.fn().mockResolvedValue({ lead, branchId: "branch-a" }),
+      findCreated: jest.fn().mockResolvedValue(lead),
+    };
+    const audit = { record: jest.fn() };
+    const realtime = { emitCrmChanged: jest.fn() };
+    let committed = false;
+    const integrity = {
+      executeVersionedMutation: jest.fn(async (command) => {
+        if (committed) {
+          return { resultRef: { leadId: lead.id }, replayed: true };
+        }
+        committed = true;
+        return {
+          resultRef: await command.mutate({ query: jest.fn() }),
+          replayed: false,
+        };
+      }),
+    };
+    const service = new LeadCommandService(
+      { query: jest.fn() } as never,
+      audit as never,
+      { assertCanWriteCrm: jest.fn() } as never,
+      realtime as never,
+      writes as never,
+      integrity as never,
+    );
+    const metadata = {
+      idempotencyKey: "create-lead-0001",
+      requestId: "request-lead-0001",
+    };
+    const dto = { firstName: "Анна", assignedTo: "owner-a" };
+
+    const first = await service.create(actor, dto, undefined, metadata);
+    const retry = await service.create(actor, dto, undefined, metadata);
+
+    expect(retry.id).toBe(first.id);
+    expect(writes.createInTransaction).toHaveBeenCalledTimes(1);
+    expect(writes.findCreated).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(realtime.emitCrmChanged).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps direct deletion blocked after authorization", () => {
     const actor = { userId: "manager-a", role: "manager" as const };
     const policy = { assertCanWriteCrm: jest.fn() };

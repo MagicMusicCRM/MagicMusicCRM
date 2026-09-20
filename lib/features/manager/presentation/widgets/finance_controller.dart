@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -43,6 +44,8 @@ class FinanceController extends ChangeNotifier {
   FinanceState _state;
   Timer? _realtimeTimer;
   bool _disposed = false;
+  ({DateTime from, DateTime to, String? branchId})? _paymentsQuery;
+  ({DateTime from, DateTime to, String? branchId})? _expensesQuery;
   int _paymentGeneration = 0;
   int _expenseGeneration = 0;
   int _mutationGeneration = 0;
@@ -111,7 +114,14 @@ class FinanceController extends ChangeNotifier {
     if (_disposed) return;
     final generation = ++_paymentGeneration;
     final query = _query();
-    _state = _state.copyWith(loading: true, loadError: null);
+    _paymentsQuery = query;
+    _state = _state.copyWith(
+      loading: true,
+      loadError: null,
+      paymentsNextCursor: null,
+      paymentsLoadingMore: false,
+      paymentsPageError: null,
+    );
     _notify();
     try {
       final result = await _crm.listPaymentsWithTotal(
@@ -125,6 +135,7 @@ class FinanceController extends ChangeNotifier {
         payments: List<Payment>.unmodifiable(result.items),
         total: result.totalAmount.toDouble(),
         totalCount: result.totalCount,
+        paymentsNextCursor: result.nextCursor,
         loading: false,
         loadError: null,
       );
@@ -139,7 +150,14 @@ class FinanceController extends ChangeNotifier {
     if (_disposed) return;
     final generation = ++_expenseGeneration;
     final query = _query();
-    _state = _state.copyWith(expensesLoading: true);
+    _expensesQuery = query;
+    _state = _state.copyWith(
+      expensesLoading: true,
+      expensesLoadError: null,
+      expensesNextCursor: null,
+      expensesLoadingMore: false,
+      expensesPageError: null,
+    );
     _notify();
     try {
       final response = await _crm.listExpenses(
@@ -155,15 +173,108 @@ class FinanceController extends ChangeNotifier {
           .toList(growable: false);
       _state = _state.copyWith(
         expenses: List<Map<String, dynamic>>.unmodifiable(items),
+        expensesNextCursor: response['nextCursor'] as String?,
         expensesTotal: (response['total'] as num?)?.toDouble() ?? 0,
         expensesLoading: false,
+        expensesLoadError: null,
       );
-    } catch (_) {
+    } catch (error) {
       if (!_isCurrent(generation, _expenseGeneration)) return;
       _state = _state.copyWith(
-        expenses: const [],
-        expensesTotal: 0,
+        expensesLoadError: error,
         expensesLoading: false,
+      );
+    }
+    _notify();
+  }
+
+  Future<void> loadMorePayments() async {
+    final cursor = _state.paymentsNextCursor;
+    final query = _paymentsQuery;
+    if (_disposed ||
+        _state.loading ||
+        _state.paymentsLoadingMore ||
+        cursor == null ||
+        query == null) {
+      return;
+    }
+    final generation = _paymentGeneration;
+    _state = _state.copyWith(
+      paymentsLoadingMore: true,
+      paymentsPageError: null,
+    );
+    _notify();
+    try {
+      final result = await _crm.listPaymentsWithTotal(
+        cursor: cursor,
+        from: query.from.toUtc().toIso8601String(),
+        to: query.to.toUtc().toIso8601String(),
+        branchId: query.branchId,
+        limit: 100,
+      );
+      if (!_isCurrent(generation, _paymentGeneration)) return;
+      final existing = _state.payments.map((item) => item.id).toSet();
+      _state = _state.copyWith(
+        payments: List<Payment>.unmodifiable([
+          ..._state.payments,
+          ...result.items.where((item) => existing.add(item.id)),
+        ]),
+        paymentsNextCursor: result.nextCursor,
+        paymentsLoadingMore: false,
+      );
+    } catch (error) {
+      if (!_isCurrent(generation, _paymentGeneration)) return;
+      _state = _state.copyWith(
+        paymentsLoadingMore: false,
+        paymentsPageError: error,
+      );
+    }
+    _notify();
+  }
+
+  Future<void> loadMoreExpenses() async {
+    final cursor = _state.expensesNextCursor;
+    final query = _expensesQuery;
+    if (_disposed ||
+        _state.expensesLoading ||
+        _state.expensesLoadingMore ||
+        cursor == null ||
+        query == null) {
+      return;
+    }
+    final generation = _expenseGeneration;
+    _state = _state.copyWith(
+      expensesLoadingMore: true,
+      expensesPageError: null,
+    );
+    _notify();
+    try {
+      final response = await _crm.listExpenses(
+        cursor: cursor,
+        from: query.from.toUtc().toIso8601String(),
+        to: query.to.toUtc().toIso8601String(),
+        branchId: query.branchId,
+        limit: 50,
+      );
+      if (!_isCurrent(generation, _expenseGeneration)) return;
+      final existing = _state.expenses.map((item) => item['id']).toSet();
+      final items = (response['items'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .where((item) => existing.add(item['id']));
+      _state = _state.copyWith(
+        expenses: List<Map<String, dynamic>>.unmodifiable([
+          ..._state.expenses,
+          ...items,
+        ]),
+        expensesNextCursor: response['nextCursor'] as String?,
+        expensesLoadingMore: false,
+      );
+    } catch (error) {
+      if (!_isCurrent(generation, _expenseGeneration)) return;
+      _state = _state.copyWith(
+        expensesLoadingMore: false,
+        expensesPageError: error,
       );
     }
     _notify();
@@ -174,11 +285,15 @@ class FinanceController extends ChangeNotifier {
     required String category,
     String? description,
     String? branchId,
+    String? occurredAt,
+    MagicMutationIdentity? identity,
   }) {
     return _mutateExpense(
       () => _crm.createExpense(
         amount: amount,
         category: category,
+        occurredAt: occurredAt,
+        identity: identity,
         description: description,
         branchId: branchId ?? _state.branchId,
       ),
@@ -187,24 +302,32 @@ class FinanceController extends ChangeNotifier {
 
   Future<void> updateExpense({
     required String expenseId,
+    required int expectedVersion,
     required num amount,
     required String category,
     String? description,
     String? branchId,
+    String? occurredAt,
+    MagicMutationIdentity? identity,
   }) {
     return _mutateExpense(
       () => _crm.updateExpense(
         expenseId: expenseId,
+        expectedVersion: expectedVersion,
         amount: amount,
         category: category,
+        occurredAt: occurredAt,
+        identity: identity,
         description: description,
         branchId: branchId ?? _state.branchId,
       ),
     );
   }
 
-  Future<void> deleteExpense(String expenseId) {
-    return _mutateExpense(() => _crm.deleteExpense(expenseId));
+  Future<void> deleteExpense(String expenseId, {required int expectedVersion}) {
+    return _mutateExpense(
+      () => _crm.deleteExpense(expenseId, expectedVersion: expectedVersion),
+    );
   }
 
   Future<void> _mutateExpense(Future<Object?> Function() mutation) async {

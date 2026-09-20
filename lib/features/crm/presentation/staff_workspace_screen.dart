@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
+import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot_model.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
@@ -121,9 +123,23 @@ class _StaffWorkspaceContentState extends State<_StaffWorkspaceContent> {
   void _selectSection(int tab) {
     final workspace = WorkspaceNavigationScope.maybeOf(context);
     if (workspace == null) return;
-    final link = EntityRouteRegistry.sectionRootLink(
-      crmSectionForTab(widget.snapshot.role, tab),
-    );
+    final section = crmSectionForTab(widget.snapshot.role, tab);
+    final rootLink = EntityRouteRegistry.sectionRootLink(section);
+    final pendingFocus = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(crmSectionFocusProvider);
+    final link = pendingFocus?.section == section
+        ? EntityLink(
+            entityType: rootLink.entityType,
+            entityId: rootLink.entityId,
+            rawEntityType: rootLink.rawEntityType,
+            optionalFocus: EntityLinkFocus(
+              focus: rootLink.optionalFocus?.focus,
+              filter: pendingFocus!.filters,
+            ),
+          )
+        : rootLink;
     workspace.controller.replaceCurrentLink(widget.tab.tabId, link);
   }
 

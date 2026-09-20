@@ -2,7 +2,11 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
-import { branchIdExpr } from "./branch-scope";
+import {
+  branchIdExpr,
+  currentActorRoleSql,
+  managerBranchScopeSql,
+} from "./branch-scope";
 import { readTypedClientValueMap } from "./clients/client-config.repository";
 import { CrmPolicy } from "./crm.policy";
 import { LessonRow, toLessonDto, toTimelineDto } from "./crm-mappers";
@@ -96,6 +100,11 @@ export class LeadCardService {
           on linked_student.lead_id = l.id
          and linked_student.deleted_at is null
         where l.id = $1 and l.deleted_at is null
+          and ${managerBranchScopeSql({
+            roleExpression: currentActorRoleSql("$2"),
+            userIdExpression: "$2",
+            branchExpression: branchIdExpr("l"),
+          })}
         limit 1
       `,
       [leadId, actor.userId],

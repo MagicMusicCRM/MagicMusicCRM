@@ -59,16 +59,13 @@ export class ReportingReadService {
       filter.params,
     );
     const totalLessons = Number(result.rows[0]?.total_lessons ?? 0);
-    const successfulLessons = Number(
-      result.rows[0]?.successful_lessons ?? 0,
-    );
+    const successfulLessons = Number(result.rows[0]?.successful_lessons ?? 0);
     return {
       ...filter.range,
       branchId: query.branchId ?? null,
       totalLessons,
       successfulLessons,
-      successRate:
-        totalLessons === 0 ? 0 : successfulLessons / totalLessons,
+      successRate: totalLessons === 0 ? 0 : successfulLessons / totalLessons,
       drilldown: {
         entityType: "lesson_list",
         entityId: "successfully_completed",
@@ -194,15 +191,15 @@ export class ReportingReadService {
         ),
         expense_facts as (
           select
-            date_trunc('month', expense.created_at) as month_start,
+            date_trunc('month', coalesce(expense.occurred_at,expense.created_at)) as month_start,
             round(coalesce(sum(expense.amount), 0) * 100)::bigint
               as expenses_minor
           from app.expenses expense
           where expense.deleted_at is null
-            and expense.created_at >= $1::timestamptz
-            and expense.created_at < $2::timestamptz
+            and coalesce(expense.occurred_at,expense.created_at) >= $1::timestamptz
+            and coalesce(expense.occurred_at,expense.created_at) < $2::timestamptz
             and ($3::uuid is null or expense.branch_id = $3)
-          group by date_trunc('month', expense.created_at)
+          group by date_trunc('month', coalesce(expense.occurred_at,expense.created_at))
         )
         select
           to_char(months.month_start, 'YYYY-MM-DD') as month_start,

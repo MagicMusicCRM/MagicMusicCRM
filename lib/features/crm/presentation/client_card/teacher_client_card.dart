@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
 
 import 'client_card_api.dart';
 
@@ -161,6 +164,8 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
             key: ValueKey('teacher-section-${selected.$3}'),
             name: selected.$2,
             raw: sections[selected.$3],
+            lessonSection: selected.$3 == 'lessons',
+            homeworkSection: selected.$3 == 'homework',
           ),
         ),
       ],
@@ -169,10 +174,18 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
 }
 
 class _TeacherSection extends StatelessWidget {
-  const _TeacherSection({super.key, required this.name, required this.raw});
+  const _TeacherSection({
+    super.key,
+    required this.name,
+    required this.raw,
+    required this.lessonSection,
+    required this.homeworkSection,
+  });
 
   final String name;
   final Object? raw;
+  final bool lessonSection;
+  final bool homeworkSection;
 
   @override
   Widget build(BuildContext context) {
@@ -199,12 +212,35 @@ class _TeacherSection extends StatelessWidget {
             'Запись';
         final rawSubtitle =
             item['status'] ?? item['lifecycleState'] ?? item['dueAt'];
+        final lifecycle = lessonSection
+            ? LessonStateProjection.fromMap(item)
+            : null;
+        final attachments = homeworkSection
+            ? homeworkAttachments(item['attachments'])
+            : const <Map<String, dynamic>>[];
         return ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(_teacherCardValue(rawTitle)),
-          subtitle: rawSubtitle == null
-              ? null
-              : Text(_teacherCardValue(rawSubtitle, status: true)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (lifecycle != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: LessonStateBadge(projection: lifecycle),
+                  ),
+                )
+              else if (rawSubtitle != null)
+                Text(_teacherCardValue(rawSubtitle, status: true)),
+              if (attachments.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.sm),
+                HomeworkAttachmentList(attachments: attachments),
+              ],
+            ],
+          ),
         );
       },
     );
@@ -217,9 +253,6 @@ String _teacherCardStatusLabel(Object? raw) {
     'active' => 'Активен',
     'inactive' => 'Неактивен',
     'archived' => 'В архиве',
-    'scheduled' => 'Забронировано',
-    'completed' || 'done' => 'Завершено',
-    'cancelled' => 'Отменено',
     'assigned' => 'Назначено',
     'submitted' => 'Сдано',
     'reviewed' => 'Проверено',

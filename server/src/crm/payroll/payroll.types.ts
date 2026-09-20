@@ -38,10 +38,16 @@ export interface PayrollLessonRow {
   compensation_type?: string | null;
   compensation_rule_key?: string | null;
   compensation_rule_label?: string | null;
+  compensation_actual_value?: string | number | null;
+  teacher_snapshot_rate?: string | number | null;
+  compensation_override_reason?: string | null;
+  compensation_source?: "automatic" | "manual" | null;
 }
 
 export interface PayrollLessonAccrual {
   hours: number;
+  scheduledHours: number;
+  creditedHours: number;
   rate: number;
   coefficient: number;
   amount: number;
@@ -99,4 +105,50 @@ export interface TeacherReportRow {
   id: string;
   name: string;
   salary: string | number | null;
+}
+
+export interface TeacherStatsReportPeriod {
+  from: string;
+  to: string;
+}
+
+export interface TeacherStatsUnitAccumulator {
+  compensationKey: string;
+  compensationLabel: string;
+  compensationSource: "automatic" | "manual";
+  unitType: TeacherStatsUnitType;
+  groupId: string | null;
+  studentId: string | null;
+  unitName: string;
+  teacherRate: number | null;
+  days: Map<string, number>;
+  lessonIds: string[];
+  editableLessonIds: string[];
+  settledLessons: number;
+  completedLessons: number;
+  payableLessons: number;
+  hoursTotal: number;
+  scheduledHoursTotal: number;
+  accruedTotal: number;
+}
+
+export interface TeacherStatsAccumulator {
+  completedLessons: number;
+  payableLessons: number;
+  hoursTotal: number;
+  scheduledHoursTotal: number;
+  accruedTotal: number;
+  units: Map<string, TeacherStatsUnitAccumulator>;
+}
+
+export interface TeacherStatsReportTotals {
+  completedLessons: number;
+  payableLessons: number;
+  hoursTotal: number;
+  scheduledHoursTotal: number;
+  accruedTotal: number;
+  bonusTotal: number;
+  deductionTotal: number;
+  paidTotal: number;
+  periodBalance: number;
 }

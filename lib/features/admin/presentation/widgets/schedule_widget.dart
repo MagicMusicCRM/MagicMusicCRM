@@ -1,3 +1,5 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
+import 'package:magic_music_crm/core/observability/app_performance.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,6 +18,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/magic_toast.dart';
 
@@ -35,6 +38,7 @@ import 'schedule_teacher_timeline.dart';
 part 'schedule_widget_widgets.dart';
 part 'schedule_widget_actions.dart';
 part 'schedule_widget_toolbar.dart';
+part 'schedule_widget_desktop_toolbar.dart';
 part 'schedule_widget_week_view.dart';
 part 'schedule_widget_room_day_view.dart';
 part 'schedule_widget_context_banners.dart';
@@ -140,14 +144,16 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // Extra schedule filters (applied client-side over already-loaded lessons —
   // is_trial / conflict_types / teacher_id all ride along in the matrix).
   bool _onlyTrial = false;
+  Set<String> _settlementTypes = {}, _compensationRules = {};
   bool _onlyConflicts = false;
-  bool _filtersExpanded = false;
+  bool _fitDayToViewport = true;
   String? _filterTeacherId;
   String? _filterRoomId;
   String? _filterClientType;
   String? _filterClientId;
   String? _filterClientName;
   bool _hideOtherClientLessons = true;
+  final _desktopSearchController = TextEditingController();
   String _scheduleSearchQuery = '';
   bool _scheduleSearchLoading = false;
   // The user's own branch (staff assignment), resolved once, used as the
@@ -188,15 +194,24 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     // A filter deep-linked from the overview («Пробные занятия» / «Конфликты
     // расписания») — consumed once before the first fetch so the grid opens
     // filtered. Day view is what actually renders these filters, so switch to it.
-    final focus = ref
-        .read(crmSectionFocusProvider.notifier)
-        .consume('schedule');
+    final focus = ref.read(crmSectionFocusProvider);
     if (focus != null) {
       if (focus.filters['trial'] == '1') _onlyTrial = true;
       if (focus.filters['conflicts'] == '1') _onlyConflicts = true;
       _currentView = ScheduleView.day;
     }
-    if (widget.active) _fetchAll();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(crmSectionFocusProvider.notifier).consume('schedule');
+      }
+    });
+    if (widget.active) {
+      if (widget.initialLink?.entityType == EntityLinkType.lesson) {
+        unawaited(_resolveInitialLessonLink());
+      } else {
+        _fetchAll();
+      }
+    }
     // The client card sets the focus BEFORE this widget mounts (it sets focus,
     // closes the card and routes here). `ref.listen` in build only catches
     // *changes*, so pick up an already-set focus once on first frame.
@@ -209,6 +224,50 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       final focus = ref.read(scheduleNavigationProvider);
       if (focus != null) _applyScheduleFocus(focus);
     });
+  }
+
+  Future<void> _resolveInitialLessonLink() async {
+    final lessonId = widget.initialLink?.entityId;
+    if (lessonId == null || lessonId.isEmpty) {
+      await _fetchAll();
+      return;
+    }
+    try {
+      final rows = await ref
+          .read(magicCrmServiceProvider)
+          .listLessons(lessonId: lessonId, limit: 1);
+      final lesson = rows
+          .where((row) => row['id']?.toString() == lessonId)
+          .firstOrNull;
+      if (!mounted || lesson == null) {
+        await _fetchAll();
+        return;
+      }
+      final rawOffset = lesson['scheduled_utc_offset_minutes'];
+      final offset = rawOffset is num
+          ? rawOffset.toInt()
+          : int.tryParse(rawOffset?.toString() ?? '') ?? 180;
+      final instant = DateTime.tryParse(
+        lesson['scheduled_at']?.toString() ?? '',
+      );
+      if (instant != null) {
+        final local = instant.toUtc().add(Duration(minutes: offset));
+        final date = scheduleDisplayDate(local);
+        _selectedDate = date;
+        _displayedMonth = DateTime(date.year, date.month);
+      }
+      final branchId = lesson['branch_id']?.toString();
+      if (branchId?.isNotEmpty == true) {
+        _selectedBranchId = branchId;
+        _allBranchesSelected = false;
+      }
+      _lessons = [lesson];
+      await _fetchAll();
+      if (mounted) await _fetchDayLessons(_selectedDate);
+    } catch (error) {
+      debugPrint('Error resolving linked lesson: $error');
+      if (mounted) await _fetchAll();
+    }
   }
 
   void _restorePendingClientFocus() {
@@ -261,7 +320,15 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     _filterClientName = filters['clientName']?.toString();
     _hideOtherClientLessons = filters['showOtherClientLessons'] != true;
     _scheduleSearchQuery = filters['scheduleQuery']?.toString().trim() ?? '';
+    _desktopSearchController.text = _scheduleSearchQuery;
+    _fitDayToViewport = filters['fitDayToViewport'] != false;
     _onlyTrial = filters['trial'] == true || filters['trial'] == '1';
+    _settlementTypes = (filters['settlementTypes'] as List? ?? const [])
+        .whereType<String>()
+        .toSet();
+    _compensationRules = (filters['compensationRules'] as List? ?? const [])
+        .whereType<String>()
+        .toSet();
     _onlyConflicts =
         filters['conflicts'] == true || filters['conflicts'] == '1';
     _currentView = ScheduleView.values.firstWhere(
@@ -298,6 +365,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     filters: {
       'view': _currentView.name,
       'dayMode': _dayViewMode.name,
+      'fitDayToViewport': _fitDayToViewport,
       if (widget.clientId != null) 'section': 'lessons',
       if (widget.clientId != null) 'clientCalendarMode': _currentView.name,
       if (_selectedBranchId != null) 'branchId': _selectedBranchId,
@@ -314,6 +382,10 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (_scheduleSearchQuery.isNotEmpty)
         'scheduleQuery': _scheduleSearchQuery,
       if (_onlyTrial) 'trial': true,
+      if (_settlementTypes.isNotEmpty)
+        'settlementTypes': _settlementTypes.toList(),
+      if (_compensationRules.isNotEmpty)
+        'compensationRules': _compensationRules.toList(),
       if (_onlyConflicts) 'conflicts': true,
     },
     date: _selectedDate,
@@ -323,6 +395,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   @override
   void dispose() {
+    _desktopSearchController.dispose();
     _realtimeDebounce?.cancel();
     _highlightClearTimer?.cancel();
     super.dispose();
@@ -416,48 +489,57 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     // collapses to a bare skeleton when you change branch/date/view.
     final firstLoad = (_isLoading || _loadError != null) && !_hasLoadedOnce;
     final refreshing = _isLoading && _hasLoadedOnce;
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Column(
-        children: [
-          _buildScheduleToolbar(firstLoad: firstLoad),
-          SizedBox(
-            height: 2,
-            child: refreshing
-                ? const LinearProgressIndicator(
-                    minHeight: 2,
-                    backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation(AppColor.gold),
-                  )
-                : null,
-          ),
-          if (!firstLoad) ...[
-            if (_currentView == ScheduleView.day)
-              ScheduleDayModeToggle(
-                mode: _dayViewMode,
-                onModeChanged: (m) {
-                  if (_dayViewMode == m) return;
-                  _emitState(() => _dayViewMode = m);
-                  _fetchAll();
-                },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final desktop = constraints.maxWidth >= 720;
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Column(
+            children: [
+              _buildScheduleToolbar(firstLoad: firstLoad),
+              SizedBox(
+                height: 2,
+                child: refreshing
+                    ? const LinearProgressIndicator(
+                        minHeight: 2,
+                        backgroundColor: Colors.transparent,
+                        valueColor: AlwaysStoppedAnimation(AppColor.gold),
+                      )
+                    : null,
               ),
-          ],
-          if (!firstLoad && _filterClientId != null) _buildClientFilterBanner(),
-          if (!firstLoad && widget.clientId != null)
-            _buildClientContextBanner(),
-          if (!firstLoad && _hasScheduleSearch) _buildScheduleSearchBanner(),
-          if (!firstLoad &&
-              widget.canWrite &&
-              _currentView != ScheduleView.month) ...[
-            ScheduleDayLegend(week: _currentView == ScheduleView.week),
-          ],
-          if (!firstLoad && _currentView == ScheduleView.day) ...[
-            _buildAvailabilitySummary(),
-          ],
-          Expanded(child: _buildScheduleContent()),
-        ],
-      ),
+              if (!firstLoad) ...[
+                if (!desktop && _currentView == ScheduleView.day)
+                  ScheduleDayModeToggle(
+                    mode: _dayViewMode,
+                    onModeChanged: (m) {
+                      if (_dayViewMode == m) return;
+                      _emitState(() => _dayViewMode = m);
+                      _fetchAll();
+                    },
+                  ),
+              ],
+              if (!firstLoad && _filterClientId != null)
+                _buildClientFilterBanner(),
+              if (!firstLoad && widget.clientId != null)
+                _buildClientContextBanner(),
+              if (!firstLoad && _hasScheduleSearch)
+                _buildScheduleSearchBanner(),
+              if (!desktop &&
+                  !firstLoad &&
+                  widget.canWrite &&
+                  _currentView != ScheduleView.month) ...[
+                ScheduleDayLegend(week: _currentView == ScheduleView.week),
+              ],
+              if (!desktop &&
+                  !firstLoad &&
+                  _currentView == ScheduleView.day) ...[
+                _buildAvailabilitySummary(),
+              ],
+              Expanded(child: _buildScheduleContent()),
+            ],
+          ),
+        );
+      },
     );
   }
 }

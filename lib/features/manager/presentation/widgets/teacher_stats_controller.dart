@@ -189,6 +189,7 @@ class TeacherStatsController extends ChangeNotifier {
     try {
       final query = _state.query;
       final report = await _crm.getTeacherStatsReport(
+        compensationRuleKey: query.compensationRuleKey,
         from: query.from.toUtc().toIso8601String(),
         to: query.to.toUtc().toIso8601String(),
         branchId: query.branchId,
@@ -274,6 +275,7 @@ class TeacherStatsController extends ChangeNotifier {
     try {
       final query = _state.query;
       final bytes = await _crm.exportTeacherStatsReport(
+        compensationRuleKey: query.compensationRuleKey,
         from: query.from.toUtc().toIso8601String(),
         to: query.to.toUtc().toIso8601String(),
         branchId: query.branchId,

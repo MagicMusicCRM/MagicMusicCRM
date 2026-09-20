@@ -63,6 +63,30 @@ final studentBoardProvider = FutureProvider.autoDispose
       );
     });
 
+typedef StudentBoardSearchKey = ({String branchId, String query});
+
+final studentBoardSearchProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, StudentBoardSearchKey>((
+      ref,
+      key,
+    ) async {
+      final service = ref.watch(magicCrmServiceProvider);
+      final response = key.branchId == kNoBranchBoardId
+          ? await service.searchStudents(
+              noBranch: true,
+              q: key.query,
+              limit: 100,
+            )
+          : await service.searchStudents(
+              branchId: key.branchId,
+              q: key.query,
+              limit: 100,
+            );
+      return (response['items'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList(growable: false);
+    });
+
 /// Pure: bucket students into the column whose `status` matches (case-
 /// insensitive). Configured active stages are the draggable targets; any
 /// unknown status (or missing status) lands in the remediation column.

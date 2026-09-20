@@ -61,7 +61,9 @@ abstract final class ClientCardAccessPolicy {
       'director',
       'system_admin',
     }.contains(effectiveRole);
-    final canReadClientFinance = managerAccess;
+    final canReadClientFinance =
+        capabilitySnapshot?.allows('commerce.client_finance.read') ??
+        managerAccess;
     final canWriteSchedule =
         capabilitySnapshot?.allows('schedule.lesson.write') ?? managerAccess;
     final canReadSchedule = capabilitySnapshot == null

@@ -109,6 +109,7 @@ extension _ClientCardContactEditors on _ClientCardState {
   }
 
   Future<void> _editContactPerson(String entity, {int? index}) async {
+    if (!_canWriteClient) return;
     final persons = _contactPersonsForEntity(entity);
     final existing = index == null ? const <String, dynamic>{} : persons[index];
     final relation = existing['relation']?.toString() ?? '';
@@ -148,7 +149,9 @@ extension _ClientCardContactEditors on _ClientCardState {
           LayoutBuilder(
             builder: (context, constraints) {
               final addButton = TextButton.icon(
-                onPressed: () => _editContactPerson(entity),
+                onPressed: _canWriteClient
+                    ? () => _editContactPerson(entity)
+                    : null,
                 style: TextButton.styleFrom(
                   foregroundColor: AppColor.gold,
                   visualDensity: VisualDensity.compact,
@@ -224,7 +227,9 @@ extension _ClientCardContactEditors on _ClientCardState {
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(Icons.edit_rounded, size: 16),
                         tooltip: 'Изменить',
-                        onPressed: () => _editContactPerson(entity, index: i),
+                        onPressed: _canWriteClient
+                            ? () => _editContactPerson(entity, index: i)
+                            : null,
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,

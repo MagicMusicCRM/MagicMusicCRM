@@ -340,6 +340,9 @@ void main() {
         branches: const [
           {'id': 'branch-1', 'name': 'Главный'},
         ],
+        rooms: const [
+          {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Аудитория 1'},
+        ],
         teachers: const [
           {'id': 'teacher-1', 'firstName': 'Мария', 'lastName': 'Иванова'},
         ],
@@ -402,6 +405,40 @@ void main() {
             'hasPrevious': false,
             'hasNext': false,
           },
+        },
+        studentLessonTimelinePage: {
+          'items': [
+            {
+              'id': 'lesson-1',
+              'version': 1,
+              'scheduledAt': DateTime.now().toUtc().toIso8601String(),
+              'durationMinutes': 60,
+              'lifecycleState': 'scheduled',
+              'student': {'id': 'student-1', 'name': 'Анна Смирнова'},
+              'group': null,
+              'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
+              'room': null,
+              'branch': {'id': 'branch-1', 'name': 'Главный'},
+              'origin': {
+                'kind': 'generated',
+                'planId': 'plan-1',
+                'seriesId': 'series-1',
+              },
+              'settlement': {
+                'coveredBySubscription': false,
+                'settlementTypeKey': 'free_lesson',
+              },
+              'reschedule': {
+                'predecessorId': null,
+                'successorId': null,
+                'actionableLessonId': 'lesson-1',
+              },
+            },
+          ],
+          'previousCursor': null,
+          'nextCursor': null,
+          'hasPrevious': false,
+          'hasNext': false,
         },
       );
       await tester.pumpWidget(
@@ -471,7 +508,7 @@ void main() {
       expect(find.byKey(const Key('client-calendar-widget')), findsNothing);
       expect(find.text('Постоянные расписания'), findsOneWidget);
       expect(find.text('Индивидуальный вокал'), findsOneWidget);
-      expect(find.byKey(const Key('client-lesson-date-tray')), findsOneWidget);
+      expect(find.byKey(const Key('student-lesson-timeline')), findsOneWidget);
       expect(find.text('Фактические занятия'), findsNothing);
       expect(find.text('Предстоящие'), findsNothing);
       expect(find.text('Прошедшие'), findsNothing);
@@ -523,9 +560,9 @@ void main() {
         ),
       );
       await tester.ensureVisible(
-        find.byKey(const ValueKey('client-lesson-lesson-1')),
+        find.byKey(const ValueKey('student-timeline-lesson-1')),
       );
-      await tester.tap(find.byKey(const ValueKey('client-lesson-lesson-1')));
+      await tester.tap(find.byKey(const ValueKey('student-timeline-lesson-1')));
       await tester.pumpAndSettle();
       expect(find.text('Изменить занятие'), findsOneWidget);
       await tester.binding.handlePopRoute();
@@ -546,6 +583,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('client-calendar-widget')), findsOneWidget);
+      tester.view.physicalSize = const Size(1280, 720);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('День'));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.text('22:00')).bottom, lessThanOrEqualTo(720));
+      await tester.tap(find.byKey(const Key('client-calendar-back')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('client-desktop-canvas')), findsOneWidget);
+      expect(find.byKey(const Key('client-calendar-widget')), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -742,7 +788,7 @@ void main() {
       accountId: 'account-1',
       role: 'admin',
       accessVersion: 1,
-      capabilities: {'crm.client.read.basic'},
+      capabilities: {'crm.client.read.basic', 'crm.client.write'},
       scopes: {},
     );
     await tester.pumpWidget(

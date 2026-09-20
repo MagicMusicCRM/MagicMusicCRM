@@ -1,4 +1,5 @@
 import { PoolClient } from "pg";
+import type { CrmPolicy } from "../crm.policy";
 import type { IssueSubscriptionDiscountDto, IssueSubscriptionSurchargeDto } from "../dto/issue-subscription.dto";
 import type { NormalizedDiscount, NormalizedSurcharge } from "./subscription-issue.contracts";
 
@@ -23,28 +24,53 @@ export type TeacherCompensationFactType =
 
 export type LessonSettlementContext = "settle" | "reschedule" | "cancel";
 
+export interface LessonClientFinancialDecision {
+  clientId: string;
+  settlementTypeKey?: string;
+  chargeDurationMinutes?: number;
+  subscriptionId?: string;
+  payerStudentId?: string;
+  chargeType?: ClientChargeFactType;
+  basePriceMinor?: string;
+  discount?: IssueSubscriptionDiscountDto;
+  surcharge?: IssueSubscriptionSurchargeDto;
+}
+
 export interface LessonFinancialDecision {
   /** Server-owned rate frozen when the assigned teacher is corrected. Never accepted by the command DTO. */
   teacherRateSnapshot?: { type: "hourly"; value: string };
   settlementTypeKey: string;
-  clientDecisions?: Array<{
-    clientId: string;
-    settlementTypeKey?: string;
-    subscriptionId?: string;
-    payerStudentId?: string;
-    chargeType?: ClientChargeFactType;
-    basePriceMinor?: string;
-    discount?: IssueSubscriptionDiscountDto;
-    surcharge?: IssueSubscriptionSurchargeDto;
-  }>;
+  clientDecisions?: LessonClientFinancialDecision[];
   teacherCompensationRuleKey: string;
   teacherCompensationValueMinor?: string;
+  teacherCreditedDurationMinutes?: number;
+  teacherCompensationSource?: "automatic" | "manual";
 }
 
 export interface PreparedLessonSettlementPlan {
   decision: LessonFinancialDecision;
   settlementRevisionId: string;
   compensationRevisionId: string;
+}
+
+export interface ResolvePlannedLessonSettlementInput {
+  branchId: string;
+  durationMinutes: number;
+  decision: LessonFinancialDecision;
+  actorUserId: string;
+  authorization: ReturnType<CrmPolicy["teacherCompensationMutationAuthorization"]>;
+  reasonText?: string;
+  preservedTeacherDecision?: Pick<
+    LessonFinancialDecision,
+    | "teacherCompensationRuleKey"
+    | "teacherCompensationValueMinor"
+    | "teacherCreditedDurationMinutes"
+    | "teacherCompensationSource"
+  >;
+  requiredClientIds?: string[];
+  configurationRevisionIds?: NonNullable<
+    LessonSettlementInput["configurationRevisionIds"]
+  >;
 }
 
 export interface PlannedSubscriptionAllocation {
@@ -64,6 +90,8 @@ export interface StoredLessonSettlementPlan
 }
 
 export interface LessonSettlementInput {
+  /** Internal worker policy; never accepted from a client command DTO. */
+  requireAvailableFunding?: boolean;
   context: LessonSettlementContext;
   decision: LessonFinancialDecision;
   reasonText?: string;
@@ -114,6 +142,7 @@ export interface LessonSettlementResult {
     compensationDefaultValue: string | null;
     compensationActualValue: string | null;
     compensationOverrideReason: string | null;
+    compensationSource: "automatic" | "manual";
     configurationRevisionId: string | null;
   };
 }
@@ -124,6 +153,15 @@ export interface LessonSettlementPreview {
 }
 
 export interface LessonSettlementPort {
+  reuseStoredTeacherCompensation(
+    client: PoolClient,
+    lessonId: string,
+    decision: LessonFinancialDecision,
+  ): Promise<LessonFinancialDecision>;
+  resolvePlannedPlan(
+    client: PoolClient,
+    input: ResolvePlannedLessonSettlementInput,
+  ): Promise<PreparedLessonSettlementPlan>;
   settle(
     client: PoolClient,
     lessonId: string,
@@ -145,6 +183,14 @@ export interface LessonSettlementPort {
       reasonText?: string;
     },
   ): Promise<PreparedLessonSettlementPlan>;
+  assignPreparedPlan(
+    client: PoolClient,
+    input: PreparedLessonSettlementPlan & {
+      lessonId: string;
+      selectedBy: string;
+      reasonText?: string;
+    },
+  ): Promise<PreparedLessonSettlementPlan>;
   clonePlan(
     client: PoolClient,
     input: {
@@ -152,10 +198,7 @@ export interface LessonSettlementPort {
       targetLessonId: string;
       selectedBy: string;
       reasonText?: string;
-      fallback?: {
-        branchId: string;
-        decision: LessonFinancialDecision;
-      };
+      fallback?: PreparedLessonSettlementPlan;
     },
   ): Promise<PreparedLessonSettlementPlan>;
   loadPlan(

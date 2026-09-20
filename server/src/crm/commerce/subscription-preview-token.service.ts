@@ -8,6 +8,7 @@ import {
   AccountAdjustmentReversalPreviewTokenPayload,
   LessonTransitionPreviewTokenPayload,
   SchedulePlanEndPreviewTokenPayload,
+  SchedulePlanRowRemovalPreviewTokenPayload,
   SchedulePlanHistoryPreviewTokenPayload,
   PaymentReversalPreviewTokenPayload,
   PaymentCorrectionPreviewTokenPayload,
@@ -16,6 +17,7 @@ import {
   signPaymentReversalPreview,
   signPaymentCorrectionPreview,
   signSchedulePlanEndPreview,
+  signSchedulePlanRowRemovalPreview,
   signSchedulePlanHistoryPreview,
   signSubscriptionCancelPreview,
   signSubscriptionPurchasePreview,
@@ -28,6 +30,7 @@ import {
   verifyPaymentCorrectionPreview,
   verifyAccountAdjustmentReversalPreview,
   verifySchedulePlanEndPreview,
+  verifySchedulePlanRowRemovalPreview,
   verifySchedulePlanHistoryPreview,
   verifyLessonTransitionPreview,
   verifySubscriptionCancelPreview,
@@ -398,6 +401,45 @@ export class SubscriptionPreviewTokenService {
           error.code === "PREVIEW_TOKEN_EXPIRED"
             ? "Предпросмотр завершения расписания устарел. Обновите расчёт."
             : "Подписанный предпросмотр завершения расписания недействителен.",
+      });
+    }
+  }
+
+  issueSchedulePlanRowRemoval(
+    payload: Omit<
+      SchedulePlanRowRemovalPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ) {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: SchedulePlanRowRemovalPreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signSchedulePlanRowRemovalPreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifySchedulePlanRowRemoval(token: string, now = new Date()) {
+    try {
+      return verifySchedulePlanRowRemovalPreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: "SCHEDULE_PLAN_ROW_PREVIEW_INVALID",
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр удаления строки устарел. Проверьте расписание снова."
+            : "Подписанный предпросмотр удаления строки недействителен.",
       });
     }
   }

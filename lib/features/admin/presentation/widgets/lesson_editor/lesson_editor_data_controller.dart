@@ -170,13 +170,15 @@ class LessonEditorDataController implements LessonEditorDataLoader {
 
   Future<LessonEditorSession> hydrateSession(
     LessonEditorInitialSource source,
-    LessonEditorSession session,
-  ) async {
+    LessonEditorSession session, {
+    String? actionableLessonId,
+  }) async {
     final snapshot = session.snapshot;
     if (snapshot == null) return session;
-    final rows = await _listLessons!(snapshot.lessonId);
+    final lessonId = actionableLessonId ?? snapshot.lessonId;
+    final rows = await _listLessons!(lessonId);
     final exact = rows
-        .where((row) => row['id'] == snapshot.lessonId)
+        .where((row) => row['id']?.toString() == lessonId)
         .firstOrNull;
     if (exact == null) {
       throw StateError('Занятие недоступно. Обновите расписание.');
@@ -190,9 +192,14 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   Future<LessonEditorSession> reloadAfterConflict(
     LessonEditorInitialSource source,
     LessonEditorSession session,
-    LessonEditorReferenceState references,
-  ) async {
-    final current = await hydrateSession(source, session);
+    LessonEditorReferenceState references, {
+    String? actionableLessonId,
+  }) async {
+    final current = await hydrateSession(
+      source,
+      session,
+      actionableLessonId: actionableLessonId,
+    );
     // Only replace the baseline; the dialog keeps the operator's draft.
     return const LessonEditorDecisionPolicy()
         .applyReferenceDefaults(current, current.draft, references, false)
@@ -265,8 +272,10 @@ class LessonEditorDataController implements LessonEditorDataLoader {
     _activeBranchId = branchId;
     final draft = _initialDraft(
       session.draft,
+      session.snapshot,
       selectedClient,
       branchId,
+      branches,
       teachers,
     );
     final references = LessonEditorReferenceState(
@@ -599,11 +608,39 @@ String? _initialBranchId(
 
 LessonEditorDraft _initialDraft(
   LessonEditorDraft source,
+  LessonEditorSnapshot? snapshot,
   LessonClientRef? client,
   String? branchId,
+  List<LessonEditorReferenceItem> branches,
   List<LessonEditorReferenceItem> teachers,
 ) {
-  final draft = source.copyWith(client: client, branchId: branchId);
+  final branch = branches.where((item) => item.id == branchId).firstOrNull;
+  final offset =
+      int.tryParse(
+        (branch?.raw['utcOffsetMinutes'] ?? branch?.raw['utc_offset_minutes'])
+                ?.toString() ??
+            '',
+      ) ??
+      180;
+  var localStart = source.localStart;
+  final scheduledAt = snapshot?.rawLesson['scheduled_at']?.toString();
+  final parsed = scheduledAt == null ? null : DateTime.tryParse(scheduledAt);
+  if (parsed != null) {
+    final branchLocal = parsed.toUtc().add(Duration(minutes: offset));
+    localStart = DateTime(
+      branchLocal.year,
+      branchLocal.month,
+      branchLocal.day,
+      branchLocal.hour,
+      branchLocal.minute,
+    );
+  }
+  final draft = source.copyWith(
+    client: client,
+    branchId: branchId,
+    localStart: localStart,
+    utcOffsetMinutes: offset,
+  );
   return _isTeacherEligible(teachers, draft.teacherId, branchId)
       ? draft
       : draft.copyWith(teacherId: null);

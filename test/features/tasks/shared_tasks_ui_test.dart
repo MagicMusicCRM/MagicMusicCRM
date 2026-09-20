@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -420,7 +421,7 @@ void main() {
     expect(find.text('Подготовить отчёт'), findsOneWidget);
 
     source.failNextList = true;
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byType(AppDropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Закрытые').last);
     await tester.pumpAndSettle();

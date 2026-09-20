@@ -200,6 +200,7 @@ export class LessonSettlementCorrectionService {
       canConfirm: true,
       financialPreview: this.financialProjection(preview.settled),
       resourceChanges: preview.resourceChange,
+      warnings: preview.warnings,
       previewToken: signed.token,
       previewExpiresAt: signed.expiresAt,
     };
@@ -321,8 +322,9 @@ export class LessonSettlementCorrectionService {
       version: number | string;
       lifecycle_state: string;
       branch_id: string;
+      duration_minutes: number;
     }>(
-      `select version, lifecycle_state, branch_id from app.lessons
+      `select version, lifecycle_state, branch_id, duration_minutes from app.lessons
        where id = $1 and deleted_at is null
        ${lock ? "for update" : ""}`,
       [lessonId],
@@ -340,20 +342,50 @@ export class LessonSettlementCorrectionService {
     const resources = await applyLessonResourceEdit(
       client, actor, lessonId, dto.resources, this.constraints,
     );
-    const authorizedDecision = this.policy.canManageTeacherCompensation(actor)
-      ? dto.financialDecision
+    const storedTeacherDecision = this.policy.canManageTeacherCompensation(actor)
+      ? undefined
       : await this.settlement.reuseStoredTeacherCompensation(
           client,
           lessonId,
           dto.financialDecision,
         );
-    const decision = { ...authorizedDecision, teacherRateSnapshot: resources.teacherRateSnapshot };
-    const prepared = await this.settlement.preparePlan(
-      client,
-      resources.branchId,
-      decision,
-      actor.userId,
-    );
+    const prepared = await this.settlement.resolvePlannedPlan(client, {
+      branchId: resources.branchId,
+      durationMinutes: source.duration_minutes,
+      decision: {
+        ...dto.financialDecision,
+        teacherRateSnapshot: resources.teacherRateSnapshot,
+      },
+      actorUserId: actor.userId,
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
+      reasonText: dto.reasonText,
+      requiredClientIds: resources.requiredClientIds,
+      ...(storedTeacherDecision
+        ? {
+            preservedTeacherDecision: {
+              teacherCompensationRuleKey:
+                storedTeacherDecision.teacherCompensationRuleKey,
+              teacherCompensationValueMinor:
+                storedTeacherDecision.teacherCompensationValueMinor,
+              teacherCreditedDurationMinutes:
+                storedTeacherDecision.teacherCreditedDurationMinutes,
+              teacherCompensationSource:
+                storedTeacherDecision.teacherCompensationSource,
+            },
+          }
+        : {}),
+    });
+    const decision = prepared.decision;
+    const warnings = await this.settlement.partialDurationWarnings(client, {
+      branchId: resources.branchId,
+      durationMinutes: source.duration_minutes,
+      decision: dto.financialDecision,
+      configurationRevisionIds: {
+        settlementRevisionId: prepared.settlementRevisionId,
+        compensationRevisionId: prepared.compensationRevisionId,
+      },
+    });
     const previous = await client.query<{
       id: string;
       version: number | string;
@@ -392,7 +424,13 @@ export class LessonSettlementCorrectionService {
       },
       correction: { id: correctionId },
     });
-    return { correctionVersion, settled, decision, resourceChange: resources.change };
+    return {
+      correctionVersion,
+      settled,
+      decision,
+      warnings,
+      resourceChange: resources.change,
+    };
   }
 
   private fingerprint(
@@ -403,6 +441,7 @@ export class LessonSettlementCorrectionService {
       expectedVersion: dto.expectedVersion,
       reasonText: dto.reasonText.trim(),
       financialDecision: applied.decision,
+      warnings: applied.warnings,
       resourceChanges: applied.resourceChange,
       financial: this.financialProjection(applied.settled),
     });

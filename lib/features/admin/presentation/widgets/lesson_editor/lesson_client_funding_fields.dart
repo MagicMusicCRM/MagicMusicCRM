@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
@@ -386,7 +387,7 @@ class _ParticipantFundingFieldsState extends State<_ParticipantFundingFields> {
           onSelected: _choosePayer,
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
+        AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           key: _key('charge-type'),
           initialValue: _chargeType,
@@ -436,7 +437,7 @@ class _ParticipantFundingFieldsState extends State<_ParticipantFundingFields> {
             },
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
+          AppDropdownButtonFormField<String>(
             menuMaxHeight: 256,
             key: _key('discount-type'),
             initialValue: _discountType,
@@ -478,7 +479,7 @@ class _ParticipantFundingFieldsState extends State<_ParticipantFundingFields> {
             ),
           ],
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
+          AppDropdownButtonFormField<String>(
             menuMaxHeight: 256,
             key: _key('surcharge-type'),
             initialValue: _surchargeType,

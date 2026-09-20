@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:uuid/uuid.dart';
+import 'package:magic_music_crm/core/observability/app_performance.dart';
 
 import 'package:dio/dio.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -251,32 +253,14 @@ class MagicApiClient {
     bool authenticated = true,
     ResponseType? responseType,
     MagicMutationIdentity? mutationIdentity,
-  }) async {
-    _addApiBreadcrumb(method, path, authenticated: authenticated);
-    final requestHeaders =
-        mutationIdentity?.headers ?? _mutationHeaders(method);
-    try {
-      return await _sendWithRetry<T>(
-        method,
-        path,
-        data: data,
-        queryParameters: queryParameters,
-        authenticated: authenticated,
-        responseType: responseType,
-        requestHeaders: requestHeaders,
-      );
-    } on DioException catch (error) {
-      if (!authenticated || error.response?.statusCode != 401) {
-        await _captureApiException(error, method, path);
-        throw MagicApiException.fromDio(error);
-      }
-
-      final refreshed = await _tryRefresh();
-      if (!refreshed) {
-        await _captureApiException(error, method, path);
-        throw MagicApiException.fromDio(error);
-      }
-
+  }) => AppPerformance.measure<T>(
+    AppPerformance.operationFor(method, path),
+    () async {
+      _addApiBreadcrumb(method, path, authenticated: authenticated);
+      final requestHeaders =
+          mutationIdentity?.headers ??
+          _mutationHeaders(method) ??
+          {'X-Request-Id': const Uuid().v4()};
       try {
         return await _sendWithRetry<T>(
           method,
@@ -287,19 +271,40 @@ class MagicApiClient {
           responseType: responseType,
           requestHeaders: requestHeaders,
         );
-      } on DioException catch (retryError) {
-        await _captureApiException(retryError, method, path);
-        throw MagicApiException.fromDio(retryError);
-      }
-    }
-  }
+      } on DioException catch (error) {
+        if (!authenticated || error.response?.statusCode != 401) {
+          await _captureApiException(error, method, path);
+          throw MagicApiException.fromDio(error);
+        }
 
-  /// Wraps [_send] with a single retry for connection-phase failures. The first
-  /// request after the app/network has been idle can be slow or dropped (cold
-  /// DNS resolution, a dropped first SYN behind a rate-limiter); an immediate
-  /// retry then succeeds because the route/DNS cache is warm. Connection-phase
-  /// failures mean the request never reached the server, so retrying is safe for
-  /// any method; a slow response (receiveTimeout) is only retried for reads.
+        final refreshed = await _tryRefresh();
+        if (!refreshed) {
+          await _captureApiException(error, method, path);
+          throw MagicApiException.fromDio(error);
+        }
+
+        try {
+          return await _sendWithRetry<T>(
+            method,
+            path,
+            data: data,
+            queryParameters: queryParameters,
+            authenticated: authenticated,
+            responseType: responseType,
+            requestHeaders: requestHeaders,
+          );
+        } on DioException catch (retryError) {
+          await _captureApiException(retryError, method, path);
+          throw MagicApiException.fromDio(retryError);
+        }
+      }
+    },
+  );
+
+  /// Retries once when no connection was established, or for safe reads.
+  /// A connectionError can also mean a lost response after the server committed.
+  /// Merely sending an Idempotency-Key does not prove that a route honors it;
+  /// ambiguous writes must return to the caller without a transport replay.
   Future<T> _sendWithRetry<T>(
     String method,
     String path, {
@@ -335,10 +340,10 @@ class MagicApiClient {
   bool _isRetriableConnectionError(DioException e, String method) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-      case DioExceptionType.connectionError:
         return true;
+      case DioExceptionType.connectionError:
       case DioExceptionType.receiveTimeout:
-        return method == 'GET';
+        return const {'GET', 'HEAD', 'OPTIONS'}.contains(method.toUpperCase());
       default:
         return false;
     }
@@ -369,25 +374,74 @@ class MagicApiClient {
       }
     }
 
-    final stopwatch = Stopwatch()..start();
-    final response = await _dio.request<Object?>(
-      _normalizePath(path),
-      data: data,
-      queryParameters: queryParameters,
-      options: Options(
-        method: method,
-        headers: headers,
-        responseType: responseType,
-      ),
-    );
-    stopwatch.stop();
-    _addApiResponseBreadcrumb(
+    final response = await _requestTimed(
       method,
       path,
-      statusCode: response.statusCode,
-      durationMs: stopwatch.elapsedMilliseconds,
+      data: data,
+      queryParameters: queryParameters,
+      headers: headers,
+      responseType: responseType,
     );
     return response.data as T;
+  }
+
+  Future<Response<Object?>> _requestTimed(
+    String method,
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    required Map<String, dynamic> headers,
+    ResponseType? responseType,
+  }) async {
+    final timer = Stopwatch()..start();
+    final operation = AppPerformance.current;
+    Response<Object?>? response;
+    String? failure;
+    try {
+      response = await _dio.request<Object?>(
+        _normalizePath(path),
+        data: data,
+        queryParameters: queryParameters,
+        options: Options(
+          method: method,
+          headers: {
+            ...headers,
+            if (operation != null) 'X-Operation-Id': operation.id,
+          },
+          responseType: responseType,
+        ),
+      );
+      return response;
+    } on DioException catch (error) {
+      response = error.response;
+      failure = error.type.name;
+      rethrow;
+    } finally {
+      final timings = <String, double>{};
+      for (final token
+          in (response?.headers['server-timing']?.join(',') ?? '').split(',')) {
+        final match = RegExp(
+          r'^\s*(app|db|pool);dur=([0-9]+(?:\.[0-9]+)?)\s*$',
+        ).firstMatch(token);
+        if (match != null) {
+          final value = double.tryParse(match[2]!);
+          if (value != null && value.isFinite) timings[match[1]!] = value;
+        }
+      }
+      AppPerformance.record({
+        'kind': 'http',
+        'operation': operation?.name.name ?? 'api',
+        'operationId': operation?.id,
+        'requestId': headers['X-Request-Id'],
+        'method': method,
+        'statusCode': response?.statusCode,
+        'durationMs': timer.elapsedMicroseconds / 1000,
+        'errorType': failure,
+        if (timings['app'] != null) 'serverMs': timings['app'],
+        if (timings['db'] != null) 'dbQueryMs': timings['db'],
+        if (timings['pool'] != null) 'dbAcquireMs': timings['pool'],
+      });
+    }
   }
 
   static int _mutationSequence = 0;
@@ -460,10 +514,11 @@ class MagicApiClient {
     if (refreshToken == null || refreshToken.isEmpty) return false;
 
     try {
-      final response = await _dio.post<Object?>(
-        _normalizePath('/auth/refresh'),
+      final response = await _requestTimed(
+        'POST',
+        '/auth/refresh',
         data: {'refreshToken': refreshToken},
-        options: Options(headers: <String, dynamic>{}),
+        headers: {'X-Request-Id': const Uuid().v4()},
       );
       final data = response.data;
       if (data is! Map<String, dynamic>) return false;
@@ -471,11 +526,16 @@ class MagicApiClient {
       if (session is! Map<String, dynamic>) return false;
       await _tokenStore.write(MagicApiTokens.fromJson(session));
       return true;
-    } on DioException {
+    } on DioException catch (error) {
       final latest = await _tokenStore.read();
       if (latest?.refreshToken != null &&
           latest!.refreshToken != refreshToken) {
         return true;
+      }
+      // Only an explicit authentication rejection invalidates the session.
+      // Network failures and temporary server errors retain retryable tokens.
+      if (error.response?.statusCode != 401) {
+        throw MagicApiException.fromDio(error);
       }
       await _tokenStore.clear();
       await onSessionInvalidated?.call();
@@ -506,27 +566,6 @@ class MagicApiClient {
           'method': method,
           'path': _safePath(path),
           'authenticated': authenticated,
-        },
-      ),
-    );
-  }
-
-  static void _addApiResponseBreadcrumb(
-    String method,
-    String path, {
-    required int? statusCode,
-    required int durationMs,
-  }) {
-    Sentry.addBreadcrumb(
-      Breadcrumb(
-        category: 'api.response',
-        type: 'http',
-        level: SentryLevel.info,
-        data: {
-          'method': method,
-          'path': _safePath(path),
-          'statusCode': statusCode,
-          'durationMs': durationMs,
         },
       ),
     );
