@@ -94,23 +94,30 @@ extension _LeadsActions on _LeadsWidgetState {
   Future<void> _loadFilterMetadata() async {
     try {
       final crm = ref.read(magicCrmServiceProvider);
-      final hollihop = ref.read(hollihopServiceProvider);
+      final forms = ref.read(clientFormsApiProvider);
       final results = await Future.wait<dynamic>([
         crm.listBranches(limit: 100),
         crm.listLeadSources(),
         crm.listResponsibleStaff(),
-        hollihop.getDisciplines(),
-        hollihop.getLevels(),
-        hollihop.getCategories(),
+        crm.listDisciplines(),
+        forms.listFields(entityType: 'lead'),
       ]);
       if (!mounted) return;
       _emitState(() {
         _branches = List<Map<String, dynamic>>.from(results[0] as List);
         _sources = List<Map<String, dynamic>>.from(results[1] as List);
         _responsibles = List<Map<String, dynamic>>.from(results[2] as List);
-        _disciplines = _stringOptions(results[3] as List);
-        _levels = _stringOptions(results[4] as List);
-        _categories = _stringOptions(results[5] as List);
+        _disciplines = _stringOptions([
+          for (final item in results[3] as List) item['name'],
+        ]);
+        final fields = List<Map<String, dynamic>>.from(results[4] as List);
+        List<Map<String, dynamic>> options(String key) => _stringOptions([
+          for (final field in fields)
+            if (field['key'] == key && field['options'] is List)
+              ...field['options'] as List,
+        ]);
+        _levels = options('level');
+        _categories = options('category');
       });
     } catch (_) {
       // Filter metadata is progressive; the board remains usable without it.

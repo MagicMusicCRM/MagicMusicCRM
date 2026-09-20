@@ -81,12 +81,12 @@ extension _ClientCardCollaborationTabs on _ClientCardState {
         _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
         // #9: строка «Контакты» из выгрузки HolliHop (custom_data.contacts) —
         // только чтение, показывается когда заполнена.
-        if (_hhField('contacts') != null)
-          _buildInfoCard('Контакты из прежней системы', [
+        if (_storedCustomField('contacts') != null)
+          _buildInfoCard('Дополнительные контакты', [
             _InfoRow(
               icon: Icons.family_restroom_outlined,
               label: 'Контактные лица',
-              value: _hhField('contacts')!,
+              value: _storedCustomField('contacts')!,
             ),
           ]),
       ],

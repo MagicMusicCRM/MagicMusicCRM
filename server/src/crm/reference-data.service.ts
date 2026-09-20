@@ -8,7 +8,6 @@ import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { CrmPolicy } from "./crm.policy";
-import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { requiredTrim } from "./crm-util";
 import { assertSettingsBranchScope } from "./settings-branch-scope";
 
@@ -25,11 +24,11 @@ interface LeadStatusRow {
 
 /**
  * CRM reference/catalog data, extracted from CrmService (SRP): lead statuses,
- * loss reasons, lead sources, disciplines and branch-discipline links, plus the
- * HolliHop metadata proxies. Leaf domain — touches only the reference tables
+ * loss reasons, lead sources, disciplines and branch-discipline links.
+ * Leaf domain — touches only the reference tables
  * (`app.lead_statuses`, `app.lead_loss_reasons`, `app.lead_sources`,
  * `app.disciplines`, `app.branch_disciplines`) and the shared
- * database/audit/policy/hollihop collaborators, no other CrmService internals.
+ * database/audit/policy collaborators, no other CrmService internals.
  */
 @Injectable()
 export class ReferenceDataService {
@@ -37,7 +36,6 @@ export class ReferenceDataService {
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
-    private readonly hollihop: HolliHopMetadataService,
   ) {}
 
   // ponytail: LeadStatusRow + toLeadStatusDto are duplicated from CrmService, which
@@ -236,26 +234,6 @@ export class ReferenceDataService {
         archiveReason: row.archive_reason,
       })),
     };
-  }
-
-  async listHolliHopDisciplines(actor: ActorContext) {
-    this.policy.assertCanWriteCrm(actor);
-    return this.hollihop.listDisciplines();
-  }
-
-  async listHolliHopLevels(actor: ActorContext) {
-    this.policy.assertCanWriteCrm(actor);
-    return this.hollihop.listLevels();
-  }
-
-  async listHolliHopCategories(actor: ActorContext) {
-    this.policy.assertCanWriteCrm(actor);
-    return this.hollihop.listCategories();
-  }
-
-  async listHolliHopLeadStatuses(actor: ActorContext) {
-    this.policy.assertCanWriteCrm(actor);
-    return this.hollihop.listLeadStatuses();
   }
 
   async createDiscipline(actor: ActorContext, dto: { name: string }) {

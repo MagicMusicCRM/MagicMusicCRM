@@ -1,7 +1,6 @@
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { CrmPolicy } from "./crm.policy";
-import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { ReferenceDataService } from "./reference-data.service";
 
 describe("ReferenceDataService", () => {
@@ -37,27 +36,13 @@ describe("ReferenceDataService", () => {
       assertCanManageSystemSettings: jest.fn(),
       assertCanManageClientConfiguration: jest.fn(),
     };
-    const hollihop = {
-      listDisciplines: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
-      listLevels: jest.fn().mockResolvedValue({ configured: false, items: [] }),
-      listCategories: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
-      listLeadStatuses: jest
-        .fn()
-        .mockResolvedValue({ configured: false, items: [] }),
-    };
-
     const service = new ReferenceDataService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      hollihop as unknown as HolliHopMetadataService,
     );
 
-    return { service, query, audit, policy, hollihop };
+    return { service, query, audit, policy };
   };
 
   it("restricts lead statuses to CRM writers", async () => {
@@ -173,45 +158,6 @@ describe("ReferenceDataService", () => {
     expect(query.mock.calls[0][0]).toContain("app.branch_disciplines");
     expect(query.mock.calls[0][1]).toEqual(["branch-1", false]);
     expect(query.mock.calls[0][0]).toContain("d.is_active");
-  });
-
-  it("proxies HolliHop metadata through CRM write policy", async () => {
-    const { service, policy, hollihop } = createService();
-    hollihop.listDisciplines.mockResolvedValueOnce({
-      configured: true,
-      items: ["Вокал"],
-    });
-    hollihop.listLevels.mockResolvedValueOnce({
-      configured: true,
-      items: ["Начальный"],
-    });
-    hollihop.listCategories.mockResolvedValueOnce({
-      configured: true,
-      items: ["Взрослые"],
-    });
-    hollihop.listLeadStatuses.mockResolvedValueOnce({
-      configured: true,
-      items: [{ externalId: "1", name: "Новый", color: null, sortOrder: 0 }],
-    });
-
-    await expect(service.listHolliHopDisciplines(actor)).resolves.toEqual({
-      configured: true,
-      items: ["Вокал"],
-    });
-    await expect(service.listHolliHopLevels(actor)).resolves.toEqual({
-      configured: true,
-      items: ["Начальный"],
-    });
-    await expect(service.listHolliHopCategories(actor)).resolves.toEqual({
-      configured: true,
-      items: ["Взрослые"],
-    });
-    await expect(service.listHolliHopLeadStatuses(actor)).resolves.toEqual({
-      configured: true,
-      items: [{ externalId: "1", name: "Новый", color: null, sortOrder: 0 }],
-    });
-
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledTimes(4);
   });
 
   it("creates a discipline", async () => {

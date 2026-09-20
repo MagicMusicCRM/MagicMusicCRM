@@ -24,7 +24,6 @@ import { CrmFinanceController } from "./crm-finance.controller";
 import { CrmLeadsController } from "./crm-leads.controller";
 import { CrmContactsController } from "./crm-contacts.controller";
 import { CrmAnalyticsSupportModule } from "./crm-analytics-support.module";
-import { HolliHopMetadataService } from "./hollihop-metadata.service";
 import { CrmService } from "./crm.service";
 import { BlacklistService } from "./blacklist.service";
 import { HomeworkService } from "./homework.service";
@@ -268,7 +267,6 @@ import { StudentLessonTimelineService } from "./schedule/student-lesson-timeline
     TeacherStatsReportService,
     TeacherStatsXlsxService,
     PayrollService,
-    HolliHopMetadataService,
     ScheduleSeriesWorker,
     CommentSharingService,
     ClientReferenceService,

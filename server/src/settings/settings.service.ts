@@ -17,6 +17,8 @@ import {
 } from "./dto/update-crm-custom-fields.dto";
 import {
   DEFAULT_CRM_CUSTOM_FIELDS,
+  crmFieldDisplayLabel,
+  findDefaultCrmField,
   type CrmCustomFieldDefinition,
 } from "./crm-custom-field-catalog";
 
@@ -365,12 +367,16 @@ export class SettingsService {
       const normalized: CrmCustomFieldDefinition = {
         entity,
         key,
-        label,
+        label: crmFieldDisplayLabel(key, label),
         type,
         required: raw.required === true,
       };
       const hint = this.normalizeOptionalText(raw.hint, 160);
-      if (hint) normalized.hint = hint;
+      if (hint) {
+        normalized.hint = key === "hollihopId" && /holl[yi][\s_-]*hop/i.test(hint)
+          ? findDefaultCrmField(key, entity)?.hint
+          : hint;
+      }
       if (type === "select") {
         normalized.options = this.normalizeOptions(raw.options);
       }

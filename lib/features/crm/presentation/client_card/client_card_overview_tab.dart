@@ -251,7 +251,7 @@ extension _ClientCardOverviewTab on _ClientCardState {
   // ── «Дополнительно» — HolliHop-поля без своей строки/пикера ───────────────
   // Reads from the student half first, then the lead half, so a converted
   // client shows whichever half carries the value.
-  String? _hhField(String key) {
+  String? _storedCustomField(String key) {
     for (final data in [
       if (_mode.hasStudentHalf) _student?['custom_data'],
       if (_mode.hasLeadHalf) _leadData['custom_data'],
@@ -279,7 +279,7 @@ extension _ClientCardOverviewTab on _ClientCardState {
   }
 
   String? _responsibleLabel() {
-    final name = _hhField('responsibleName');
+    final name = _storedCustomField('responsibleName');
     if (name != null) return name;
     // Fallback: first assignee's FullName from either half.
     for (final data in [
@@ -298,7 +298,8 @@ extension _ClientCardOverviewTab on _ClientCardState {
   }
 
   String? _visitDateLabel() {
-    final raw = _hhField('visitDate') ?? _hhField('visitDateTime');
+    final raw =
+        _storedCustomField('visitDate') ?? _storedCustomField('visitDateTime');
     if (raw == null) return null;
     final dt = DateTime.tryParse(raw);
     return dt != null ? DateFormat('d MMM yyyy', 'ru').format(dt) : raw;

@@ -86,9 +86,6 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.number().integer().min(0).default(1),
   }),
   LEAD_WEBHOOK_SECRET: Joi.string().allow("").min(32).default(""),
-  HOLLIHOP_BASE_URL: Joi.string().uri().default("https://sokol.t8s.ru/Api/V2/"),
-  HOLLIHOP_AUTH_KEY: Joi.string().allow("").default(""),
-  HOLLIHOP_TIMEOUT_MS: Joi.number().integer().min(100).max(30000).default(5000),
 });
 
 function productionWorkerFlag(nonProductionDefault = true) {

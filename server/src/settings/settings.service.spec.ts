@@ -23,6 +23,23 @@ describe("SettingsService", () => {
     return { service, query, audit, realtime };
   };
 
+  it("presents saved import fields without changing their stored identity", async () => {
+    const saved = [{
+      entity: "teachers", key: "hollihopId", label: "ID в HolliHop",
+      hint: "Идентификатор преподавателя в HolliHop после миграции",
+      type: "text", required: false,
+    }];
+    const { service, query } = createService([{ value: saved }]);
+    const result = await service.getCrmCustomFields(admin);
+    expect(result.fields).toEqual([{
+      ...saved[0], label: "Внешний ID",
+      hint: "Исходный идентификатор преподавателя при переносе данных",
+    }]);
+    expect(saved[0].label).toBe("ID в HolliHop");
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toContain("select");
+  });
+
   it("returns admin chat avatar setting for authenticated users", async () => {
     const { service, query } = createService([
       {
@@ -109,7 +126,7 @@ describe("SettingsService", () => {
         expect.objectContaining({
           entity: "students",
           key: "hollihopId",
-          label: "ID в HolliHop",
+          label: "Внешний ID",
         }),
         expect.objectContaining({
           entity: "students",

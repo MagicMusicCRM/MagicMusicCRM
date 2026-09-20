@@ -282,24 +282,4 @@ export class CrmReferenceDataController {
     return this.referenceLifecycle.history(actor, "branch_discipline", id);
   }
 
-  @Get("hollihop/disciplines")
-  listHolliHopDisciplines(@CurrentActor() actor: ActorContext) {
-    return this.referenceData.listHolliHopDisciplines(actor);
-  }
-
-  @Get("hollihop/levels")
-  listHolliHopLevels(@CurrentActor() actor: ActorContext) {
-    return this.referenceData.listHolliHopLevels(actor);
-  }
-
-  @Get("hollihop/categories")
-  listHolliHopCategories(@CurrentActor() actor: ActorContext) {
-    return this.referenceData.listHolliHopCategories(actor);
-  }
-
-  @Get("hollihop/lead-statuses")
-  listHolliHopLeadStatuses(@CurrentActor() actor: ActorContext) {
-    return this.referenceData.listHolliHopLeadStatuses(actor);
-  }
-
 }

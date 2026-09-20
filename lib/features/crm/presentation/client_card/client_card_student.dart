@@ -997,9 +997,9 @@ extension _ClientCardStudent on _ClientCardState {
 
   /// #9: статус из HolliHop — подписью под пикером статуса, а не отдельной
   /// строкой в «Дополнительно»: это одно и то же поле в двух системах.
-  String? get _hhStatusHelper {
-    final name = _hhField('statusName');
-    return name == null ? null : 'Статус в прежней системе: $name';
+  String? get _previousStatusHelper {
+    final name = _storedCustomField('statusName');
+    return name == null ? null : 'Предыдущий статус: $name';
   }
 
   Widget _buildStatusPicker(ColorScheme cs, StatusRecord current) {
@@ -1018,7 +1018,7 @@ extension _ClientCardStudent on _ClientCardState {
         decoration: _inputDecoration(
           cs,
           label: 'Статус',
-          helperText: _hhStatusHelper,
+          helperText: _previousStatusHelper,
           isDense: true,
         ),
         items: _statuses.map((s) {

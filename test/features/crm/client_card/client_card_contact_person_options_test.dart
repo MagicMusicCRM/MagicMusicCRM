@@ -77,6 +77,28 @@ Future<void> _expectConfiguredRelationOptions(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('keeps imported contact text without migration branding', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+
+    await _openContacts(
+      tester,
+      _UnifiedClientFieldApi(
+        customData: const {
+          'hollihopId': 'imported-42',
+          'contacts': 'Мама: +79991112233',
+        },
+      ),
+    );
+
+    expect(find.text('Дополнительные контакты'), findsOneWidget);
+    expect(find.text('Мама: +79991112233'), findsOneWidget);
+    expect(find.textContaining('прежней системы'), findsNothing);
+  });
+
   testWidgets(
     'shows configured relation options when adding a contact person',
     (tester) async {

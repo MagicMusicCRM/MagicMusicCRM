@@ -1,3 +1,4 @@
+import { crmFieldDisplayLabel } from "../../settings/crm-custom-field-catalog";
 import {
   ConflictException,
   Injectable,
@@ -401,7 +402,7 @@ export class ClientConfigService {
     return {
       id: row.id,
       key: row.field_key,
-      label: row.label,
+      label: crmFieldDisplayLabel(row.field_key, row.label),
       valueType: row.value_type,
       required: row.is_required,
       isActive: row.is_active && row.deleted_at === null,

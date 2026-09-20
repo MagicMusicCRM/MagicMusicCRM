@@ -13,7 +13,7 @@ const REJECTED_CRM_CUSTOM_FIELD_KEYS = new Set([
   "individualPrice",
 ]);
 
-const HOLLIHOP_SOURCE_OPTIONS = [
+const DEFAULT_SOURCE_OPTIONS = [
   "* брат нашего ученика",
   "* вотсап",
   "* вотсап/и др. соц сети",
@@ -44,11 +44,11 @@ const HOLLIHOP_SOURCE_OPTIONS = [
   "Сразу в: Watsapp/Telegram/Instagram + Коммент:Куда!",
   "ЯК",
 ];
-const HOLLIHOP_DISCIPLINE_OPTIONS = ["Барабаны", "Вокал", "Гитара", "Фортепиано"];
-const HOLLIHOP_LEVEL_OPTIONS = ["Без опыта", "Начальный", "Средний"];
-const HOLLIHOP_CATEGORY_OPTIONS = ["Взрослые", "Дети"];
-const HOLLIHOP_LEARNING_TYPE_OPTIONS = ["И.", "Общий", "С.", "Сертификат"];
-const HOLLIHOP_CONTACT_RELATION_OPTIONS = [
+const DEFAULT_DISCIPLINE_OPTIONS = ["Барабаны", "Вокал", "Гитара", "Фортепиано"];
+const DEFAULT_LEVEL_OPTIONS = ["Без опыта", "Начальный", "Средний"];
+const DEFAULT_CATEGORY_OPTIONS = ["Взрослые", "Дети"];
+const DEFAULT_LEARNING_TYPE_OPTIONS = ["И.", "Общий", "С.", "Сертификат"];
+const DEFAULT_CONTACT_RELATION_OPTIONS = [
   "бабушка",
   "даритель",
   "жена",
@@ -65,10 +65,10 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   {
     entity: "students",
     key: "hollihopId",
-    label: "ID в HolliHop",
+    label: "Внешний ID",
     type: "text",
     required: false,
-    hint: "Идентификатор ученика в HolliHop после миграции",
+    hint: "Исходный идентификатор ученика при переносе данных",
   },
   {
     entity: "students",
@@ -98,7 +98,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Направление",
     type: "select",
     required: false,
-    options: HOLLIHOP_DISCIPLINE_OPTIONS,
+    options: DEFAULT_DISCIPLINE_OPTIONS,
   },
   {
     entity: "students",
@@ -106,7 +106,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Уровень",
     type: "select",
     required: false,
-    options: HOLLIHOP_LEVEL_OPTIONS,
+    options: DEFAULT_LEVEL_OPTIONS,
   },
   {
     entity: "students",
@@ -114,7 +114,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Категория обучения",
     type: "select",
     required: false,
-    options: HOLLIHOP_CATEGORY_OPTIONS,
+    options: DEFAULT_CATEGORY_OPTIONS,
   },
   {
     entity: "students",
@@ -122,7 +122,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Тип обучения",
     type: "select",
     required: false,
-    options: HOLLIHOP_LEARNING_TYPE_OPTIONS,
+    options: DEFAULT_LEARNING_TYPE_OPTIONS,
   },
   {
     entity: "students",
@@ -130,7 +130,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Источник",
     type: "select",
     required: false,
-    options: HOLLIHOP_SOURCE_OPTIONS,
+    options: DEFAULT_SOURCE_OPTIONS,
   },
   {
     entity: "students",
@@ -187,7 +187,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Кем приходится",
     type: "select",
     required: false,
-    options: HOLLIHOP_CONTACT_RELATION_OPTIONS,
+    options: DEFAULT_CONTACT_RELATION_OPTIONS,
   },
   {
     entity: "students",
@@ -249,10 +249,10 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   {
     entity: "leads",
     key: "hollihopId",
-    label: "ID в HolliHop",
+    label: "Внешний ID",
     type: "text",
     required: false,
-    hint: "Идентификатор лида в HolliHop после миграции",
+    hint: "Исходный идентификатор лида при переносе данных",
   },
   {
     entity: "leads",
@@ -301,7 +301,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Источник заявки",
     type: "select",
     required: false,
-    options: HOLLIHOP_SOURCE_OPTIONS,
+    options: DEFAULT_SOURCE_OPTIONS,
   },
   {
     entity: "leads",
@@ -309,7 +309,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Рекламный источник",
     type: "select",
     required: false,
-    options: HOLLIHOP_SOURCE_OPTIONS,
+    options: DEFAULT_SOURCE_OPTIONS,
   },
   {
     entity: "leads",
@@ -331,7 +331,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Интересующее направление",
     type: "select",
     required: false,
-    options: HOLLIHOP_DISCIPLINE_OPTIONS,
+    options: DEFAULT_DISCIPLINE_OPTIONS,
   },
   {
     entity: "leads",
@@ -339,7 +339,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Уровень",
     type: "select",
     required: false,
-    options: HOLLIHOP_LEVEL_OPTIONS,
+    options: DEFAULT_LEVEL_OPTIONS,
   },
   {
     entity: "leads",
@@ -347,7 +347,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Категория обучения",
     type: "select",
     required: false,
-    options: HOLLIHOP_CATEGORY_OPTIONS,
+    options: DEFAULT_CATEGORY_OPTIONS,
   },
   {
     entity: "leads",
@@ -355,7 +355,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Тип обучения",
     type: "select",
     required: false,
-    options: HOLLIHOP_LEARNING_TYPE_OPTIONS,
+    options: DEFAULT_LEARNING_TYPE_OPTIONS,
   },
   {
     entity: "leads",
@@ -416,7 +416,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Кем приходится",
     type: "select",
     required: false,
-    options: HOLLIHOP_CONTACT_RELATION_OPTIONS,
+    options: DEFAULT_CONTACT_RELATION_OPTIONS,
   },
   {
     entity: "leads",
@@ -449,10 +449,10 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   {
     entity: "teachers",
     key: "hollihopId",
-    label: "ID в HolliHop",
+    label: "Внешний ID",
     type: "text",
     required: false,
-    hint: "Идентификатор преподавателя в HolliHop после миграции",
+    hint: "Исходный идентификатор преподавателя при переносе данных",
   },
   {
     entity: "teachers",
@@ -482,7 +482,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Основное направление",
     type: "select",
     required: false,
-    options: HOLLIHOP_DISCIPLINE_OPTIONS,
+    options: DEFAULT_DISCIPLINE_OPTIONS,
   },
   {
     entity: "teachers",
@@ -493,7 +493,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Уровни обучения",
     type: "select",
     required: false,
-    options: HOLLIHOP_LEVEL_OPTIONS,
+    options: DEFAULT_LEVEL_OPTIONS,
   },
   {
     entity: "teachers",
@@ -501,7 +501,7 @@ const LEGACY_DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Категории",
     type: "select",
     required: false,
-    options: HOLLIHOP_CATEGORY_OPTIONS,
+    options: DEFAULT_CATEGORY_OPTIONS,
   },
   {
     entity: "teachers",
@@ -548,7 +548,7 @@ export const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
     label: "Рекламный источник",
     type: "select",
     required: false,
-    options: HOLLIHOP_SOURCE_OPTIONS,
+    options: DEFAULT_SOURCE_OPTIONS,
   },
 ];
 
@@ -559,4 +559,11 @@ export function findDefaultCrmField(
   return DEFAULT_CRM_CUSTOM_FIELDS.find(
     (field) => field.key === key && (!entity || field.entity === entity),
   ) ?? null;
+}
+
+// Keep persisted import identifiers intact while retiring their old UI label.
+export function crmFieldDisplayLabel(key: string, label: string): string {
+  return key === "hollihopId" && /holl[yi][\s_-]*hop/i.test(label)
+    ? "Внешний ID"
+    : label;
 }

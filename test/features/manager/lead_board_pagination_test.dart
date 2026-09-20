@@ -19,6 +19,7 @@ class _LeadBoardApi extends MagicApiClient {
 
   static const statusA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   static const statusB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  final requestedPaths = <String>[];
   final boardQueries = <Map<String, dynamic>>[];
 
   Map<String, dynamic> _lead(
@@ -67,6 +68,7 @@ class _LeadBoardApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    requestedPaths.add(path);
     if (path == '/crm/leads/board') {
       final query = Map<String, dynamic>.from(queryParameters ?? const {});
       boardQueries.add(query);
@@ -193,14 +195,22 @@ class _LeadBoardApi extends MagicApiClient {
               'role': 'manager',
             },
           ],
-          '/crm/hollihop/disciplines' => <String, dynamic>{
-            'items': <String>['Вокал'],
+          '/crm/disciplines' => <String, dynamic>{
+            'items': [
+              {'id': 'discipline-a', 'name': 'Вокал'},
+            ],
           },
-          '/crm/hollihop/levels' => <String, dynamic>{
-            'items': <String>['Начальный'],
-          },
-          '/crm/hollihop/categories' => <String, dynamic>{
-            'items': <String>['Взрослый'],
+          '/crm/client-config/fields' => <String, dynamic>{
+            'items': [
+              {
+                'key': 'level',
+                'options': ['Начальный'],
+              },
+              {
+                'key': 'category',
+                'options': ['Взрослый'],
+              },
+            ],
           },
           '/crm/lead-statuses' => <String, dynamic>{
             'items': [
@@ -329,8 +339,30 @@ void main() {
       await tester.tap(find.text('Фильтры'));
       await tester.pumpAndSettle();
 
+      for (final filter in [
+        ('Направление', 'Вокал'),
+        ('Уровень', 'Начальный'),
+        ('Категория', 'Взрослый'),
+      ]) {
+        final dropdown = find.byKey(ValueKey('${filter.$1}:'));
+        await tester.ensureVisible(dropdown);
+        await tester.tap(dropdown);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text(filter.$2).last);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 2));
+      }
+      expect(api.requestedPaths, contains('/crm/disciplines'));
+      expect(api.requestedPaths, contains('/crm/client-config/fields'));
+      expect(
+        api.requestedPaths.where((path) => path.contains('hollihop')),
+        isEmpty,
+      );
+
       await tester.tap(find.byKey(const ValueKey('Источник:')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.text('Сайт').last);
       await tester.pump();
       await tester.pump(const Duration(seconds: 2));
@@ -362,6 +394,9 @@ void main() {
         api.boardQueries.any(
           (query) =>
               query['source'] == 'Сайт' &&
+              query['discipline'] == 'Вокал' &&
+              query['level'] == 'Начальный' &&
+              query['category'] == 'Взрослый' &&
               query['assignedTo'] == 'manager-a' &&
               query['requestType'] == 'Пробное занятие' &&
               query['sort'] == 'oldest',

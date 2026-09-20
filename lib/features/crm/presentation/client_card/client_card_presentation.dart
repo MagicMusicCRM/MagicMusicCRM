@@ -217,7 +217,7 @@ extension _ClientCardPresentation on _ClientCardState {
   /// одинаково достоверно.
   String? _appealAtSourceLabel(Map<String, dynamic> data) {
     return switch (data['appeal_at_source']?.toString()) {
-      'hollihop' => 'из прежней системы',
+      'hollihop' => 'исходная дата обращения',
       'app' => 'дата появления в приложении',
       _ => null,
     };
