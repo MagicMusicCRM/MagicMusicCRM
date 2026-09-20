@@ -1,26 +1,26 @@
 # Magic Music CRM
 
-Magic Music CRM — private production CRM для сети музыкальных школ. Клиент
-написан на Flutter, backend — NestJS/PostgreSQL; Redis и Socket.IO обеспечивают
-worker/realtime-контур. Интерфейс русский; тема — светлая Quiet Graphite & Sophisticated Gold.
+Закрытая CRM для сети музыкальных школ: клиенты и лиды, расписание занятий,
+абонементы и оплаты, задачи, мессенджер и отчётность. Клиент написан на Flutter,
+backend — NestJS/PostgreSQL. Интерфейс — на русском языке; единая светлая тема —
+Quiet Graphite & Sophisticated Gold.
 
-## Исторический срез на 11 августа 2026
+## Версии и статус
 
-Обновлено: 2026-08-11.
+README актуализирован 20 сентября 2026 года по исходникам и документации репозитория.
 
-- Production client: `1.5.1+181`.
-- Production API: `https://api.magicmusiccrm.ru/api`.
-- Server revision: hotfix `b04f177`, exact image `sha256:6e8fc887…`.
-- Production migration: `0118`.
-- Последний полный baseline: Flutter `667/667`; backend `158/158` suites,
-  `1259/1259` tests; backend build PASS.
-- Owner mega-UAT не завершён: `10 PASS`, `29 PARTIAL`, `61 PENDING`.
-- Обнаружен незавершённый organizational lifecycle: филиалы и группы можно
-  создавать, но нельзя штатно закрыть; room delete не проверяет активные связи;
-  offboarding Staff/Teacher не атомарно отзывает доступ.
+| Область | Зафиксированное состояние |
+| --- | --- |
+| Версия клиента в исходниках | `1.5.43+223`, см. [pubspec.yaml](pubspec.yaml) |
+| Последний документированный production-выпуск | `1.5.42+222` от 16 сентября 2026 года, tag `v1.5.42` |
+| Схема этого production-выпуска | `0156_trial_lesson_catalog` |
+| Приёмка выпуска 222 | Windows clean-install/upgrade UAT пропущен по решению владельца; Android проверен на локальной Debug-сборке, проверка подписанного релиза на физическом устройстве не заявляется |
 
-Подробный актуальный статус:
-`docs/architecture/NEXT-AGENT-HANDOFF.md`.
+Версия в исходниках не подтверждает публикацию. Текущая передача, ограничения
+и сведения о восстановлении находятся в
+[NEXT-AGENT-HANDOFF.md](docs/architecture/NEXT-AGENT-HANDOFF.md),
+доказательства выпуска — в [аудите 222](docs/audits/release-222-production.md).
+Указанный статус взят из этих документов; обновление README не включает live-проверку production.
 
 ## Архитектура
 
@@ -30,48 +30,103 @@ Flutter / Riverpod / GoRouter
         v
 NestJS API / backend RBAC / Socket.IO
         |
-        +--> PostgreSQL (canonical state and append-only facts)
-        +--> Redis (worker/realtime coordination)
+        +--> PostgreSQL (состояние, история, audit/outbox)
         +--> private file storage
 ```
 
-Supabase сохранён только для legacy export/import tooling и не является runtime
-зависимостью Flutter. HolliHop используется как backend-only источник импорта.
+Redis также описан в инфраструктурном Docker Compose. Для приведённого ниже
+локального запуска API используется PostgreSQL. Supabase сохранён для legacy
+export/import tooling и не является runtime-зависимостью Flutter; HolliHop
+используется как backend-only источник импорта.
 
-Основные решения: `docs/architecture/CURRENT-DECISIONS.md`.
-Продуктовые инварианты: `docs/product/CURRENT-PRODUCT-RULES.md`.
+- UI обращается к существующим services/providers; shared state — Riverpod.
+- Backend проверяет права и область доступа к ресурсам.
+- Денежные команды и операции с занятиями сохраняют транзакции, контроль версии,
+  идемпотентность, audit/outbox и неизменяемую историю фактов.
+- Организационные сущности с историческими связями закрываются через
+  preview/blockers/commit и архивирование.
+
+Подробности: [архитектурные решения](docs/architecture/CURRENT-DECISIONS.md)
+и [продуктовые правила](docs/product/CURRENT-PRODUCT-RULES.md).
 
 ## Структура репозитория
 
-```text
-lib/                 Flutter application
-test/                Flutter unit/widget tests
-integration_test/    Flutter integration smoke
-server/              NestJS API, workers, migrations and tests
-infra/               Docker, Caddy, backup and deployment tooling
-scripts/             Release, inventory and smoke helpers
-docs/                Current rules, runbooks, audits and release evidence
-```
+| Путь | Назначение |
+| --- | --- |
+| `lib/` | Flutter-приложение: общие компоненты, API, providers и функциональные разделы |
+| `test/`, `integration_test/` | Клиентские unit/widget и интеграционные проверки |
+| `server/src/`, `server/db/` | NestJS API, фоновые обработчики, тесты и SQL-миграции |
+| `infra/`, `scripts/` | Инфраструктура, backup, сборка, release и smoke-инструменты |
+| `docs/` | Продуктовые правила, архитектура, тестирование, runbooks и release evidence |
 
-## Локальный запуск
+Точки входа: [lib/main.dart](lib/main.dart) и [server/src/main.ts](server/src/main.ts).
 
-Требуются Flutter stable, Node.js/npm, PostgreSQL и Redis. Реальные env-файлы
-ignored и не должны попадать в Git.
+## Локальный запуск на Windows
+
+Нужны Flutter с Dart, совместимым с `^3.11.1`, Node.js 24/npm и PostgreSQL 17.
+Команды ниже используют Docker Compose для локальной БД. Для Flutter Windows
+должны быть установлены инструменты desktop-сборки; готовность проверяет `flutter doctor`.
+Все команды выполняются из корня репозитория в PowerShell.
+
+1. Установите зависимости и создайте локальный конфигурационный файл, если его ещё нет:
+
+   ```powershell
+   flutter pub get
+   npm --prefix server ci
+   if (-not (Test-Path server/.env)) {
+     Copy-Item server/.env.example server/.env
+   }
+   ```
+
+   Проверьте `server/.env` по [шаблону](server/.env.example): `DATABASE_URL` и
+   `MIGRATION_DATABASE_URL` должны указывать на локальную БД. Реальные env-файлы,
+   секреты и персональные данные не коммитятся. Email/push и внешние интеграции
+   требуют отдельной настройки провайдеров; шаблон не содержит их ключей.
+
+2. Запустите локальный PostgreSQL и примените миграции:
+
+   ```powershell
+   docker compose -f server/docker-compose.test.yml up -d --wait
+   $env:MIGRATION_DATABASE_URL = 'postgresql://magiccrm_owner:magiccrm_owner@localhost:54329/magiccrm'
+   npm --prefix server run db:migrate
+   Remove-Item Env:MIGRATION_DATABASE_URL
+   ```
+
+   Адрес соответствует проектному [Compose-файлу](server/docker-compose.test.yml)
+   и предназначен только для локальной разработки. Если проектная БД уже работает
+   на порту `54329`, повторно поднимать её не нужно. Мигратор читает переменные
+   процесса и самостоятельно не загружает `server/.env`; для другого локального
+   экземпляра замените адрес и согласуйте его с настройками API.
+
+3. Запустите API и оставьте терминал открытым:
+
+   ```powershell
+   npm --prefix server run start:dev
+   ```
+
+4. Во втором терминале проверьте API и запустите клиент:
+
+   ```powershell
+   Invoke-RestMethod http://localhost:3000/api/health
+   flutter run -d windows --dart-define=MAGIC_API_BASE_URL=http://localhost:3000/api --dart-define=MAGIC_PROFILE=local
+   ```
+
+   `MAGIC_API_BASE_URL` явно выбирает локальный backend: без него клиент по умолчанию
+   использует production API. `MAGIC_PROFILE=local` отделяет локальную сессию от
+   обычного профиля. Для проверки готовности БД и фоновых обработчиков доступен
+   `/api/health/ready`. Запуск API не заменяет подготовку локальных учётных записей
+   и данных для пользовательских сценариев.
+
+## Проверка изменений
+
+Для обычной правки запускайте затронутые тесты. Примеры из корня репозитория:
 
 ```powershell
-flutter pub get
-npm --prefix server ci
-npm --prefix server run start:dev
-flutter run --dart-define=MAGIC_API_BASE_URL=http://localhost:3000/api
+flutter test test/core/api/payment_contract_test.dart
+npm --prefix server test -- --runTestsByPath src/auth/session-postgres.integration.spec.ts
 ```
 
-Перед локальным запуском backend подготовьте ignored `server/.env` по
-актуальному deployment/runbook-контексту. Не копируйте production secrets в
-документацию или shell output.
-
-## Проверка
-
-Для обычной правки запускайте только затронутый тест. Полный baseline:
+Полный набор проверок кода:
 
 ```powershell
 flutter analyze
@@ -81,45 +136,45 @@ npm --prefix server run test:full
 npm --prefix server run build
 ```
 
-Серверный gate создаёт мигрированный шаблон и отдельную локальную БД на каждый
-suite; skipped/pending/todo и неполный набор не считаются PASS. Команды для
-отдельных файлов, режима без БД и свежего coverage:
-[docs/engineering/TESTING.md](docs/engineering/TESTING.md).
+Серверным тестам нужен локальный PostgreSQL из инструкции выше. Runner создаёт
+мигрированный шаблон и отдельную БД на каждый suite; полный gate отклоняет
+skipped/pending/todo и неполный набор. Настройки изоляции, режим без внешней БД
+и coverage описаны в [TESTING.md](docs/engineering/TESTING.md).
 
-Release и production используют отдельные scripts/runbooks, backup, rollback и
-reconciliation. Наличие успешных unit-тестов само по себе не закрывает owner
-UAT.
+Полный набор тестов не заменяет release gate и пользовательскую приёмку.
+Сквозные сценарии описаны в [RELEASE-JOURNEYS.md](docs/engineering/RELEASE-JOURNEYS.md).
+Исторические результаты проверок относятся только к проверенному кандидату.
 
-## RepoWise
+## Работа с репозиторием
 
-RepoWise — единственный активный code-intelligence слой проекта. Локальный
-индекс не коммитится.
+Начните с [AGENTS.md](AGENTS.md). RepoWise — основной инструмент навигации по
+коду и оценки риска; локальный индекс не коммитится.
 
-Для новой машины:
+Настройка на новой машине:
 
 ```powershell
 repowise init --no-prose --no-agents --no-claude-md --codex --no-editor-setup
+repowise doctor
 ```
 
-После структурных изменений:
+После серии структурных изменений:
 
 ```powershell
 repowise update --index-only
 ```
 
-Правила использования без лишней церемонии:
-`docs/engineering/REPOWISE-WORKFLOW.md`.
+Если индекс использует `mock`, отключён семантический поиск или уверенность
+низкая, вывод сверяется с живым исходником. Процесс описан в
+[REPOWISE-WORKFLOW.md](docs/engineering/REPOWISE-WORKFLOW.md).
 
-## Актуальные документы
+## Эксплуатация и документация
 
-- `AGENTS.md` — короткие правила для агентов.
-- `docs/architecture/NEXT-AGENT-HANDOFF.md` — production/UAT и ближайшие
-  продуктовые пробелы.
-- `docs/product/CURRENT-PRODUCT-RULES.md` — предметная модель и RBAC.
-- `docs/architecture/CURRENT-DECISIONS.md` — действующие архитектурные решения.
-- `docs/audits/2026-08-11-repowise-application-audit.md` — полный аудит
-  приложения и незавершённых lifecycle.
-- `docs/audits/v7-owner-production-mega-uat-result.md` — единственный текущий
-  статус 100 UAT-сценариев.
-- `docs/audits/v7-owner-mega-uat-evidence/README.md` — индекс доказательств.
-- `docs/runbooks/` — операционные runbooks.
+Production и deploy изменяются только по прямой команде владельца, со свежим
+backup, проверяемым планом восстановления и post-deploy reconciliation.
+Финансовая, учебная и audit-история сохраняется.
+
+- [Текущая передача и production/UAT](docs/architecture/NEXT-AGENT-HANDOFF.md).
+- [Продуктовые правила и RBAC](docs/product/CURRENT-PRODUCT-RULES.md).
+- [Архитектурные решения](docs/architecture/CURRENT-DECISIONS.md).
+- [Инфраструктура и развёртывание](infra/staging/README.md).
+- [Операционные runbooks](docs/runbooks/).
