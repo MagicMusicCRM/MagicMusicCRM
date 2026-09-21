@@ -78,3 +78,8 @@ Android certificate SHA-256 совпадает с production:
 Windows Setup остаётся unsigned, как и предыдущие выпуски. Автоматические
 проверки не заменяют ручной authenticated UAT новых экранов на production — его
 выполняет владелец этим выпуском.
+
+[GitHub Release v1.5.44](https://github.com/MagicMusicCRM/MagicMusicCRM/releases/tag/v1.5.44)
+опубликован не как draft/prerelease; размеры и SHA-256 всех четырёх assets
+совпали с локальными артефактами. Tag указывает на точный production source
+commit `e4e14b6ae80921b8f94a305c2fe85184d35ea9e7`.
