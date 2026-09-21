@@ -47,8 +47,8 @@ class ScheduleReferenceController extends ChangeNotifier {
     saving: _saving,
     error: _error,
   );
-  bool get availabilityLocked =>
-      _teacherDraft?.extraRecurring.isNotEmpty == true;
+  // Multiple recurring windows are a supported first-class draft shape.
+  bool get availabilityLocked => false;
 
   bool get canLoadReference => switch (section) {
     ScheduleReferenceSection.branchHours => _branchId != null,
@@ -259,7 +259,7 @@ class ScheduleReferenceController extends ChangeNotifier {
   }
 
   bool get _canEditDraft => canEdit && !_saving;
-  bool get _canEditAvailability => _canEditDraft && !availabilityLocked;
+  bool get _canEditAvailability => _canEditDraft;
 
   void _startLoading() {
     _loading = true;
@@ -305,6 +305,41 @@ class ScheduleReferenceController extends ChangeNotifier {
 }
 
 extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
+  List<Map<String, dynamic>> recurringRulesFor(int weekday) {
+    final draft = _teacherDraft;
+    return draft == null ? const [] : recurringRulesForDay(draft, weekday);
+  }
+
+  void addRecurringRule(int weekday) {
+    final draft = _teacherDraft;
+    if (!_canEditAvailability || draft == null) return;
+    _teacherDraft = withRecurringRuleAdded(
+      draft,
+      weekday,
+      timezone: _branchDraft?.timezone ?? 'Europe/Moscow',
+      validFrom: DateFormat('yyyy-MM-dd').format(_clock()),
+    );
+    _notify();
+  }
+
+  void updateRecurringRule(
+    Map<String, dynamic> rule,
+    String field,
+    Object? value,
+  ) {
+    final draft = _teacherDraft;
+    if (!_canEditAvailability || draft == null) return;
+    _teacherDraft = withRecurringRuleUpdated(draft, rule, field, value);
+    _notify();
+  }
+
+  void removeRecurringRule(Map<String, dynamic> rule) {
+    final draft = _teacherDraft;
+    if (!_canEditAvailability || draft == null) return;
+    _teacherDraft = withoutRecurringRule(draft, rule);
+    _notify();
+  }
+
   void setAssignment(String branchId, bool selected) {
     final draft = _teacherDraft;
     if (!_canEditDraft || draft == null) return;

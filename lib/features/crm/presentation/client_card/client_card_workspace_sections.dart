@@ -57,18 +57,9 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.xl,
-              AppSpace.xl,
-              AppSpace.md,
-              AppSpace.xl,
-            ),
-            child: SizedBox(
-              key: const Key('client-desktop-section-rail'),
-              width: 224,
-              child: _buildDesktopSectionJumps(cs, tabs),
-            ),
+          KeyedSubtree(
+            key: const Key('client-desktop-section-rail'),
+            child: _buildDesktopIdentitySidebar(cs, currentStatus, tabs),
           ),
           VerticalDivider(width: 1, color: cs.outlineVariant),
           Expanded(
@@ -78,12 +69,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               builder: (context, controller) => SingleChildScrollView(
                 key: const Key('client-desktop-canvas'),
                 controller: controller,
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpace.xl,
-                  AppSpace.xl,
-                  AppSpace.xl + AppSpace.sm,
-                  AppSpace.xxl,
-                ),
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 14),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1440),
@@ -93,7 +79,6 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
                             cs,
                             currentStatus,
                             tabs,
-                            wide: constraints.maxWidth >= 840,
                             canReadClientFinance: canReadClientFinance,
                             canReadSchedule: canReadSchedule,
                             canWriteSchedule: canWriteSchedule,
@@ -110,67 +95,21 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     );
   }
 
-  Widget _buildDesktopSectionJumps(
-    ColorScheme cs,
-    List<(IconData, String, String)> tabs,
-  ) {
-    final selectedSection = tabs.any((tab) => tab.$3 == _selectedSection)
-        ? _selectedSection
-        : tabs.first.$3;
-    return Semantics(
-      container: true,
-      label: 'Быстрый переход по карточке клиента',
-      child: Container(
-        key: const Key('client-desktop-section-jumps'),
-        padding: const EdgeInsets.all(AppSpace.md),
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: cs.outlineVariant),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var index = 0; index < tabs.length; index++) ...[
-              Semantics(
-                button: true,
-                selected: selectedSection == tabs[index].$3,
-                child: OutlinedButton.icon(
-                  key: Key('client-section-jump-${tabs[index].$3}'),
-                  onPressed: () => _selectSection(tabs[index].$3),
-                  style: OutlinedButton.styleFrom(
-                    alignment: Alignment.centerLeft,
-                    backgroundColor: selectedSection == tabs[index].$3
-                        ? AppColor.goldSoft
-                        : null,
-                  ),
-                  icon: Icon(tabs[index].$1, size: 16),
-                  label: Text(
-                    tabs[index].$2,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              if (index < tabs.length - 1) const SizedBox(height: AppSpace.sm),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildDesktopCardLayout(
     ColorScheme cs,
     StatusRecord currentStatus,
     List<(IconData, String, String)> tabs, {
-    required bool wide,
     required bool canReadClientFinance,
     required bool canReadSchedule,
     required bool canWriteSchedule,
     required bool canReadTasks,
   }) {
     final bySection = {for (final tab in tabs) tab.$3: tab};
+    final selected = _selectedSection == 'profile'
+        ? 'profile'
+        : bySection.containsKey(_selectedSection)
+        ? _selectedSection
+        : tabs.first.$3;
     Widget card(
       (IconData, String, String) tab, {
       _EqualHeightMetrics? equalHeight,
@@ -192,68 +131,40 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       ),
     );
 
-    if (!wide) {
-      return Column(
-        children: [
-          for (var index = 0; index < tabs.length; index++) ...[
-            card(tabs[index]),
-            if (index < tabs.length - 1) const SizedBox(height: AppSpace.lg),
-          ],
-        ],
-      );
-    }
-
-    final blocks = <Widget>[];
-    void add(Widget child) {
-      if (blocks.isNotEmpty) blocks.add(const SizedBox(height: AppSpace.lg));
-      blocks.add(child);
-    }
-
-    add(_buildDesktopAtGlance(cs));
-
-    final overview = bySection['overview'];
-    final contacts = bySection['contacts'];
-    if (overview != null && contacts != null) {
-      add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 2, child: card(overview)),
-            const SizedBox(width: AppSpace.lg),
-            Expanded(child: card(contacts)),
-          ],
+    if (selected == 'profile') {
+      return KeyedSubtree(
+        key: const Key('client-desktop-selected-profile'),
+        child: _desktopSectionCard(
+          cs,
+          key: _desktopSectionKeys['profile']!,
+          section: 'profile',
+          icon: Icons.badge_outlined,
+          title: 'Данные клиента',
+          child: _buildClientInfoTab(
+            cs,
+            currentStatus,
+            embedded: true,
+            canWriteSchedule: canWriteSchedule,
+          ),
         ),
       );
-    } else if (overview != null) {
-      add(card(overview));
     }
 
-    final lessons = bySection['lessons'];
-    if (lessons != null) add(card(lessons));
-
-    final subscriptions = bySection['subscriptions'];
-    final progress = bySection['progress'];
-    if (wide && subscriptions != null && progress != null) {
-      add(
-        _EqualHeightPair(
-          gap: AppSpace.lg,
-          leftBuilder: (metrics) => card(subscriptions, equalHeight: metrics),
-          rightBuilder: (metrics) => card(progress, equalHeight: metrics),
-        ),
+    final selectedTab = bySection[selected]!;
+    if (selected != 'overview') {
+      return KeyedSubtree(
+        key: Key('client-desktop-selected-$selected'),
+        child: card(selectedTab),
       );
-    } else {
-      if (subscriptions != null) add(card(subscriptions));
-      if (progress != null) add(card(progress));
     }
 
-    final payments = bySection['payments'];
-    if (payments != null) add(card(payments));
-
-    for (final section in const ['history_tasks']) {
-      final tab = bySection[section];
-      if (tab != null) add(card(tab));
-    }
-    return Column(children: blocks);
+    return _buildDesktopOverviewDashboard(
+      cs,
+      currentStatus,
+      canReadClientFinance: canReadClientFinance,
+      canReadSchedule: canReadSchedule,
+      canReadTasks: canReadTasks,
+    );
   }
 
   Widget _buildDesktopWorkspaceSection(

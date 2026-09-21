@@ -181,12 +181,14 @@ LessonEditorDraft _financialDraft({
   String rule = 'percent',
   String? valueMinor = '12000',
   String reason = 'Индивидуальная договорённость',
+  bool compensationTouched = false,
 }) => _draft().copyWith(
   clientChargeType: 'subscription',
   subscriptionId: 'subscription-a',
   compensationRuleKey: rule,
   compensationValueMinor: valueMinor,
   plannedSettlementReason: reason,
+  compensationTouched: compensationTouched,
 );
 
 LessonScheduleSectionModel _scheduleModel({
@@ -912,7 +914,7 @@ void main() {
     tester,
   ) async {
     final actions = _RecordingActions();
-    final draft = _financialDraft();
+    final draft = _financialDraft().copyWith(compensationTouched: true);
     await tester.pumpWidget(
       _host(
         SingleChildScrollView(
@@ -964,6 +966,53 @@ void main() {
     expect(find.text('Оплата ученика'), findsOneWidget);
     expect(find.text('Результат и расчёты'), findsOneWidget);
   });
+
+  testWidgets(
+    'teacher compensation is read-only until explicit checkbox confirmation',
+    (tester) async {
+      final actions = _RecordingActions();
+      final draft = _financialDraft();
+      await tester.pumpWidget(
+        _host(
+          SingleChildScrollView(
+            child: LessonFinancialSection(
+              model: LessonFinancialSectionModel(
+                session: _session(draft: draft),
+                draft: draft,
+                references: _financialReferences(),
+                isSaving: false,
+                requiresCompensationValue: true,
+                compensationNeedsReason: true,
+                canManageTeacherCompensation: true,
+              ),
+              actions: actions,
+              fundingFields: const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+
+      final toggle = find.byKey(
+        const ValueKey('lesson-compensation-edit-toggle'),
+      );
+      expect(toggle, findsOneWidget);
+      expect(
+        tester
+            .widget<AppDropdownButtonFormField<String>>(
+              find.byKey(const ValueKey('lesson-compensation-rule-field')),
+            )
+            .onChanged,
+        isNull,
+      );
+      expect(
+        find.byKey(const ValueKey('lesson-compensation-value-field')),
+        findsNothing,
+      );
+
+      await tester.tap(toggle);
+      expect(actions.compensationRule, draft.compensationRuleKey);
+    },
+  );
 
   testWidgets(
     'admin trial permission exposes rule selection without arbitrary rate fields',
@@ -1033,10 +1082,16 @@ void main() {
         );
         expect(find.byKey(const ValueKey('lesson-trial-toggle')), findsNothing);
         if (allowed) {
-          tester.widget<AppDropdownButtonFormField<String>>(rule).onChanged!(
-            'standard',
+          expect(
+            tester.widget<AppDropdownButtonFormField<String>>(rule).onChanged,
+            isNull,
           );
-          expect(actions.compensationRule, 'standard');
+          tester
+              .widget<CheckboxListTile>(
+                find.byKey(const ValueKey('lesson-compensation-edit-toggle')),
+              )
+              .onChanged!(true);
+          expect(actions.compensationRule, 'trial_lesson');
         }
         expect(tester.takeException(), isNull);
       }
@@ -1375,12 +1430,14 @@ void main() {
                         rule: rule,
                         valueMinor: valueMinor,
                         reason: reason,
+                        compensationTouched: true,
                       ),
                     ),
                     draft: _financialDraft(
                       rule: rule,
                       valueMinor: valueMinor,
                       reason: reason,
+                      compensationTouched: true,
                     ),
                     references: _financialReferences(),
                     isSaving: false,
@@ -1649,6 +1706,7 @@ void main() {
     final draft = _financialDraft(
       valueMinor: '13500',
       reason: 'Индивидуальная причина',
+      compensationTouched: true,
     );
     await tester.pumpWidget(
       _host(
@@ -1781,7 +1839,10 @@ void main() {
     tester.view.physicalSize = const Size(1400, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final draft = _financialDraft(valueMinor: '13500');
+    final draft = _financialDraft(
+      valueMinor: '13500',
+      compensationTouched: true,
+    );
     await tester.pumpWidget(
       _host(
         LessonEditorView(

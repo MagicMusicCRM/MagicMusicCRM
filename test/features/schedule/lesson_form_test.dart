@@ -386,9 +386,13 @@ class _FakeApiClient extends MagicApiClient {
                 <String, dynamic>{
                   'settlementTypes': const [
                     {
-                      'stableKey': 'trial_lesson', 'label': 'Пробный урок',
-                      'allowedContexts': ['settle'], 'active': true, 'order': 7,
-                      'hourShareBasisPoints': 0, 'clientDurationMode': 'zero',
+                      'stableKey': 'trial_lesson',
+                      'label': 'Пробный урок',
+                      'allowedContexts': ['settle'],
+                      'active': true,
+                      'order': 7,
+                      'hourShareBasisPoints': 0,
+                      'clientDurationMode': 'zero',
                       'teacherDurationMode': 'full',
                       'defaultTeacherCompensationRuleKey': 'trial_lesson',
                     },
@@ -415,8 +419,12 @@ class _FakeApiClient extends MagicApiClient {
                   ],
                   'teacherCompensationRules': const [
                     {
-                      'stableKey': 'trial_lesson', 'label': 'Пробный урок — без оплаты',
-                      'mode': 'none', 'value': '0', 'active': true, 'order': 5,
+                      'stableKey': 'trial_lesson',
+                      'label': 'Пробный урок — без оплаты',
+                      'mode': 'none',
+                      'value': '0',
+                      'active': true,
+                      'order': 5,
                     },
                     {
                       'stableKey': 'none',
@@ -703,6 +711,7 @@ Future<void> _selectRequiredResources(
   await tester.pumpAndSettle();
   await tester.tap(find.text('Бесплатное занятие').last);
   await tester.pumpAndSettle();
+  await _enableLessonCompensationOverride(tester);
   await tester.tap(
     find.byKey(const ValueKey('lesson-compensation-rule-field')),
   );
@@ -714,6 +723,15 @@ Future<void> _selectRequiredResources(
     clientName == 'Анна Лидова' ? _leadId : _studentId,
     'Без списания',
   );
+}
+
+Future<void> _enableLessonCompensationOverride(WidgetTester tester) async {
+  final toggle = find.byKey(const ValueKey('lesson-compensation-edit-toggle'));
+  final checkbox = tester.widget<CheckboxListTile>(toggle);
+  if (checkbox.value == true) return;
+  await tester.ensureVisible(toggle);
+  await tester.tap(toggle);
+  await tester.pumpAndSettle();
 }
 
 Future<void> _chooseFundingSource(
@@ -771,6 +789,7 @@ Future<void> _fillRescheduleDecision(
   await tester.pump();
   await tester.tap(find.text('Бесплатное занятие').last);
   await tester.pump(const Duration(milliseconds: 400));
+  await _enableLessonCompensationOverride(tester);
   await tester.ensureVisible(
     find.byKey(const Key('lesson-compensation-rule-field')),
   );
@@ -1188,6 +1207,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Бесплатное занятие').last);
       await tester.pumpAndSettle();
+      await _enableLessonCompensationOverride(tester);
       await tester.tap(
         find.byKey(const ValueKey('lesson-compensation-rule-field')),
       );
@@ -1408,8 +1428,12 @@ void main() {
       const ValueKey('lesson-room-field'),
       'Зал 1',
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('lesson-settlement-type-field')));
-    await tester.tap(find.byKey(const ValueKey('lesson-settlement-type-field')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('lesson-settlement-type-field')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('lesson-settlement-type-field')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Пробный урок').last);
     await tester.pumpAndSettle();
@@ -1423,38 +1447,50 @@ void main() {
     expect(body['clientChargeValue'], 0);
     expect(body, isNot(contains('subscriptionId')));
     expect(body['financialDecision']['settlementTypeKey'], 'trial_lesson');
-    expect(body['financialDecision']['teacherCompensationRuleKey'], 'trial_lesson');
+    expect(
+      body['financialDecision']['teacherCompensationRuleKey'],
+      'trial_lesson',
+    );
     expect(body['financialDecision']['teacherCompensationSource'], 'automatic');
     expect(body['financialDecision']['clientDecisions'], [
-      {'clientId': _studentId, 'chargeType': 'none', 'chargeDurationMinutes': 0},
+      {
+        'clientId': _studentId,
+        'chargeType': 'none',
+        'chargeDurationMinutes': 0,
+      },
     ]);
   });
 
-  testWidgets('trial remains free and preserves an explicit manual no-pay choice', (
-    tester,
-  ) async {
-    final client = _FakeApiClient();
-    await _pumpDialog(tester, client);
-    await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
-    await tester.ensureVisible(find.byKey(const ValueKey('lesson-settlement-type-field')));
-    await tester.tap(find.byKey(const ValueKey('lesson-settlement-type-field')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Пробный урок').last);
-    await tester.pumpAndSettle();
+  testWidgets(
+    'trial remains free and preserves an explicit manual no-pay choice',
+    (tester) async {
+      final client = _FakeApiClient();
+      await _pumpDialog(tester, client);
+      await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Пробный урок').last);
+      await tester.pumpAndSettle();
 
-    await _tapCreate(tester);
-    await tester.pumpAndSettle();
+      await _tapCreate(tester);
+      await tester.pumpAndSettle();
 
-    final body = client.lessonPosts.single;
-    expect(body['isTrial'], isTrue);
-    expect(body['clientChargeType'], 'none');
-    expect(body['clientChargeValue'], 0);
-    expect(body, isNot(contains('subscriptionId')));
-    expect(body['financialDecision']['settlementTypeKey'], 'trial_lesson');
-    expect(body['financialDecision']['teacherCompensationRuleKey'], 'none');
-    expect(body['financialDecision']['teacherCompensationSource'], 'manual');
-    expect(body['teacherCompensationValue'], 0);
-  });
+      final body = client.lessonPosts.single;
+      expect(body['isTrial'], isTrue);
+      expect(body['clientChargeType'], 'none');
+      expect(body['clientChargeValue'], 0);
+      expect(body, isNot(contains('subscriptionId')));
+      expect(body['financialDecision']['settlementTypeKey'], 'trial_lesson');
+      expect(body['financialDecision']['teacherCompensationRuleKey'], 'none');
+      expect(body['financialDecision']['teacherCompensationSource'], 'manual');
+      expect(body['teacherCompensationValue'], 0);
+    },
+  );
 
   testWidgets(
     'student defaults to a concrete active subscription in the create payload',
@@ -1632,6 +1668,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Занятие').last);
       await tester.pumpAndSettle();
+      await _enableLessonCompensationOverride(tester);
       await tester.tap(
         find.byKey(const ValueKey('lesson-compensation-rule-field')),
       );
@@ -1837,8 +1874,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('90 мин').last);
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const ValueKey('lesson-settlement-type-field')));
-      await tester.tap(find.byKey(const ValueKey('lesson-settlement-type-field')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Пробный урок').last);
       await tester.pumpAndSettle();
@@ -1913,8 +1954,14 @@ void main() {
             .value,
         90,
       );
-      expect(tester.state<FormFieldState<String>>(
-        find.byKey(const ValueKey('lesson-settlement-type-field'))).value, 'trial_lesson');
+      expect(
+        tester
+            .state<FormFieldState<String>>(
+              find.byKey(const ValueKey('lesson-settlement-type-field')),
+            )
+            .value,
+        'trial_lesson',
+      );
       expect(
         tester
             .widget<Text>(
@@ -2087,6 +2134,7 @@ void main() {
   ) async {
     final client = _FakeApiClient(decisionCatalog: _manualCompensationCatalog);
     await _pumpDialog(tester, client, lesson: _editableLesson());
+    await _enableLessonCompensationOverride(tester);
     final rule = find.byKey(const ValueKey('lesson-compensation-rule-field'));
     await tester.ensureVisible(rule);
     await tester.tap(rule);
@@ -2310,6 +2358,10 @@ void main() {
       await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Бесплатное занятие').last);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('lesson-decision-compensation-edit-toggle')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
       await tester.pumpAndSettle();

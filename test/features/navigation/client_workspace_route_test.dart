@@ -219,7 +219,7 @@ void main() {
             const Key('client-custom-fields-expansion'),
             skipOffstage: false,
           ),
-          findsOneWidget,
+          width < 840 ? findsOneWidget : findsNothing,
         );
         expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
         expect(tester.takeException(), isNull);
@@ -329,7 +329,7 @@ void main() {
   );
 
   testWidgets(
-    'desktop client card is one canvas with a lazy calendar after preferences',
+    'desktop client card uses a dense selected workspace with lazy calendar',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(1200, 900);
@@ -468,6 +468,10 @@ void main() {
 
       expect(find.byKey(const Key('client-desktop-canvas')), findsOneWidget);
       expect(
+        find.byKey(const Key('client-desktop-selected-overview')),
+        findsOneWidget,
+      );
+      expect(
         find.byKey(const Key('client-desktop-section-rail')),
         findsOneWidget,
       );
@@ -481,6 +485,7 @@ void main() {
       );
       for (final section in const [
         ('overview', 'Обзор'),
+        ('profile', 'Данные клиента'),
         ('contacts', 'Контакты'),
         ('lessons', 'Занятия'),
         ('subscriptions', 'Абонементы'),
@@ -497,10 +502,42 @@ void main() {
         );
         expect(
           find.byKey(Key('client-desktop-section-${section.$1}')),
-          findsOneWidget,
+          findsNothing,
         );
       }
       expect(find.text('Документы'), findsNothing);
+      expect(find.byKey(const Key('client-overview-core')), findsOneWidget);
+      expect(
+        find.byKey(const Key('client-overview-subscription')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('client-overview-next-lesson')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('client-section-jump-profile')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('client-desktop-selected-profile')),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextFormField, 'Имя'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('client-section-jump-lessons')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('client-desktop-selected-lessons')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('client-desktop-section-lessons')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('client-desktop-section-overview')),
+        findsNothing,
+      );
       expect(
         find.byKey(const Key('client-calendar-expansion')),
         findsOneWidget,
@@ -512,53 +549,6 @@ void main() {
       expect(find.text('Фактические занятия'), findsNothing);
       expect(find.text('Предстоящие'), findsNothing);
       expect(find.text('Прошедшие'), findsNothing);
-      expect(
-        tester
-            .getTopLeft(
-              find.byKey(const Key('client-desktop-section-overview')),
-            )
-            .dy,
-        tester
-            .getTopLeft(
-              find.byKey(const Key('client-desktop-section-contacts')),
-            )
-            .dy,
-      );
-      expect(
-        tester
-            .getTopLeft(
-              find.byKey(const Key('client-desktop-section-subscriptions')),
-            )
-            .dy,
-        tester
-            .getTopLeft(
-              find.byKey(const Key('client-desktop-section-progress')),
-            )
-            .dy,
-      );
-      for (final section in const ['subscriptions', 'progress']) {
-        expect(
-          tester
-              .getSize(find.byKey(Key('client-desktop-section-$section')))
-              .height,
-          greaterThan(0),
-          reason: section,
-        );
-      }
-      expect(
-        tester
-            .getTopLeft(
-              find.byKey(const Key('client-desktop-section-payments')),
-            )
-            .dy,
-        greaterThan(
-          tester
-              .getTopLeft(
-                find.byKey(const Key('client-desktop-section-subscriptions')),
-              )
-              .dy,
-        ),
-      );
       await tester.ensureVisible(
         find.byKey(const ValueKey('student-timeline-lesson-1')),
       );
@@ -831,6 +821,9 @@ void main() {
     );
     workspace.selectTab(clientTabId);
     await tester.pump();
+
+    await tester.tap(find.byKey(const Key('client-section-jump-profile')));
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Имя'),

@@ -2,10 +2,68 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_reference_gateway.dart';
 
 void main() {
+  testWidgets(
+    'existing base rate stays locked until the explicit confirmation checkbox',
+    (tester) async {
+      final key = GlobalKey<TeacherEmploymentFieldsState>();
+      const initial = TeacherEmploymentInitial(
+        branches: [
+          {'id': 'branch-a', 'name': 'Центральный'},
+        ],
+        rate: 750,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: TeacherEmploymentFields(
+                key: key,
+                gateway: _FakeTeacherEmploymentReferenceGateway(),
+                initial: initial,
+                requireRateConfirmation: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('teacher-rate-change-confirmation')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<AppDropdownButtonFormField<String>>(
+              find.byKey(const ValueKey('rate-mode-750')),
+            )
+            .onChanged,
+        isNull,
+      );
+
+      await tester.tap(
+        find.byKey(const Key('teacher-rate-change-confirmation')),
+      );
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<AppDropdownButtonFormField<String>>(
+              find.byKey(const ValueKey('rate-mode-750')),
+            )
+            .onChanged,
+        isNotNull,
+      );
+      expect(key.currentState!.validateAndRead()?.rateChanged, isFalse);
+    },
+  );
+
   testWidgets(
     'shared teacher fields return branches disciplines configured options and rate',
     (tester) async {

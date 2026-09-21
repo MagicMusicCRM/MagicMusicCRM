@@ -98,6 +98,7 @@ part 'client_card_comment_editor.dart';
 part 'client_card_family_access.dart';
 part 'client_card_workspace_sections.dart';
 part 'client_card_at_glance.dart';
+part 'client_card_desktop_dashboard.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
 /// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to
@@ -248,6 +249,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   final Map<String, GlobalKey> _desktopSectionKeys = {
     for (final section in [
       'overview',
+      'profile',
       'lessons',
       'payments',
       'subscriptions',

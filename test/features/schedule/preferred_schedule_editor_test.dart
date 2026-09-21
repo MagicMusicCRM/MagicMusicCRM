@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/preferred_schedule_editor.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
@@ -190,6 +191,56 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'plan compensation requires explicit checkbox before it can be changed',
+    (tester) async {
+      await _openEditor(
+        tester,
+        width: 840,
+        editor: const PreferredScheduleEditor(
+          branches: _branches,
+          teachers: _teachers,
+          rooms: _rooms,
+          defaultBranchId: 'branch-a',
+          planMode: true,
+          initialTitle: 'План',
+          canManageTeacherCompensation: true,
+          decisionCatalogs: {
+            'branch-a': LessonDecisionCatalog(
+              settlementTypes: [
+                LessonDecisionCatalogItem(
+                  key: 'visit',
+                  label: 'Визит',
+                  order: 0,
+                ),
+              ],
+              compensationRules: [
+                LessonDecisionCatalogItem(
+                  key: 'hourly',
+                  label: 'Почасовая',
+                  order: 0,
+                ),
+              ],
+            ),
+          },
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('schedule-plan-compensation-edit-toggle')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<AppDropdownButtonFormField<String>>(
+              find.byKey(const ValueKey('schedule-plan-compensation-rule')),
+            )
+            .onChanged,
+        isNull,
+      );
+    },
+  );
 
   for (final width in const [360.0, 840.0]) {
     testWidgets(

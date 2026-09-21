@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 
 import '../test/features/crm/client_card/card_fake_api.dart';
 import 'evidence_screenshot.dart';
@@ -38,10 +39,22 @@ void main() {
         {
           'id': 'history-1',
           'actionKey': 'crm.payment_reversed',
-          'action': 'Оплата удалена из статистики',
+          'title': 'Оплата удалена из статистики',
           'reason': 'Дубль банковской операции',
           'summary': 'Сумма: 3 000 ₽',
-          'actorName': 'Анна Администратор',
+          'actor': {
+            'id': 'manager-a',
+            'name': 'Анна Администратор',
+            'role': 'manager',
+          },
+          'target': {
+            'type': 'student',
+            'id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            'label': 'Анна Соколова',
+            'displayName': 'Анна Соколова',
+            'routeType': 'student',
+          },
+          'changes': <dynamic>[],
           'occurredAt': '2026-08-07T11:00:00.000Z',
         },
       ],
@@ -53,6 +66,22 @@ void main() {
       seed: _student,
       entityType: 'student',
       routed: true,
+      capabilitySnapshot: const CapabilitySnapshot(
+        accountId: 'manager-a',
+        role: 'manager',
+        accessVersion: 1,
+        capabilities: {
+          'crm.client.read.basic',
+          'crm.client.write',
+          'commerce.client_finance.read',
+          'commerce.client_finance.write',
+          'schedule.lesson.read.assigned',
+          'schedule.lesson.write',
+          'workflow.task.read',
+          'workflow.task.write',
+        },
+        scopes: {},
+      ),
     );
 
     expect(
@@ -61,31 +90,36 @@ void main() {
     );
     expect(
       find.byKey(const Key('subscription-add'), skipOffstage: false),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('assign-homework'), skipOffstage: false),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('Действия'), findsNothing);
-    expect(find.text('Важен звонок перед занятием'), findsOneWidget);
-    expect(find.text('Причина: Дубль банковской операции'), findsOneWidget);
-    expect(find.textContaining('Анна Администратор'), findsOneWidget);
+    expect(
+      find.byKey(const Key('client-desktop-selected-overview')),
+      findsOneWidget,
+    );
     await captureEvidence(tester, 'windows-client-workspace-overview');
+
+    await tester.tap(find.byKey(const Key('client-section-jump-profile')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('client-internal-note-input')),
+          )
+          .controller!
+          .text,
+      'Важен звонок перед занятием',
+    );
 
     await tester.enterText(
       find.byKey(const Key('client-internal-note-input')),
       'Позвонить за час',
     );
-    await tester.pump();
-    await tester.ensureVisible(
-      find.byKey(const Key('client-internal-note-save')),
-    );
-    tester
-        .widget<FilledButton>(
-          find.byKey(const Key('client-internal-note-save')),
-        )
-        .onPressed!();
+    await tester.pump(const Duration(milliseconds: 900));
     await tester.pumpAndSettle();
     expect(api.updateInternalNoteBody, {
       'body': 'Позвонить за час',
@@ -94,6 +128,30 @@ void main() {
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
+
+    await tester.tap(
+      find.byKey(const Key('client-section-jump-subscriptions')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('subscription-add')), findsOneWidget);
+    await captureEvidence(tester, 'windows-client-workspace-subscriptions');
+
+    await tester.tap(find.byKey(const Key('client-section-jump-progress')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('assign-homework')), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('client-section-jump-history_tasks')),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('audit-event-expand')));
+    await tester.tap(find.byKey(const Key('audit-event-expand')));
+    await tester.pumpAndSettle();
+    expect(find.text('Причина: Дубль банковской операции'), findsOneWidget);
+    expect(find.textContaining('Анна Администратор'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('client-section-jump-payments')));
+    await tester.pumpAndSettle();
 
     for (final key in const [
       Key('payment-movements-expansion'),

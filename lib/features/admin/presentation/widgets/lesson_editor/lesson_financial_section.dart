@@ -379,40 +379,69 @@ class _DecisionFields extends StatelessWidget {
     if (!model.canManageTeacherCompensation && !canSelectTrialRule) {
       return settlement;
     }
-    return _ResponsivePair(
-      first: settlement,
-      second: AppDropdownButtonFormField<String>(
-        menuMaxHeight: 256,
-        isExpanded: true,
-        key: const ValueKey('lesson-compensation-rule-field'),
-        initialValue: draft.compensationRuleKey,
-        decoration: InputDecoration(
-          labelText: 'Правило оплаты преподавателю *',
-          helperText: canSelectTrialRule && !model.canManageTeacherCompensation
-              ? 'Ручной выбор сохранится для этого занятия'
-              : 'Значение можно задать отдельно для этого занятия',
+    final compensationEditing = draft.compensationTouched;
+    final compensation = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CheckboxListTile(
+          key: const ValueKey('lesson-compensation-edit-toggle'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: compensationEditing,
+          onChanged: model.isSaving
+              ? null
+              : (enabled) => actions.edit(
+                  enabled == true
+                      ? LessonReferenceEdit(
+                          LessonReferenceTarget.compensationRule,
+                          draft.compensationRuleKey,
+                        )
+                      : const LessonRestoreRecommendationEdit(),
+                ),
+          title: const Text('Изменить оплату преподавателю вручную'),
+          subtitle: Text(
+            compensationEditing
+                ? 'Ручное исключение будет сохранено в расчёте занятия.'
+                : 'Сейчас действует рекомендуемое правило; поле защищено от случайного изменения.',
+          ),
         ),
-        items: [
-          for (final item in catalog?.compensationRules ?? const [])
-            DropdownMenuItem(
-              value: item.key,
-              child: Text(
-                item.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-        ],
-        onChanged: model.isSaving
-            ? null
-            : (value) => actions.edit(
-                LessonReferenceEdit(
-                  LessonReferenceTarget.compensationRule,
-                  value,
+        AppDropdownButtonFormField<String>(
+          menuMaxHeight: 256,
+          isExpanded: true,
+          key: const ValueKey('lesson-compensation-rule-field'),
+          initialValue: draft.compensationRuleKey,
+          decoration: InputDecoration(
+            labelText: 'Правило оплаты преподавателю *',
+            helperText:
+                canSelectTrialRule && !model.canManageTeacherCompensation
+                ? 'Ручной выбор сохранится для этого занятия'
+                : compensationEditing
+                ? 'Задано вручную для этого занятия'
+                : 'Включите чекбокс выше, чтобы изменить правило',
+          ),
+          items: [
+            for (final item in catalog?.compensationRules ?? const [])
+              DropdownMenuItem(
+                value: item.key,
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-      ),
+          ],
+          onChanged: model.isSaving || !compensationEditing
+              ? null
+              : (value) => actions.edit(
+                  LessonReferenceEdit(
+                    LessonReferenceTarget.compensationRule,
+                    value,
+                  ),
+                ),
+        ),
+      ],
     );
+    return _ResponsivePair(first: settlement, second: compensation);
   }
 }
 
@@ -424,7 +453,9 @@ class _CompensationOverride extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!model.requiresCompensationValue) return const SizedBox.shrink();
+    if (!model.draft.compensationTouched || !model.requiresCompensationValue) {
+      return const SizedBox.shrink();
+    }
     final draft = model.draft;
     final selectedRule = _catalogItem(
       model.references.catalog?.compensationRules,

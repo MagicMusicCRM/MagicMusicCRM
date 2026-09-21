@@ -80,6 +80,7 @@ class TeacherEmploymentFields extends StatefulWidget {
   final TeacherEmploymentInitial initial;
   final bool requireRate;
   final bool canManageRate;
+  final bool requireRateConfirmation;
   final bool enabled;
 
   const TeacherEmploymentFields({
@@ -88,6 +89,7 @@ class TeacherEmploymentFields extends StatefulWidget {
     this.initial = const TeacherEmploymentInitial(),
     this.requireRate = false,
     this.canManageRate = true,
+    this.requireRateConfirmation = false,
     this.enabled = true,
   });
 
@@ -116,6 +118,7 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
   bool _loading = true;
   bool _loadingDisciplines = false;
   bool _rateTouched = false;
+  bool _rateChangeConfirmed = false;
   num? _rate;
   String? _loadError;
   String? _selectionError;
@@ -315,11 +318,41 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
+            if (widget.requireRateConfirmation) ...[
+              CheckboxListTile(
+                key: const Key('teacher-rate-change-confirmation'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _rateChangeConfirmed,
+                onChanged: !widget.enabled
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _rateChangeConfirmed = value == true;
+                          if (!_rateChangeConfirmed) {
+                            _rate = widget.initial.rate;
+                            _rateTouched = false;
+                            _rateEffectiveFrom = null;
+                          }
+                        });
+                      },
+                title: const Text('Разрешить изменение базовой ставки'),
+                subtitle: const Text(
+                  'Включите только после проверки новой ставки и даты начала.',
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             TeacherRateSelector(
+              key: ValueKey(
+                'teacher-rate-${widget.initial.rate}-$_rateChangeConfirmed',
+              ),
               initialRate: widget.initial.rate,
               allowUnset: true,
               required: widget.requireRate,
-              enabled: widget.enabled,
+              enabled:
+                  widget.enabled &&
+                  (!widget.requireRateConfirmation || _rateChangeConfirmed),
               label: 'Базовая ставка, ₽/астр.ч. *',
               onChanged: (value) {
                 _rate = value;
@@ -332,7 +365,9 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
               value: _rateEffectiveFrom,
               firstDate: DateTime(2020),
               lastDate: DateTime(2100),
-              enabled: widget.enabled,
+              enabled:
+                  widget.enabled &&
+                  (!widget.requireRateConfirmation || _rateChangeConfirmed),
               onChanged: (value) => setState(() => _rateEffectiveFrom = value),
             ),
             const SizedBox(height: 12),

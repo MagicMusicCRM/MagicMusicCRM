@@ -48,6 +48,7 @@ class StaffDetailContent extends StatelessWidget {
         onLifecycle: onLifecycle,
         onRole: onRole,
         onLink: onLink,
+        embedded: embedded,
       ),
     );
     final saveButton = FilledButton.icon(
@@ -100,6 +101,7 @@ class _StaffDetailForm extends StatelessWidget {
     required this.onLifecycle,
     required this.onRole,
     required this.onLink,
+    required this.embedded,
   });
 
   final StaffDetailController controller;
@@ -108,6 +110,7 @@ class _StaffDetailForm extends StatelessWidget {
   final VoidCallback onLifecycle;
   final VoidCallback onRole;
   final StaffDetailLinkCallback onLink;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -135,6 +138,77 @@ class _StaffDetailForm extends StatelessWidget {
         ],
       ),
     );
+    final access = _StaffDetailSection(
+      title: 'Доступ в приложение',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _AccessRoleField(
+            controller: controller,
+            currentRole: currentRole,
+            onRole: onRole,
+          ),
+          _StaffAccessActions(
+            controller: controller,
+            currentRole: currentRole,
+            onProvision: onProvision,
+            onLifecycle: onLifecycle,
+            onLink: onLink,
+          ),
+        ],
+      ),
+    );
+    if (embedded) {
+      final staff = controller.staff;
+      return PersonnelSectionedCardBody(
+        keyPrefix: 'staff',
+        sections: [
+          PersonnelCardSection(
+            id: 'overview',
+            label: 'Обзор',
+            icon: Icons.dashboard_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _StaffSummary(controller: controller, currentRole: currentRole),
+                const SizedBox(height: 12),
+                _StaffDetailSection(
+                  title: 'Основные данные',
+                  child: _IdentityFields(
+                    controller: controller,
+                    currentRole: currentRole,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PersonnelCardSection(
+            id: 'employment',
+            label: 'Работа и филиалы',
+            icon: Icons.work_outline_rounded,
+            child: employment,
+          ),
+          PersonnelCardSection(
+            id: 'access',
+            label: 'Доступ',
+            icon: Icons.admin_panel_settings_outlined,
+            child: access,
+          ),
+          PersonnelCardSection(
+            id: 'history',
+            label: 'История',
+            icon: Icons.history_rounded,
+            child: PersonnelHistorySummary(
+              createdAt: staff['created_at'] ?? staff['createdAt'],
+              lifecycleState: staff['lifecycle_state']?.toString() ?? 'active',
+              offboardedAt: staff['offboarded_at'] ?? staff['offboardedAt'],
+              offboardReason:
+                  staff['offboard_reason'] ?? staff['offboardReason'],
+            ),
+          ),
+        ],
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 720;

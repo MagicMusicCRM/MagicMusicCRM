@@ -8,6 +8,8 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 
+import '../../support/modal_layout_evidence.dart';
+
 class _PersonnelApi extends MagicApiClient {
   _PersonnelApi()
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
@@ -62,11 +64,62 @@ class _PersonnelApi extends MagicApiClient {
           }
           as T;
     }
+    if (path == '/crm/branches') {
+      return <String, dynamic>{
+            'items': [
+              {'id': 'branch-a', 'name': 'Центр'},
+            ],
+          }
+          as T;
+    }
+    if (path == '/crm/teachers') {
+      return <String, dynamic>{
+            'items': [
+              {
+                'id': 'teacher-a',
+                'firstName': 'Мария',
+                'lastName': 'Соколова',
+                'status': 'active',
+              },
+            ],
+          }
+          as T;
+    }
+    if (path == '/crm/schedule-reference') {
+      return <String, dynamic>{
+            'branch': {
+              'version': 1,
+              'timezone': 'Europe/Moscow',
+              'weekly': <Map<String, dynamic>>[],
+              'exceptions': <Map<String, dynamic>>[],
+            },
+            'teacher': {
+              'version': 4,
+              'assignments': [
+                {'branchId': 'branch-a'},
+              ],
+              'availability': [
+                {
+                  'id': 'rule-a',
+                  'kind': 'recurring',
+                  'weekday': 1,
+                  'localStart': '10:00',
+                  'localEnd': '18:00',
+                  'validFrom': '2026-09-01',
+                  'timezone': 'Europe/Moscow',
+                },
+              ],
+            },
+          }
+          as T;
+    }
     return <String, dynamic>{'items': <dynamic>[]} as T;
   }
 }
 
 void main() {
+  setUpAll(loadModalFonts);
+
   testWidgets('personnel link opens the existing staff card', (tester) async {
     tester.view.physicalSize = const Size(1366, 768);
     tester.view.devicePixelRatio = 1;
@@ -80,25 +133,30 @@ void main() {
         'crm.client.read.basic',
         'schedule.lesson.read.assigned',
         'config.crm.read',
+        'config.crm.edit',
       },
       scopes: {},
     );
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          magicApiClientProvider.overrideWithValue(api),
-          capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: PersonnelWorkspace(
-              snapshot: snapshot,
-              initialLink: EntityLink.typed(
-                entityType: EntityLinkType.user,
-                entityId: 'staff-a',
-                variant: 'staff',
-                presentation: const EntityPresentationReference(
-                  primary: 'Анна Петрова',
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: ProviderScope(
+          overrides: [
+            magicApiClientProvider.overrideWithValue(api),
+            capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
+          ],
+          child: MaterialApp(
+            theme: ThemeData(fontFamily: 'Inter'),
+            home: Scaffold(
+              body: PersonnelWorkspace(
+                snapshot: snapshot,
+                initialLink: EntityLink.typed(
+                  entityType: EntityLinkType.user,
+                  entityId: 'staff-a',
+                  variant: 'staff',
+                  presentation: const EntityPresentationReference(
+                    primary: 'Анна Петрова',
+                  ),
                 ),
               ),
             ),
@@ -107,6 +165,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await captureModalLayout(tester, 'windows-staff-card-overview');
 
     expect(api.requests, contains('/crm/staff/staff-a'));
     expect(find.text('Карточка сотрудника'), findsOneWidget);
@@ -114,6 +173,17 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byKey(const Key('personnel-detail-pane')), findsOneWidget);
     expect(find.byKey(const Key('staff-detail-embedded')), findsOneWidget);
+    for (final section in const [
+      'overview',
+      'employment',
+      'access',
+      'history',
+    ]) {
+      expect(
+        find.byKey(Key('staff-personnel-section-$section')),
+        findsOneWidget,
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 
@@ -126,31 +196,37 @@ void main() {
     final api = _PersonnelApi();
     const snapshot = CapabilitySnapshot(
       accountId: 'account-a',
-      role: 'manager',
+      role: 'director',
       accessVersion: 1,
       capabilities: {
         'crm.client.read.basic',
         'schedule.lesson.read.assigned',
         'config.crm.read',
+        'config.crm.edit',
+        'commerce.teacher_payroll.write',
       },
       scopes: {},
     );
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          magicApiClientProvider.overrideWithValue(api),
-          capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: PersonnelWorkspace(
-              snapshot: snapshot,
-              initialLink: EntityLink.typed(
-                entityType: EntityLinkType.teacher,
-                entityId: 'teacher-a',
-                variant: 'personnel_teacher',
-                presentation: const EntityPresentationReference(
-                  primary: 'Мария Соколова',
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: ProviderScope(
+          overrides: [
+            magicApiClientProvider.overrideWithValue(api),
+            capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
+          ],
+          child: MaterialApp(
+            theme: ThemeData(fontFamily: 'Inter'),
+            home: Scaffold(
+              body: PersonnelWorkspace(
+                snapshot: snapshot,
+                initialLink: EntityLink.typed(
+                  entityType: EntityLinkType.teacher,
+                  entityId: 'teacher-a',
+                  variant: 'personnel_teacher',
+                  presentation: const EntityPresentationReference(
+                    primary: 'Мария Соколова',
+                  ),
                 ),
               ),
             ),
@@ -159,16 +235,60 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await captureModalLayout(tester, 'windows-teacher-card-overview');
 
     expect(api.requests, contains('/crm/teachers/teacher-a'));
     expect(find.text('Карточка преподавателя'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byKey(const Key('personnel-detail-pane')), findsOneWidget);
     expect(find.byKey(const Key('teacher-detail-embedded')), findsOneWidget);
-    expect(find.text('Основные данные и доступ'), findsOneWidget);
-    expect(find.text('Работа, филиалы и оплата'), findsOneWidget);
+    for (final section in const [
+      'overview',
+      'schedule',
+      'employment',
+      'access',
+      'history',
+    ]) {
+      expect(
+        find.byKey(Key('teacher-personnel-section-$section')),
+        findsOneWidget,
+      );
+    }
     expect(find.byKey(const Key('teacher-open-schedule')), findsOneWidget);
     expect(find.byKey(const Key('teacher-open-availability')), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('teacher-personnel-section-schedule')),
+    );
+    await tester.pumpAndSettle();
+    await captureModalLayout(tester, 'windows-teacher-card-availability');
+    expect(api.requests, contains('/crm/branches'));
+    expect(api.requests, contains('/crm/teachers'));
+    expect(api.requests, contains('/crm/schedule-reference'));
+    expect(find.text('Доступность преподавателя'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('teacher-availability-add-1')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextButton>(
+            find.byKey(const ValueKey('teacher-availability-add-1')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(find.text('Недоступность по датам'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('teacher-personnel-section-employment')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('teacher-rate-change-confirmation')),
+      findsOneWidget,
+    );
+    await captureModalLayout(tester, 'windows-teacher-card-rate-guard');
     expect(tester.takeException(), isNull);
   });
 }

@@ -201,7 +201,7 @@ class LessonDecisionFormContent extends StatelessWidget {
             onSubscriptionChanged: onSubscriptionChanged,
             onChargeTypeChanged: onChargeTypeChanged,
           ),
-        if (canManageTeacherCompensation)
+        if (canManageTeacherCompensation && compensationTouched)
           LessonDecisionCompensationSection(
             completedReschedule: completedReschedule,
             rule: compensationRule,
@@ -388,23 +388,49 @@ class LessonDecisionOptionsSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpace.md),
       ],
-      if (canManageTeacherCompensation)
+      if (canManageTeacherCompensation) ...[
+        CheckboxListTile(
+          key: const Key('lesson-decision-compensation-edit-toggle'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: compensationTouched,
+          onChanged: !enabled
+              ? null
+              : (value) {
+                  if (value == true) {
+                    onCompensationChanged(compensationKey);
+                  } else {
+                    onRestoreRecommendation();
+                  }
+                },
+          title: const Text('Изменить оплату преподавателю вручную'),
+          subtitle: Text(
+            compensationTouched
+                ? 'Изменение будет сохранено с причиной и историей.'
+                : 'Действует рекомендуемое правило; поле защищено.',
+          ),
+        ),
         AppDropdownButtonFormField<String>(
           menuMaxHeight: 256,
           key: const Key('lesson-decision-compensation'),
           initialValue: compensationKey,
           isExpanded: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Оплата преподавателю *',
-            helperText: 'Выбирается сотрудником независимо от списания',
+            helperText: compensationTouched
+                ? 'Задано вручную независимо от списания'
+                : 'Включите чекбокс выше, чтобы изменить правило',
           ),
           items: [
             for (final item in catalog.compensationRules)
               DropdownMenuItem(value: item.key, child: Text(item.label)),
           ],
           validator: (value) => value == null ? 'Выберите оплату' : null,
-          onChanged: enabled ? onCompensationChanged : null,
+          onChanged: enabled && compensationTouched
+              ? onCompensationChanged
+              : null,
         ),
+      ],
       if (canManageTeacherCompensation &&
           _catalogItem(
                 catalog.settlementTypes,

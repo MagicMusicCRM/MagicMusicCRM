@@ -612,6 +612,10 @@ Future<void> _openAndFill(
   expect(find.text('Занятие'), findsNothing);
   await tester.tap(find.text('Бесплатное занятие').last);
   await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(const Key('lesson-decision-compensation-edit-toggle')),
+  );
+  await tester.pumpAndSettle();
   await tester.ensureVisible(
     find.byKey(const Key('lesson-decision-compensation')),
   );
@@ -890,6 +894,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Частично оплачиваемый пропуск'), findsNothing);
       await tester.tap(find.text('Оплачиваемый пропуск').last);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('lesson-decision-compensation-edit-toggle')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
       await tester.pumpAndSettle();
@@ -1562,6 +1570,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Бесплатное занятие').last);
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('lesson-decision-compensation-edit-toggle')),
+    );
+    await tester.pumpAndSettle();
     await tester.ensureVisible(
       find.byKey(const Key('lesson-decision-compensation')),
     );
@@ -1691,6 +1703,10 @@ void main() {
       await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Занятие').last);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('lesson-decision-compensation-edit-toggle')),
+      );
       await tester.pumpAndSettle();
       await tester.ensureVisible(
         find.byKey(const Key('lesson-decision-compensation')),

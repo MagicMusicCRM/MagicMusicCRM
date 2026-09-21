@@ -161,27 +161,17 @@ class TeacherAvailabilityCard extends StatelessWidget {
             )
           : null,
       children: [
-        if (controller.availabilityLocked)
-          const ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.lock_outline_rounded),
-            title: Text('Сложная схема доступности'),
-            subtitle: Text(
-              'На один день задано несколько правил. '
-              'Редактор не изменяет их, чтобы не потерять данные.',
-            ),
-          ),
+        const Text(
+          'Для каждого дня можно задать несколько рабочих интервалов и срок действия. '
+          'Разовые занятые периоды добавляются ниже.',
+        ),
+        const SizedBox(height: 12),
         for (final day in scheduleReferenceDayNames.entries)
-          ScheduleTimeRow(
+          _TeacherRecurringDayEditor(
+            weekday: day.key,
             label: day.value,
-            value: draft?.recurring[day.key],
+            controller: controller,
             editable: canMutate,
-            startKey: 'localStart',
-            endKey: 'localEnd',
-            onEnabled: (enabled) =>
-                controller.setRecurringEnabled(day.key, enabled),
-            onTime: (field, value) =>
-                controller.setRecurringTime(day.key, field, value),
           ),
         const Divider(height: 28),
         Row(
@@ -225,6 +215,181 @@ class TeacherAvailabilityCard extends StatelessWidget {
   Future<void> _addInterval(BuildContext context) async {
     final interval = await showUnavailableIntervalDialog(context);
     if (interval != null) controller.addUnavailableInterval(interval);
+  }
+}
+
+class _TeacherRecurringDayEditor extends StatelessWidget {
+  const _TeacherRecurringDayEditor({
+    required this.weekday,
+    required this.label,
+    required this.controller,
+    required this.editable,
+  });
+
+  final int weekday;
+  final String label;
+  final ScheduleReferenceController controller;
+  final bool editable;
+
+  @override
+  Widget build(BuildContext context) {
+    final rules = controller.recurringRulesFor(weekday);
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      key: ValueKey('teacher-availability-day-$weekday'),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton.icon(
+                key: ValueKey('teacher-availability-add-$weekday'),
+                onPressed: editable
+                    ? () => controller.addRecurringRule(weekday)
+                    : null,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Интервал'),
+              ),
+            ],
+          ),
+          if (rules.isEmpty)
+            Text(
+              'Рабочие интервалы не заданы',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            )
+          else
+            for (final rule in rules)
+              _TeacherRecurringRuleRow(
+                rule: rule,
+                controller: controller,
+                editable: editable,
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeacherRecurringRuleRow extends StatelessWidget {
+  const _TeacherRecurringRuleRow({
+    required this.rule,
+    required this.controller,
+    required this.editable,
+  });
+
+  final Map<String, dynamic> rule;
+  final ScheduleReferenceController controller;
+  final bool editable;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = rule['localStart']?.toString() ?? '09:00';
+    final end = rule['localEnd']?.toString() ?? '21:00';
+    final validFrom = DateTime.tryParse(rule['validFrom']?.toString() ?? '');
+    final validUntil = DateTime.tryParse(rule['validUntil']?.toString() ?? '');
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          TextButton.icon(
+            onPressed: editable
+                ? () => _pickTime(context, 'localStart', start)
+                : null,
+            icon: const Icon(Icons.schedule_rounded, size: 16),
+            label: Text(start),
+          ),
+          const Text('—'),
+          TextButton(
+            onPressed: editable
+                ? () => _pickTime(context, 'localEnd', end)
+                : null,
+            child: Text(end),
+          ),
+          TextButton.icon(
+            onPressed: editable
+                ? () => _pickDate(context, 'validFrom', validFrom)
+                : null,
+            icon: const Icon(Icons.event_available_outlined, size: 16),
+            label: Text(
+              'с ${validFrom == null ? 'сегодня' : DateFormat('dd.MM.yyyy').format(validFrom)}',
+            ),
+          ),
+          TextButton.icon(
+            onPressed: editable
+                ? () => _pickDate(context, 'validUntil', validUntil)
+                : null,
+            icon: const Icon(Icons.event_busy_outlined, size: 16),
+            label: Text(
+              validUntil == null
+                  ? 'без срока'
+                  : 'до ${DateFormat('dd.MM.yyyy').format(validUntil)}',
+            ),
+          ),
+          if (validUntil != null)
+            IconButton(
+              tooltip: 'Убрать дату окончания',
+              onPressed: editable
+                  ? () =>
+                        controller.updateRecurringRule(rule, 'validUntil', null)
+                  : null,
+              icon: const Icon(Icons.event_busy_rounded, size: 18),
+            ),
+          IconButton(
+            tooltip: 'Удалить рабочий интервал',
+            onPressed: editable
+                ? () => controller.removeRecurringRule(rule)
+                : null,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickTime(
+    BuildContext context,
+    String field,
+    String current,
+  ) async {
+    final next = await pickScheduleTime(context, current);
+    if (next != null) controller.updateRecurringRule(rule, field, next);
+  }
+
+  Future<void> _pickDate(
+    BuildContext context,
+    String field,
+    DateTime? current,
+  ) async {
+    final now = DateUtils.dateOnly(DateTime.now());
+    final next = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (next != null) {
+      controller.updateRecurringRule(
+        rule,
+        field,
+        DateFormat('yyyy-MM-dd').format(next),
+      );
+    }
   }
 }
 

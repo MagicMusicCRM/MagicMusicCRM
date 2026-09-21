@@ -469,18 +469,51 @@ class _DecisionFields extends StatelessWidget {
               onChanged: onSettlementChanged,
             ),
             if (canManageTeacherCompensation)
-              _dropdown(
-                key: const ValueKey('schedule-plan-compensation-rule'),
-                label: 'Оплата преподавателю *',
-                helperText: 'Сотрудник выбирает правило явно',
-                value: state.teacherCompensationRuleKey,
-                items: _itemsWithStoredValue(
-                  catalog?.compensationRules ?? const [],
-                  state.teacherCompensationRuleKey,
-                ),
-                onChanged: onCompensationChanged,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  CheckboxListTile(
+                    key: const ValueKey(
+                      'schedule-plan-compensation-edit-toggle',
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: state.compensationTouched,
+                    onChanged: (enabled) {
+                      if (enabled == true) {
+                        onCompensationChanged(
+                          state.teacherCompensationRuleKey ??
+                              catalog?.compensationRules.firstOrNull?.key,
+                        );
+                      } else {
+                        onApplyRecommendation();
+                      }
+                    },
+                    title: const Text('Изменить оплату преподавателю вручную'),
+                    subtitle: Text(
+                      state.compensationTouched
+                          ? 'Исключение будет сохранено для постоянного расписания.'
+                          : 'Действует рекомендуемое правило; изменение заблокировано.',
+                    ),
+                  ),
+                  _dropdown(
+                    key: const ValueKey('schedule-plan-compensation-rule'),
+                    label: 'Оплата преподавателю *',
+                    helperText: state.compensationTouched
+                        ? 'Задано вручную'
+                        : 'Включите чекбокс выше, чтобы изменить правило',
+                    value: state.teacherCompensationRuleKey,
+                    items: _itemsWithStoredValue(
+                      catalog?.compensationRules ?? const [],
+                      state.teacherCompensationRuleKey,
+                    ),
+                    onChanged: onCompensationChanged,
+                    enabled: state.compensationTouched,
+                  ),
+                ],
               ),
             if (canManageTeacherCompensation &&
+                state.compensationTouched &&
                 settlement?.teacherDurationMode == 'manual')
               _MinutesField(
                 key: const ValueKey('schedule-plan-teacher-minutes'),
@@ -537,6 +570,7 @@ class _DecisionFields extends StatelessWidget {
     required String? value,
     required List<LessonDecisionCatalogItem> items,
     required ValueChanged<String?> onChanged,
+    bool enabled = true,
   }) => AppDropdownButtonFormField<String>(
     menuMaxHeight: 256,
     isExpanded: true,
@@ -550,7 +584,7 @@ class _DecisionFields extends StatelessWidget {
           child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
     ],
-    onChanged: onChanged,
+    onChanged: enabled ? onChanged : null,
   );
 
   List<LessonDecisionCatalogItem> _itemsWithStoredValue(

@@ -279,6 +279,10 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
         snapshot != null &&
         (snapshot.allows('config.crm.read') ||
             snapshot.allows('system.settings.manage'));
+    final canEditAvailability =
+        snapshot != null &&
+        (snapshot.allows('config.crm.edit') ||
+            snapshot.allows('system.settings.manage'));
     final content = TeacherDetailContent(
       teacher: _teacher,
       nameController: _nameController,
@@ -293,12 +297,14 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       canManageTeacherRates: canManageTeacherRates,
       canOpenSchedule: canOpenSchedule,
       canOpenAvailability: canOpenAvailability,
+      canEditAvailability: canEditAvailability,
       saving: _saving,
       onOpenSchedule: () => unawaited(_openSchedule()),
       onOpenAvailability: () => unawaited(_openAvailability()),
       onProvisionAccess: _provisionAccess,
       onManageLifecycle: _manageLifecycle,
       onChangeAccessRole: _changeAccessRole,
+      embedded: widget.embedded,
     );
     final saveButton = FilledButton.icon(
       key: const Key('teacher-detail-save'),

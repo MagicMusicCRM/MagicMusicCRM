@@ -97,48 +97,52 @@ void main() {
       controller.dispose();
     });
 
-    test('duplicate recurring rules stay preserved and lock editing', () async {
-      final api = _ScheduleReferenceApi(
-        teacherAvailability: const [
-          {
-            'kind': 'recurring',
-            'available': true,
-            'timezone': 'Europe/Moscow',
-            'weekday': 1,
-            'localStart': '09:00',
-            'localEnd': '13:00',
-            'validFrom': '2026-01-01',
-          },
-          {
-            'kind': 'recurring',
-            'available': true,
-            'timezone': 'Europe/Moscow',
-            'weekday': 1,
-            'localStart': '14:00',
-            'localEnd': '18:00',
-            'validFrom': '2026-01-01',
-          },
-        ],
-      );
-      final controller = _controller(api);
+    test(
+      'multiple recurring windows stay editable and preserve every rule',
+      () async {
+        final api = _ScheduleReferenceApi(
+          teacherAvailability: const [
+            {
+              'kind': 'recurring',
+              'available': true,
+              'timezone': 'Europe/Moscow',
+              'weekday': 1,
+              'localStart': '09:00',
+              'localEnd': '13:00',
+              'validFrom': '2026-01-01',
+            },
+            {
+              'kind': 'recurring',
+              'available': true,
+              'timezone': 'Europe/Moscow',
+              'weekday': 1,
+              'localStart': '14:00',
+              'localEnd': '18:00',
+              'validFrom': '2026-01-01',
+            },
+          ],
+        );
+        final controller = _controller(api);
 
-      await controller.loadCatalogs();
-      expect(controller.availabilityLocked, isTrue);
-      controller.setRecurringTime(1, 'localStart', '08:00');
-      expect(
-        controller.state.teacherDraft!.recurring[1]!['localStart'],
-        '09:00',
-      );
+        await controller.loadCatalogs();
+        expect(controller.availabilityLocked, isFalse);
+        expect(controller.recurringRulesFor(1), hasLength(2));
+        final afternoon = controller.recurringRulesFor(1).last;
+        controller.updateRecurringRule(afternoon, 'localStart', '15:00');
+        controller.addRecurringRule(1);
+        expect(controller.recurringRulesFor(1), hasLength(3));
+        expect(controller.recurringRulesFor(1)[1]['localStart'], '15:00');
 
-      await controller.saveAvailability();
-      final rules =
-          api.lastPut(
-                '/crm/schedule-reference/teachers/teacher-a/availability',
-              )['rules']!
-              as List<dynamic>;
-      expect(rules.where((rule) => rule['weekday'] == 1), hasLength(2));
-      expect(rules, contains(containsPair('localStart', '14:00')));
-    });
+        await controller.saveAvailability();
+        final rules =
+            api.lastPut(
+                  '/crm/schedule-reference/teachers/teacher-a/availability',
+                )['rules']!
+                as List<dynamic>;
+        expect(rules.where((rule) => rule['weekday'] == 1), hasLength(3));
+        expect(rules, contains(containsPair('localStart', '15:00')));
+      },
+    );
 
     test('late schedule response cannot replace the newer selection', () async {
       final first = Completer<Map<String, dynamic>>();
