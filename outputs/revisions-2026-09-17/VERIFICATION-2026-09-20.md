@@ -7,17 +7,22 @@
 
 | Контур | Проверка | Результат |
 |---|---|---|
-| Карточка клиента | Windows device `client_workspace_device_test.dart` | PASS: Holli Hop-подобный первый экран, переход к полной форме, заметка, абонементы, прогресс, история и оплаты; сохранены снимки `ui-evidence/candidate-2026-09-21/` |
+| Карточка клиента | Windows device `client_workspace_device_test.dart` | PASS: desktop и compact-сценарии, RBAC и связь исходного лида; Holli Hop-подобный первый экран, переход к полной форме, заметка, абонементы, прогресс, история и оплаты; сохранены снимки `ui-evidence/candidate-2026-09-21/` |
 | Карточки Staff/Teacher | `personnel_deep_link_test.dart` | PASS: секционные embedded-карточки, прямые ссылки, график/недоступность внутри Teacher |
 | Недоступность | `schedule_reference_controller_test.dart` и сценарий Teacher | PASS: несколько регулярных интервалов одного дня доступны для добавления, изменения и удаления; датированная недоступность остаётся в каноническом редакторе |
 | Защита ставки/компенсации | Teacher employment, lesson editor, decision flow, recurring plan | PASS: четыре UI-пути требуют явного чекбокса; отмена подтверждения восстанавливает исходное значение |
-| Регрессия Flutter | 8 целевых test-файлов | 166 тестов прошли |
-| Статика | изменённые client/personnel/schedule файлы | `No issues found` |
+| Полная регрессия Flutter | `flutter test --reporter compact` | 1853 теста прошли, 4 штатно пропущены, 0 падений |
+| Целевая регрессия UI | client/personnel/schedule/modal/homework | 35 тестов прошли после исправления старых ожиданий прежней карточки |
+| Статика | 11 изменённых client/personnel/schedule/test файлов | `No issues found` |
+| Риск изменения | RepoWise `get_change_risk(f4b137377)` | Типичный, 38,9-й перцентиль, умеренный приоритет; coverage map отсутствует, поэтому выполнен полный Flutter-набор |
 
-Полный `flutter analyze lib test integration_test --no-fatal-infos` не нашёл
-ошибок в изменённом коде, но возвращает ненулевой статус из-за 30 ранее
-существовавших info-lints в соседних live-тестах. Целевой анализ изменённых
-файлов чистый.
+Полный `flutter analyze` всего workspace возвращает ненулевой статус из-за
+ранее существовавших незакоммиченных Dart-фрагментов в
+`outputs/crm-function-map-2026-09-10/`; это не исходный код приложения, и он
+не изменялся. Целевой анализ 11 изменённых файлов чистый.
+
+Корректирующий UI сохранён коммитами `b88d523ed` и `f4b137377`. Production и
+deploy для этих коммитов не выполнялись.
 
 > Исторический предрелизный отчёт. Кандидат позднее выпущен в production как
 > `1.5.44+224`; актуальные backup, restore, cutover, reconciliation и публичные
