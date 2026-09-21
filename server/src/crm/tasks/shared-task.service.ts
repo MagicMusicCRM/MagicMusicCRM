@@ -13,6 +13,7 @@ import {
   CloseSharedTaskDto,
   CreateSharedTaskDto,
   SharedTaskListQuery,
+  SharedTaskResultsQuery,
   UpdateSharedTaskDto,
 } from "../dto/shared-task.dto";
 import { SharedTaskRepository } from "./shared-task.repository";
@@ -38,6 +39,8 @@ export interface CloseResultRef extends TaskResultRef {
   closedAt: string;
   closedBy: string;
   closeRequestId: string;
+  resultCode: string | null;
+  resultLabel: string | null;
 }
 
 const aggregateType = "workflow:shared-task";
@@ -179,9 +182,7 @@ export class SharedTaskService {
 
   async list(actor: ActorContext, query: SharedTaskListQuery) {
     this.policy.assertCanReadOperationalData(actor);
-    if (
-      (query.linkedEntityType == null) !== (query.linkedEntityId == null)
-    ) {
+    if ((query.linkedEntityType == null) !== (query.linkedEntityId == null)) {
       this.invalid(
         "linkedEntity",
         "Тип и идентификатор связанного объекта обязательны вместе.",
@@ -221,7 +222,10 @@ export class SharedTaskService {
   async calendar(actor: ActorContext, query: SharedTaskListQuery) {
     this.policy.assertCanReadOperationalData(actor);
     if (!query.from || !query.to) {
-      this.invalid("range", "Для календаря обязательны начало и конец периода.");
+      this.invalid(
+        "range",
+        "Для календаря обязательны начало и конец периода.",
+      );
     }
     const from = new Date(query.from);
     const to = new Date(query.to);
@@ -260,6 +264,73 @@ export class SharedTaskService {
     };
   }
 
+  async results(actor: ActorContext, query: SharedTaskResultsQuery) {
+    this.policy.assertManagerOnly(actor);
+    if ((query.from == null) !== (query.to == null)) {
+      this.invalid("range", "Укажите начало и конец периода вместе.");
+    }
+    if (query.from && query.to) {
+      const from = new Date(query.from);
+      const to = new Date(query.to);
+      if (to <= from || to.getTime() - from.getTime() > 370 * 86_400_000) {
+        this.invalid("range", "Период результатов должен быть не больше года.");
+      }
+    }
+    const result = await this.repository.listResults(actor.userId, {
+      from: query.from,
+      to: query.to,
+      branchId: query.branchId,
+      closedBy: query.closedBy,
+      resultCode: query.resultCode,
+      q: query.q?.trim() || undefined,
+      late: query.late == null ? undefined : query.late === "true",
+      includeUndated: query.includeUndated === "true",
+      limit: query.limit ?? 500,
+    });
+    const first = result.rows[0];
+    return {
+      items: result.rows.map((row) => ({
+        taskId: row.task_id,
+        title: row.title,
+        body: row.body,
+        client:
+          row.linked_entity_id &&
+          ["lead", "student", "profile"].includes(row.linked_entity_type ?? "")
+            ? {
+                type: row.linked_entity_type,
+                id: row.linked_entity_id,
+                label: row.linked_entity_label,
+              }
+            : null,
+        audiences: row.audiences,
+        plannedStartAt: row.planned_start_at,
+        plannedAllDay: row.planned_all_day,
+        closedAt: row.closed_at,
+        closedBy: row.closed_by
+          ? {
+              id: row.closed_by,
+              label: row.closed_by_name,
+              entityType: row.closed_by_entity_type,
+              entityId: row.closed_by_entity_id,
+            }
+          : null,
+        wasOverdue: row.was_overdue,
+        result: row.result_code
+          ? {
+              code: row.result_code,
+              label: row.result_label,
+              comment: row.comment,
+            }
+          : null,
+      })),
+      summary: {
+        closed: Number(first?.total_count ?? 0),
+        overdue: Number(first?.overdue_count ?? 0),
+        withoutResult: Number(first?.missing_result_count ?? 0),
+      },
+    };
+  }
+
   async history(actor: ActorContext, taskId: string) {
     const task = await this.resolve(actor, taskId);
     const result = await this.repository.history(task.id);
@@ -268,9 +339,10 @@ export class SharedTaskService {
         id: row.id,
         action: row.action,
         actorUserId: row.actor_user_id,
-        actorName: [row.actor_first_name, row.actor_last_name]
-          .filter(Boolean)
-          .join(" ") || null,
+        actorName:
+          [row.actor_first_name, row.actor_last_name]
+            .filter(Boolean)
+            .join(" ") || null,
         before: row.before_ref,
         after: row.after_ref,
         occurredAt:
@@ -300,6 +372,7 @@ export class SharedTaskService {
     this.assertMetadata(metadata);
     const scoped = await this.resolve(actor, taskId);
     if (scoped.closed_at) return this.closeDto(scoped);
+    const closeValues = this.validateClose(dto);
     const affectedUserIds = (
       await this.repository.reminderRecipients(taskId)
     ).rows.map((row) => row.user_id);
@@ -315,13 +388,17 @@ export class SharedTaskService {
           aggregateType,
           aggregateId: taskId,
           expectedVersion: dto.expectedVersion,
-          payload: { taskId },
+          payload: { taskId, ...closeValues },
           audit: {
             action: "workflow.shared_task_closed",
             entityType: "shared_task",
             entityId: taskId,
             beforeRef: { state: "open" },
-            afterRef: { state: "closed" },
+            afterRef: {
+              state: "closed",
+              resultCode: closeValues.resultCode,
+              resultLabel: closeValues.resultLabel,
+            },
             metadata: {
               changes: [
                 {
@@ -329,6 +406,14 @@ export class SharedTaskService {
                   from: "Открыта",
                   to: "Закрыта",
                   label: "Статус задачи",
+                  valueType: "text",
+                  displayMode: "values",
+                },
+                {
+                  field: "result",
+                  from: null,
+                  to: closeValues.resultLabel,
+                  label: "Результат выполнения",
                   valueType: "text",
                   displayMode: "values",
                 },
@@ -340,7 +425,8 @@ export class SharedTaskService {
             payload: { taskId },
           },
           mutate: async (client, version) => {
-            const current = (await this.repository.lock(client, taskId)).rows[0];
+            const current = (await this.repository.lock(client, taskId))
+              .rows[0];
             if (!current) throw new NotFoundException("Задача не найдена.");
             const close = (
               await this.repository.close(
@@ -348,6 +434,16 @@ export class SharedTaskService {
                 taskId,
                 actor.userId,
                 metadata.requestId,
+                {
+                  ...closeValues,
+                  plannedStartAt: current.start_at,
+                  plannedAllDay: current.all_day,
+                  wasOverdue: isTaskOverdue({
+                    state: current.state,
+                    startAt: current.start_at,
+                    allDay: current.all_day,
+                  }),
+                },
               )
             ).rows[0]!;
             await client.query(
@@ -438,15 +534,10 @@ export class SharedTaskService {
     };
   }
 
-  private async validateAudiences(
-    audiences: CreateSharedTaskDto["audiences"],
-  ) {
+  private async validateAudiences(audiences: CreateSharedTaskDto["audiences"]) {
     const seen = new Set<string>();
     for (const audience of audiences) {
-      if (
-        audience.type === "allBranches" &&
-        audience.targetId !== undefined
-      ) {
+      if (audience.type === "allBranches" && audience.targetId !== undefined) {
         this.invalid(
           "audiences",
           "Для всей школы идентификатор филиала не используется.",
@@ -479,7 +570,8 @@ export class SharedTaskService {
   private async buildAudiencePreview(
     audiences: CreateSharedTaskDto["audiences"],
   ) {
-    const rows = (await this.repository.previewAudienceRecipients(audiences)).rows;
+    const rows = (await this.repository.previewAudienceRecipients(audiences))
+      .rows;
     const selectors = audiences.map((audience, index) => {
       const matches = rows.filter(
         (row) => row.selector_index === index && row.user_id != null,
@@ -488,10 +580,12 @@ export class SharedTaskService {
       return {
         type: audience.type,
         ...(audience.targetId ? { targetId: audience.targetId } : {}),
-        label: row?.selector_label ??
+        label:
+          row?.selector_label ??
           (audience.type === "allBranches" ? "Вся школа" : "Получатель"),
         mode: audience.type === "user" ? "fixed" : "dynamic",
-        currentRecipientCount: new Set(matches.map((item) => item.user_id)).size,
+        currentRecipientCount: new Set(matches.map((item) => item.user_id))
+          .size,
       };
     });
     const recipients = new Map<
@@ -617,6 +711,24 @@ export class SharedTaskService {
         status: reminder.status,
       })),
       hasReminder: reminders.length > 0,
+      closure:
+        "close_id" in row && row.close_id
+          ? {
+              id: row.close_id,
+              closedAt: row.closed_at,
+              closedBy: row.closed_by,
+              result: row.close_result_code
+                ? {
+                    code: row.close_result_code,
+                    label: row.close_result_label,
+                    comment: row.close_comment,
+                  }
+                : null,
+              plannedStartAt: row.close_planned_start_at ?? row.start_at,
+              plannedAllDay: row.close_planned_all_day ?? row.all_day,
+              wasOverdue: row.close_was_overdue,
+            }
+          : null,
     };
   }
 
@@ -628,6 +740,8 @@ export class SharedTaskService {
       closedAt: new Date(row.closed_at!).toISOString(),
       closedBy: row.closed_by!,
       closeRequestId: row.close_request_id!,
+      resultCode: row.close_result_code,
+      resultLabel: row.close_result_label,
     };
   }
 
@@ -643,7 +757,25 @@ export class SharedTaskService {
       closedAt: new Date(close.closed_at).toISOString(),
       closedBy: close.closed_by,
       closeRequestId: close.request_id,
+      resultCode: close.result_code!,
+      resultLabel: close.result_label!,
     };
+  }
+
+  private validateClose(dto: CloseSharedTaskDto) {
+    const resultCode = dto.resultCode?.trim();
+    const resultLabel = dto.resultLabel?.trim();
+    const comment = dto.comment?.trim() || null;
+    if (!resultCode || !/^[a-z0-9][a-z0-9._-]*$/.test(resultCode)) {
+      this.invalid("resultCode", "Выберите результат выполнения задачи.");
+    }
+    if (!resultLabel) {
+      this.invalid("resultLabel", "Выберите результат выполнения задачи.");
+    }
+    if (resultCode === "other" && !comment) {
+      this.invalid("comment", "Для результата «Другое» добавьте пояснение.");
+    }
+    return { resultCode, resultLabel, comment };
   }
 
   private auditRef(row: SharedTaskRow) {
@@ -674,7 +806,11 @@ export class SharedTaskService {
   }
 
   private deterministicId(seed: string): string {
-    const hex = createHash("sha256").update(seed).digest("hex").slice(0, 32).split("");
+    const hex = createHash("sha256")
+      .update(seed)
+      .digest("hex")
+      .slice(0, 32)
+      .split("");
     hex[12] = "4";
     hex[16] = ["8", "9", "a", "b"][parseInt(hex[16]!, 16) % 4]!;
     const value = hex.join("");

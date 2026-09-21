@@ -309,6 +309,12 @@ class EntityRouteRegistry {
         optionalFocus: EntityLinkFocus(focus: 'users', filter: focus.filter),
         variant: 'configuration',
       ),
+      'personnel' => EntityLink.typed(
+        entityType: EntityLinkType.report,
+        entityId: '__section__',
+        optionalFocus: focus,
+        variant: 'personnel',
+      ),
       'homework' => EntityLink.typed(
         entityType: EntityLinkType.homework,
         entityId: '__section__',
@@ -340,6 +346,9 @@ class EntityRouteRegistry {
   }
 
   static String _sectionFor(EntityLink link) => switch (link.entityType) {
+    EntityLinkType.user when link.rawEntityType == 'staff' => 'personnel',
+    EntityLinkType.teacher when link.rawEntityType == 'personnel_teacher' =>
+      'personnel',
     EntityLinkType.report
         when link.rawEntityType == 'lesson_list' &&
             const {
@@ -352,6 +361,7 @@ class EntityRouteRegistry {
     EntityLinkType.report when link.rawEntityType == 'overview' => 'overview',
     EntityLinkType.report when link.rawEntityType == 'configuration' =>
       'configuration',
+    EntityLinkType.report when link.rawEntityType == 'personnel' => 'personnel',
     EntityLinkType.client ||
     EntityLinkType.subscription ||
     EntityLinkType.comment ||
@@ -379,6 +389,7 @@ class EntityRouteRegistry {
 
   static String _sectionTitle(String section) => switch (section) {
     'clients' => 'Клиенты',
+    'personnel' => 'Персонал',
     'schedule' => 'Расписание',
     'tasks' => 'Задачи',
     'finance' => 'Финансы',
@@ -392,9 +403,19 @@ class EntityRouteRegistry {
   };
 
   static Set<String> _requiredCapabilitiesFor(EntityLink link) {
+    if ((link.entityType == EntityLinkType.user &&
+            link.rawEntityType == 'staff') ||
+        (link.entityType == EntityLinkType.teacher &&
+            link.rawEntityType == 'personnel_teacher')) {
+      return const {'crm.client.read.basic'};
+    }
     if (link.entityType == EntityLinkType.report &&
         link.rawEntityType == 'configuration') {
       return const {'config.crm.read', 'system.settings.manage'};
+    }
+    if (link.entityType == EntityLinkType.report &&
+        link.rawEntityType == 'personnel') {
+      return const {'crm.client.read.basic'};
     }
     if (link.entityType == EntityLinkType.report &&
         link.rawEntityType == 'lesson_list' &&
@@ -522,9 +543,14 @@ class EntityRouteRegistry {
       ),
     ),
     EntityLinkType.user: EntityRouteRegistration(
-      isAllowed: (_, snapshot) => snapshot.allows('system.settings.manage'),
-      buildLocation: (link, snapshot) =>
-          _staffRoute(link, snapshot, 'configuration'),
+      isAllowed: (link, snapshot) => link.rawEntityType == 'staff'
+          ? snapshot.allows('crm.client.read.basic')
+          : snapshot.allows('system.settings.manage'),
+      buildLocation: (link, snapshot) => _staffRoute(
+        link,
+        snapshot,
+        link.rawEntityType == 'staff' ? 'personnel' : 'configuration',
+      ),
     ),
     EntityLinkType.homework: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('crm.client.read.basic'),
@@ -580,6 +606,8 @@ class EntityRouteRegistry {
           snapshot,
           link.rawEntityType == 'configuration'
               ? 'configuration'
+              : link.rawEntityType == 'personnel'
+              ? 'personnel'
               : isSchedule
               ? 'schedule'
               : link.rawEntityType == 'overview'
@@ -589,12 +617,17 @@ class EntityRouteRegistry {
       },
     ),
     EntityLinkType.teacher: EntityRouteRegistration(
-      isAllowed: (_, snapshot) => _hasAny(snapshot, const {
-        'schedule.lesson.read.assigned',
-        'schedule.lesson.write',
-      }),
-      buildLocation: (link, snapshot) =>
-          _staffRoute(link, snapshot, 'schedule'),
+      isAllowed: (link, snapshot) => link.rawEntityType == 'personnel_teacher'
+          ? snapshot.allows('crm.client.read.basic')
+          : _hasAny(snapshot, const {
+              'schedule.lesson.read.assigned',
+              'schedule.lesson.write',
+            }),
+      buildLocation: (link, snapshot) => _staffRoute(
+        link,
+        snapshot,
+        link.rawEntityType == 'personnel_teacher' ? 'personnel' : 'schedule',
+      ),
     ),
     EntityLinkType.group: EntityRouteRegistration(
       isAllowed: (_, snapshot) => _hasAny(snapshot, const {

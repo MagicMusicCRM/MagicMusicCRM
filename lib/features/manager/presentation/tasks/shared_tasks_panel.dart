@@ -12,7 +12,9 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_details.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_close_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_results_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_view.dart';
@@ -27,6 +29,8 @@ class SharedTasksPanel extends ConsumerStatefulWidget {
     this.scrollController,
     this.canWrite,
     this.defaultToMineToday = false,
+    this.canViewResults,
+    this.onOpenResultEntity,
   });
 
   final SharedTasksDataSource? dataSource;
@@ -36,6 +40,8 @@ class SharedTasksPanel extends ConsumerStatefulWidget {
   final ScrollController? scrollController;
   final bool? canWrite;
   final bool defaultToMineToday;
+  final bool? canViewResults;
+  final ValueChanged<EntityLink>? onOpenResultEntity;
 
   @override
   ConsumerState<SharedTasksPanel> createState() => _SharedTasksPanelState();
@@ -48,6 +54,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
   ProviderSubscription<AsyncValue<CrmChangedEvent>>? _realtimeSubscription;
   ProviderSubscription<CrmSectionFocus?>? _sectionFocusSubscription;
   bool _focusConsumed = false;
+  bool _showResults = false;
 
   @override
   void initState() {
@@ -214,8 +221,11 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
   }
 
   Future<void> _close(Map<String, dynamic> task) async {
-    final result = await _controller.close(task);
-    if (result.succeeded && mounted) {
+    final closed = await showSharedTaskCloseDialog(
+      context,
+      onSubmit: (input) => _controller.close(task, input),
+    );
+    if (closed == true && mounted) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Задача закрыта.')));
@@ -290,8 +300,14 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
     );
   }
 
+  Future<void> _openResultEntity(EntityLink link) async {
+    if (!link.isSupported) return;
+    await openEntityLink(context, ref, link);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final snapshot = ref.read(capabilitySnapshotProvider).value;
     final canCreate = widget.canWrite ?? false;
     final canEdit =
         widget.canWrite ??
@@ -300,6 +316,29 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
                 .value
                 ?.allows('workflow.task.write') ==
             true;
+    final canViewResults =
+        widget.canViewResults ??
+        (snapshot?.allows('report.status.read') == true &&
+            const {
+              'admin',
+              'manager',
+              'director',
+              'system_admin',
+            }.contains(snapshot?.role));
+    if (_showResults && canViewResults && !widget.embedded) {
+      return SharedTaskResultsPanel(
+        dataSource: _dataSource,
+        onBack: () => setState(() => _showResults = false),
+        onOpenEntity: (link) {
+          final callback = widget.onOpenResultEntity;
+          if (callback != null) {
+            callback(link);
+          } else {
+            unawaited(_openResultEntity(link));
+          }
+        },
+      );
+    }
     return SharedTasksView(
       state: _controller.state,
       onQueryChanged: (query) => unawaited(_controller.setQuery(query)),
@@ -313,6 +352,9 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
       onRefresh: _load,
       canCreate: canCreate,
       canEdit: canEdit,
+      onOpenResults: canViewResults && !widget.embedded
+          ? () => setState(() => _showResults = true)
+          : null,
       embedded: widget.embedded,
       showViewToolbar: widget.linkedEntity == null,
       scrollController: widget.scrollController,

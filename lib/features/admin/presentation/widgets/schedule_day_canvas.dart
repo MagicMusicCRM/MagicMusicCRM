@@ -85,6 +85,20 @@ class ScheduleEntry {
   }
 }
 
+class ScheduleBlockedInterval {
+  const ScheduleBlockedInterval({
+    required this.columnId,
+    required this.startLocal,
+    required this.endLocal,
+    this.reason,
+  });
+
+  final String columnId;
+  final DateTime startLocal;
+  final DateTime endLocal;
+  final String? reason;
+}
+
 /// Midnight lessons belong to the preceding evening in the extended grid.
 /// This is a display date only; commands retain the actual calendar date.
 DateTime scheduleDisplayDate(DateTime time) =>
@@ -163,6 +177,7 @@ class ScheduleDayCanvas extends StatefulWidget {
   final DateTime date; // branch-local selected day (date only)
   final List<ScheduleColumn> columns;
   final List<ScheduleEntry> entries;
+  final List<ScheduleBlockedInterval> blockedIntervals;
   final bool allowCreate;
   final Future<void> Function(
     ScheduleEntry entry,
@@ -184,6 +199,7 @@ class ScheduleDayCanvas extends StatefulWidget {
     required this.date,
     required this.columns,
     required this.entries,
+    this.blockedIntervals = const [],
     this.allowCreate = true,
     this.onProposeMove,
     required this.onCreateSlot,

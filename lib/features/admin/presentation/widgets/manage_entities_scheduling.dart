@@ -162,7 +162,14 @@ class _GroupsList extends ConsumerWidget {
 class _EmployeesList extends ConsumerWidget {
   final String searchQuery;
   final String currentRole;
-  const _EmployeesList({required this.searchQuery, required this.currentRole});
+  final String? selectedId;
+  final ValueChanged<Map<String, dynamic>>? onSelected;
+  const _EmployeesList({
+    required this.searchQuery,
+    required this.currentRole,
+    this.selectedId,
+    this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -222,6 +229,9 @@ class _EmployeesList extends ConsumerWidget {
               final isAppAccount = e['is_app_account'] == true;
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
+                color: selectedId == e['id']?.toString()
+                    ? AppColor.goldSoft
+                    : null,
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor: roleColor.withAlpha(40),
@@ -318,6 +328,10 @@ class _EmployeesList extends ConsumerWidget {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   onTap: () async {
+                    if (onSelected != null) {
+                      onSelected!(e);
+                      return;
+                    }
                     final updated = await StaffDetailDialog.show(
                       context,
                       e,

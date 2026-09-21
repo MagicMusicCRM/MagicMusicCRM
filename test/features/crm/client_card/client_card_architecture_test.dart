@@ -157,6 +157,52 @@ void main() {
     expect(find.byType(ClientCardShell), findsNothing);
   });
 
+  testWidgets(
+    'desktop first screen keeps the four client essentials visible at 125%',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1366, 768);
+      addTearDown(tester.view.reset);
+      final api = FakeCardApiClient(
+        lead: const {
+          'id': 'lead-1',
+          'version': 1,
+          'firstName': 'Иван',
+          'lastName': 'Петров',
+          'phone': '+79990000000',
+          'email': 'client@example.test',
+          'customData': <String, dynamic>{'responsibleName': 'Анна'},
+        },
+        internalNote: {
+          'id': 'note-1',
+          'body': 'Позвонить перед следующим занятием',
+          'version': 1,
+        },
+      );
+
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: const {'id': 'lead-1'},
+        routed: true,
+        textScale: 1.25,
+      );
+
+      expect(find.byKey(const Key('client-at-glance')), findsOneWidget);
+      for (final key in const [
+        'client-at-glance-note',
+        'client-at-glance-next-lesson',
+        'client-at-glance-stage',
+        'client-at-glance-contacts',
+      ]) {
+        final tile = find.byKey(Key(key));
+        expect(tile, findsOneWidget);
+        expect(tester.getBottomLeft(tile).dy, lessThanOrEqualTo(768));
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final routed in [false, true]) {
     final host = routed ? 'routed' : 'dialog';
     testWidgets(

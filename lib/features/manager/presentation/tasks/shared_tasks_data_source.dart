@@ -88,8 +88,20 @@ abstract class SharedTasksDataSource implements SharedTaskEditorGateway {
   Future<Map<String, dynamic>> close(
     String taskId,
     int expectedVersion,
+    SharedTaskCompletionInput input,
     MagicMutationIdentity identity,
   );
+
+  Future<Map<String, dynamic>> results({
+    String? from,
+    String? to,
+    String? branchId,
+    String? closedBy,
+    String? resultCode,
+    String? q,
+    bool? late,
+    bool includeUndated = false,
+  }) => Future.error(UnimplementedError('Task results are unavailable.'));
 
   Future<List<SharedTaskAudienceOption>> audienceOptions();
 }
@@ -212,12 +224,39 @@ class MagicCrmSharedTasksDataSource implements SharedTasksDataSource {
   Future<Map<String, dynamic>> close(
     String taskId,
     int expectedVersion,
+    SharedTaskCompletionInput input,
     MagicMutationIdentity identity,
   ) {
     return _crm.closeSharedTask(
       taskId: taskId,
       expectedVersion: expectedVersion,
+      resultCode: input.resultCode,
+      resultLabel: input.resultLabel,
+      comment: input.comment,
       identity: identity,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> results({
+    String? from,
+    String? to,
+    String? branchId,
+    String? closedBy,
+    String? resultCode,
+    String? q,
+    bool? late,
+    bool includeUndated = false,
+  }) {
+    return _crm.listSharedTaskResults(
+      from: from,
+      to: to,
+      branchId: branchId,
+      closedBy: closedBy,
+      resultCode: resultCode,
+      q: q,
+      late: late,
+      includeUndated: includeUndated,
     );
   }
 

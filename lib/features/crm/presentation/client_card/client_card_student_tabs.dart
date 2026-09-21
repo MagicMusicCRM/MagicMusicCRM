@@ -820,6 +820,11 @@ class _InstallmentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final paid = installment.status == 'paid';
+    final datePrefix = switch (installment.dueKind) {
+      'forecast' => 'Прогноз',
+      'actual' => 'Срок после расходования объёма',
+      _ => 'Срок',
+    };
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
       leading: Icon(
@@ -830,7 +835,7 @@ class _InstallmentRow extends StatelessWidget {
         '${subscription.terms.displayName} · платёж ${installment.installmentNumber}',
       ),
       subtitle: Text(
-        '${DateFormat('dd.MM.yyyy').format(installment.dueAt.toLocal())} · '
+        '$datePrefix: ${DateFormat('dd.MM.yyyy').format(installment.dueAt.toLocal())} · '
         '${paid ? 'Оплачен' : 'Ожидает оплаты'}',
       ),
       trailing: Text(

@@ -203,6 +203,7 @@ const taskMigrationIds = [
   "0101_canonical_shared_tasks",
   "0114_admin_task_board",
   "0115_school_task_staff_recipients",
+  "0158_shared_task_results",
 ] as const;
 
 async function applyTaskMigrations(

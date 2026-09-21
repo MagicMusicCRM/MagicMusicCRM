@@ -41,6 +41,7 @@ export type CommerceSurchargeDto =
 export interface CommerceInstallmentDto {
   installmentNumber: number;
   dueAt: string;
+  dueKind: "forecast" | "actual" | "fixed";
   amountMinor: string;
   currencyCode: string;
   status: string;

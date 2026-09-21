@@ -1040,6 +1040,79 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
+  Future<Map<String, dynamic>> getV4SalesClientsSummary({
+    String? branchId,
+    String? from,
+    String? to,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/sales-clients',
+      queryParameters: _v4ReportQuery(branchId: branchId, from: from, to: to),
+    );
+  }
+
+  Future<Map<String, dynamic>> getV4SalesClientsList({
+    required Map<String, dynamic> filter,
+    required String segment,
+    String? sourceId,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/sales-clients/clients',
+      queryParameters: {
+        ..._v4ReportQuery(
+          branchId: filter['branchId']?.toString(),
+          from: filter['from']?.toString(),
+          to: filter['to']?.toString(),
+        ),
+        'segment': segment,
+        'sourceId': ?sourceId,
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getV4FinanceDebtSummary({
+    String? branchId,
+    String? from,
+    String? to,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/finance-debt',
+      queryParameters: _v4ReportQuery(branchId: branchId, from: from, to: to),
+    );
+  }
+
+  Future<Map<String, dynamic>> getV4FinanceDebtItems({
+    required Map<String, dynamic> filter,
+    required String segment,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/finance-debt/items',
+      queryParameters: {
+        ...filter,
+        'segment': segment,
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getV4Utilization({
+    String? branchId,
+    String? from,
+    String? to,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/utilization',
+      queryParameters: _v4ReportQuery(branchId: branchId, from: from, to: to),
+    );
+  }
+
   Future<V4ReportExportResult> requestV4ReportExport({
     required String reportKey,
     required String format,
@@ -1874,10 +1947,12 @@ extension MagicCrmFinance on MagicCrmService {
   Future<Map<String, dynamic>> getAnalyticsChatSla({
     String? from,
     String? to,
+    String? branchId,
   }) async {
     final q = <String, dynamic>{};
     if (from != null) q['from'] = from;
     if (to != null) q['to'] = to;
+    if (branchId != null) q['branchId'] = branchId;
     return _api.get<Map<String, dynamic>>(
       '/analytics/chats/sla',
       queryParameters: q,

@@ -14,6 +14,36 @@ class SharedTaskAudienceOption {
   final String label;
 }
 
+@immutable
+class SharedTaskResultOption {
+  const SharedTaskResultOption({required this.code, required this.label});
+
+  final String code;
+  final String label;
+}
+
+const sharedTaskResultOptions = <SharedTaskResultOption>[
+  SharedTaskResultOption(code: 'completed', label: 'Выполнено'),
+  SharedTaskResultOption(code: 'not_completed', label: 'Не выполнено'),
+  SharedTaskResultOption(code: 'follow_up', label: 'Нужен следующий контакт'),
+  SharedTaskResultOption(code: 'other', label: 'Другое'),
+];
+
+@immutable
+class SharedTaskCompletionInput {
+  const SharedTaskCompletionInput({
+    required this.resultCode,
+    required this.resultLabel,
+    this.comment,
+  });
+
+  final String resultCode;
+  final String resultLabel;
+  final String? comment;
+
+  bool get requiresComment => resultCode == 'other';
+}
+
 typedef SharedTaskAudiencePreviewLoader =
     Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> audiences);
 

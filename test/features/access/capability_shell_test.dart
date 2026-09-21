@@ -61,6 +61,7 @@ void main() {
       6,
       2,
       3,
+      4,
     ]);
 
     final overPrivilegedAdmin = CapabilitySnapshot(
@@ -80,7 +81,7 @@ void main() {
     );
     expect(
       crmVisibleTabsForCapabilities(overPrivilegedAdmin, isDesktop: true),
-      [0, 2, 3, 6],
+      [0, 2, 3, 4, 6],
     );
 
     final director = CapabilitySnapshot(
@@ -95,6 +96,7 @@ void main() {
       1,
       2,
       3,
+      4,
       6,
       7,
       8,
@@ -104,6 +106,7 @@ void main() {
       1,
       2,
       3,
+      4,
       6,
       7,
       8,

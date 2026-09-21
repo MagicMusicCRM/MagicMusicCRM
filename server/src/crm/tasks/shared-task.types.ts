@@ -36,7 +36,44 @@ export interface TaskCloseRow {
   closed_at: Date | string;
   closed_by: string;
   request_id: string;
+  result_code: string | null;
+  result_label: string | null;
+  comment: string | null;
+  planned_start_at: Date | string | null;
+  planned_all_day: boolean | null;
+  was_overdue: boolean | null;
   created_at: Date | string;
+}
+
+export interface SharedTaskResultRow {
+  task_id: string;
+  title: string;
+  body: string | null;
+  linked_entity_type: string | null;
+  linked_entity_id: string | null;
+  linked_entity_label: string | null;
+  audiences: Array<{
+    type: SharedTaskAudienceType;
+    targetId?: string;
+    label: string;
+    entityType?: "staff" | "teacher";
+    entityId?: string;
+  }>;
+  close_id: string | null;
+  closed_at: Date | string | null;
+  closed_by: string | null;
+  closed_by_name: string | null;
+  closed_by_entity_type: "staff" | "teacher" | null;
+  closed_by_entity_id: string | null;
+  result_code: string | null;
+  result_label: string | null;
+  comment: string | null;
+  planned_start_at: Date | string | null;
+  planned_all_day: boolean | null;
+  was_overdue: boolean | null;
+  total_count: number | string;
+  overdue_count: number | string;
+  missing_result_count: number | string;
 }
 
 export interface SharedTaskMigrationEvidenceRow {
@@ -70,4 +107,10 @@ export interface ResolvedSharedTaskRow extends SharedTaskRow {
   closed_at: Date | string | null;
   closed_by: string | null;
   close_request_id: string | null;
+  close_result_code: string | null;
+  close_result_label: string | null;
+  close_comment: string | null;
+  close_planned_start_at: Date | string | null;
+  close_planned_all_day: boolean | null;
+  close_was_overdue: boolean | null;
 }

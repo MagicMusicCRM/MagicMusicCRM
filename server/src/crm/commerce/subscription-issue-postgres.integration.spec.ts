@@ -1383,6 +1383,128 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     expect(await countIssuedSubscriptions()).toBe(before + 1);
   });
 
+  it("keeps a future installment as a forecast until paid units are consumed", async () => {
+    const input = {
+      packageId,
+      payerStudentId: studentId,
+      fundingMode: "installment" as const,
+      purchaseReason: "Срок после расходования первого оплаченного объёма",
+      paymentAmountMinor: "400000",
+      paymentOccurredAt: "2026-09-20T09:00:00.000Z",
+      paymentMethod: "cashless" as const,
+      installments: [
+        { dueAt: "2026-10-20T09:00:00.000Z", amountMinor: "400000" },
+      ],
+    };
+    const preview = await issueService.previewPurchase(
+      actors.director,
+      studentId,
+      input,
+    );
+    const purchased = await issueService.purchase(
+      actors.director,
+      studentId,
+      { ...input, previewToken: preview.previewToken, confirm: true },
+      mutationMetadata("consumption-based-installment"),
+    );
+
+    const installment = await pool.query<{ id: string; due_policy: string }>(
+      `select id, due_policy
+       from app.subscription_installments
+       where issued_subscription_id = $1`,
+      [purchased.subscription.id],
+    );
+    expect(installment.rows).toEqual([
+      expect.objectContaining({ due_policy: "consumption" }),
+    ]);
+
+    await dueWorker.runOnce(new Date("2035-01-01T00:00:00.000Z"), 100);
+    await expect(
+      pool.query(
+        "select id from app.subscription_installment_due_facts where installment_id = $1",
+        [installment.rows[0]!.id],
+      ),
+    ).resolves.toHaveProperty("rowCount", 0);
+    await expect(
+      pool.query(
+        "select id from app.client_payment_records where installment_id = $1",
+        [installment.rows[0]!.id],
+      ),
+    ).resolves.toHaveProperty("rowCount", 0);
+
+    const scope = await commerceRepository.resolveStudentScope(
+      actors.director,
+      studentId,
+    );
+    const projection = await commerceRepository.loadProjection(
+      actors.director,
+      [scope],
+    );
+    expect(
+      projection[0]!.subscriptions
+        .find((item) => item.id === purchased.subscription.id)!
+        .installments[0],
+    ).toMatchObject({ dueKind: "forecast", status: "scheduled" });
+
+    const lesson = await pool.query<{ id: string }>(
+      `insert into app.lessons (student_id, branch_id, scheduled_at, status)
+       select id, branch_id, $2::timestamptz, 'scheduled'
+       from app.students where id = $1
+       returning id`,
+      [studentId, "2026-09-27T09:00:00.000Z"],
+    );
+    const charge = await pool.query<{ id: string }>(
+      `insert into app.lesson_client_charge_facts (
+         lesson_id, client_type, client_id, charge_type, snapshot_value,
+         subscription_id, amount_minor, units, created_at
+       ) values ($1, 'student', $2, 'subscription', 5, $3, 0, 5, $4)
+       returning id`,
+      [
+        lesson.rows[0]!.id,
+        studentId,
+        purchased.subscription.id,
+        "2026-09-28T12:34:56.000Z",
+      ],
+    );
+
+    await dueWorker.runOnce(new Date("2035-01-01T00:00:00.000Z"), 100);
+    const dueFact = await pool.query<{
+      due_at: Date;
+      trigger_charge_fact_id: string;
+    }>(
+      `select due_at, trigger_charge_fact_id
+       from app.subscription_installment_due_facts
+       where installment_id = $1`,
+      [installment.rows[0]!.id],
+    );
+    expect(dueFact.rows).toHaveLength(1);
+    expect(dueFact.rows[0]!.due_at.toISOString()).toBe(
+      "2026-09-28T12:34:56.000Z",
+    );
+    expect(dueFact.rows[0]!.trigger_charge_fact_id).toBe(charge.rows[0]!.id);
+    await expect(
+      pool.query(
+        "select id from app.client_payment_records where installment_id = $1",
+        [installment.rows[0]!.id],
+      ),
+    ).resolves.toHaveProperty("rowCount", 1);
+
+    const actualProjection = await commerceRepository.loadProjection(
+      actors.director,
+      [scope],
+    );
+    const projectedInstallment = actualProjection[0]!.subscriptions
+      .find((item) => item.id === purchased.subscription.id)!
+      .installments[0]!;
+    expect(projectedInstallment).toMatchObject({
+      dueKind: "actual",
+      status: "posted_pending",
+    });
+    expect(new Date(projectedInstallment.dueAt).toISOString()).toBe(
+      "2026-09-28T12:34:56.000Z",
+    );
+  });
+
   it("rechecks current finance capability when a previewed purchase commits", async () => {
     const input = {
       packageId,

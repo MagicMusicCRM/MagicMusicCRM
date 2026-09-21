@@ -308,15 +308,24 @@ describe('NotificationsService', () => {
     } as never);
     database.transaction.mockImplementationOnce(async (work) => {
       const client = {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({ rows: [{ id: 'notification-a' }] })
-          .mockResolvedValueOnce({ rows: [] })
-          .mockResolvedValueOnce({ rows: [{ email: 'a@example.com' }] })
-          .mockResolvedValueOnce({ rows: [] })
-          .mockResolvedValueOnce({ rows: [] })
-          .mockResolvedValueOnce({ rows: [{ email: 'b@example.com' }] })
-          .mockResolvedValue({ rows: [] })
+        query: jest.fn(async (sql: string, params?: unknown[]) => {
+          if (sql.includes('insert into app.notifications')) {
+            return { rows: [{ id: 'notification-a' }] };
+          }
+          if (sql.includes('select email from app.users')) {
+            return {
+              rows: [
+                {
+                  email:
+                    params?.[0] === 'user-a'
+                      ? 'a@example.com'
+                      : 'b@example.com'
+                }
+              ]
+            };
+          }
+          return { rows: [] };
+        })
       };
       return work(client as never);
     });
@@ -424,14 +433,17 @@ describe('NotificationsService', () => {
   it('reuses an explicit notification id and guards channel side effects', async () => {
     const { service, database } = createService();
     const client = {
-      query: jest
-        .fn()
-        .mockResolvedValueOnce({
-          rows: [{ id: '11111111-1111-5111-8111-111111111111' }]
-        })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [{ email: 'a@example.com' }] })
-        .mockResolvedValue({ rows: [] })
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('insert into app.notifications')) {
+          return {
+            rows: [{ id: '11111111-1111-5111-8111-111111111111' }]
+          };
+        }
+        if (sql.includes('select email from app.users')) {
+          return { rows: [{ email: 'a@example.com' }] };
+        }
+        return { rows: [] };
+      })
     };
     database.transaction.mockImplementationOnce(async (work) => work(client as never));
 
@@ -446,8 +458,9 @@ describe('NotificationsService', () => {
 
     expect(String(client.query.mock.calls[0][0])).toContain('on conflict (id)');
     expect(client.query.mock.calls[0][1]?.[0]).toBe('11111111-1111-5111-8111-111111111111');
-    expect(String(client.query.mock.calls[3][0])).toContain('where not exists');
+    expect(String(client.query.mock.calls[2][0])).toContain("channel = 'in_app'");
     expect(String(client.query.mock.calls[4][0])).toContain('where not exists');
+    expect(String(client.query.mock.calls[5][0])).toContain('where not exists');
   });
 
   it('routes a rescheduled lesson to its successor and informs the removed teacher', async () => {

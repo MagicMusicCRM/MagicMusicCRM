@@ -42,6 +42,7 @@ export interface InstallmentRow {
   issued_subscription_id: string;
   installment_number: number;
   due_at: Date | string;
+  due_policy: "calendar" | "consumption";
   amount_minor: string;
   currency_code: string;
   status: "pending" | "paid" | "void";
@@ -419,6 +420,7 @@ export class SubscriptionIssueRepository {
       issuedSubscriptionId: string;
       currencyCode: string;
       installments: PlannedInstallment[];
+      duePolicy?: "calendar" | "consumption";
     },
   ): Promise<InstallmentRow[]> {
     const rows: InstallmentRow[] = [];
@@ -429,15 +431,17 @@ export class SubscriptionIssueRepository {
             issued_subscription_id,
             installment_number,
             due_at,
+            due_policy,
             amount_minor,
             currency_code
           )
-          values ($1, $2, $3, $4::bigint, $5)
+          values ($1, $2, $3, $4, $5::bigint, $6)
           returning
             id,
             issued_subscription_id,
             installment_number,
             due_at,
+            due_policy,
             amount_minor,
             currency_code,
             status,
@@ -447,6 +451,7 @@ export class SubscriptionIssueRepository {
           input.issuedSubscriptionId,
           installment.installmentNumber,
           installment.dueAt,
+          input.duePolicy ?? "calendar",
           installment.amountMinor,
           input.currencyCode,
         ],
@@ -596,6 +601,7 @@ export class SubscriptionIssueRepository {
           issued_subscription_id,
           installment_number,
           due_at,
+          due_policy,
           amount_minor,
           currency_code,
           status,

@@ -13,11 +13,17 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail
 class StaffDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> staff;
   final String currentRole;
+  final bool embedded;
+  final Future<void> Function()? onChanged;
+  final VoidCallback? onClose;
 
   const StaffDetailDialog({
     super.key,
     required this.staff,
     required this.currentRole,
+    this.embedded = false,
+    this.onChanged,
+    this.onClose,
   });
 
   static Future<bool?> show(
@@ -70,7 +76,9 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     ref
         .read(crmNavigationRequestProvider.notifier)
         .navigateTo(CrmNavigationRequest.userRolesSearch(value));
-    Navigator.of(context, rootNavigator: true).pop(false);
+    if (!widget.embedded) {
+      Navigator.of(context, rootNavigator: true).pop(false);
+    }
   }
 
   Future<void> _provisionAccess() async {
@@ -97,7 +105,12 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
 
   Future<void> _manageLifecycle() async {
     final saved = await _accessFlow.manageLifecycle(context);
-    if (saved && mounted) Navigator.pop(context, true);
+    if (!saved || !mounted) return;
+    if (widget.embedded) {
+      await widget.onChanged?.call();
+    } else {
+      Navigator.pop(context, true);
+    }
   }
 
   Future<void> _changeAccessRole() async {
@@ -114,7 +127,11 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
       await _controller.save();
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
-      Navigator.of(context).pop(true);
+      if (widget.embedded) {
+        await widget.onChanged?.call();
+      } else {
+        Navigator.of(context).pop(true);
+      }
       messenger.showSnackBar(
         const SnackBar(content: Text('Данные сотрудника сохранены')),
       );
@@ -150,6 +167,8 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
       onLink: _openUserLinking,
       onSave: _save,
       onCancel: () => Navigator.pop(context),
+      embedded: widget.embedded,
+      onClose: widget.onClose,
     );
   }
 }

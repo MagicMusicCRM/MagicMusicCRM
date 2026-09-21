@@ -15,10 +15,14 @@ class ScheduleReferenceSettings extends ConsumerStatefulWidget {
     super.key,
     required this.canEdit,
     required this.section,
+    this.initialBranchId,
+    this.initialTeacherId,
   });
 
   final bool canEdit;
   final ScheduleReferenceSection section;
+  final String? initialBranchId;
+  final String? initialTeacherId;
 
   @override
   ConsumerState<ScheduleReferenceSettings> createState() =>
@@ -40,7 +44,9 @@ class _ScheduleReferenceSettingsState
   void didUpdateWidget(covariant ScheduleReferenceSettings oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.canEdit == widget.canEdit &&
-        oldWidget.section == widget.section) {
+        oldWidget.section == widget.section &&
+        oldWidget.initialBranchId == widget.initialBranchId &&
+        oldWidget.initialTeacherId == widget.initialTeacherId) {
       return;
     }
     _controller.dispose();
@@ -53,6 +59,8 @@ class _ScheduleReferenceSettingsState
         crm: ref.read(magicCrmServiceProvider),
         section: widget.section,
         canEdit: widget.canEdit,
+        initialBranchId: widget.initialBranchId,
+        initialTeacherId: widget.initialTeacherId,
       );
 
   @override

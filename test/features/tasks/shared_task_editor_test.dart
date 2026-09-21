@@ -94,6 +94,7 @@ class RecordingSharedTasksDataSource extends SharedTasksDataSource {
   Future<Map<String, dynamic>> close(
     String taskId,
     int expectedVersion,
+    SharedTaskCompletionInput input,
     MagicMutationIdentity identity,
   ) async => const {};
 
@@ -313,7 +314,10 @@ void main() {
       find.byKey(const Key('shared-task-title')),
       'Изменённый заголовок',
     );
-    await tester.enterText(find.widgetWithText(TextField, 'Описание'), 'Изменённое описание');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Описание'),
+      'Изменённое описание',
+    );
 
     await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
     await tester.pumpAndSettle();

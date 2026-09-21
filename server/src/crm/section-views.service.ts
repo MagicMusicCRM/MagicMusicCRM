@@ -49,6 +49,8 @@ export class SectionViewsService {
 
   /**
    * Сколько нового в каждом разделе с тех пор, как человек его открывал.
+   * Для задач цифра имеет другой, рабочий смысл: открытые задачи на сегодня.
+   * Она не обнуляется от просмотра раздела.
    *
    * Считаются НОВЫЕ записи, а не правки. «Непросмотренное изменение» для
    * человека — это «появилось то, чего я не видел»; правка существующего в
@@ -102,12 +104,19 @@ export class SectionViewsService {
             (select count(*) from app.students s, seen
               where s.deleted_at is null and s.created_at > seen.clients_at)
           ) as clients,
-          -- Задачи — ТОЛЬКО свои: чужая задача не требует от человека действия,
-          -- а бейдж «сделай что-то» должен звать именно его. Иначе у школы с
-          -- 12 483 задачами цифра станет фоном.
-          (select count(*) from app.canonical_tasks t, seen
+          -- Задачи — открытые, назначенные пользователю и запланированные на
+          -- текущий московский день. Просмотр вкладки не меняет этот счётчик.
+          (select count(*) from app.canonical_tasks t
             where t.deleted_at is null
-              and t.created_at > seen.tasks_at
+              and t.status = 'open'
+              and t.due_at >= (
+                date_trunc('day', now() at time zone 'Europe/Moscow')
+                at time zone 'Europe/Moscow'
+              )
+              and t.due_at < (
+                date_trunc('day', now() at time zone 'Europe/Moscow')
+                + interval '1 day'
+              ) at time zone 'Europe/Moscow'
               and exists (
                 select 1 from app.shared_task_recipients recipient
                 where recipient.task_id = t.id and recipient.user_id = $1

@@ -4,7 +4,12 @@ import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { DashboardService } from "../crm/dashboard.service";
 import { CrmPolicy } from "../crm/crm.policy";
-import { branchIdExpr } from "../crm/branch-scope";
+import {
+  branchIdExpr,
+  currentActorRoleSql,
+  managerBranchScopeSql,
+} from "../crm/branch-scope";
+import { SalesClientsReadService } from "./sales-clients-read.service";
 
 @Injectable()
 export class AnalyticsService {
@@ -13,6 +18,7 @@ export class AnalyticsService {
     private readonly dashboard_: DashboardService,
     private readonly policy: CrmPolicy,
     private readonly audit: AuditService,
+    private readonly salesClients?: SalesClientsReadService,
   ) {}
 
   overview(actor: ActorContext) {
@@ -64,35 +70,54 @@ export class AnalyticsService {
   async funnel(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
     this.policy.assertManagerOnly(actor);
     const { from, to } = this.rangeBounds(query);
-    const result = await this.database.query<{
-      status_id: string;
-      name: string;
-      sort_order: number;
-      leads_entered: string;
-    }>(
-      `select ls.id as status_id, ls.name, ls.sort_order,
-              count(distinct lsh.lead_id) as leads_entered
-         from app.lead_status_history lsh
-         join app.lead_statuses ls on ls.id = lsh.new_status_id
-        where lsh.new_status_id is not null
-          and lsh.changed_at >= $1::timestamptz
-          and lsh.changed_at < $2::timestamptz
-          and ($3::uuid is null or lsh.branch_id = $3::uuid)
-        group by ls.id, ls.name, ls.sort_order
-        order by ls.sort_order`,
-      [from, to, query.branchId ?? null],
-    );
-    let prev: number | null = null;
-    const stages = result.rows.map((r) => {
-      const leadsEntered = Number(r.leads_entered);
-      // Volume ratio of distinct leads that ENTERED this status vs the previous status in the window —
-      // NOT a per-lead cohort conversion; can exceed 100%.
-      const ratioToPrevStage =
-        prev === null || prev === 0 ? (prev === null ? null : 0) : Math.round((leadsEntered / prev) * 100);
-      prev = leadsEntered;
-      return { statusId: r.status_id, name: r.name, sortOrder: r.sort_order, leadsEntered, ratioToPrevStage };
+    if (!this.salesClients) {
+      throw new Error("SalesClientsReadService is required for cohort funnel analytics.");
+    }
+    const summary = await this.salesClients.summary(actor, {
+      from,
+      to,
+      branchId: query.branchId,
     });
-    return { from, to, stages };
+    const inquiries = summary.funnel.inquiries;
+    const cohortRatio = (value: number) =>
+      inquiries === 0 ? 0 : Math.round((value / inquiries) * 100);
+    const stages = [
+      {
+        statusId: "inquiry",
+        name: "Обращения",
+        sortOrder: 0,
+        leadsEntered: inquiries,
+        ratioToPrevStage: null,
+      },
+      {
+        statusId: "trial_booked",
+        name: "Записаны на пробное",
+        sortOrder: 1,
+        leadsEntered: summary.funnel.trialBooked,
+        ratioToPrevStage: cohortRatio(summary.funnel.trialBooked),
+      },
+      {
+        statusId: "trial_attended",
+        name: "Посетили пробное",
+        sortOrder: 2,
+        leadsEntered: summary.funnel.trialAttended,
+        ratioToPrevStage: cohortRatio(summary.funnel.trialAttended),
+      },
+      {
+        statusId: "first_paid",
+        name: "Первая фактическая оплата",
+        sortOrder: 3,
+        leadsEntered: summary.funnel.firstPaidSales,
+        ratioToPrevStage: cohortRatio(summary.funnel.firstPaidSales),
+      },
+    ];
+    return {
+      from,
+      to,
+      observationDays: summary.observationDays,
+      ratioDefinition: "cohort_share",
+      stages,
+    };
   }
 
   async branchComparison(actor: ActorContext, query: { from?: string; to?: string }) {
@@ -118,7 +143,8 @@ export class AnalyticsService {
            where l.deleted_at is null and l.created_at >= $1::timestamptz and l.created_at < $2::timestamptz
              and ${branchIdExpr("l")} = b.id::text) as new_leads,
          (select count(*) from app.lessons les
-           where les.deleted_at is null and les.status in ('completed', 'done')
+           where les.deleted_at is null
+             and les.lifecycle_state = 'successfully_completed'
              and les.scheduled_at >= $1::timestamptz and les.scheduled_at < $2::timestamptz
              and les.branch_id = b.id) as completed_lessons
        from app.branches b
@@ -275,6 +301,12 @@ export class AnalyticsService {
   async churnRisk(actor: ActorContext, query: { inactiveDays?: number | string; branchId?: string }) {
     this.policy.assertManagerOnly(actor);
     const inactiveDays = Number(query.inactiveDays ?? 21);
+    const actorRole = currentActorRoleSql("$3");
+    const scope = managerBranchScopeSql({
+      roleExpression: actorRole,
+      userIdExpression: "$3",
+      branchExpression: branchIdExpr("s"),
+    });
     const result = await this.database.query<{
       student_id: string;
       name: string;
@@ -288,10 +320,19 @@ export class AnalyticsService {
            from app.lessons l
            left join app.lesson_participation lp on lp.lesson_id = l.id
           where l.deleted_at is null
-            and l.status in ('completed', 'done')
+            and l.lifecycle_state = 'successfully_completed'
             and coalesce(l.student_id, lp.student_id) is not null
             and (lp.id is null or lp.status not in ('absent', 'missed', 'no_show'))
           group by coalesce(l.student_id, lp.student_id)
+       ), future_lesson as (
+         select distinct coalesce(l.student_id, lp.student_id) as student_id
+           from app.lessons l
+           left join app.lesson_participation lp on lp.lesson_id = l.id
+          where l.deleted_at is null
+            and l.successor_id is null
+            and l.lifecycle_state in ('scheduled', 'settlement_pending')
+            and l.scheduled_at >= now()
+            and coalesce(l.student_id, lp.student_id) is not null
        )
        select s.id as student_id,
               btrim(concat_ws(' ', p.first_name, p.last_name)) as name,
@@ -302,13 +343,21 @@ export class AnalyticsService {
          from app.students s
          left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
          left join last_lesson ll on ll.student_id = s.id
+         left join future_lesson fl on fl.student_id = s.id
         where s.deleted_at is null and s.status = 'active'
           and ($2::uuid is null or ${branchIdExpr("s")} = $2::text)
-          and (ll.last_completed_at is null
-               or ll.last_completed_at < now() - make_interval(days => $1::int))
+          and ${scope}
+          and fl.student_id is null
+          and (
+            ll.last_completed_at < now() - make_interval(days => $1::int)
+            or (
+              ll.last_completed_at is null
+              and s.created_at < now() - make_interval(days => $1::int)
+            )
+          )
         order by ll.last_completed_at asc nulls first
         limit 200`,
-      [inactiveDays, query.branchId ?? null],
+      [inactiveDays, query.branchId ?? null, actor.userId],
     );
     return {
       inactiveDays,
@@ -322,26 +371,78 @@ export class AnalyticsService {
     };
   }
 
-  // Org-wide only — chats.branch_id is not populated, so chat SLA is not branch-scoped (branch attribution for chats is a follow-up).
-  async chatsSla(actor: ActorContext, query: { from?: string; to?: string }) {
+  async chatsSla(actor: ActorContext, query: { from?: string; to?: string; branchId?: string }) {
     this.policy.assertManagerOnly(actor);
     const { from, to } = this.rangeBounds(query);
+    const actorRole = currentActorRoleSql("$4");
+    const scope = managerBranchScopeSql({
+      roleExpression: actorRole,
+      userIdExpression: "$4",
+      branchExpression: "chat_context.branch_id",
+    });
     const result = await this.database.query<{
       inbound_count: string;
       responded_count: string;
       avg_minutes: string | null;
       median_minutes: string | null;
       p90_minutes: string | null;
+      slow_chats: Array<{
+        chatId: string;
+        clientName: string;
+        inboundAt: string;
+        responseAt: string;
+        minutes: number;
+      }> | null;
     }>(
-      `with classified as (
+      `with chat_context as (
+         select c.id, c.owner_user_id,
+                coalesce(
+                  c.branch_id::text,
+                  ${branchIdExpr("chat_student")},
+                  ${branchIdExpr("chat_lead")},
+                  linked.branch_id
+                ) as branch_id
+           from app.chats c
+           left join app.students chat_student
+             on chat_student.id = c.student_id
+            and chat_student.deleted_at is null
+           left join app.leads chat_lead
+             on chat_lead.id = c.lead_id
+            and chat_lead.deleted_at is null
+           left join lateral (
+             select case
+                      when link.entity_type = 'student'
+                        then ${branchIdExpr("linked_student")}
+                      when link.entity_type = 'lead'
+                        then ${branchIdExpr("linked_lead")}
+                      else null
+                    end as branch_id
+               from app.user_crm_links link
+               left join app.students linked_student
+                 on linked_student.id = link.entity_id
+                and link.entity_type = 'student'
+                and linked_student.deleted_at is null
+               left join app.leads linked_lead
+                 on linked_lead.id = link.entity_id
+                and link.entity_type = 'lead'
+                and linked_lead.deleted_at is null
+              where link.user_id = c.owner_user_id
+                and link.deleted_at is null
+              order by (link.entity_type = 'student') desc, link.created_at desc
+              limit 1
+           ) linked on true
+          where c.type = 'administration' and c.deleted_at is null
+       ), classified as (
          select m.id, m.chat_id, m.created_at,
                 case when u.role in ('admin', 'manager', 'director', 'system_admin') then 'staff' else 'client' end as cls
            from app.messages m
-           join app.chats c on c.id = m.chat_id and c.type = 'administration' and c.deleted_at is null
+           join chat_context on chat_context.id = m.chat_id
            left join app.users u on u.id = m.sender_id and u.deleted_at is null
           where m.deleted_at is null
             and m.message_type <> 'system'
             and m.sender_id is not null
+            and ($3::uuid is null or chat_context.branch_id = $3::text)
+            and ${scope}
        ),
        seq as (
          select chat_id, created_at, cls,
@@ -356,7 +457,10 @@ export class AnalyticsService {
             and created_at >= $1::timestamptz and created_at < $2::timestamptz
        ),
        gaps as (
-         select extract(epoch from (resp.response_at - i.inbound_at)) / 60.0 as minutes
+         select i.chat_id,
+                i.inbound_at,
+                resp.response_at,
+                extract(epoch from (resp.response_at - i.inbound_at)) / 60.0 as minutes
            from inbound i
            cross join lateral (
              select min(s.created_at) as response_at
@@ -370,9 +474,42 @@ export class AnalyticsService {
          (select count(*) from gaps) as responded_count,
          coalesce(avg(minutes), 0) as avg_minutes,
          coalesce(percentile_cont(0.5) within group (order by minutes), 0) as median_minutes,
-         coalesce(percentile_cont(0.9) within group (order by minutes), 0) as p90_minutes
+         coalesce(percentile_cont(0.9) within group (order by minutes), 0) as p90_minutes,
+         coalesce((
+           select jsonb_agg(
+             jsonb_build_object(
+               'chatId', slow.chat_id,
+               'clientName', slow.client_name,
+               'inboundAt', slow.inbound_at,
+               'responseAt', slow.response_at,
+               'minutes', round(slow.minutes::numeric, 1)
+             )
+             order by slow.minutes desc
+           )
+           from (
+             select gap.chat_id,
+                    gap.inbound_at,
+                    gap.response_at,
+                    gap.minutes,
+                    coalesce(
+                      nullif(btrim(concat_ws(' ', profile.first_name, profile.last_name)), ''),
+                      account.email,
+                      'Клиент'
+                    ) as client_name
+               from gaps gap
+               join chat_context context on context.id = gap.chat_id
+               left join app.users account
+                 on account.id = context.owner_user_id
+                and account.deleted_at is null
+               left join app.profiles profile
+                 on profile.user_id = context.owner_user_id
+                and profile.deleted_at is null
+              order by gap.minutes desc
+              limit 20
+           ) slow
+         ), '[]'::jsonb) as slow_chats
        from gaps`,
-      [from, to],
+      [from, to, query.branchId ?? null, actor.userId],
     );
     const row = result.rows[0];
     const inboundCount = Number(row?.inbound_count ?? 0);
@@ -381,12 +518,14 @@ export class AnalyticsService {
     return {
       from,
       to,
+      branchId: query.branchId ?? null,
       inboundCount,
       respondedCount,
       responseRate: inboundCount === 0 ? 0 : Math.round((respondedCount / inboundCount) * 100) / 100,
       avgMinutes: round1(row?.avg_minutes ?? null),
       medianMinutes: round1(row?.median_minutes ?? null),
       p90Minutes: round1(row?.p90_minutes ?? null),
+      slowChats: Array.isArray(row?.slow_chats) ? row.slow_chats : [],
     };
   }
 
@@ -409,7 +548,7 @@ export class AnalyticsService {
       this.churnRisk(actor, { branchId }),
       this.branchComparison(actor, { from, to }),
       this.lossReasons(actor, dated),
-      this.chatsSla(actor, { from, to }),
+      this.chatsSla(actor, { from, to, branchId }),
     ]);
 
     const churn =

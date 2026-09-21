@@ -135,6 +135,41 @@ void main() {
       expect(adapter.requests.first.body['platform'], 'android');
       expect(adapter.requests.last.method, 'DELETE');
     });
+
+    test(
+      'requests the scoped delivery journal with an exclusive range',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/admin/notifications/deliveries',
+            statusCode: 200,
+            body: {'items': <dynamic>[], 'total': 0},
+          ),
+        ]);
+        final service = MagicNotificationsService(_client(adapter));
+
+        await service.listDeliveryJournal(
+          from: DateTime.utc(2026, 9, 1),
+          toExclusive: DateTime.utc(2026, 10, 1),
+          branchId: 'branch-1',
+          channel: 'push',
+          status: 'failed',
+          limit: 25,
+          offset: 50,
+        );
+
+        final request = adapter.requests.single;
+        expect(request.queryParameters, {
+          'from': '2026-09-01T00:00:00.000Z',
+          'to': '2026-10-01T00:00:00.000Z',
+        'branchId': 'branch-1',
+        'channel': 'push',
+        'status': 'failed',
+        'limit': 25,
+        'offset': 50,
+        });
+      },
+    );
   });
 }
 

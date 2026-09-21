@@ -80,6 +80,23 @@ void main() {
       expect(controller.state.teacherDraft?.version, 5);
     });
 
+    test('teacher workflow link preselects the requested teacher', () async {
+      final api = _ScheduleReferenceApi();
+      final controller = ScheduleReferenceController(
+        crm: MagicCrmService(api),
+        section: ScheduleReferenceSection.teacherSchedule,
+        canEdit: true,
+        initialTeacherId: 'teacher-b',
+        clock: () => DateTime(2026, 8, 27, 12),
+      );
+
+      await controller.loadCatalogs();
+
+      expect(controller.state.teacherId, 'teacher-b');
+      expect(controller.state.teacherDraft?.version, 3);
+      controller.dispose();
+    });
+
     test('duplicate recurring rules stay preserved and lock editing', () async {
       final api = _ScheduleReferenceApi(
         teacherAvailability: const [

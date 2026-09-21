@@ -123,7 +123,11 @@ describe("Shared task reminders and realtime close (PostgreSQL)", () => {
     await tasks.close(
       fixture.manager,
       task.id,
-      { expectedVersion: task.version },
+      {
+        expectedVersion: task.version,
+        resultCode: "completed",
+        resultLabel: "Выполнено",
+      },
       {
         idempotencyKey: `close-${randomUUID()}`,
         requestId: `close-request-${randomUUID()}`,

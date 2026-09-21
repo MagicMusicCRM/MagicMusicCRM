@@ -71,24 +71,24 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('type-filter-trial_lesson')));
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const ValueKey('settlement-corner-lesson')),
+      find.byKey(const ValueKey('settlement-background-lesson')),
       findsOneWidget,
       reason: 'legend only',
     );
     expect(
-      find.byKey(const ValueKey('settlement-corner-trial_lesson')),
+      find.byKey(const ValueKey('settlement-background-trial_lesson')),
       findsNWidgets(2),
     );
     await tester.tap(find.byKey(const ValueKey('type-filter-free_lesson')));
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const ValueKey('settlement-corner-free_lesson')),
+      find.byKey(const ValueKey('settlement-background-free_lesson')),
       findsNWidgets(2),
     );
     await tester.tap(find.text('Сбросить выбор'));
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const ValueKey('settlement-corner-lesson')),
+      find.byKey(const ValueKey('settlement-background-lesson')),
       findsNWidgets(2),
     );
     expect(tester.takeException(), isNull);
@@ -158,7 +158,9 @@ void main() {
     expect(result!.compensationRules, isEmpty);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('ordinary lesson has a corner', (tester) async {
+  testWidgets('ordinary lesson has a persistent settlement background', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -174,7 +176,7 @@ void main() {
       ),
     );
     expect(
-      find.byKey(const ValueKey('settlement-corner-lesson')),
+      find.byKey(const ValueKey('settlement-background-lesson')),
       findsOneWidget,
     );
   });
@@ -188,6 +190,9 @@ void main() {
     );
     expect(find.byType(SingleChildScrollView), findsNothing);
     expect(tester.takeException(), isNull);
-    expect(find.text('Уголки — тип списания').hitTestable(), findsOneWidget);
+    expect(
+      find.text('Фон — тип списания · значок — статус').hitTestable(),
+      findsOneWidget,
+    );
   });
 }

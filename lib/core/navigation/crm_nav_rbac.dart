@@ -10,7 +10,7 @@
 ///
 /// Canonical (non-teacher) tab index meaning:
 ///   0 Чат · 1 Обзор · 2 Расписание · 3 Клиенты ·
-///   4 Пользователи (legacy deep link) · 5 Финансы (legacy deep link) ·
+///   4 Персонал · 5 Финансы (legacy deep link) ·
 ///   6 Задачи · 7 Аналитика · 8 Настройки системы.
 /// Teacher reuses 0/1/2 for Чат/Расписание/Ученики.
 ///
@@ -83,11 +83,11 @@ bool crmCanManageTeacherRates(CapabilitySnapshot snapshot) =>
 List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
   if (role == 'client') return const [];
   if (role == 'teacher') return const [0, 1, 2];
-  if (role == 'admin') return const [0, 2, 3, 6];
+  if (role == 'admin') return const [0, 2, 3, 4, 6];
   // The compact shell keeps secondary destinations in «Ещё»; Analytics must
   // remain reachable because Overview KPI cards deep-link into it.
-  if (!isDesktop) return const [0, 1, 2, 3, 6, 7, 8];
-  return const [0, 1, 2, 3, 6, 7, 8];
+  if (!isDesktop) return const [0, 1, 2, 3, 4, 6, 7, 8];
+  return const [0, 1, 2, 3, 4, 6, 7, 8];
 }
 
 /// Server-sourced destination matrix used by the live shell. Role-based
@@ -109,6 +109,7 @@ List<int> crmVisibleTabsForCapabilities(
       0,
       if (snapshot.allows('schedule.lesson.read.assigned')) 2,
       if (snapshot.allows('crm.client.read.basic')) 3,
+      if (snapshot.allows('crm.client.read.basic')) 4,
       if (snapshot.allows('workflow.task.read')) 6,
     ];
   }
@@ -127,6 +128,7 @@ List<int> crmVisibleTabsForCapabilities(
   }
   if (snapshot.allows('schedule.lesson.read.assigned')) tabs.add(2);
   if (snapshot.allows('crm.client.read.basic')) tabs.add(3);
+  if (snapshot.allows('crm.client.read.basic')) tabs.add(4);
   if (canReadTasks && !tabs.contains(6)) tabs.add(6);
   if (snapshot.allows('report.status.read')) tabs.add(7);
   if (snapshot.role != 'admin' &&
@@ -176,6 +178,11 @@ ResponsiveNavDestination crmDestinationForTab(
       label: 'Клиенты',
       badgeCount: badgeCount,
     ),
+    4 => const ResponsiveNavDestination(
+      icon: Icons.badge_outlined,
+      selectedIcon: Icons.badge_rounded,
+      label: 'Персонал',
+    ),
     5 => ResponsiveNavDestination(
       icon: Icons.account_balance_wallet_outlined,
       selectedIcon: Icons.account_balance_wallet_rounded,
@@ -221,7 +228,6 @@ int crmResolveVisibleTab({
   // v7 unified Finance and Reports under Analytics. Keep old tab-5 links
   // useful without exposing a duplicate top-level destination.
   if (requestedTab == 5 && visibleTabs.contains(7)) return 7;
-  if (requestedTab == 4 && visibleTabs.contains(8)) return 8;
   if (visibleTabs.contains(currentTab)) return currentTab;
   return visibleTabs.first;
 }
@@ -236,6 +242,7 @@ String crmSectionForTab(String role, int tab) => role == 'teacher'
         1 => 'overview',
         2 => 'schedule',
         3 => 'clients',
+        4 => 'personnel',
         5 => 'finance',
         6 => 'tasks',
         7 => 'reports',

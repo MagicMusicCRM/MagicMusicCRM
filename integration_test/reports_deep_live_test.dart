@@ -15,7 +15,7 @@ import 'live_audit_harness.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => initializeDateFormatting('ru'));
-  for (final role in ['manager', 'director'])
+  for (final role in ['manager', 'director']) {
     testWidgets(
       '$role reports filters and drilldowns',
       (tester) async {
@@ -146,7 +146,7 @@ void main() {
             expect(q['entityType'], isNull);
           },
         );
-        if (role == 'director')
+        if (role == 'director') {
           await h.check(
             'FINANCE-JOURNAL',
             'Переключить журнал на финансовые операции',
@@ -157,6 +157,7 @@ void main() {
               expect(find.text('Расход'), findsWidgets);
             },
           );
+        }
         final now = DateTime.now(),
             filter = DashboardFilter(
               from: DateTime(now.year, 1, 1),
@@ -222,12 +223,13 @@ void main() {
               findsOneWidget,
             );
             final q = lastQuery('/lesson-success/lessons')['query'] as Map;
-            for (final k in ['from', 'to', 'branchId'])
+            for (final k in ['from', 'to', 'branchId']) {
               expect(q[k], filter.apiFilter[k]);
+            }
             await h.tap(find.text('К отчёту'));
           },
         );
-        if (role == 'director')
+        if (role == 'director') {
           await h.check(
             'FINANCE-NONZERO',
             'Финансовая сводка включает настоящие 5000 ₽ прихода и 2000 ₽ расхода',
@@ -240,6 +242,7 @@ void main() {
               expect(data['expensesMinor'], '200000');
             },
           );
+        }
         await h.check(
           'OVERVIEW-PERIODS',
           'Обзор переключает 7 дней, месяц и квартал',
@@ -248,7 +251,7 @@ void main() {
             await tester.pump();
             await h.mount(Scaffold(body: ManagerOverviewWidget(role: role)));
             await h.quiet();
-            for (final label in ['7 дней', 'Квартал', 'Месяц']) {
+            for (final label in ['7 дней', 'Месяц', 'Год', 'Период']) {
               await h.tap(find.text(label).first);
               await h.quiet();
             }
@@ -260,4 +263,5 @@ void main() {
       },
       timeout: const Timeout(Duration(minutes: 10)),
     );
+  }
 }

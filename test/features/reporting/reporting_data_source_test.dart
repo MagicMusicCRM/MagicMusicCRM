@@ -17,6 +17,23 @@ final _sourceProvider = Provider<ReportingDataSource>(
 );
 
 void main() {
+  test('dashboard presets use current calendar week, month and year', () {
+    final now = DateTime(2026, 9, 20, 16, 45);
+
+    expect(
+      DashboardFilter.forPreset(DashboardPeriodPreset.week, now: now),
+      DashboardFilter(from: DateTime(2026, 9, 14), to: DateTime(2026, 9, 20)),
+    );
+    expect(
+      DashboardFilter.forPreset(DashboardPeriodPreset.month, now: now),
+      DashboardFilter(from: DateTime(2026, 9, 1), to: DateTime(2026, 9, 20)),
+    );
+    expect(
+      DashboardFilter.forPreset(DashboardPeriodPreset.year, now: now),
+      DashboardFilter(from: DateTime(2026, 1, 1), to: DateTime(2026, 9, 20)),
+    );
+  });
+
   test('dashboard filter preserves analytics and workspace mappings', () {
     final filter = DashboardFilter(
       from: DateTime.utc(2026, 8, 1),

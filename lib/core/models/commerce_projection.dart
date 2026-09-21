@@ -437,6 +437,7 @@ class CommerceInstallment {
   const CommerceInstallment({
     required this.installmentNumber,
     required this.dueAt,
+    required this.dueKind,
     required this.amountMinor,
     required this.currencyCode,
     required this.status,
@@ -444,6 +445,7 @@ class CommerceInstallment {
 
   final int installmentNumber;
   final DateTime dueAt;
+  final String dueKind;
   final BigInt amountMinor;
   final String currencyCode;
   final String status;
@@ -455,6 +457,7 @@ class CommerceInstallment {
         'installmentNumber',
       ),
       dueAt: _commerceDate(json['dueAt'], 'dueAt'),
+      dueKind: json['dueKind']?.toString() ?? 'fixed',
       amountMinor: _commerceMinor(json['amountMinor'], 'amountMinor'),
       currencyCode: _commerceRequiredString(json, 'currencyCode'),
       status: _commerceRequiredString(json, 'status'),

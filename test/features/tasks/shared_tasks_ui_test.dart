@@ -33,6 +33,11 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
   bool failAudiencePreview = false;
   bool taskAllDay = false;
   DateTime? taskStartAt;
+  SharedTaskCompletionInput? lastCloseInput;
+  int resultsCalls = 0;
+  String? resultsResultCode;
+  String? resultsFrom;
+  String? resultsTo;
 
   Map<String, dynamic> get task => {
     'id': '11111111-1111-4111-8111-111111111111',
@@ -170,8 +175,10 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
   Future<Map<String, dynamic>> close(
     String taskId,
     int expectedVersion,
+    SharedTaskCompletionInput input,
     MagicMutationIdentity identity,
   ) async {
+    lastCloseInput = input;
     if (failNextClose) {
       failNextClose = false;
       throw StateError('offline');
@@ -184,6 +191,63 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
     }
     closed = true;
     return {'taskId': taskId, 'taskVersion': 2};
+  }
+
+  @override
+  Future<Map<String, dynamic>> results({
+    String? from,
+    String? to,
+    String? branchId,
+    String? closedBy,
+    String? resultCode,
+    String? q,
+    bool? late,
+    bool includeUndated = false,
+  }) async {
+    resultsCalls++;
+    resultsResultCode = resultCode;
+    resultsFrom = from;
+    resultsTo = to;
+    return {
+      'items': [
+        {
+          'taskId': 'task-result-1',
+          'title': 'Позвонить клиенту',
+          'body': 'Уточнить решение после пробного занятия',
+          'client': {
+            'type': 'lead',
+            'id': '44444444-4444-4444-8444-444444444444',
+            'label': 'Мария Иванова',
+          },
+          'audiences': [
+            {
+              'type': 'user',
+              'targetId': '22222222-2222-4222-8222-222222222222',
+              'label': 'Анна Петрова',
+              'entityType': 'staff',
+              'entityId': '33333333-3333-4333-8333-333333333333',
+            },
+            {'type': 'branch', 'label': 'Центральный'},
+          ],
+          'plannedStartAt': '2026-09-18T09:00:00.000Z',
+          'plannedAllDay': false,
+          'closedAt': '2026-09-18T10:30:00.000Z',
+          'closedBy': {
+            'id': '22222222-2222-4222-8222-222222222222',
+            'label': 'Анна Петрова',
+            'entityType': 'staff',
+            'entityId': '33333333-3333-4333-8333-333333333333',
+          },
+          'wasOverdue': true,
+          'result': {
+            'code': 'completed',
+            'label': 'Выполнено',
+            'comment': 'Клиент подтвердил следующий звонок.',
+          },
+        },
+      ],
+      'summary': {'closed': 1, 'overdue': 1, 'withoutResult': 0},
+    };
   }
 
   @override
@@ -271,6 +335,8 @@ Widget _host(
   EntityLink? linkedEntity,
   bool canWrite = true,
   bool defaultToMineToday = false,
+  bool canViewResults = false,
+  ValueChanged<EntityLink>? onOpenResultEntity,
 }) {
   return ProviderScope(
     child: MaterialApp(
@@ -287,6 +353,8 @@ Widget _host(
           linkedEntity: linkedEntity,
           canWrite: canWrite,
           defaultToMineToday: defaultToMineToday,
+          canViewResults: canViewResults,
+          onOpenResultEntity: onOpenResultEntity,
         ),
       ),
     ),
@@ -532,7 +600,16 @@ void main() {
 
     await tester.tap(find.text('Закрыть задачу'));
     await tester.pumpAndSettle();
+    expect(find.text('Результат выполнения задачи'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('shared-task-result-select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выполнено').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shared-task-close-submit')));
+    await tester.pumpAndSettle();
     expect(find.text('Нет задач'), findsOneWidget);
+    expect(source.lastCloseInput?.resultCode, 'completed');
+    expect(source.lastCloseInput?.resultLabel, 'Выполнено');
   });
 
   testWidgets('close failure keeps task open and retries explicitly', (
@@ -544,15 +621,111 @@ void main() {
 
     await tester.tap(find.text('Закрыть задачу'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shared-task-result-select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выполнено').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shared-task-close-submit')));
+    await tester.pumpAndSettle();
     expect(
-      find.text('Не удалось закрыть. Задача осталась открытой.'),
+      find.text('Не удалось закрыть задачу. Данные формы сохранены.'),
       findsOneWidget,
     );
-    expect(find.text('Повторить закрытие'), findsOneWidget);
+    expect(find.text('Результат выполнения задачи'), findsOneWidget);
 
-    await tester.tap(find.text('Повторить закрытие'));
+    await tester.tap(find.byKey(const Key('shared-task-close-submit')));
     await tester.pumpAndSettle();
     expect(find.text('Нет задач'), findsOneWidget);
+  });
+
+  testWidgets('Other requires an explanation before closing', (tester) async {
+    final source = FakeSharedTasksDataSource();
+    await tester.pumpWidget(_host(source));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Закрыть задачу'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shared-task-result-select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Другое').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shared-task-close-submit')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Для результата «Другое» добавьте пояснение.'),
+      findsOneWidget,
+    );
+    expect(source.lastCloseInput, isNull);
+
+    await tester.enterText(
+      find.byKey(const Key('shared-task-result-comment')),
+      'Клиент попросил перенести обсуждение.',
+    );
+    await tester.tap(find.byKey(const Key('shared-task-close-submit')));
+    await tester.pumpAndSettle();
+
+    expect(source.lastCloseInput?.resultCode, 'other');
+    expect(
+      source.lastCloseInput?.comment,
+      'Клиент попросил перенести обсуждение.',
+    );
+  });
+
+  testWidgets('manager opens task results with full operational context', (
+    tester,
+  ) async {
+    final source = FakeSharedTasksDataSource();
+    EntityLink? opened;
+    await tester.pumpWidget(
+      _host(
+        source,
+        canViewResults: true,
+        onOpenResultEntity: (link) => opened = link,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('shared-task-open-results')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Результаты выполнения задач'), findsOneWidget);
+    expect(find.text('Позвонить клиенту'), findsOneWidget);
+    expect(find.text('Мария Иванова'), findsOneWidget);
+    expect(find.text('Анна Петрова'), findsWidgets);
+    expect(find.text('Выполнено'), findsWidgets);
+    expect(find.text('Клиент подтвердил следующий звонок.'), findsOneWidget);
+    expect(find.text('Закрыта с опозданием'), findsOneWidget);
+    expect(find.text('Открыть поручение'), findsOneWidget);
+    expect(find.text('Неделя'), findsOneWidget);
+    expect(find.text('Месяц'), findsOneWidget);
+    expect(find.text('Год'), findsOneWidget);
+    expect(find.text('Указать период'), findsOneWidget);
+    expect(source.resultsCalls, 1);
+
+    await tester.tap(
+      find.byKey(const Key('shared-task-result-closer-task-result-1')),
+    );
+    await tester.pump();
+    expect(opened?.rawEntityType, 'staff');
+    expect(opened?.entityId, '33333333-3333-4333-8333-333333333333');
+
+    final callsBeforeWeek = source.resultsCalls;
+    await tester.tap(find.text('Неделя'));
+    await tester.pumpAndSettle();
+    expect(source.resultsCalls, callsBeforeWeek + 1);
+    final weekFrom = DateTime.parse(source.resultsFrom!).toUtc();
+    final weekTo = DateTime.parse(source.resultsTo!).toUtc();
+    expect(
+      weekTo.difference(weekFrom),
+      lessThanOrEqualTo(const Duration(days: 7)),
+    );
+
+    await tester.tap(find.byKey(const Key('shared-task-results-result')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Не выполнено').last);
+    await tester.pumpAndSettle();
+    expect(source.resultsResultCode, 'not_completed');
   });
 
   testWidgets('mobile collapsed filter is 56px and advanced filters scroll', (

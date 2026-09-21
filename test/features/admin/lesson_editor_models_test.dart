@@ -139,6 +139,7 @@ void main() {
     final input = LessonEditorInitialInput.fromSource(_InitialSource(lesson));
 
     expect(input.initialDate, DateTime(2026, 8, 28, 11));
+    expect(input.initialTeacherId, 'teacher-1');
     expect(input.initialRoomId, 'room-1');
     expect(input.initialBranchId, 'branch-1');
     expect(input.initialDurationMinutes, 75);
@@ -153,6 +154,9 @@ void main() {
 }
 
 class _InitialSource implements LessonEditorInitialSource {
+  @override
+  String? get initialTeacherId => 'teacher-1';
+
   const _InitialSource(this.lesson);
 
   @override

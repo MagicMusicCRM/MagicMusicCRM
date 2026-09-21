@@ -70,6 +70,8 @@ export class SubscriptionPurchasePersistenceService {
       issuedSubscriptionId: subscription.id,
       currencyCode: input.package.currency_code,
       installments: input.normalized.installments,
+      duePolicy:
+        input.fundingMode === "installment" ? "consumption" : "calendar",
     });
     await this.repository.createObligations(client, {
       studentId: input.payerStudentId,

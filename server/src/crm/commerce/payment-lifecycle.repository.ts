@@ -99,6 +99,117 @@ export class PaymentLifecycleRepository {
     private readonly integrity: PlatformIntegrityRepository,
   ) {}
 
+  async materializeConsumptionBasedInstallmentDues(
+    now: Date,
+    limit: number,
+  ): Promise<number> {
+    const result = await this.database.query<{ id: string }>(
+      `
+        with terms as (
+          select
+            installment.id as installment_id,
+            installment.issued_subscription_id,
+            subscription.created_at as issued_at,
+            coalesce(
+              nullif(subscription.commercial_snapshot ->> 'finalPriceMinor', '')::numeric,
+              0
+            ) as final_price_minor,
+            coalesce(
+              nullif(subscription.commercial_snapshot ->> 'unitCount', '')::numeric,
+              subscription.lessons_total,
+              0
+            ) as unit_count,
+            greatest(
+              coalesce(
+                nullif(subscription.commercial_snapshot ->> 'finalPriceMinor', '')::numeric,
+                0
+              ) - coalesce((
+                select sum(all_parts.amount_minor)
+                from app.subscription_installments all_parts
+                where all_parts.issued_subscription_id = subscription.id
+                  and all_parts.status <> 'void'
+              ), 0),
+              0
+            ) + coalesce((
+              select sum(previous.amount_minor)
+              from app.subscription_installments previous
+              where previous.issued_subscription_id = subscription.id
+                and previous.status <> 'void'
+                and previous.installment_number < installment.installment_number
+            ), 0) as funded_before_minor,
+            coalesce((
+              select sum(payment.amount_minor)
+              from app.commerce_ordinary_payments payment
+              where payment.issued_subscription_id = subscription.id
+                and payment.deleted_at is null
+            ), 0) + coalesce((
+              select sum(adjustment.amount_minor)
+              from app.commerce_ordinary_account_adjustments adjustment
+              join app.commerce_ordinary_payments source
+                on source.id = adjustment.source_payment_id
+              where source.issued_subscription_id = subscription.id
+                and adjustment.deleted_at is null
+                and adjustment.status = 'paid'
+            ), 0) as actual_paid_minor
+          from app.subscription_installments installment
+          join app.subscriptions subscription
+            on subscription.id = installment.issued_subscription_id
+          where installment.due_policy = 'consumption'
+            and installment.status = 'pending'
+            and subscription.status = 'active'
+            and not exists (
+              select 1 from app.subscription_installment_due_facts existing
+              where existing.installment_id = installment.id
+            )
+        ), thresholds as (
+          select terms.*,
+            case
+              when final_price_minor <= 0 then 0
+              else funded_before_minor * unit_count / final_price_minor
+            end as due_after_units
+          from terms
+          where actual_paid_minor >= funded_before_minor
+        ), eligible as (
+          select threshold.*,
+            crossing.charge_fact_id,
+            coalesce(crossing.due_at, threshold.issued_at, $1::timestamptz)
+              as effective_due_at
+          from thresholds threshold
+          left join lateral (
+            select ranked.charge_fact_id, ranked.due_at
+            from (
+              select
+                charge.id as charge_fact_id,
+                charge.created_at as due_at,
+                sum(charge.units) over (
+                  order by charge.created_at, charge.id
+                ) as consumed_units
+              from app.lesson_client_charge_facts_effective charge
+              where charge.subscription_id = threshold.issued_subscription_id
+                and charge.charge_type = 'subscription'
+            ) ranked
+            where ranked.consumed_units >= threshold.due_after_units
+            order by ranked.due_at, ranked.charge_fact_id
+            limit 1
+          ) crossing on threshold.due_after_units > 0
+          where threshold.due_after_units = 0
+             or crossing.charge_fact_id is not null
+          order by effective_due_at, threshold.installment_id
+          limit $2
+        )
+        insert into app.subscription_installment_due_facts (
+          installment_id, due_at, trigger_charge_fact_id
+        )
+        select installment_id, effective_due_at, charge_fact_id
+        from eligible
+        on conflict (installment_id) do nothing
+        returning id
+      `,
+      [now, Math.max(1, Math.min(200, Math.floor(limit)))],
+    );
+    return result.rowCount ?? 0;
+  }
+
   async findRecordTarget(
     studentId: string,
     issuedSubscriptionId?: string,
@@ -498,7 +609,7 @@ export class PaymentLifecycleRepository {
         ), candidates as (
           select
             installment.id as installment_id,
-            installment.due_at,
+            coalesce(due_fact.due_at, installment.due_at) as due_at,
             subscription.id as issued_subscription_id,
             subscription.student_id as recipient_student_id,
             coalesce(
@@ -514,6 +625,8 @@ export class PaymentLifecycleRepository {
           from app.subscription_installments installment
           join app.subscriptions subscription
             on subscription.id = installment.issued_subscription_id
+          left join app.subscription_installment_due_facts due_fact
+            on due_fact.installment_id = installment.id
           join app.students target_student
             on target_student.id = subscription.student_id
            and target_student.deleted_at is null
@@ -550,6 +663,10 @@ export class PaymentLifecycleRepository {
           ) school_setting on true
           where installment.status = 'pending'
             and subscription.status = 'active'
+            and (
+              installment.due_policy = 'calendar'
+              or due_fact.id is not null
+            )
             and not exists (
               select 1
               from app.installment_payment_reminders reminder
@@ -571,13 +688,24 @@ export class PaymentLifecycleRepository {
                   and adjustment.deleted_at is null
                   and adjustment.status = 'paid'
               ), 0)
-            ) < (
+            ) < greatest(
+              coalesce(
+                nullif(subscription.commercial_snapshot ->> 'finalPriceMinor', '')::numeric,
+                0
+              ) - coalesce((
+                select sum(all_parts.amount_minor)
+                from app.subscription_installments all_parts
+                where all_parts.issued_subscription_id = subscription.id
+                  and all_parts.status <> 'void'
+              ), 0),
+              0
+            ) + coalesce((
               select sum(previous.amount_minor)
               from app.subscription_installments previous
               where previous.issued_subscription_id = subscription.id
                 and previous.status <> 'void'
                 and previous.installment_number <= installment.installment_number
-            )
+            ), 0)
         ), eligible as (
           select candidate.*
           from candidates candidate
@@ -685,13 +813,24 @@ export class PaymentLifecycleRepository {
                       and adjustment.deleted_at is null
                       and adjustment.status = 'paid'
                   ), 0)
-                ) < (
+                ) < greatest(
+                  coalesce(
+                    nullif(subscription.commercial_snapshot ->> 'finalPriceMinor', '')::numeric,
+                    0
+                  ) - coalesce((
+                    select sum(all_parts.amount_minor)
+                    from app.subscription_installments all_parts
+                    where all_parts.issued_subscription_id = subscription.id
+                      and all_parts.status <> 'void'
+                  ), 0),
+                  0
+                ) + coalesce((
                   select sum(previous.amount_minor)
                   from app.subscription_installments previous
                   where previous.issued_subscription_id = subscription.id
                     and previous.status <> 'void'
                     and previous.installment_number <= installment.installment_number
-                )
+                ), 0)
             )
         `,
       );
@@ -846,7 +985,7 @@ export class PaymentLifecycleRepository {
             ) as payer_student_id,
             installment.amount_minor::text,
             installment.currency_code,
-            installment.due_at,
+            coalesce(due_fact.due_at, installment.due_at) as due_at,
             subscription.student_id as recipient_student_id,
             (
               select count(*) + 1
@@ -856,8 +995,14 @@ export class PaymentLifecycleRepository {
           from app.subscription_installments installment
           join app.subscriptions subscription
             on subscription.id = installment.issued_subscription_id
+          left join app.subscription_installment_due_facts due_fact
+            on due_fact.installment_id = installment.id
           where installment.status = 'pending'
-            and installment.due_at <= $1
+            and coalesce(due_fact.due_at, installment.due_at) <= $1
+            and (
+              installment.due_policy = 'calendar'
+              or due_fact.id is not null
+            )
             and subscription.status = 'active'
             and not exists (
               select 1
@@ -880,14 +1025,25 @@ export class PaymentLifecycleRepository {
                   and adjustment.deleted_at is null
                   and adjustment.status = 'paid'
               ), 0)
-            ) < (
+            ) < greatest(
+              coalesce(
+                nullif(subscription.commercial_snapshot ->> 'finalPriceMinor', '')::numeric,
+                0
+              ) - coalesce((
+                select sum(all_parts.amount_minor)
+                from app.subscription_installments all_parts
+                where all_parts.issued_subscription_id = subscription.id
+                  and all_parts.status <> 'void'
+              ), 0),
+              0
+            ) + coalesce((
               select sum(previous.amount_minor)
               from app.subscription_installments previous
               where previous.issued_subscription_id = subscription.id
                 and previous.status <> 'void'
                 and previous.installment_number <= installment.installment_number
-            )
-          order by installment.due_at, installment.id
+            ), 0)
+          order by coalesce(due_fact.due_at, installment.due_at), installment.id
           for update of installment skip locked
           limit $2
         `,

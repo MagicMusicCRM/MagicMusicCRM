@@ -118,6 +118,23 @@ void main() {
     expect(session.snapshot, isNull);
   });
 
+  test('prefills the teacher selected in the schedule grid', () {
+    final session = mapper.map(
+      const LessonEditorInitialInput(
+        initialDate: null,
+        initialTeacherId: 'teacher-a',
+        initialDurationMinutes: 60,
+        initialRoomId: null,
+        initialBranchId: 'branch-a',
+        initialIsTrial: false,
+        lesson: null,
+      ),
+    );
+
+    expect(session.draft.teacherId, 'teacher-a');
+    expect(session.draft.branchId, 'branch-a');
+  });
+
   test(
     'keeps fallback lead display separate from the nullable note source',
     () {

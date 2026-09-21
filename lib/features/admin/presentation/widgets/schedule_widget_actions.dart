@@ -56,11 +56,16 @@ extension _ScheduleActions on _ScheduleWidgetState {
     }
   }
 
-  Future<void> _openWeekCreate(DateTime startLocal, int durationMinutes) async {
+  Future<void> _openWeekCreate(
+    DateTime startLocal,
+    int durationMinutes, {
+    String? teacherId,
+  }) async {
     if (!widget.canWrite) return;
     final created = await CreateLessonDialog.show(
       context,
       initialDate: startLocal,
+      initialTeacherId: teacherId,
       initialBranchId: _selectedBranchId,
       initialDurationMinutes: durationMinutes,
       clientType: _contextClientType,
@@ -430,9 +435,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
       final wave1 = await Future.wait([
         crm.listBranches(limit: 100),
         crm.listRooms(limit: 100),
+        if (_dayViewMode == DayViewMode.byTeacher) crm.listTeachers(limit: 100),
       ]);
       final branches = wave1[0];
       final rooms = wave1[1];
+      final teacherDirectory = wave1.length > 2
+          ? wave1[2]
+          : const <Map<String, dynamic>>[];
 
       // A room belongs to exactly one branch. A linked room must therefore
       // override a branch restored from the previously open schedule tab;
@@ -611,6 +620,15 @@ extension _ScheduleActions on _ScheduleWidgetState {
       // Build teacher/student name maps from matrix data (no extra API calls).
       final tNames = <String, String>{};
       final sNames = <String, String>{};
+      for (final teacher in teacherDirectory) {
+        final id = teacher['id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        final name = [
+          teacher['first_name'] ?? teacher['firstName'],
+          teacher['last_name'] ?? teacher['lastName'],
+        ].whereType<String>().where((part) => part.trim().isNotEmpty).join(' ');
+        if (name.isNotEmpty) tNames[id] = name;
+      }
       for (final lesson in enrichedLessons) {
         final tid = lesson['teacher_id']?.toString();
         if (tid != null && tid.isNotEmpty) {
@@ -655,6 +673,15 @@ extension _ScheduleActions on _ScheduleWidgetState {
         return;
       }
 
+      final teacherIds = tNames.keys.toList()
+        ..sort((left, right) => tNames[left]!.compareTo(tNames[right]!));
+      final selectedWeekTeacher =
+          _currentView == ScheduleView.week &&
+              _dayViewMode == DayViewMode.byTeacher
+          ? (widget.fixedTeacherId ??
+                _filterTeacherId ??
+                teacherIds.firstOrNull)
+          : null;
       _emitState(() {
         _branches = visibleBranches;
         _branchOffsets = offsets;
@@ -667,10 +694,24 @@ extension _ScheduleActions on _ScheduleWidgetState {
         _roomNames = nameMap;
         _monthDaySummary = monthSummary;
         _teacherNames = tNames;
+        if (selectedWeekTeacher != null) {
+          _filterTeacherId = selectedWeekTeacher;
+        }
         _studentNames = sNames;
         _isLoading = false;
         _hasLoadedOnce = true;
       });
+
+      if (selectedWeekTeacher != null) {
+        unawaited(_fetchTeacherWeekReference());
+      } else if (_teacherWeekReference != null ||
+          _teacherWeekReferenceLoading) {
+        _emitState(() {
+          _teacherWeekReference = null;
+          _teacherWeekReferenceLoading = false;
+          _teacherWeekReferenceGeneration++;
+        });
+      }
 
       // The month-wide matrix is capped at 300 rows; if we're already in the day
       // view, backfill the selected day so it isn't left empty for dates past the
@@ -684,6 +725,46 @@ extension _ScheduleActions on _ScheduleWidgetState {
       _emitState(() {
         _loadError = e;
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchTeacherWeekReference() async {
+    final branchId = _selectedBranchId;
+    final teacherId = widget.fixedTeacherId ?? _filterTeacherId;
+    if (_currentView != ScheduleView.week ||
+        _dayViewMode != DayViewMode.byTeacher ||
+        branchId == null ||
+        teacherId == null) {
+      return;
+    }
+    final generation = ++_teacherWeekReferenceGeneration;
+    _emitState(() => _teacherWeekReferenceLoading = true);
+    final monday = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    ).subtract(Duration(days: _selectedDate.weekday - 1));
+    try {
+      final reference = await ref
+          .read(magicCrmServiceProvider)
+          .getScheduleReference(
+            branchId: branchId,
+            teacherId: teacherId,
+            from: monday,
+            to: monday.add(const Duration(days: 7)),
+          );
+      if (!mounted || generation != _teacherWeekReferenceGeneration) return;
+      _emitState(() {
+        _teacherWeekReference = reference;
+        _teacherWeekReferenceLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || generation != _teacherWeekReferenceGeneration) return;
+      debugPrint('Error fetching teacher week availability: $error');
+      _emitState(() {
+        _teacherWeekReference = null;
+        _teacherWeekReferenceLoading = false;
       });
     }
   }
@@ -852,12 +933,14 @@ extension _ScheduleActions on _ScheduleWidgetState {
       // Optional filters — applied over the already-loaded matrix, no refetch.
       if (_canFilterFinancialTypes &&
           _settlementTypes.isNotEmpty &&
-          !_settlementTypes.contains(l['settlement_type_key']))
+          !_settlementTypes.contains(l['settlement_type_key'])) {
         return false;
+      }
       if (_canFilterFinancialTypes &&
           _compensationRules.isNotEmpty &&
-          !_compensationRules.contains(l['teacher_compensation_rule_key']))
+          !_compensationRules.contains(l['teacher_compensation_rule_key'])) {
         return false;
+      }
       if (_onlyTrial && l['is_trial'] != true) return false;
       if (_onlyConflicts && conflictTypes(l['conflict_types']).isEmpty) {
         return false;
@@ -880,7 +963,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
 
   /// Teacher options for the filter sheet, from the lessons currently loaded.
   List<({String id, String name})> get _teacherFilterOptions {
-    final seen = <String, String>{};
+    final seen = <String, String>{..._teacherNames};
     for (final l in _lessons) {
       final id = l['teacher_id']?.toString();
       if (id == null || id.isEmpty) continue;
@@ -1343,8 +1426,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
     });
     // Financial, teacher and trial scopes must refresh every matrix query;
     // local predicates also protect the view while the response is in flight.
-    if (branchChanged || modeChanged || financialChanged || scopeChanged)
+    if (branchChanged || modeChanged || financialChanged || scopeChanged) {
       _fetchAll();
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -175,21 +175,30 @@ extension _ClientCardStudent on _ClientCardState {
   }
 
   Future<void> _openClientTrayLesson(Map<String, dynamic> lesson) async {
+    lesson = await _loadActionableClientLesson(lesson) ?? const {};
+    if (lesson.isEmpty || !mounted) return;
+    final changed = await CreateLessonDialog.show(context, lesson: lesson);
+    if (changed == true && mounted) await _refreshClientLessonData();
+  }
+
+  Future<Map<String, dynamic>?> _loadActionableClientLesson(
+    Map<String, dynamic> lesson,
+  ) async {
     if (lesson['version'] == null ||
         (lesson['student_id'] == null &&
             lesson['lead_id'] == null &&
             lesson['group_id'] == null)) {
       try {
         final id = lesson['id']?.toString();
-        if (id == null || id.isEmpty) return;
+        if (id == null || id.isEmpty) return null;
         final exact = await ref
             .read(magicCrmServiceProvider)
             .listLessons(lessonId: id, limit: 1);
-        if (!mounted) return;
+        if (!mounted) return null;
         if (exact.isEmpty) throw StateError('Lesson unavailable');
         lesson = exact.first;
       } catch (_) {
-        if (!mounted) return;
+        if (!mounted) return null;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -197,11 +206,49 @@ extension _ClientCardStudent on _ClientCardState {
             ),
           ),
         );
-        return;
+        return null;
       }
     }
-    final changed = await CreateLessonDialog.show(context, lesson: lesson);
-    if (changed == true && mounted) await _fetchStudentData();
+    return lesson;
+  }
+
+  Future<void> _createLeadTrialLesson() async {
+    final changed = await CreateLessonDialog.show(
+      context,
+      leadId: _leadId,
+      leadName: _clientPresentationLabel,
+      initialBranchId: _clientBranchId,
+      initialIsTrial: true,
+    );
+    if (changed == true && mounted) await _refreshClientLessonData();
+  }
+
+  Future<void> _cancelClientTrayLesson(Map<String, dynamic> lesson) async {
+    final actionable = await _loadActionableClientLesson(lesson);
+    if (!mounted || actionable == null) return;
+    final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
+    final changed = await showLessonDecisionFlow(
+      context,
+      crm: ref.read(magicCrmServiceProvider),
+      operation: LessonDecisionOperation.cancel,
+      lesson: actionable,
+      canManageTeacherCompensation:
+          snapshot != null && crmCanManageTeacherRates(snapshot),
+    );
+    if (changed == true && mounted) {
+      await _refreshClientLessonData();
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Занятие отменено',
+        type: MagicToastType.success,
+      );
+    }
+  }
+
+  Future<void> _refreshClientLessonData() async {
+    if (_mode.hasLeadHalf) await _fetchCard();
+    if (_mode.hasStudentHalf) await _fetchStudentData();
   }
 
   // ── Student tab: Оплаты ──────────────────────────────────────────────────
@@ -646,6 +693,7 @@ extension _ClientCardStudent on _ClientCardState {
       _clientFirstName,
     ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' ');
     final recipientId = issuingForLead ? _leadId : _studentId;
+    String? convertedStudentId;
     final issued = await showSubscriptionIssueFormSheet(
       context,
       package: packages.first,
@@ -681,12 +729,16 @@ extension _ClientCardStudent on _ClientCardState {
         if (issuingForLead) _emitState(() => _converting = true);
         try {
           if (issuingForLead) {
-            await crm.purchaseLeadSubscription(
+            final response = await crm.purchaseLeadSubscription(
               _leadId,
               input: submission.purchase,
               preview: submission.preview,
               identity: submission.identity,
             );
+            final student = response['student'];
+            if (student is Map && student['id'] != null) {
+              convertedStudentId = student['id'].toString();
+            }
           } else {
             await crm.purchaseSubscription(
               _studentId,
@@ -703,7 +755,6 @@ extension _ClientCardStudent on _ClientCardState {
       },
     );
     if (issued != true || !mounted) return;
-    _markDirty();
     MagicToast.show(
       context,
       issuingForLead
@@ -712,9 +763,27 @@ extension _ClientCardStudent on _ClientCardState {
       type: MagicToastType.success,
     );
     if (issuingForLead) {
-      _closeCard(true);
+      final studentId = convertedStudentId;
+      if (studentId == null || studentId.isEmpty) {
+        // The purchase succeeded but an unexpected legacy response omitted the
+        // converted student. Refresh the lead and resolve its linked student
+        // without closing the user's working card.
+        await _fetchCard(preserveVisibleContent: true);
+        return;
+      }
+      _emitState(() {
+        _mode = ClientMode.converted;
+        _resolvedStudentId = studentId;
+      });
+      await Future.wait([
+        _fetchCard(preserveVisibleContent: true),
+        _fetchStudentData(studentId: studentId, preserveVisibleContent: true),
+        _fetchFamily(),
+        _fetchClientAccess(),
+        _fetchInternalContext(),
+      ]);
     } else {
-      _fetchStudentData();
+      await _fetchStudentData(preserveVisibleContent: true);
     }
   }
 
@@ -1043,23 +1112,23 @@ extension _ClientCardStudent on _ClientCardState {
         onChanged: !_canWriteClient
             ? null
             : (v) async {
-          if (v != null) {
-            String? reason;
-            if (_statusRequiresReason[v] == true) {
-              reason = await showMagicDialog<String>(
-                context: context,
-                builder: (_) => const _LeadStatusReasonDialog(),
-              );
-              if (reason == null || !mounted) return;
-            }
-            _emitState(() {
-              _leadData['status'] = v;
-              _pendingLeadStatusComment = reason;
-              _edited = true;
-              _draft.leadStatusEdit = _draft.revision;
-            });
-          }
-        },
+                if (v != null) {
+                  String? reason;
+                  if (_statusRequiresReason[v] == true) {
+                    reason = await showMagicDialog<String>(
+                      context: context,
+                      builder: (_) => const _LeadStatusReasonDialog(),
+                    );
+                    if (reason == null || !mounted) return;
+                  }
+                  _emitState(() {
+                    _leadData['status'] = v;
+                    _pendingLeadStatusComment = reason;
+                    _edited = true;
+                    _draft.leadStatusEdit = _draft.revision;
+                  });
+                }
+              },
       ),
     );
   }
@@ -1138,7 +1207,8 @@ class _LeadStatusReasonDialog extends StatefulWidget {
   const _LeadStatusReasonDialog();
 
   @override
-  State<_LeadStatusReasonDialog> createState() => _LeadStatusReasonDialogState();
+  State<_LeadStatusReasonDialog> createState() =>
+      _LeadStatusReasonDialogState();
 }
 
 class _LeadStatusReasonDialogState extends State<_LeadStatusReasonDialog> {

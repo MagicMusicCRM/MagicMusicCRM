@@ -114,15 +114,18 @@ extension MagicCrmSchedule on MagicCrmService {
   Future<Map<String, dynamic>> getScheduleReference({
     required String branchId,
     required String teacherId,
+    DateTime? from,
+    DateTime? to,
   }) {
-    final now = DateTime.now().toUtc();
+    final rangeStart = (from ?? DateTime.now()).toUtc();
+    final rangeEnd = (to ?? rangeStart.add(const Duration(days: 31))).toUtc();
     return _api.get<Map<String, dynamic>>(
       '/crm/schedule-reference',
       queryParameters: {
         'branchId': branchId,
         'teacherId': teacherId,
-        'from': now.toIso8601String(),
-        'to': now.add(const Duration(days: 31)).toIso8601String(),
+        'from': rangeStart.toIso8601String(),
+        'to': rangeEnd.toIso8601String(),
       },
     );
   }
@@ -239,6 +242,44 @@ extension MagicCrmSchedule on MagicCrmService {
     };
   }
 
+  Future<Map<String, dynamic>> listSharedTaskResults({
+    String? from,
+    String? to,
+    String? branchId,
+    String? closedBy,
+    String? resultCode,
+    String? q,
+    bool? late,
+    bool includeUndated = false,
+    int limit = 500,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/shared-tasks/results',
+      queryParameters: {
+        'limit': limit,
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+        if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+        if (closedBy != null && closedBy.isNotEmpty) 'closedBy': closedBy,
+        if (resultCode != null && resultCode.isNotEmpty)
+          'resultCode': resultCode,
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        if (late != null) 'late': late.toString(),
+        if (includeUndated) 'includeUndated': 'true',
+      },
+    );
+    return {
+      'items': response['items'] is List
+          ? (response['items'] as List)
+                .whereType<Map<String, dynamic>>()
+                .toList()
+          : <Map<String, dynamic>>[],
+      'summary': response['summary'] is Map<String, dynamic>
+          ? response['summary']
+          : <String, dynamic>{'closed': 0, 'overdue': 0, 'withoutResult': 0},
+    };
+  }
+
   Future<List<Map<String, dynamic>>> listSharedTaskHistory(
     String taskId,
   ) async {
@@ -287,12 +328,21 @@ extension MagicCrmSchedule on MagicCrmService {
   Future<Map<String, dynamic>> closeSharedTask({
     required String taskId,
     required int expectedVersion,
+    required String resultCode,
+    required String resultLabel,
+    String? comment,
     required MagicMutationIdentity identity,
   }) {
     return _api.postIdempotent<Map<String, dynamic>>(
       '/crm/shared-tasks/$taskId/close',
       identity: identity,
-      data: {'expectedVersion': expectedVersion},
+      data: {
+        'expectedVersion': expectedVersion,
+        'resultCode': resultCode,
+        'resultLabel': resultLabel,
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
+      },
     );
   }
 
@@ -364,8 +414,8 @@ extension MagicCrmSchedule on MagicCrmService {
     String? branchId,
   }) async {
     final queryParameters = <String, dynamic>{
-      if (teacherId != null) 'teacherId': teacherId,
-      if (isTrial != null) 'isTrial': isTrial,
+      'teacherId': ?teacherId,
+      'isTrial': ?isTrial,
       if (settlementTypes.isNotEmpty)
         'settlementTypes': settlementTypes.join(','),
       if (compensationRules.isNotEmpty)

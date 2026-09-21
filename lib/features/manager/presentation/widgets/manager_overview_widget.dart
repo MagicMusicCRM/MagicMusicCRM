@@ -1,4 +1,5 @@
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -12,7 +13,7 @@ import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
 part 'manager_overview_widgets.dart';
 
-enum _DashboardPeriod { week, month, quarter }
+enum _DashboardPeriod { week, month, year, custom }
 
 class _DashboardWindow {
   final DateTime from;
@@ -31,6 +32,11 @@ class _DashboardWindow {
     final toFmt = DateFormat('d MMM', 'ru');
     return '${fromFmt.format(from)} - ${toFmt.format(visibleTo)}';
   }
+
+  _DashboardWindow previous() {
+    final length = toExclusive.difference(from);
+    return _DashboardWindow(from: from.subtract(length), toExclusive: from);
+  }
 }
 
 extension _DashboardPeriodBounds on _DashboardPeriod {
@@ -38,7 +44,8 @@ extension _DashboardPeriodBounds on _DashboardPeriod {
     return switch (this) {
       _DashboardPeriod.week => '7 дней',
       _DashboardPeriod.month => 'Месяц',
-      _DashboardPeriod.quarter => 'Квартал',
+      _DashboardPeriod.year => 'Год',
+      _DashboardPeriod.custom => 'Период',
     };
   }
 
@@ -54,19 +61,41 @@ extension _DashboardPeriodBounds on _DashboardPeriod {
           now.year,
           now.month,
           now.day,
-        ).subtract(const Duration(days: 6)),
+        ).subtract(Duration(days: now.weekday - DateTime.monday)),
         toExclusive: todayEnd,
       ),
       _DashboardPeriod.month => _DashboardWindow(
         from: DateTime(now.year, now.month),
         toExclusive: todayEnd,
       ),
-      _DashboardPeriod.quarter => _DashboardWindow(
-        from: DateTime(now.year, now.month - 2),
+      _DashboardPeriod.year => _DashboardWindow(
+        from: DateTime(now.year, 1),
+        toExclusive: todayEnd,
+      ),
+      _DashboardPeriod.custom => _DashboardWindow(
+        from: DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(const Duration(days: 29)),
         toExclusive: todayEnd,
       ),
     };
   }
+}
+
+class _DashboardLoad {
+  final Map<String, dynamic> current;
+  final Map<String, dynamic> previous;
+  final _DashboardWindow window;
+  final DateTime loadedAt;
+
+  const _DashboardLoad({
+    required this.current,
+    required this.previous,
+    required this.window,
+    required this.loadedAt,
+  });
 }
 
 class ManagerOverviewWidget extends ConsumerStatefulWidget {
@@ -92,9 +121,10 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
   bool get _canSeeFinance => crmHasSchoolFinanceAccess(widget.role);
 
   _DashboardPeriod _period = _DashboardPeriod.month;
+  DateTimeRange? _customRange;
   String? _branchId;
   late Future<List<Map<String, dynamic>>> _branchesFuture;
-  late Future<Map<String, dynamic>> _dashboardFuture;
+  late Future<_DashboardLoad> _dashboardFuture;
 
   @override
   void initState() {
@@ -103,15 +133,44 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
     _dashboardFuture = _loadDashboard();
   }
 
-  Future<Map<String, dynamic>> _loadDashboard() {
-    final window = _period.window(DateTime.now());
-    return ref
-        .read(magicCrmServiceProvider)
-        .getManagerDashboard(
-          from: window.fromIso,
-          to: window.toIso,
-          branchId: _branchId,
-        );
+  _DashboardWindow _activeWindow() {
+    final range = _customRange;
+    if (_period == _DashboardPeriod.custom && range != null) {
+      return _DashboardWindow(
+        from: DateTime(range.start.year, range.start.month, range.start.day),
+        toExclusive: DateTime(
+          range.end.year,
+          range.end.month,
+          range.end.day,
+        ).add(const Duration(days: 1)),
+      );
+    }
+    return _period.window(DateTime.now());
+  }
+
+  Future<_DashboardLoad> _loadDashboard() async {
+    final window = _activeWindow();
+    final previous = window.previous();
+    final branchId = _branchId;
+    final service = ref.read(magicCrmServiceProvider);
+    final dashboards = await Future.wait([
+      service.getManagerDashboard(
+        from: window.fromIso,
+        to: window.toIso,
+        branchId: branchId,
+      ),
+      service.getManagerDashboard(
+        from: previous.fromIso,
+        to: previous.toIso,
+        branchId: branchId,
+      ),
+    ]);
+    return _DashboardLoad(
+      current: dashboards[0],
+      previous: dashboards[1],
+      window: window,
+      loadedAt: DateTime.now(),
+    );
   }
 
   void _reloadDashboard({bool refreshBranches = false}) {
@@ -132,10 +191,35 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
     }
   }
 
-  void _setPeriod(_DashboardPeriod period) {
-    if (_period == period) return;
+  Future<void> _setPeriod(_DashboardPeriod period) async {
+    if (_period == period && period != _DashboardPeriod.custom) return;
+    DateTimeRange? customRange;
+    if (period == _DashboardPeriod.custom) {
+      final now = DateTime.now();
+      customRange = await showMagicDateRangePicker(
+        context: context,
+        firstDate: DateTime(2010),
+        lastDate: DateTime(now.year, now.month, now.day),
+        initialDateRange:
+            _customRange ??
+            DateTimeRange(
+              start: DateTime(
+                now.year,
+                now.month,
+                now.day,
+              ).subtract(const Duration(days: 29)),
+              end: DateTime(now.year, now.month, now.day),
+            ),
+        helpText: 'Период обзора',
+        cancelText: 'Отмена',
+        confirmText: 'Применить',
+        saveText: 'Применить',
+      );
+      if (!mounted || customRange == null) return;
+    }
     setState(() {
       _period = period;
+      if (customRange != null) _customRange = customRange;
       _dashboardFuture = _loadDashboard();
     });
   }
@@ -151,7 +235,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
+    return FutureBuilder<_DashboardLoad>(
       future: _dashboardFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
@@ -164,14 +248,19 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
           );
         }
 
-        final dashboard = snapshot.data ?? const <String, dynamic>{};
+        final load = snapshot.data;
+        final dashboard = load?.current ?? const <String, dynamic>{};
+        final previousDashboard = load?.previous ?? const <String, dynamic>{};
         final kpis = dashboard['kpis'] is Map<String, dynamic>
             ? dashboard['kpis'] as Map<String, dynamic>
             : const <String, dynamic>{};
         final sources = dashboard['sources'] is Map<String, dynamic>
             ? dashboard['sources'] as Map<String, dynamic>
             : const <String, dynamic>{};
-        final window = _period.window(DateTime.now());
+        final previousKpis = previousDashboard['kpis'] is Map<String, dynamic>
+            ? previousDashboard['kpis'] as Map<String, dynamic>
+            : const <String, dynamic>{};
+        final window = load?.window ?? _activeWindow();
 
         return RefreshIndicator(
           color: AppTheme.secondaryGold,
@@ -190,6 +279,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
                   children: [
                     _DashboardHeader(
                       periodLabel: window.label(),
+                      loadedAt: load?.loadedAt,
                       loading:
                           snapshot.connectionState == ConnectionState.waiting,
                     ),
@@ -249,6 +339,12 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
                                 value: spec.format(kpis[spec.key]),
                                 accent: spec.accent,
                                 sourceLabel: spec.sourceLabel,
+                                definition: spec.definition,
+                                comparisonLabel: _comparisonLabel(
+                                  kpis[spec.key],
+                                  previousKpis[spec.key],
+                                  enabled: spec.comparisonAvailable,
+                                ),
                                 onTap: spec.onTap,
                               ),
                             );
@@ -285,6 +381,8 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
           icon: Icons.account_balance_wallet_rounded,
           accent: AppTheme.success,
           sourceLabel: _sourceLabel(sources['revenue'], 'Финансы'),
+          definition: 'Сумма проведённых оплат за выбранный период.',
+          comparisonAvailable: true,
           format: _money,
           onTap: () => widget.onTabChange?.call(5, null),
         ),
@@ -295,6 +393,8 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
           icon: Icons.event_available_rounded,
           accent: AppTheme.secondaryGold,
           sourceLabel: _sourceLabel(sources['expectedPayments'], 'Платежи'),
+          definition:
+              'Сумма запланированных платежей, срок которых попадает в период.',
           format: _money,
           onTap: () => widget.onTabChange?.call(5, null),
         ),
@@ -305,6 +405,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
           icon: Icons.priority_high_rounded,
           accent: AppTheme.danger,
           sourceLabel: _sourceLabel(sources['debtStudents'], 'Балансы'),
+          definition: 'Количество учеников с отрицательным доступным балансом.',
           format: _count,
           onTap: () => widget.onTabChange?.call(5, null),
         ),
@@ -314,6 +415,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         icon: Icons.school_rounded,
         accent: AppTheme.primaryGold,
         sourceLabel: 'Система',
+        definition: 'Ученики в активном статусе на конец периода.',
         format: _count,
         onTap: () => _focusAndGo('clients', {'segment': 'students'}, 3),
       ),
@@ -323,6 +425,8 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         icon: Icons.person_add_rounded,
         accent: AppTheme.warning,
         sourceLabel: _sourceLabel(sources['newLeads'], 'Лиды'),
+        definition: 'Лиды, созданные в выбранном периоде.',
+        comparisonAvailable: true,
         format: _count,
         onTap: () => _focusAndGo('leads', {'status': 'new'}, 3),
       ),
@@ -332,6 +436,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         icon: Icons.task_alt_rounded,
         accent: AppTheme.warning,
         sourceLabel: _sourceLabel(sources['tasks'], 'Задачи'),
+        definition: 'Незакрытые задачи на конец выбранного периода.',
         format: _count,
         onTap: () => _focusAndGo('tasks', {'due': 'all', 'status': 'open'}, 6),
       ),
@@ -341,6 +446,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         icon: Icons.timer_off_rounded,
         accent: AppTheme.danger,
         sourceLabel: _sourceLabel(sources['tasks'], 'Задачи'),
+        definition: 'Незакрытые задачи, плановый срок которых уже прошёл.',
         format: _count,
         onTap: () => _focusAndGo('tasks', {'due': 'overdue'}, 6),
       ),
@@ -350,6 +456,8 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         icon: Icons.event_note_rounded,
         accent: AppTheme.secondaryGold,
         sourceLabel: _sourceLabel(sources['schedule'], 'Расписание'),
+        definition: 'Пробные занятия, начинающиеся в выбранном периоде.',
+        comparisonAvailable: true,
         format: _count,
         onTap: () => _focusAndGo('schedule', {'trial': '1'}, 2),
       ),
@@ -359,6 +467,9 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         icon: Icons.warning_amber_rounded,
         accent: AppTheme.danger,
         sourceLabel: _sourceLabel(sources['schedule'], 'Расписание'),
+        definition:
+            'Пересечения преподавателей, кабинетов или недоступности в периоде.',
+        comparisonAvailable: true,
         format: _count,
         onTap: () => _focusAndGo('schedule', {'conflicts': '1'}, 2),
       ),
@@ -368,6 +479,8 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         icon: Icons.meeting_room_rounded,
         accent: AppTheme.primaryGold,
         sourceLabel: _sourceLabel(sources['schedule'], 'Расписание'),
+        definition: 'Количество занятий в аудиториях за выбранный период.',
+        comparisonAvailable: true,
         format: _count,
         onTap: () => widget.onTabChange?.call(7, null),
       ),
@@ -377,9 +490,29 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         icon: Icons.manage_history_rounded,
         accent: AppTheme.secondaryGold,
         sourceLabel: _sourceLabel(sources['activity'], 'Активность'),
+        definition:
+            'Количество зафиксированных действий сотрудников за период.',
+        comparisonAvailable: true,
         format: _count,
         onTap: () => widget.onTabChange?.call(7, 2),
       ),
     ];
+  }
+
+  String _comparisonLabel(
+    Object? currentValue,
+    Object? previousValue, {
+    required bool enabled,
+  }) {
+    if (!enabled) return 'Срез на текущий момент';
+    final current = _asNum(currentValue);
+    final previous = _asNum(previousValue);
+    if (current == 0 && previous == 0) {
+      return 'Без изменений к прошлому периоду';
+    }
+    if (previous == 0) return 'Новое значение к прошлому периоду';
+    final percent = ((current - previous) / previous.abs()) * 100;
+    final sign = percent > 0 ? '+' : '';
+    return '$sign${percent.toStringAsFixed(0)}% к прошлому периоду';
   }
 }

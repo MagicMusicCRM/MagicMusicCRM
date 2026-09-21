@@ -217,6 +217,53 @@ class FakeCardApiClient extends MagicApiClient {
       if (currentProfileGate != null) return await currentProfileGate! as T;
       return currentProfile as T;
     }
+    if (path == '/access/me') {
+      final capabilities = switch (role) {
+        'director' || 'system_admin' => const [
+          'crm.client.read.basic',
+          'crm.client.write',
+          'commerce.client_finance.read',
+          'schedule.lesson.read.assigned',
+          'schedule.lesson.write',
+          'workflow.task.read',
+          'workflow.task.write',
+          'staff.teacher_rate.read',
+          'staff.teacher_rate.write',
+        ],
+        'manager' => const [
+          'crm.client.read.basic',
+          'crm.client.write',
+          'commerce.client_finance.read',
+          'schedule.lesson.read.assigned',
+          'schedule.lesson.write',
+          'workflow.task.read',
+          'workflow.task.write',
+          'staff.teacher_rate.read',
+        ],
+        'admin' => const [
+          'crm.client.read.basic',
+          'crm.client.write',
+          'commerce.client_finance.read',
+          'schedule.lesson.read.assigned',
+          'schedule.lesson.write',
+          'workflow.task.read',
+          'workflow.task.write',
+        ],
+        'teacher' => const [
+          'crm.client.read.basic',
+          'schedule.lesson.read.assigned',
+        ],
+        _ => const <String>[],
+      };
+      return <String, dynamic>{
+            'accountId': '10000000-0000-4000-8000-000000000001',
+            'role': role,
+            'accessVersion': 1,
+            'capabilities': capabilities,
+            'scopes': const {'crm': 'branch', 'schedule': 'branch'},
+          }
+          as T;
+    }
     if (path == '/legal/gate') {
       return <String, dynamic>{
             'role': role,
@@ -1122,8 +1169,15 @@ Future<void> pumpClientCard(
   ProviderContainer? container,
   CapabilitySnapshot? capabilitySnapshot,
   ValueChanged<bool?>? onClosed,
+  double textScale = 1,
 }) async {
   final app = MaterialApp(
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(
+        context,
+      ).copyWith(textScaler: TextScaler.linear(textScale)),
+      child: child!,
+    ),
     home: Builder(
       builder: (context) => Scaffold(
         body: Center(

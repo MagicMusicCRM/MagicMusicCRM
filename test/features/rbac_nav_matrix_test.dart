@@ -112,18 +112,28 @@ void main() {
       expect(crmVisibleTabs('client', isDesktop: false), isEmpty);
     });
 
-    test('Администратор: Чат, Расписание, Клиенты и Задачи', () {
-      expect(crmVisibleTabs('admin', isDesktop: true), [0, 2, 3, 6]);
-      expect(crmVisibleTabs('admin', isDesktop: false), [0, 2, 3, 6]);
+    test('Администратор: Чат, Расписание, Клиенты, Персонал и Задачи', () {
+      expect(crmVisibleTabs('admin', isDesktop: true), [0, 2, 3, 4, 6]);
+      expect(crmVisibleTabs('admin', isDesktop: false), [0, 2, 3, 4, 6]);
     });
 
     test('Управляющий: operational CRM без раздела «Финансы» (5)', () {
-      expect(crmVisibleTabs('manager', isDesktop: true), [0, 1, 2, 3, 6, 7, 8]);
+      expect(crmVisibleTabs('manager', isDesktop: true), [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6,
+        7,
+        8,
+      ]);
       expect(crmVisibleTabs('manager', isDesktop: false), [
         0,
         1,
         2,
         3,
+        4,
         6,
         7,
         8,
@@ -136,6 +146,7 @@ void main() {
         1,
         2,
         3,
+        4,
         6,
         7,
         8,
@@ -145,6 +156,7 @@ void main() {
         1,
         2,
         3,
+        4,
         6,
         7,
         8,
@@ -205,9 +217,9 @@ void main() {
       }
     });
 
-    test('Пользователи (4) собраны в единственные Настройки (8)', () {
+    test('Персонал (4) является отдельным рабочим разделом', () {
       final visible = crmVisibleTabs('director', isDesktop: true);
-      expect(visible, isNot(contains(4)));
+      expect(visible, contains(4));
       expect(visible, contains(8));
       expect(
         crmResolveVisibleTab(
@@ -215,7 +227,7 @@ void main() {
           requestedTab: 4,
           currentTab: 0,
         ),
-        8,
+        4,
       );
     });
   });
@@ -260,24 +272,27 @@ void main() {
       );
     });
 
-    test('sparse admin tabs accept tasks and reject hidden settings', () {
-      final visible = crmVisibleTabs('admin', isDesktop: false);
-      expect(
-        crmResolveVisibleTab(
-          visibleTabs: visible,
-          requestedTab: 6,
-          currentTab: 0,
-        ),
-        6,
-      );
-      expect(
-        crmResolveVisibleTab(
-          visibleTabs: visible,
-          requestedTab: 4,
-          currentTab: 2,
-        ),
-        2,
-      );
-    });
+    test(
+      'sparse admin tabs accept personnel and tasks but reject settings',
+      () {
+        final visible = crmVisibleTabs('admin', isDesktop: false);
+        expect(
+          crmResolveVisibleTab(
+            visibleTabs: visible,
+            requestedTab: 6,
+            currentTab: 0,
+          ),
+          6,
+        );
+        expect(
+          crmResolveVisibleTab(
+            visibleTabs: visible,
+            requestedTab: 4,
+            currentTab: 2,
+          ),
+          4,
+        );
+      },
+    );
   });
 }

@@ -319,7 +319,10 @@ void main() {
     controller.setInstallmentCount(3);
 
     expect(await controller.submit(), SubscriptionIssueSubmitResult.blocked);
-    expect(controller.error, 'Итог должен позволять 3 положительных платежа.');
+    expect(
+      controller.error,
+      'Остаток должен позволять 3 положительных платежа.',
+    );
   });
 
   test('insufficient balance preview never invokes commit', () async {
@@ -502,9 +505,28 @@ void main() {
 
       expect(purchase.paymentAmountMinor, BigInt.from(250000));
       expect(purchase.issue.installments.map((item) => item.amountMinor), [
-        BigInt.from(275000),
-        BigInt.from(275000),
+        BigInt.from(550000),
       ]);
+      expect(
+        purchase.issue.installments.single.dueAt,
+        DateTime.utc(2026, 2, 28, 12),
+      );
     },
   );
+
+  test('payment count includes the initial payment', () {
+    final controller = _controller(
+      package: _package(basePriceMinor: '1440000', unitCount: 4),
+    );
+    addTearDown(controller.dispose);
+    controller.selectFundingMode(SubscriptionFundingMode.installment);
+    controller.setInstallmentCount(2);
+    controller.setPaymentAmount('7200');
+
+    final purchase = controller.buildPurchase();
+
+    expect(purchase.paymentAmountMinor, BigInt.from(720000));
+    expect(purchase.issue.installments, hasLength(1));
+    expect(purchase.issue.installments.single.amountMinor, BigInt.from(720000));
+  });
 }

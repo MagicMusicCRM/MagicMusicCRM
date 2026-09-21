@@ -2,9 +2,14 @@ part of 'manager_overview_widget.dart';
 
 class _DashboardHeader extends StatelessWidget {
   final String periodLabel;
+  final DateTime? loadedAt;
   final bool loading;
 
-  const _DashboardHeader({required this.periodLabel, required this.loading});
+  const _DashboardHeader({
+    required this.periodLabel,
+    required this.loadedAt,
+    required this.loading,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,13 +24,26 @@ class _DashboardHeader extends StatelessWidget {
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 4),
-              Text(
-                periodLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              Wrap(
+                spacing: 10,
+                runSpacing: 2,
+                children: [
+                  Text(
+                    periodLabel,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (loadedAt != null)
+                    Text(
+                      'Обновлено ${DateFormat('HH:mm').format(loadedAt!)}',
+                      key: const Key('overview-updated-at'),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
@@ -71,12 +89,21 @@ class _DashboardFilters extends StatelessWidget {
         SegmentedButton<_DashboardPeriod>(
           segments: _DashboardPeriod.values
               .map(
-                (period) =>
-                    ButtonSegment(value: period, label: Text(period.label)),
+                (period) => ButtonSegment(
+                  value: period,
+                  label: Text(
+                    period.label,
+                    key: Key('overview-period-${period.name}'),
+                  ),
+                  icon: period == _DashboardPeriod.custom
+                      ? const Icon(Icons.date_range_outlined, size: 18)
+                      : null,
+                ),
               )
               .toList(),
           selected: {period},
           showSelectedIcon: false,
+          key: const Key('overview-period-selector'),
           onSelectionChanged: (selection) => onPeriodChanged(selection.first),
         ),
         ConstrainedBox(
@@ -186,8 +213,16 @@ class _AttentionPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Требует внимания',
+              'Проблемные зоны',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Строки ведут к записям, которые требуют действия.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
             ),
             const SizedBox(height: 10),
             LayoutBuilder(
@@ -271,6 +306,8 @@ class _KpiTile extends StatelessWidget {
   final String value;
   final Color accent;
   final String sourceLabel;
+  final String definition;
+  final String comparisonLabel;
   final VoidCallback? onTap;
 
   const _KpiTile({
@@ -279,6 +316,8 @@ class _KpiTile extends StatelessWidget {
     required this.value,
     required this.accent,
     required this.sourceLabel,
+    required this.definition,
+    required this.comparisonLabel,
     required this.onTap,
   });
 
@@ -291,7 +330,7 @@ class _KpiTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          height: 86,
+          height: 108,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
@@ -326,13 +365,36 @@ class _KpiTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Tooltip(
+                          message: definition,
+                          child: const Icon(
+                            Icons.info_outline_rounded,
+                            size: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
                     Text(
-                      label,
+                      comparisonLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 10,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -408,6 +470,8 @@ class _KpiSpec {
   final IconData icon;
   final Color accent;
   final String sourceLabel;
+  final String definition;
+  final bool comparisonAvailable;
   final String Function(Object? value) format;
   final VoidCallback? onTap;
 
@@ -417,6 +481,8 @@ class _KpiSpec {
     required this.icon,
     required this.accent,
     required this.sourceLabel,
+    required this.definition,
+    this.comparisonAvailable = false,
     required this.format,
     required this.onTap,
   });

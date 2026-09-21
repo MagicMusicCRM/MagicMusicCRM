@@ -235,7 +235,7 @@ class SubscriptionIssueInstallmentSection extends StatelessWidget {
             initialValue: draft.installmentCount,
             decoration: clientCardInputDecoration(
               Theme.of(context).colorScheme,
-              label: 'Количество платежей',
+              label: 'Всего платежей, включая первый взнос',
               isDense: true,
             ),
             items: [

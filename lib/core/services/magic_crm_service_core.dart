@@ -866,6 +866,11 @@ extension MagicCrmCore on MagicCrmService {
     return _items(response).map(_legacyStaff).toList();
   }
 
+  Future<Map<String, dynamic>> getStaff(String id) async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/staff/$id');
+    return _legacyStaff(response);
+  }
+
   Future<List<AuditPresentationEvent>> listActivityLog({
     String? q,
     String? actorUserId,

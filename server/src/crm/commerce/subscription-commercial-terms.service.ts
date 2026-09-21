@@ -139,6 +139,7 @@ export class SubscriptionCommercialTermsService {
     const installments = this.normalizeInstallments(
       dto.installments,
       installmentTotalMinor,
+      paidNowMinor !== undefined && BigInt(paidNowMinor) > 0n,
     );
     const snapshot = this.createSnapshot(
       packageRow,
@@ -161,13 +162,16 @@ export class SubscriptionCommercialTermsService {
   private normalizeInstallments(
     dto: IssueSubscriptionInstallmentDto[] | undefined,
     finalPriceMinor: string,
+    hasInitialPayment = false,
   ): PlannedInstallment[] {
     if (dto === undefined) return [];
-    if (dto.length < 2) {
+    if (dto.length < (hasInitialPayment ? 1 : 2)) {
       throw new UnprocessableEntityException({
         code: "INSTALLMENTS_MINIMUM_TWO",
         field: "installments",
-        message: "Рассрочка должна содержать минимум две части.",
+        message: hasInitialPayment
+          ? "После первого взноса должен остаться хотя бы один платёж."
+          : "Рассрочка должна содержать минимум две части.",
       });
     }
     let total = 0n;

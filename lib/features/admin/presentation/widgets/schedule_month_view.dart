@@ -322,7 +322,12 @@ class ScheduleMonthView extends StatelessWidget {
       lesson,
       hasConflict: conflicts.isNotEmpty,
     );
-    final color = projection.token.accent;
+    final settlementKey = LessonSettlementCorner.effectiveKey(
+      (lesson['settlement_type_key'] ?? lesson['settlementTypeKey'])
+          ?.toString(),
+      isTrial: lesson['is_trial'] == true,
+    );
+    final color = LessonSettlementCorner.colorFor(settlementKey)!;
     final time = start == null
         ? ''
         : '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} ';
@@ -337,7 +342,7 @@ class ScheduleMonthView extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 2),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withAlpha(28),
+        color: LessonSettlementCorner.backgroundFor(settlementKey),
         borderRadius: BorderRadius.circular(4),
         border: Border(left: BorderSide(color: color, width: 2)),
       ),
@@ -354,7 +359,7 @@ class ScheduleMonthView extends StatelessWidget {
               (!trial && constraints.maxWidth >= (relationContext ? 36 : 24)) ||
               constraints.maxWidth >= (relationContext ? 112 : 92);
           return LessonSettlementCorner(
-            settlementTypeKey: lesson['settlement_type_key']?.toString(),
+            settlementTypeKey: settlementKey,
             expand: false,
             child: Row(
               children: [
@@ -371,7 +376,11 @@ class ScheduleMonthView extends StatelessWidget {
                 if (showStatusIcon) ...[
                   Tooltip(
                     message: projection.label,
-                    child: Icon(projection.token.icon, size: 10, color: color),
+                    child: Icon(
+                      projection.token.icon,
+                      size: 10,
+                      color: projection.token.accent,
+                    ),
                   ),
                   const SizedBox(width: 2),
                 ],

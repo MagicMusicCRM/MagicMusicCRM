@@ -38,7 +38,7 @@ void main() {
     )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
   });
   testWidgets(
-    'real day and thirty-cell timeline keep narrow settlement corners legible',
+    'real day and timeline keep persistent settlement backgrounds legible',
     (tester) async {
       tester.view.physicalSize = const Size(1120, 840);
       tester.view.devicePixelRatio = 1;
@@ -107,7 +107,7 @@ void main() {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'Уголки в реальных виджетах · тестовые данные',
+                      'Фон списания в реальных виджетах · тестовые данные',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,

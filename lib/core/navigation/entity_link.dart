@@ -165,7 +165,7 @@ class EntityLink {
       'lesson_list' ||
       'school_finance_month' => EntityLinkType.report,
       'configuration' => EntityLinkType.report,
-      'teacher' => EntityLinkType.teacher,
+      'teacher' || 'personnel_teacher' => EntityLinkType.teacher,
       'group' => EntityLinkType.group,
       'room' => EntityLinkType.room,
       'branch' => EntityLinkType.branch,

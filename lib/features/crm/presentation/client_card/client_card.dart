@@ -20,6 +20,7 @@ import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
@@ -96,6 +97,7 @@ part 'client_card_assignment_editors.dart';
 part 'client_card_comment_editor.dart';
 part 'client_card_family_access.dart';
 part 'client_card_workspace_sections.dart';
+part 'client_card_at_glance.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
 /// Инфо / Задачи / Комментарии / Семья / История). Behaviour is equivalent to

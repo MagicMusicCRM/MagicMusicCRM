@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -104,6 +105,63 @@ export class CloseSharedTaskDto {
   @IsInt()
   @Min(1)
   expectedVersion!: number;
+
+  @IsString()
+  @MaxLength(80)
+  @Matches(/^[a-z0-9][a-z0-9._-]*$/)
+  resultCode!: string;
+
+  @IsString()
+  @MaxLength(120)
+  resultLabel!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  comment?: string;
+}
+
+export class SharedTaskResultsQuery {
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  closedBy?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  resultCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  q?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  late?: "true" | "false";
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  includeUndated?: "true" | "false";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
 }
 
 export class SharedTaskListQuery {

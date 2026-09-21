@@ -89,7 +89,8 @@ extension _ScheduleTeacherDayView on _ScheduleWidgetState {
       rows: rows,
       entries: entries,
       allowCreate: widget.canWrite,
-      onCreateSlot: (_, start, duration) => _openWeekCreate(start, duration),
+      onCreateSlot: (teacherId, start, duration) =>
+          _openWeekCreate(start, duration, teacherId: teacherId),
       onOpenLesson: _showLessonDetails,
       initialVerticalOffset: _dayScrollOffset,
       onVerticalOffsetChanged: _updateDayScrollOffset,

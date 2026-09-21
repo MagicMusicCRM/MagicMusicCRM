@@ -10,8 +10,12 @@ class ScheduleReferenceController extends ChangeNotifier {
     required MagicCrmService crm,
     required this.section,
     required this.canEdit,
+    String? initialBranchId,
+    String? initialTeacherId,
     DateTime Function()? clock,
   }) : _crm = crm,
+       _branchId = initialBranchId,
+       _teacherId = initialTeacherId,
        _clock = clock ?? DateTime.now;
 
   final MagicCrmService _crm;

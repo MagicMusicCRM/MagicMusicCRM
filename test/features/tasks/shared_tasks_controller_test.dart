@@ -6,6 +6,11 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 
+const _completion = SharedTaskCompletionInput(
+  resultCode: 'completed',
+  resultLabel: 'Выполнено',
+);
+
 class _ListCall {
   const _ListCall({
     this.state,
@@ -107,6 +112,7 @@ class _ControlledSharedTasksDataSource extends SharedTasksDataSource {
   Future<Map<String, dynamic>> close(
     String taskId,
     int expectedVersion,
+    SharedTaskCompletionInput input,
     MagicMutationIdentity identity,
   ) {
     closeTaskIds.add(taskId);
@@ -317,7 +323,10 @@ void main() {
     addTearDown(controller.dispose);
     await controller.setQuery(const SharedTasksQuery());
 
-    final closing = controller.close(const {'id': 'task-1', 'version': 3});
+    final closing = controller.close(const {
+      'id': 'task-1',
+      'version': 3,
+    }, _completion);
     await pumpEventQueue();
     controller.updateQuery(
       controller.state.query.copyWith(search: 'после закрытия'),
@@ -422,11 +431,11 @@ void main() {
       addTearDown(controller.dispose);
       const task = {'id': 'task-1', 'version': 7};
 
-      final failed = await controller.close(task);
+      final failed = await controller.close(task, _completion);
       expect(failed.succeeded, isFalse);
       expect(controller.state.closeErrors['task-1'], isA<StateError>());
 
-      final succeeded = await controller.close(task);
+      final succeeded = await controller.close(task, _completion);
       expect(succeeded.succeeded, isTrue);
       expect(source.closeIdentities, hasLength(2));
       expect(source.closeIdentities.last, same(source.closeIdentities.first));
@@ -435,7 +444,7 @@ void main() {
       expect(controller.state.closing, isEmpty);
       expect(controller.state.closeErrors, isEmpty);
 
-      expect((await controller.close(task)).succeeded, isTrue);
+      expect((await controller.close(task, _completion)).succeeded, isTrue);
       expect(source.closeIdentities, hasLength(3));
       expect(
         source.closeIdentities.last,
@@ -463,14 +472,14 @@ void main() {
         (await controller.close(const {
           'id': 'task-1',
           'version': 7,
-        })).succeeded,
+        }, _completion)).succeeded,
         isFalse,
       );
       expect(
         (await controller.close(const {
           'id': 'task-1',
           'version': 8,
-        })).succeeded,
+        }, _completion)).succeeded,
         isFalse,
       );
       expect(source.closeIdentities[1], isNot(same(source.closeIdentities[0])));
@@ -479,7 +488,7 @@ void main() {
         (await controller.close(const {
           'id': 'task-1',
           'version': 8,
-        })).succeeded,
+        }, _completion)).succeeded,
         isTrue,
       );
       expect(source.closeVersions, [7, 8, 8]);
@@ -547,7 +556,10 @@ void main() {
     addTearDown(controller.dispose);
     await controller.setQuery(const SharedTasksQuery(state: 'open'));
 
-    final closing = controller.close(const {'id': 'task-1', 'version': 4});
+    final closing = controller.close(const {
+      'id': 'task-1',
+      'version': 4,
+    }, _completion);
     await pumpEventQueue();
     await controller.setQuery(const SharedTasksQuery(state: 'closed'));
     closeRefresh.complete(_response('stale-open'));
@@ -566,8 +578,8 @@ void main() {
     addTearDown(controller.dispose);
     const task = {'id': 'task-1', 'version': 5};
 
-    final first = controller.close(task);
-    final duplicate = await controller.close(task);
+    final first = controller.close(task, _completion);
+    final duplicate = await controller.close(task, _completion);
     expect(duplicate.succeeded, isFalse);
     expect(source.closeTaskIds, ['task-1']);
     expect(controller.state.closing, {'task-1'});

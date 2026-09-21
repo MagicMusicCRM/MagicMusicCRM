@@ -20,6 +20,13 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/chat_sla_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/sales_clients_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/finance_debt_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/utilization_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/notification_delivery_journal_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_results_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 import 'lesson_settlement_report_dialog.dart';
@@ -58,6 +65,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   int _dashboardRevision = 0;
   String _journal = 'activity';
   Timer? _realtimeDebounce;
+  late final SharedTasksDataSource _taskResultsDataSource;
 
   bool get _canSeeFinance =>
       widget.accessSnapshot?.allows('commerce.school_finance.read') ??
@@ -71,9 +79,16 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
   bool get _canSeeTeacherRates => crmHasTeacherRatesAccess(widget.role);
 
+  int get _journalTabPosition => 4 + (_canSeeFinance ? 1 : 0);
+
+  int get _teacherTabPosition => _journalTabPosition + 1;
+
+  int get _tabCount =>
+      5 + (_canSeeFinance ? 1 : 0) + (_canSeeTeacherRates ? 1 : 0);
+
   int _positionForCanonicalTab(int canonical) => switch (canonical) {
-    1 || 2 || 4 => 1,
-    5 when _canSeeTeacherRates => 2,
+    1 || 2 || 4 => _journalTabPosition,
+    5 when _canSeeTeacherRates => _teacherTabPosition,
     _ => 0,
   };
 
@@ -85,12 +100,13 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void initState() {
     super.initState();
+    _taskResultsDataSource = MagicCrmSharedTasksDataSource.fromWidgetRef(ref);
     _dashboardFilter = DashboardFilter.fromContext(
       widget.initialViewState,
       widget.initialLink?.optionalFocus?.filter,
     );
     _tabController = TabController(
-      length: _canSeeTeacherRates ? 3 : 2,
+      length: _tabCount,
       vsync: this,
       initialIndex: _positionForCanonicalTab(widget.initialTab),
     );
@@ -105,7 +121,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void didUpdateWidget(covariant ReportsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final tabCount = _canSeeTeacherRates ? 3 : 2;
+    final tabCount = _tabCount;
     if (_tabController.length != tabCount) {
       final index = _tabController.index.clamp(0, tabCount - 1);
       _tabController.dispose();
@@ -179,6 +195,10 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     }
   }
 
+  void _setDashboardPreset(DashboardPeriodPreset preset) {
+    _setDashboardFilter(_dashboardFilter.copyWithPreset(preset));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_canSeeStatus) {
@@ -193,7 +213,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       if (event.entity != 'finance' &&
           event.entity != 'lesson' &&
           event.entity != 'expense' &&
-          event.entity != 'task') {
+          event.entity != 'task' &&
+          event.entity != 'lead' &&
+          event.entity != 'student' &&
+          event.entity != 'client' &&
+          event.entity != 'notification') {
         return;
       }
       _realtimeDebounce?.cancel();
@@ -212,6 +236,23 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           indicatorColor: AppColor.gold,
           tabs: [
             const Tab(text: 'Обзор'),
+            const Tab(
+              key: ValueKey('analytics-sales-clients-tab'),
+              text: 'Продажи и клиенты',
+            ),
+            if (_canSeeFinance)
+              const Tab(
+                key: ValueKey('analytics-finance-debt-tab'),
+                text: 'Деньги и задолженность',
+              ),
+            const Tab(
+              key: ValueKey('analytics-utilization-tab'),
+              text: 'Занятия и загрузка',
+            ),
+            const Tab(
+              key: ValueKey('analytics-employee-work-tab'),
+              text: 'Работа сотрудников',
+            ),
             const Tab(text: 'Журналы'),
             if (_canSeeTeacherRates)
               const Tab(
@@ -225,12 +266,137 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             controller: _tabController,
             children: [
               _buildUnifiedDashboard(),
+              _buildSalesClientsAnalytics(),
+              if (_canSeeFinance) _buildFinanceDebtAnalytics(),
+              _buildUtilizationAnalytics(),
+              _buildEmployeeWorkAnalytics(),
               _buildOperationalJournal(),
               if (_canSeeTeacherRates) const TeacherStatsWidget(),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSalesClientsAnalytics() {
+    return Column(
+      children: [
+        _buildDashboardFilterBar(
+          title: 'Продажи и клиенты',
+          keyPrefix: 'sales-dashboard',
+        ),
+        Expanded(
+          child: SalesClientsPanel(
+            key: const ValueKey('sales-clients-analytics'),
+            filter: _dashboardFilter,
+            reloadToken: _dashboardRevision,
+            canReadSchoolFinance: _canSeeFinance,
+            onOpenEntity: (link) => unawaited(_openDashboardEntity(link)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFinanceDebtAnalytics() {
+    return Column(
+      children: [
+        _buildDashboardFilterBar(
+          title: 'Деньги и задолженность',
+          keyPrefix: 'finance-debt-dashboard',
+        ),
+        Expanded(
+          child: FinanceDebtPanel(
+            key: const ValueKey('finance-debt-analytics'),
+            filter: _dashboardFilter,
+            reloadToken: _dashboardRevision,
+            onOpenEntity: (link) => unawaited(_openDashboardEntity(link)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUtilizationAnalytics() {
+    return Column(
+      children: [
+        _buildDashboardFilterBar(
+          title: 'Занятия и загрузка',
+          keyPrefix: 'utilization-dashboard',
+        ),
+        Expanded(
+          child: UtilizationPanel(
+            key: const ValueKey('utilization-analytics'),
+            filter: _dashboardFilter,
+            reloadToken: _dashboardRevision,
+            onOpenEntity: (link) => unawaited(_openDashboardEntity(link)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmployeeWorkAnalytics() {
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          _buildDashboardFilterBar(
+            title: 'Работа сотрудников',
+            keyPrefix: 'employee-work-dashboard',
+          ),
+          const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(
+                key: ValueKey('employee-task-results-tab'),
+                text: 'Результаты задач',
+              ),
+              Tab(
+                key: ValueKey('employee-notification-deliveries-tab'),
+                text: 'Доставка уведомлений',
+              ),
+              Tab(
+                key: ValueKey('employee-chat-sla-tab'),
+                text: 'SLA обращений',
+              ),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                SharedTaskResultsPanel(
+                  key: const ValueKey('employee-work-analytics'),
+                  dataSource: _taskResultsDataSource,
+                  embedded: true,
+                  filterRange: DateTimeRange(
+                    start: _dashboardFilter.from,
+                    end: _dashboardFilter.to,
+                  ),
+                  branchId: _dashboardFilter.branchId,
+                  reloadToken: _dashboardRevision,
+                  onBack: () {},
+                  onOpenEntity: (link) => unawaited(_openDashboardEntity(link)),
+                ),
+                NotificationDeliveryJournalPanel(
+                  key: const ValueKey('employee-notification-deliveries'),
+                  filter: _dashboardFilter,
+                  reloadToken: _dashboardRevision,
+                  onOpenEntity: (link) => unawaited(_openDashboardEntity(link)),
+                ),
+                ChatSlaPanel(
+                  key: const ValueKey('employee-chat-sla'),
+                  filter: _dashboardFilter,
+                  reloadToken: _dashboardRevision,
+                  onOpenEntity: (link) => unawaited(_openDashboardEntity(link)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -271,13 +437,16 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
         }
         _journal = 'finance';
       });
-      _tabController.animateTo(1);
+      _tabController.animateTo(_journalTabPosition);
       return;
     }
     await openEntityLink(context, ref, link);
   }
 
-  Widget _buildDashboardFilterBar({required String title}) {
+  Widget _buildDashboardFilterBar({
+    required String title,
+    String keyPrefix = 'dashboard',
+  }) {
     final colors = Theme.of(context).colorScheme;
     final dateFormat = DateFormat('dd.MM.yyyy');
     return Material(
@@ -301,20 +470,33 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
                 icon: const Icon(Icons.filter_alt_outlined, size: 18),
                 label: const Text('Списания с клиентов'),
               ),
+            for (final preset in DashboardPeriodPreset.values)
+              FilterChip(
+                key: ValueKey('$keyPrefix-period-${preset.name}'),
+                selected: _dashboardFilter.matchesPreset(preset),
+                label: Text(switch (preset) {
+                  DashboardPeriodPreset.week => 'Неделя',
+                  DashboardPeriodPreset.month => 'Месяц',
+                  DashboardPeriodPreset.year => 'Год',
+                }),
+                onSelected: (_) => _setDashboardPreset(preset),
+              ),
             OutlinedButton.icon(
-              key: const ValueKey('dashboard-period'),
+              key: ValueKey('$keyPrefix-period-custom'),
               onPressed: _pickDashboardPeriod,
               icon: const Icon(Icons.calendar_today_outlined, size: 18),
-              label: Text(
-                '${dateFormat.format(_dashboardFilter.from)} - '
-                '${dateFormat.format(_dashboardFilter.to)}',
-              ),
+              label: const Text('Указать период'),
+            ),
+            Text(
+              '${dateFormat.format(_dashboardFilter.from)} — '
+              '${dateFormat.format(_dashboardFilter.to)}',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             SizedBox(
               width: 260,
               child: AppDropdownButtonFormField<String?>(
                 menuMaxHeight: 256,
-                key: const ValueKey('dashboard-scope'),
+                key: ValueKey('$keyPrefix-scope'),
                 initialValue: _dashboardFilter.branchId,
                 isExpanded: true,
                 decoration: const InputDecoration(

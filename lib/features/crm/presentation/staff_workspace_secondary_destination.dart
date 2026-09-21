@@ -15,6 +15,10 @@ Widget buildStaffWorkspaceSecondaryDestination({
 }) {
   final route = tab.currentRoute;
   return switch (selectedTab) {
+    4 when snapshot.allows('crm.client.read.basic') => PersonnelWorkspace(
+      snapshot: snapshot,
+      initialLink: route.link,
+    ),
     6 when snapshot.allows('workflow.task.read') => SharedTasksPanel(
       initialLink: route.link,
       canWrite: snapshot.allows('workflow.task.write'),
@@ -37,8 +41,12 @@ Widget buildStaffWorkspaceSecondaryDestination({
             : route.link.optionalFocus?.focus == 'users'
             ? 'users'
             : route.link.rawEntityType == 'configuration'
-            ? 'crm'
+            ? route.link.optionalFocus?.focus == 'learning'
+                  ? 'learning'
+                  : 'crm'
             : null,
+        initialTeacherId: route.link.optionalFocus?.filter['teacherId']
+            ?.toString(),
         initialUserSearch: route.link.optionalFocus?.filter['query']
             ?.toString(),
       ),

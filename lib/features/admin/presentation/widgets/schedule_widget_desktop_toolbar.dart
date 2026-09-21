@@ -8,9 +8,12 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
     final cs = Theme.of(context).colorScheme;
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final narrow = constraints.maxWidth < 900 * textScale;
+    final teacherWeek =
+        _currentView == ScheduleView.week &&
+        _dayViewMode == DayViewMode.byTeacher;
     final singleRow =
         constraints.maxWidth >=
-        1100 * MediaQuery.textScalerOf(context).scale(1);
+        (teacherWeek ? 1320 : 1100) * MediaQuery.textScalerOf(context).scale(1);
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -139,7 +142,8 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                   navigation,
                   const SizedBox(width: 8),
                   views,
-                  if (_currentView == ScheduleView.day) mode,
+                  if (_currentView != ScheduleView.month) mode,
+                  if (teacherWeek) _buildWeekTeacherSelector(firstLoad),
                   const SizedBox(width: 8),
                   Expanded(child: search),
                   const SizedBox(width: 8),
@@ -161,14 +165,58 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                     children: [
                       if (narrow) ...[views, const SizedBox(width: 8)],
                       Expanded(child: search),
-                      if (_currentView == ScheduleView.day) ...[
+                      if (_currentView != ScheduleView.month) ...[
                         const SizedBox(width: 8),
                         mode,
+                      ],
+                      if (teacherWeek) ...[
+                        const SizedBox(width: 8),
+                        Expanded(child: _buildWeekTeacherSelector(firstLoad)),
                       ],
                     ],
                   ),
                 ],
               ),
+      ),
+    );
+  }
+
+  Widget _buildWeekTeacherSelector(bool firstLoad) {
+    final options = _teacherFilterOptions;
+    if (options.isEmpty) return const SizedBox.shrink();
+    final selected = options.any((item) => item.id == _filterTeacherId)
+        ? _filterTeacherId
+        : options.first.id;
+    return SizedBox(
+      width: 210 * MediaQuery.textScalerOf(context).scale(1),
+      child: AppDropdownButtonFormField<String>(
+        menuMaxHeight: 256,
+        key: ValueKey('schedule-teacher-week-selector-$selected'),
+        initialValue: selected,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          isDense: true,
+          labelText: 'Преподаватель',
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        ),
+        items: [
+          for (final teacher in options)
+            DropdownMenuItem(
+              value: teacher.id,
+              child: Text(
+                teacher.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        onChanged: firstLoad
+            ? null
+            : (value) {
+                if (value == null || value == _filterTeacherId) return;
+                _emitState(() => _filterTeacherId = value);
+                _fetchAll();
+              },
       ),
     );
   }

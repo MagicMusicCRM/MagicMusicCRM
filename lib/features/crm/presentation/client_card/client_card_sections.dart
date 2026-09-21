@@ -272,10 +272,8 @@ num _asNum(Object? value) {
   return num.tryParse(value?.toString() ?? '') ?? 0;
 }
 
-/// Lead «активность» aggregate: summary chips + the «Пробные занятия»
-/// mini-section. Блоки «Связанные ученики»/«Заявки»/«Лента» удалены (#10):
-/// они дублировали другие вкладки и разделы карточки; запись на пробное из
-/// карточки убрана (#6) — вместо неё в баре действий «Открыть в расписании».
+/// Lead «активность» aggregate. Подробный рабочий блок пробных занятий
+/// расположен отдельно на первом экране карточки.
 Widget _aggregateCard(
   ColorScheme cs, {
   required bool loadingCard,
@@ -325,17 +323,6 @@ Widget _aggregateCard(
           titleBuilder: (row) => row['title']?.toString() ?? 'Задача',
           subtitleBuilder: (row) => _formatStatus(row['status']),
         ),
-      _miniSection(
-        cs,
-        title: 'Пробные занятия',
-        empty: 'Пробные занятия не назначены',
-        rows: trials,
-        titleBuilder: (row) => _formatDate(row['scheduled_at']),
-        subtitleBuilder: (row) => [
-          row['teacher_name'],
-          row['room_name'],
-        ].where((value) => value != null && '$value'.isNotEmpty).join(' · '),
-      ),
     ],
   );
 }

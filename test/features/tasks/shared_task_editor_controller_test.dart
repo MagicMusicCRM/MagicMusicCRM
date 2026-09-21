@@ -65,6 +65,7 @@ class _RecordingDataSource extends SharedTasksDataSource {
   Future<Map<String, dynamic>> close(
     String taskId,
     int expectedVersion,
+    SharedTaskCompletionInput input,
     MagicMutationIdentity identity,
   ) async => const {};
 

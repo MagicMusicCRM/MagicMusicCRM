@@ -20,7 +20,7 @@ import 'live_audit_harness.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => initializeDateFormatting('ru'));
-  for (final role in ['manager', 'director'])
+  for (final role in ['manager', 'director']) {
     testWidgets(
       '$role overview runtime and destinations',
       (tester) async {
@@ -53,8 +53,9 @@ void main() {
               handler.next(o);
             },
             onResponse: (r, handler) {
-              if (r.requestOptions.uri.path.endsWith('/dashboard/manager'))
+              if (r.requestOptions.uri.path.endsWith('/dashboard/manager')) {
                 responses.add(Map<String, dynamic>.from(r.data as Map));
+              }
               handler.next(r);
             },
           ),
@@ -111,7 +112,7 @@ void main() {
               method: 'GET',
               path: '/api/crm/dashboard/manager',
               status: 503,
-              maxCount: 1,
+              maxCount: 2,
             ),
           ],
         );
@@ -234,4 +235,5 @@ void main() {
       },
       timeout: const Timeout(Duration(minutes: 8)),
     );
+  }
 }

@@ -54,6 +54,7 @@ class RecordingSharedTasksDataSource extends SharedTasksDataSource {
   Future<Map<String, dynamic>> close(
     String taskId,
     int expectedVersion,
+    SharedTaskCompletionInput input,
     MagicMutationIdentity identity,
   ) async => {'id': taskId};
 
@@ -295,7 +296,15 @@ void main() {
       await source.previewAudience(audiences);
       await source.create({'title': 'Создать'}, identity);
       await source.update('task-1', {'title': 'Обновить'}, identity);
-      await source.close('task-1', 7, identity);
+      await source.close(
+        'task-1',
+        7,
+        const SharedTaskCompletionInput(
+          resultCode: 'completed',
+          resultLabel: 'Выполнено',
+        ),
+        identity,
+      );
       final options = await source.audienceOptions();
 
       final taskCalls = api.requests
@@ -360,6 +369,8 @@ void main() {
       );
       expect(_request(api, 'POST', '/crm/shared-tasks/task-1/close').data, {
         'expectedVersion': 7,
+        'resultCode': 'completed',
+        'resultLabel': 'Выполнено',
       });
       expect(
         _request(

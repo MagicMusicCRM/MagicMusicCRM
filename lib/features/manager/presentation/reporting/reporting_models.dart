@@ -3,6 +3,8 @@ import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 
 enum ReportingSectionKey { status, lessons, tasks, finance }
 
+enum DashboardPeriodPreset { week, month, year }
+
 @immutable
 class ReportingSection<T> {
   const ReportingSection({
@@ -58,6 +60,23 @@ class DashboardFilter {
     );
   }
 
+  factory DashboardFilter.forPreset(
+    DashboardPeriodPreset preset, {
+    DateTime? now,
+    String? branchId,
+  }) {
+    final current = now ?? DateTime.now();
+    final today = DateTime(current.year, current.month, current.day);
+    final from = switch (preset) {
+      DashboardPeriodPreset.week => today.subtract(
+        Duration(days: today.weekday - DateTime.monday),
+      ),
+      DashboardPeriodPreset.month => DateTime(today.year, today.month),
+      DashboardPeriodPreset.year => DateTime(today.year),
+    };
+    return DashboardFilter(from: from, to: today, branchId: branchId);
+  }
+
   factory DashboardFilter.fromContext(
     ContextViewState? state,
     Map<String, dynamic>? directFilter,
@@ -105,6 +124,20 @@ class DashboardFilter {
 
   DashboardFilter copyWithBranch(String? value) =>
       DashboardFilter(from: from, to: to, branchId: value);
+
+  DashboardFilter copyWithPreset(
+    DashboardPeriodPreset preset, {
+    DateTime? now,
+  }) => DashboardFilter.forPreset(preset, now: now, branchId: branchId);
+
+  bool matchesPreset(DashboardPeriodPreset preset, {DateTime? now}) {
+    final expected = DashboardFilter.forPreset(
+      preset,
+      now: now,
+      branchId: branchId,
+    );
+    return from == expected.from && to == expected.to;
+  }
 
   @override
   bool operator ==(Object other) =>

@@ -49,6 +49,10 @@ export class InstallmentDueWorker implements OnModuleInit, OnModuleDestroy {
     now = new Date(),
     limit = DEFAULT_BATCH_SIZE,
   ): Promise<number> {
+    await this.repository.materializeConsumptionBasedInstallmentDues(
+      now,
+      limit,
+    );
     const rows = await this.repository.materializeDueInstallments(now, limit);
     await Promise.all(
       rows.map((item) =>
@@ -74,6 +78,10 @@ export class InstallmentDueWorker implements OnModuleInit, OnModuleDestroy {
   ) {
     const limit = options.limit ?? DEFAULT_BATCH_SIZE;
     const maxAttempts = options.maxAttempts ?? 5;
+    await this.repository.materializeConsumptionBasedInstallmentDues(
+      now,
+      limit,
+    );
     const materialized =
       await this.repository.materializeInstallmentPaymentReminders(now, limit);
     const reminders =

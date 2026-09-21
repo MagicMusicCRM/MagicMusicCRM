@@ -20,6 +20,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/magic_toast.dart';
 
 import 'create_lesson_dialog.dart';
@@ -124,6 +125,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Map<String, String> _studentNames = {};
   Map<String, Color> _roomColorMap = {};
   Map<String, String> _roomNames = {};
+  Map<String, dynamic>? _teacherWeekReference;
+  bool _teacherWeekReferenceLoading = false;
+  int _teacherWeekReferenceGeneration = 0;
   // Per-branch UTC offset (minutes) so lesson times render in the branch's
   // local zone. Defaults to 180 (Moscow / UTC+3). Russia has no DST, so a fixed
   // offset is correct.
@@ -508,7 +512,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     : null,
               ),
               if (!firstLoad) ...[
-                if (!desktop && _currentView == ScheduleView.day)
+                if (!desktop && _currentView != ScheduleView.month)
                   ScheduleDayModeToggle(
                     mode: _dayViewMode,
                     onModeChanged: (m) {

@@ -48,9 +48,9 @@ class SubscriptionIssuePricing {
         _paymentAmountError(draft) ??
         _dateRangeError(draft) ??
         _purchaseReasonError(draft) ??
-        _installmentError(draft, installmentTotal);
+        _installmentError(draft, installmentTotal, paidNow);
     final installments = error == null
-        ? _installments(draft, installmentTotal, commandTimestamp)
+        ? _installments(draft, installmentTotal, paidNow, commandTimestamp)
         : const <SubscriptionInstallmentInput>[];
     return SubscriptionIssuePricing(
       basePriceMinor: basePriceMinor,
@@ -171,9 +171,9 @@ class SubscriptionIssuePricing {
 
   static String? _paymentAmountError(SubscriptionIssueDraft draft) {
     if (draft.paymentAmount.trim().isEmpty) return null;
-    return parseSubscriptionMoneyMinor(draft.paymentAmount) == null
-        ? 'Введите корректную сумму оплаты'
-        : null;
+    final amount = parseSubscriptionMoneyMinor(draft.paymentAmount);
+    if (amount == null) return 'Введите корректную сумму оплаты';
+    return null;
   }
 
   static String? _dateRangeError(SubscriptionIssueDraft draft) {
@@ -184,32 +184,42 @@ class SubscriptionIssuePricing {
 
   static String? _installmentError(
     SubscriptionIssueDraft draft,
-    BigInt finalPrice,
+    BigInt remainingPrice,
+    BigInt paidNow,
   ) {
     if (draft.fundingMode != SubscriptionFundingMode.installment) return null;
     if (draft.installmentCount < 2 || draft.installmentCount > 12) {
       return 'Количество платежей должно быть от 2 до 12.';
     }
-    if (finalPrice < BigInt.from(draft.installmentCount)) {
-      return 'Итог должен позволять ${draft.installmentCount} положительных платежа.';
+    if (remainingPrice == BigInt.zero) {
+      return 'При полной оплате выберите обычную оплату без рассрочки.';
+    }
+    final futureCount =
+        draft.installmentCount - (paidNow > BigInt.zero ? 1 : 0);
+    if (remainingPrice < BigInt.from(futureCount)) {
+      return 'Остаток должен позволять $futureCount положительных платежа.';
     }
     return null;
   }
 
   static List<SubscriptionInstallmentInput> _installments(
     SubscriptionIssueDraft draft,
-    BigInt finalPrice,
+    BigInt remainingPrice,
+    BigInt paidNow,
     DateTime commandTimestamp,
   ) {
     if (draft.fundingMode != SubscriptionFundingMode.installment) {
       return const <SubscriptionInstallmentInput>[];
     }
-    final count = draft.installmentCount;
-    final equalPart = finalPrice ~/ BigInt.from(count);
-    final remainder = (finalPrice % BigInt.from(count)).toInt();
+    final count = draft.installmentCount - (paidNow > BigInt.zero ? 1 : 0);
+    final equalPart = remainingPrice ~/ BigInt.from(count);
+    final remainder = (remainingPrice % BigInt.from(count)).toInt();
     return List<SubscriptionInstallmentInput>.generate(count, (index) {
       return SubscriptionInstallmentInput(
-        dueAt: _addUtcMonths(commandTimestamp, index),
+        dueAt: _addUtcMonths(
+          commandTimestamp,
+          index + (paidNow > BigInt.zero ? 1 : 0),
+        ),
         amountMinor: equalPart + (index < remainder ? BigInt.one : BigInt.zero),
       );
     }, growable: false);

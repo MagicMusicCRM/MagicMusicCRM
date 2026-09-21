@@ -45,7 +45,7 @@ Future<void> _chooseSearchable(
 }
 
 void main() {
-  testWidgets('manager sees one six-area settings workspace read-only', (
+  testWidgets('manager sees five linked settings groups and search', (
     tester,
   ) async {
     await _pump(
@@ -61,14 +61,17 @@ void main() {
 
     for (final label in const [
       'Организация',
-      'Расписание',
+      'Обучение',
       'Клиенты',
-      'Продажи и оплаты',
-      'Пользователи и доступы',
-      'Данные и обслуживание',
+      'Доступ и уведомления',
+      'Интеграции и система',
     ]) {
       expect(find.text(label), findsWidgets);
     }
+    await tester.enterText(find.byKey(const Key('settings-search')), 'оплаты');
+    await tester.pump();
+    expect(find.widgetWithText(ListTile, 'Клиенты'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Организация'), findsNothing);
     expect(find.text('Только просмотр назначенных филиалов'), findsOneWidget);
     expect(find.text('Новый филиал'), findsNothing);
     expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
@@ -172,7 +175,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
+      await tester.tap(find.widgetWithText(ListTile, 'Обучение'));
       await tester.pumpAndSettle();
 
       expect(find.text('Сокол'), findsWidgets);
@@ -213,7 +216,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
+    await tester.tap(find.widgetWithText(ListTile, 'Обучение'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Графики преподавателей'));
     await tester.pumpAndSettle();
@@ -717,7 +720,7 @@ void main() {
     expect(find.text('Работает'), findsOneWidget);
     expect(find.textContaining('@migration.invalid'), findsNothing);
 
-    await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
+    await tester.tap(find.widgetWithText(ListTile, 'Обучение'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Группы'));
     await tester.pumpAndSettle();

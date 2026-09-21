@@ -21,15 +21,16 @@ import { ClientStatusReadService } from "./client-status-read.service";
 import { OoxmlWorkbookBuilder } from "../common/ooxml-workbook.builder";
 import { ReportExportService } from "./report-export.service";
 import { ReportingReadService } from "./reporting-read.service";
+import { SalesClientsReadService } from "./sales-clients-read.service";
+import { FinanceDebtReadService } from "./finance-debt-read.service";
+import { UtilizationReadService } from "./utilization-read.service";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
 const parsedDatabaseUrl = new URL(databaseUrl);
 if (
-  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(
-    parsedDatabaseUrl.hostname,
-  )
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)
 ) {
   throw new Error("Reporting scope tests require local PostgreSQL.");
 }
@@ -39,6 +40,9 @@ jest.setTimeout(60_000);
 describe("ReportingReadService hard scopes (PostgreSQL)", () => {
   let database: DatabaseService;
   let service: ReportingReadService;
+  let salesClients: SalesClientsReadService;
+  let financeDebt: FinanceDebtReadService;
+  let utilization: UtilizationReadService;
   let fixture: Awaited<ReturnType<typeof createFixture>>;
   const range = {
     from: "2026-07-01T00:00:00.000Z",
@@ -51,6 +55,9 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
     );
     await cleanupStaleFixtures(database);
     service = new ReportingReadService(database, new CrmPolicy());
+    salesClients = new SalesClientsReadService(database);
+    financeDebt = new FinanceDebtReadService(database);
+    utilization = new UtilizationReadService(database);
     fixture = await createFixture(database);
   });
 
@@ -94,15 +101,15 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
       range,
     );
     expect(directorLessons.total).toBe(director.successfulLessons);
-    await expect(service.lessonSuccess(fixture.admin, range)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.lessonSuccess(fixture.admin, range),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("allows school finance only to Director/root and counts ActualPayment only", async () => {
-    await expect(service.schoolFinance(fixture.admin, range)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.schoolFinance(fixture.admin, range),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
       service.schoolFinance(fixture.manager, range),
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -166,6 +173,107 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
     });
     expect(root.revenueMinor).toBe("400000");
     expect(root.revenueMinor).not.toBe("11100000");
+  });
+
+  it("follows one inquiry cohort to the first actual subscription payment", async () => {
+    const salesRange = {
+      from: "2026-01-01T00:00:00.000Z",
+      to: "2026-02-01T00:00:00.000Z",
+    };
+    const manager = await salesClients.summary(fixture.manager, salesRange);
+    expect(manager).toMatchObject({
+      observationDays: 90,
+      funnel: {
+        inquiries: 2,
+        trialBooked: 1,
+        trialAttended: 1,
+        purchases: 1,
+        firstPaidSales: 1,
+        withoutTrialSales: 0,
+        stalled: 1,
+        conversionToFirstPayment: 0.5,
+        trialToFirstPayment: 1,
+      },
+    });
+    expect(manager.sources[0]).not.toHaveProperty("firstPaymentAmountMinor");
+
+    const director = await salesClients.summary(fixture.director, {
+      ...salesRange,
+      branchId: fixture.assignedBranchId,
+    });
+    expect(director.sources).toEqual([
+      expect.objectContaining({
+        label: fixture.salesSourceName,
+        inquiries: 2,
+        firstPaidSales: 1,
+        firstPaymentAmountMinor: "600000",
+      }),
+    ]);
+    const allBranches = await salesClients.summary(
+      fixture.director,
+      salesRange,
+    );
+    expect(allBranches.funnel).toMatchObject({
+      inquiries: 3,
+      firstPaidSales: 2,
+      withoutTrialSales: 1,
+    });
+
+    const stalled = await salesClients.list(fixture.manager, {
+      ...salesRange,
+      segment: "stalled",
+    });
+    expect(stalled).toMatchObject({
+      total: 1,
+      items: [
+        expect.objectContaining({
+          id: fixture.salesLeadIds[1],
+          entityLink: {
+            entityType: "lead",
+            entityId: fixture.salesLeadIds[1],
+          },
+          nextTask: expect.objectContaining({
+            id: fixture.salesTaskId,
+            entityLink: {
+              entityType: "task",
+              entityId: fixture.salesTaskId,
+            },
+          }),
+        }),
+      ],
+    });
+  });
+
+  it("uses actual finance movements and ignores legacy subscriptions without snapshots", async () => {
+    const finance = await financeDebt.summary(fixture.director, {
+      from: "2026-01-01T00:00:00.000Z",
+      to: "2026-02-01T00:00:00.000Z",
+      branchId: fixture.assignedBranchId,
+    });
+    expect(finance).toMatchObject({
+      receiptsMinor: "900000",
+      remainingMinor: "0",
+      overdueMinor: "0",
+      forecastMinor: "0",
+      overdueClients: 0,
+    });
+    await expect(
+      financeDebt.summary(fixture.manager, {
+        from: "2026-01-01T00:00:00.000Z",
+        to: "2026-02-01T00:00:00.000Z",
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("returns utilization rows only from configured working windows", async () => {
+    const report = await utilization.report(fixture.manager, {
+      ...range,
+      branchId: fixture.assignedBranchId,
+    });
+    expect(report).toMatchObject({ teachers: [], rooms: [] });
+    await expect(
+      utilization.report(fixture.admin, range),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("keeps Director expense CRUD, Manager deny and Analytics in one projection", async () => {
@@ -368,6 +476,12 @@ async function createFixture(database: DatabaseService) {
     `,
     [staff.rows[0]!.id, assignedBranch!.id],
   );
+  await database.query(
+    `insert into app.user_crm_links (
+       user_id, entity_type, entity_id, link_source, confirmed_at
+     ) values ($1, 'staff', $2, 'manual_phone', now())`,
+    [manager!.id, staff.rows[0]!.id],
+  );
   const students = await database.query<{ id: string }>(
     `
       insert into app.students (profile_id, status, branch_id)
@@ -428,6 +542,108 @@ async function createFixture(database: DatabaseService) {
     `,
     [students.rows[0]!.id],
   );
+  const salesSourceName = `${marker}-site`;
+  const salesSource = await database.query<{ id: string }>(
+    `insert into app.lead_sources (canonical_name, display_name)
+     values ($1, $2) returning id`,
+    [salesSourceName, salesSourceName],
+  );
+  const salesLeads = await database.query<{ id: string }>(
+    `insert into app.leads (
+       first_name, last_name, source, source_id, branch_id, created_by,
+       created_at, updated_at
+     ) values
+       ('Анна', 'Когорта', $1, $2, $3, $5,
+        '2026-01-02T10:00:00Z', '2026-01-02T10:00:00Z'),
+       ('Борис', 'Без оплаты', $1, $2, $3, $5,
+        '2026-01-03T10:00:00Z', '2026-01-03T10:00:00Z'),
+       ('Вера', 'Другой филиал', $1, $2, $4, $5,
+        '2026-01-04T10:00:00Z', '2026-01-04T10:00:00Z')
+     returning id`,
+    [
+      salesSourceName,
+      salesSource.rows[0]!.id,
+      assignedBranch!.id,
+      otherBranch!.id,
+      director!.id,
+    ],
+  );
+  const salesStudents = await database.query<{ id: string }>(
+    `insert into app.students (
+       lead_id, status, branch_id, source_id, created_at, updated_at
+     ) values
+       ($1, 'active', $3, $5, '2026-01-02T10:00:00Z', '2026-01-02T10:00:00Z'),
+       ($2, 'active', $4, $5, '2026-01-04T10:00:00Z', '2026-01-04T10:00:00Z')
+     returning id`,
+    [
+      salesLeads.rows[0]!.id,
+      salesLeads.rows[2]!.id,
+      assignedBranch!.id,
+      otherBranch!.id,
+      salesSource.rows[0]!.id,
+    ],
+  );
+  await database.query(
+    `insert into app.client_conversion_links (lead_id, student_id, converted_by, converted_at)
+     values
+       ($1, $3, $5, '2026-01-04T09:00:00Z'),
+       ($2, $4, $5, '2026-01-05T09:00:00Z')`,
+    [
+      salesLeads.rows[0]!.id,
+      salesLeads.rows[2]!.id,
+      salesStudents.rows[0]!.id,
+      salesStudents.rows[1]!.id,
+      director!.id,
+    ],
+  );
+  const salesTrial = await database.query<{ id: string }>(
+    `insert into app.lessons (
+       student_id, branch_id, scheduled_at, status, lifecycle_state,
+       is_trial, created_by
+     ) values (
+       $1, $2, '2026-01-05T10:00:00Z', 'completed',
+       'successfully_completed', true, $3
+     ) returning id`,
+    [salesStudents.rows[0]!.id, assignedBranch!.id, director!.id],
+  );
+  const salesSubscriptions = await database.query<{ id: string }>(
+    `insert into app.subscriptions (
+       student_id, lessons_total, lessons_used, status, created_at, updated_at
+     ) values
+       ($1, 8, 0, 'active', '2026-01-08T10:00:00Z', '2026-01-08T10:00:00Z'),
+       ($2, 8, 0, 'active', '2026-01-06T10:00:00Z', '2026-01-06T10:00:00Z')
+     returning id`,
+    [salesStudents.rows[0]!.id, salesStudents.rows[1]!.id],
+  );
+  const salesPayments = await database.query<{ id: string }>(
+    `insert into app.payments (
+       student_id, branch_id, amount, payment_date, created_by,
+       issued_subscription_id
+     ) values
+       ($1, $4, 6000, '2026-01-09T10:00:00Z', $6, $2),
+       ($1, $4, 3000, '2026-01-20T10:00:00Z', $6, $2),
+       ($3, $5, 4000, '2026-01-07T10:00:00Z', $6, $7)
+     returning id`,
+    [
+      salesStudents.rows[0]!.id,
+      salesSubscriptions.rows[0]!.id,
+      salesStudents.rows[1]!.id,
+      assignedBranch!.id,
+      otherBranch!.id,
+      director!.id,
+      salesSubscriptions.rows[1]!.id,
+    ],
+  );
+  const salesTask = await database.query<{ id: string }>(
+    `insert into app.shared_tasks (
+       title, all_day, start_at, state, linked_entity_type,
+       linked_entity_id, created_by, branch_id
+     ) values (
+       'Связаться после пробного', true, '2026-01-10T00:00:00Z', 'open',
+       'lead', $1, $2, $3
+     ) returning id`,
+    [salesLeads.rows[1]!.id, director!.id, assignedBranch!.id],
+  );
 
   return {
     admin: { userId: admin!.id, role: "admin" } as ActorContext,
@@ -443,9 +659,20 @@ async function createFixture(database: DatabaseService) {
     otherBranchId: otherBranch!.id,
     profileIds: profiles.rows.map((row) => row.id),
     staffId: staff.rows[0]!.id,
-    studentIds: students.rows.map((row) => row.id),
-    lessonIds: lessons.rows.map((row) => row.id),
-    paymentIds: payments.rows.map((row) => row.id),
+    studentIds: [
+      ...students.rows.map((row) => row.id),
+      ...salesStudents.rows.map((row) => row.id),
+    ],
+    lessonIds: [...lessons.rows.map((row) => row.id), salesTrial.rows[0]!.id],
+    paymentIds: [
+      ...payments.rows.map((row) => row.id),
+      ...salesPayments.rows.map((row) => row.id),
+    ],
+    salesLeadIds: salesLeads.rows.map((row) => row.id),
+    salesSubscriptionIds: salesSubscriptions.rows.map((row) => row.id),
+    salesSourceId: salesSource.rows[0]!.id,
+    salesSourceName,
+    salesTaskId: salesTask.rows[0]!.id,
     expectedPaymentId: expectedPayment.rows[0]!.id,
   };
 }
@@ -480,10 +707,9 @@ async function cleanupStaleFixtures(database: DatabaseService) {
       "delete from app.lessons where student_id = any($1::uuid[])",
       [studentIds],
     );
-    await client.query(
-      "delete from app.students where id = any($1::uuid[])",
-      [studentIds],
-    );
+    await client.query("delete from app.students where id = any($1::uuid[])", [
+      studentIds,
+    ]);
     const staff = await client.query<{ id: string }>(
       "select id from app.staff_members where profile_id = any($1::uuid[])",
       [profileIds],
@@ -503,10 +729,9 @@ async function cleanupStaleFixtures(database: DatabaseService) {
          select id from app.branches where name like 'v4-report-scope-%'
        )`,
     );
-    await client.query(
-      "delete from app.profiles where id = any($1::uuid[])",
-      [profileIds],
-    );
+    await client.query("delete from app.profiles where id = any($1::uuid[])", [
+      profileIds,
+    ]);
     await client.query("delete from app.users where id = any($1::uuid[])", [
       userIds,
     ]);
@@ -531,8 +756,25 @@ async function cleanupFixture(
     await client.query("delete from app.lessons where id = any($1::uuid[])", [
       fixture.lessonIds,
     ]);
+    await client.query("delete from app.shared_tasks where id = $1", [
+      fixture.salesTaskId,
+    ]);
+    await client.query(
+      "delete from app.subscriptions where id = any($1::uuid[])",
+      [fixture.salesSubscriptionIds],
+    );
+    await client.query(
+      "delete from app.client_conversion_links where lead_id = any($1::uuid[])",
+      [fixture.salesLeadIds],
+    );
     await client.query("delete from app.students where id = any($1::uuid[])", [
       fixture.studentIds,
+    ]);
+    await client.query("delete from app.leads where id = any($1::uuid[])", [
+      fixture.salesLeadIds,
+    ]);
+    await client.query("delete from app.lead_sources where id = $1", [
+      fixture.salesSourceId,
     ]);
     await client.query(
       "delete from app.staff_branch_assignments where staff_member_id = $1",

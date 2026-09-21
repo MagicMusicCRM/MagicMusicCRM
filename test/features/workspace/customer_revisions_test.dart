@@ -312,7 +312,7 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('corner stays separate from date on a 39 by 40 tile', (
+  testWidgets('settlement background contains date on a 39 by 40 tile', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -334,7 +334,7 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(
-      find.byKey(const ValueKey('settlement-corner-trial_lesson')),
+      find.byKey(const ValueKey('settlement-background-trial_lesson')),
       findsOneWidget,
     );
     expect(LessonSettlementCorner.colorFor(null), isNull);
@@ -342,8 +342,8 @@ void main() {
     expect(LessonSettlementCorner.colorFor('unknown'), isNotNull);
     final date = tester.getRect(find.text('30.09'));
     final corner = tester.getRect(
-      find.byKey(const ValueKey('settlement-corner-trial_lesson')),
+      find.byKey(const ValueKey('settlement-background-trial_lesson')),
     );
-    expect(date.overlaps(corner), isFalse);
+    expect(corner.contains(date.center), isTrue);
   });
 }

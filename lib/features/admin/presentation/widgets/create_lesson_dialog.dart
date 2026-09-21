@@ -20,7 +20,11 @@ import 'lesson_editor/lesson_editor_view.dart';
 class CreateLessonDialog extends ConsumerStatefulWidget
     implements LessonEditorInitialSource {
   final DateTime? initialDate;
-  final String? initialRoomId, initialBranchId, leadId, leadName;
+  final String? initialTeacherId,
+      initialRoomId,
+      initialBranchId,
+      leadId,
+      leadName;
   final String? clientType, clientId, clientName;
   final int? initialDurationMinutes;
   final Map<String, dynamic>? lesson;
@@ -28,6 +32,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget
   const CreateLessonDialog({
     super.key,
     this.initialDate,
+    this.initialTeacherId,
     this.initialRoomId,
     this.initialBranchId,
     this.initialDurationMinutes,
@@ -45,6 +50,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget
   static Future<bool?> show(
     BuildContext context, {
     DateTime? initialDate,
+    String? initialTeacherId,
     String? initialRoomId,
     String? initialBranchId,
     int? initialDurationMinutes,
@@ -67,6 +73,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget
         : 'Новое занятие',
     editor: (embeddedSurface) => CreateLessonDialog(
       initialDate: initialDate,
+      initialTeacherId: initialTeacherId,
       initialRoomId: initialRoomId,
       initialBranchId: initialBranchId,
       initialDurationMinutes: initialDurationMinutes,

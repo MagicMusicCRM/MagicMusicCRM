@@ -74,6 +74,7 @@ export class CommerceProjectionFactory {
         return {
           installmentNumber: installment.installmentNumber,
           dueAt: installment.dueAt,
+          dueKind: installment.dueKind,
           amountMinor: installment.amountMinor,
           currencyCode: installment.currencyCode,
           status: installment.status,

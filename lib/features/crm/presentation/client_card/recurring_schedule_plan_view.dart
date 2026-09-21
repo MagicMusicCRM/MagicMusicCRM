@@ -1043,6 +1043,10 @@ class _StudentTimelineItem extends StatelessWidget {
           {'key': 'subscription_reserved'},
         ],
     });
+    final settlementKey = LessonSettlementCorner.effectiveKey(
+      item.settlement.settlementTypeKey,
+    );
+    final settlementAccent = LessonSettlementCorner.colorFor(settlementKey)!;
     final local = item.scheduledAt.toLocal();
     final successor =
         item.lifecycleState == StudentLessonLifecycleState.rescheduled &&
@@ -1077,14 +1081,14 @@ class _StudentTimelineItem extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
-              color: state.token.soft,
+              color: LessonSettlementCorner.backgroundFor(settlementKey),
               border: Border.all(
-                color: state.token.accent.withValues(alpha: 0.55),
+                color: settlementAccent.withValues(alpha: 0.55),
               ),
               borderRadius: BorderRadius.circular(4),
             ),
             child: LessonSettlementCorner(
-              settlementTypeKey: item.settlement.settlementTypeKey,
+              settlementTypeKey: settlementKey,
               timeline: true,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

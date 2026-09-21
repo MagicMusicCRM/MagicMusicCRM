@@ -294,6 +294,7 @@ class LessonEditorSnapshot {
 
 abstract interface class LessonEditorInitialSource {
   DateTime? get initialDate;
+  String? get initialTeacherId;
   String? get initialRoomId;
   String? get initialBranchId;
   int? get initialDurationMinutes;
@@ -309,6 +310,7 @@ abstract interface class LessonEditorInitialSource {
 class LessonEditorInitialInput {
   const LessonEditorInitialInput({
     required this.initialDate,
+    this.initialTeacherId,
     required this.initialRoomId,
     required this.initialBranchId,
     required this.initialDurationMinutes,
@@ -326,6 +328,7 @@ class LessonEditorInitialInput {
     Map<String, dynamic>? lessonOverride,
   }) => LessonEditorInitialInput(
     initialDate: source.initialDate,
+    initialTeacherId: source.initialTeacherId,
     initialRoomId: source.initialRoomId,
     initialBranchId: source.initialBranchId,
     initialDurationMinutes: source.initialDurationMinutes,
@@ -339,6 +342,7 @@ class LessonEditorInitialInput {
   );
 
   final DateTime? initialDate;
+  final String? initialTeacherId;
   final String? initialRoomId;
   final String? initialBranchId;
   final int? initialDurationMinutes;

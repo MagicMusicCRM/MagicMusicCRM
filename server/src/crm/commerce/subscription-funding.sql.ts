@@ -92,8 +92,16 @@ export const subscriptionFundingSql = `
                 select min(pending.due_at)
                 from (
                   select
-                    installment.due_at,
-                    sum(
+                    coalesce(due_fact.due_at, installment.due_at) as due_at,
+                    greatest(
+                      totals.obligation_minor - coalesce(sum(
+                        case
+                          when installment.status = 'void' then 0
+                          else installment.amount_minor
+                        end
+                      ) over (), 0),
+                      0
+                    ) + sum(
                       case
                         when installment.status = 'void' then 0
                         else installment.amount_minor
@@ -101,6 +109,8 @@ export const subscriptionFundingSql = `
                     ) over (order by installment.installment_number)
                       as cumulative_minor
                   from app.subscription_installments installment
+                  left join app.subscription_installment_due_facts due_fact
+                    on due_fact.installment_id = installment.id
                   where installment.issued_subscription_id = issued.id
                 ) pending
                 where pending.cumulative_minor > totals.actual_paid_minor

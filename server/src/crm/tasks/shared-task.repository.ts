@@ -5,6 +5,7 @@ import { moscowTodayStartMs } from "./task-due-state";
 import {
   ResolvedSharedTaskRow,
   SharedTaskMigrationEvidenceRow,
+  SharedTaskResultRow,
   SharedTaskReminderRow,
   SharedTaskRow,
   TaskAudienceRow,
@@ -291,7 +292,13 @@ export class SharedTaskRepository {
           matched.target_id as matched_target_id,
           matched.membership_version,
           close.id as close_id, close.closed_at, close.closed_by,
-          close.request_id as close_request_id
+          close.request_id as close_request_id,
+          close.result_code as close_result_code,
+          close.result_label as close_result_label,
+          close.comment as close_comment,
+          close.planned_start_at as close_planned_start_at,
+          close.planned_all_day as close_planned_all_day,
+          close.was_overdue as close_was_overdue
         from app.shared_tasks task
         join lateral (
           select visibility.scope_kind
@@ -467,12 +474,23 @@ export class SharedTaskRepository {
     taskId: string,
     actorUserId: string,
     requestId: string,
+    input: {
+      resultCode: string;
+      resultLabel: string;
+      comment: string | null;
+      plannedStartAt: Date | string | null;
+      plannedAllDay: boolean;
+      wasOverdue: boolean;
+    },
   ) {
     return client.query<TaskCloseRow>(
       `
         with inserted as (
-          insert into app.task_closes (task_id, closed_by, request_id)
-          values ($1, $2, $3)
+          insert into app.task_closes (
+            task_id, closed_by, request_id, result_code, result_label,
+            comment, planned_start_at, planned_all_day, was_overdue
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           on conflict (task_id) do nothing
           returning *
         )
@@ -482,7 +500,217 @@ export class SharedTaskRepository {
         where task_id = $1 and not exists (select 1 from inserted)
         limit 1
       `,
-      [taskId, actorUserId, requestId],
+      [
+        taskId,
+        actorUserId,
+        requestId,
+        input.resultCode,
+        input.resultLabel,
+        input.comment,
+        input.plannedStartAt,
+        input.plannedAllDay,
+        input.wasOverdue,
+      ],
+    );
+  }
+
+  listResults(
+    actorUserId: string,
+    input: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+      closedBy?: string;
+      resultCode?: string;
+      q?: string;
+      late?: boolean;
+      includeUndated?: boolean;
+      limit: number;
+    },
+  ) {
+    return this.database.query<SharedTaskResultRow>(
+      `
+        with scoped as (
+          select
+            task.id as task_id,
+            task.title,
+            task.body,
+            task.linked_entity_type,
+            task.linked_entity_id,
+            case
+              when task.linked_entity_type = 'student' then (
+                select nullif(btrim(concat_ws(' ', profile.first_name, profile.last_name)), '')
+                from app.students student
+                join app.profiles profile on profile.id = student.profile_id
+                where student.id = task.linked_entity_id
+              )
+              when task.linked_entity_type = 'lead' then (
+                select nullif(btrim(concat_ws(' ', lead.first_name, lead.last_name)), '')
+                from app.leads lead
+                where lead.id = task.linked_entity_id
+              )
+              when task.linked_entity_type = 'profile' then (
+                select nullif(btrim(concat_ws(' ', profile.first_name, profile.last_name)), '')
+                from app.profiles profile
+                where profile.id = task.linked_entity_id
+              )
+              else null
+            end as linked_entity_label,
+            coalesce(
+              (
+                select jsonb_agg(
+                  jsonb_strip_nulls(
+                    jsonb_build_object(
+                      'type', audience.audience_type,
+                      'targetId', audience.target_id,
+                      'label', case
+                        when audience.audience_type = 'allBranches' then 'Вся школа'
+                        when audience.audience_type = 'branch' then coalesce(branch.name, 'Филиал не найден')
+                        else coalesce(
+                          nullif(btrim(concat_ws(' ', recipient.first_name, recipient.last_name)), ''),
+                          recipient_user.email,
+                          'Сотрудник не найден'
+                        )
+                      end,
+                      'entityType', case
+                        when recipient_staff.id is not null then 'staff'
+                        when recipient_teacher.id is not null then 'teacher'
+                        else null
+                      end,
+                      'entityId', coalesce(
+                        recipient_staff.id,
+                        recipient_teacher.id
+                      )
+                    )
+                  )
+                  order by audience.audience_type, audience.id
+                )
+                from app.task_audiences audience
+                left join app.branches branch
+                  on audience.audience_type = 'branch'
+                 and branch.id = audience.target_id
+                left join app.profiles recipient
+                  on audience.audience_type = 'user'
+                 and recipient.user_id = audience.target_id
+                 and recipient.deleted_at is null
+                left join app.users recipient_user
+                  on audience.audience_type = 'user'
+                 and recipient_user.id = audience.target_id
+                left join app.staff_members recipient_staff
+                  on audience.audience_type = 'user'
+                 and recipient_staff.profile_id = recipient.id
+                 and recipient_staff.deleted_at is null
+                left join app.teachers recipient_teacher
+                  on audience.audience_type = 'user'
+                 and recipient_teacher.profile_id = recipient.id
+                 and recipient_teacher.deleted_at is null
+                where audience.task_id = task.id
+              ),
+              '[]'::jsonb
+            ) as audiences,
+            close.id as close_id,
+            close.closed_at,
+            close.closed_by,
+            coalesce(
+              nullif(btrim(concat_ws(' ', closer.first_name, closer.last_name)), ''),
+              closer_user.email
+            ) as closed_by_name,
+            case
+              when closer_staff.id is not null then 'staff'
+              when closer_teacher.id is not null then 'teacher'
+              else null
+            end as closed_by_entity_type,
+            coalesce(closer_staff.id, closer_teacher.id) as closed_by_entity_id,
+            close.result_code,
+            close.result_label,
+            close.comment,
+            coalesce(close.planned_start_at, task.start_at) as planned_start_at,
+            coalesce(close.planned_all_day, task.all_day) as planned_all_day,
+            close.was_overdue
+          from app.shared_tasks task
+          left join app.task_closes close on close.task_id = task.id
+          left join app.profiles closer
+            on closer.user_id = close.closed_by and closer.deleted_at is null
+          left join app.users closer_user on closer_user.id = close.closed_by
+          left join app.staff_members closer_staff
+            on closer_staff.profile_id = closer.id
+           and closer_staff.deleted_at is null
+          left join app.teachers closer_teacher
+            on closer_teacher.profile_id = closer.id
+           and closer_teacher.deleted_at is null
+          where task.deleted_at is null
+            and task.state = 'closed'
+            and exists (
+              select 1 from app.shared_task_visibility visibility
+              where visibility.task_id = task.id
+                and visibility.user_id = $1::uuid
+            )
+            and (
+              (
+                ($2::timestamptz is null or close.closed_at >= $2)
+                and ($3::timestamptz is null or close.closed_at < $3)
+              )
+              or ($9::boolean and close.closed_at is null)
+            )
+            and ($4::uuid is null or close.closed_by = $4)
+            and (
+              $5::text is null
+              or ($5 = '__missing__' and close.result_code is null)
+              or close.result_code = $5
+            )
+            and ($6::boolean is null or close.was_overdue = $6)
+            and (
+              $7::uuid is null
+              or task.branch_id = $7
+              or exists (
+                select 1 from app.task_audiences branch_audience
+                where branch_audience.task_id = task.id
+                  and branch_audience.audience_type = 'branch'
+                  and branch_audience.target_id = $7
+              )
+              or exists (
+                select 1 from app.students student
+                where task.linked_entity_type = 'student'
+                  and student.id = task.linked_entity_id
+                  and student.branch_id = $7
+              )
+              or exists (
+                select 1 from app.leads lead
+                where task.linked_entity_type = 'lead'
+                  and lead.id = task.linked_entity_id
+                  and lead.branch_id = $7
+              )
+            )
+        ), filtered as (
+          select * from scoped
+          where $8::text is null
+             or lower(
+                  title || ' ' || coalesce(body, '') || ' ' ||
+                  coalesce(linked_entity_label, '') || ' ' ||
+                  coalesce(closed_by_name, '') || ' ' ||
+                  coalesce(result_label, '') || ' ' || coalesce(comment, '')
+                ) like '%' || lower($8) || '%'
+        )
+        select filtered.*,
+          count(*) over()::int as total_count,
+          count(*) filter (where was_overdue is true) over()::int as overdue_count,
+          count(*) filter (where result_code is null) over()::int as missing_result_count
+        from filtered
+        order by closed_at desc nulls last, task_id
+        limit $10
+      `,
+      [
+        actorUserId,
+        input.from ?? null,
+        input.to ?? null,
+        input.closedBy ?? null,
+        input.resultCode ?? null,
+        input.late ?? null,
+        input.branchId ?? null,
+        input.q ?? null,
+        input.includeUndated ?? false,
+        input.limit,
+      ],
     );
   }
 
@@ -565,10 +793,29 @@ export class SharedTaskRepository {
   ) {
     const nowMs = Date.now();
     return this.database
-      .query<{ open: number | string; overdue: number | string }>(
+      .query<{
+        open: number | string;
+        today: number | string;
+        overdue: number | string;
+      }>(
         `
           select
-            count(*) filter (where task.state = 'open')::int as open,
+            count(*) filter (
+              where task.state = 'open'
+                and (
+                  $2::text is null
+                  or lower(task.title || ' ' || coalesce(task.body, ''))
+                    like '%' || lower($2) || '%'
+                )
+                and ($3::text is null or task.priority = $3)
+                and ($4::timestamptz is null or task.start_at >= $4)
+                and ($5::timestamptz is null or task.start_at < $5)
+            )::int as open,
+            count(*) filter (
+              where task.state = 'open'
+                and task.start_at >= $7::timestamptz
+                and task.start_at < $9::timestamptz
+            )::int as today,
             count(*) filter (
               where task.state = 'open'
                 and task.start_at < case
@@ -589,14 +836,6 @@ export class SharedTaskRepository {
                   or visibility.scope_kind = $6
                 )
             )
-            and (
-              $2::text is null
-              or lower(task.title || ' ' || coalesce(task.body, ''))
-                like '%' || lower($2) || '%'
-            )
-            and ($3::text is null or task.priority = $3)
-            and ($4::timestamptz is null or task.start_at >= $4)
-            and ($5::timestamptz is null or task.start_at < $5)
         `,
         [
           actorUserId,
@@ -607,10 +846,14 @@ export class SharedTaskRepository {
           filters.scope ?? null,
           new Date(moscowTodayStartMs(nowMs)).toISOString(),
           new Date(nowMs).toISOString(),
+          new Date(
+            moscowTodayStartMs(nowMs) + 24 * 60 * 60 * 1_000,
+          ).toISOString(),
         ],
       )
       .then((result) => ({
         open: Number(result.rows[0]?.open ?? 0),
+        today: Number(result.rows[0]?.today ?? 0),
         overdue: Number(result.rows[0]?.overdue ?? 0),
       }));
   }

@@ -18,6 +18,7 @@ import {
   CreateSharedTaskDto,
   PreviewSharedTaskAudienceDto,
   SharedTaskListQuery,
+  SharedTaskResultsQuery,
   UpdateSharedTaskDto,
 } from "./dto/shared-task.dto";
 import { SharedTaskService } from "./tasks/shared-task.service";
@@ -33,6 +34,14 @@ export class SharedTaskController {
     @Query() query: SharedTaskListQuery,
   ) {
     return this.tasks.list(actor, query);
+  }
+
+  @Get("results")
+  results(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: SharedTaskResultsQuery,
+  ) {
+    return this.tasks.results(actor, query);
   }
 
   @Get(":taskId/history")

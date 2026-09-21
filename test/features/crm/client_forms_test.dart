@@ -68,6 +68,30 @@ class _ClientFormsFakeApi extends MagicApiClient {
                       'options': const <String>[],
                       'version': 1,
                     },
+                    {
+                      'id': '30000000-0000-4000-8000-000000000003',
+                      'entityType': 'lead',
+                      'key': 'category',
+                      'label': 'Категория обучения',
+                      'valueType': 'text',
+                      'required': false,
+                      'isActive': true,
+                      'isSystem': false,
+                      'options': const <String>[],
+                      'version': 1,
+                    },
+                    {
+                      'id': '30000000-0000-4000-8000-000000000004',
+                      'entityType': 'lead',
+                      'key': 'referral_note',
+                      'label': 'Комментарий к обращению',
+                      'valueType': 'text',
+                      'required': false,
+                      'isActive': true,
+                      'isSystem': false,
+                      'options': const <String>[],
+                      'version': 1,
+                    },
                   ]
                 : entityType == 'student' && studentRequiredField
                 ? [
@@ -244,6 +268,40 @@ Future<void> _enterStudentMinimum(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'Lead keeps core fields visible and preserves collapsed optional values',
+    (tester) async {
+      final api = _ClientFormsFakeApi();
+      await _pump(tester, const LeadCreateDialog(), api);
+
+      expect(
+        find.byKey(const ValueKey('custom-field-category')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('custom-field-referral_note')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('lead-additional-toggle')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('custom-field-referral_note')),
+        'Рекомендация ученика',
+      );
+      await tester.tap(find.byKey(const ValueKey('lead-additional-toggle')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('custom-field-referral_note')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('lead-additional-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.text('Рекомендация ученика'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'narrow Lead form validates required fields and sends strict DTO',
     (tester) async {

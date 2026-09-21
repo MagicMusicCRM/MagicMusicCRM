@@ -146,6 +146,10 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
     }
 
     const entity = entityFor(event);
+    const resolvedEventId =
+      event.type === "crm.lead.create.committed"
+        ? await this.leadCreateIdFor(event)
+        : eventId(event);
     if (event.type.startsWith("commerce.")) {
       this.realtime.emitFinanceChanged(await this.financeUserIds(event));
     }
@@ -153,10 +157,28 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
       entity,
       action: actionFor(event),
       id: event.type === "schedule.lessons.changed" ||
-          event.type === "crm.lesson_teacher_rate.changed" ? null : eventId(event),
+          event.type === "crm.lesson_teacher_rate.changed"
+        ? null
+        : resolvedEventId,
       branchId: optionalString(event.payload.branchId),
       affectedUserIds: stringList(event.payload.affectedUserIds),
     } satisfies CrmChangedPayload);
+  }
+
+  private async leadCreateIdFor(event: ClaimedOutboxEvent): Promise<string> {
+    const result = await this.database.query<{ lead_id: string }>(
+      `
+        select result_ref->>'leadId' as lead_id
+          from app.idempotency_records
+         where outbox_event_id = $1
+           and operation = 'crm.lead.create'
+           and status = 'completed'
+           and nullif(result_ref->>'leadId', '') is not null
+         limit 1
+      `,
+      [event.eventId],
+    );
+    return requiredString(result.rows[0]?.lead_id, event.type);
   }
 
   private async financeUserIds(event: ClaimedOutboxEvent): Promise<string[]> {
@@ -275,6 +297,7 @@ function entityFor(event: ClaimedOutboxEvent): CrmEntity {
   if (event.type.startsWith("workflow.task.")) return "task";
   if (event.type === "crm.comment.teacher-sharing.changed") return "comment";
   if (event.type === "inbound.lead.created") return "lead";
+  if (event.type === "crm.lead.create.committed") return "lead";
   if (event.type === "crm.client.archived") {
     return event.aggregateType.includes("student") ? "student" : "lead";
   }
@@ -282,6 +305,7 @@ function entityFor(event: ClaimedOutboxEvent): CrmEntity {
 }
 
 function actionFor(event: ClaimedOutboxEvent): CrmChangedPayload["action"] {
+  if (event.type === "crm.lead.create.committed") return "created";
   const action = optionalString(event.payload.action);
   if (
     action === "created" ||

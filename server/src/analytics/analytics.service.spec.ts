@@ -3,6 +3,7 @@ import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { DashboardService } from "../crm/dashboard.service";
 import { CrmPolicy } from "../crm/crm.policy";
+import { SalesClientsReadService } from "./sales-clients-read.service";
 
 describe("AnalyticsService", () => {
   const actor = { userId: "u1", role: "manager" as const };
@@ -11,13 +12,25 @@ describe("AnalyticsService", () => {
     const policy = { assertCanReadOperationalData: jest.fn(), assertCanWriteCrm: jest.fn(), assertManagerOnly: jest.fn(), assertCanReadSchoolFinance: jest.fn() };
     const crm = {} as unknown as DashboardService;
     const audit = { record: jest.fn() };
+    const salesClients = {
+      summary: jest.fn().mockResolvedValue({
+        observationDays: 90,
+        funnel: {
+          inquiries: 100,
+          trialBooked: 60,
+          trialAttended: 40,
+          firstPaidSales: 25,
+        },
+      }),
+    };
     const service = new AnalyticsService(
       { query } as unknown as DatabaseService,
       crm,
       policy as unknown as CrmPolicy,
       audit as unknown as AuditService,
+      salesClients as unknown as SalesClientsReadService,
     );
-    return { service, query, policy, audit };
+    return { service, query, policy, audit, salesClients };
   };
 
   it("reads finance monthly from the matview with a date filter", async () => {
@@ -70,19 +83,23 @@ describe("AnalyticsService", () => {
   });
 
   it("funnel returns stage counts ordered by sort_order, gated to manager/admin", async () => {
-    const { service, query, policy } = build([
-      { status_id: "s1", name: "Новый", sort_order: 0, leads_entered: "100" },
-      { status_id: "s2", name: "Пробный", sort_order: 1, leads_entered: "40" },
-    ]);
+    const { service, query, policy, salesClients } = build([]);
     const result = await service.funnel(actor, { from: "2026-01-01", to: "2026-04-01" });
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][0]).toContain("app.lead_status_history");
+    expect(query).not.toHaveBeenCalled();
+    expect(salesClients.summary).toHaveBeenCalledWith(actor, {
+      from: "2026-01-01",
+      to: "2026-04-01",
+    });
     expect(result.from).toBe("2026-01-01");
     expect(result.to).toBe("2026-04-01");
     expect(result.stages).toEqual([
-      { statusId: "s1", name: "Новый", sortOrder: 0, leadsEntered: 100, ratioToPrevStage: null },
-      { statusId: "s2", name: "Пробный", sortOrder: 1, leadsEntered: 40, ratioToPrevStage: 40 },
+      { statusId: "inquiry", name: "Обращения", sortOrder: 0, leadsEntered: 100, ratioToPrevStage: null },
+      { statusId: "trial_booked", name: "Записаны на пробное", sortOrder: 1, leadsEntered: 60, ratioToPrevStage: 60 },
+      { statusId: "trial_attended", name: "Посетили пробное", sortOrder: 2, leadsEntered: 40, ratioToPrevStage: 40 },
+      { statusId: "first_paid", name: "Первая фактическая оплата", sortOrder: 3, leadsEntered: 25, ratioToPrevStage: 25 },
     ]);
+    expect(result.ratioDefinition).toBe("cohort_share");
   });
 
   it("branchComparison returns per-branch metrics, gated to manager/admin", async () => {
@@ -92,6 +109,9 @@ describe("AnalyticsService", () => {
     const result = await service.branchComparison(actor, { from: "2026-01-01", to: "2026-04-01" });
     expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.branches");
+    expect(query.mock.calls[0][0]).toContain(
+      "les.lifecycle_state = 'successfully_completed'",
+    );
     expect(result.from).toBe("2026-01-01");
     expect(result.to).toBe("2026-04-01");
     expect(result.branches).toEqual([
@@ -150,6 +170,10 @@ describe("AnalyticsService", () => {
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("app.lessons");
     expect(sql).toContain("lesson_participation");
+    expect(sql).toContain("l.lifecycle_state = 'successfully_completed'");
+    expect(sql).toContain("future_lesson");
+    expect(sql).toContain("fl.student_id is null");
+    expect(sql).toContain("scope_assignment.branch_id");
     expect(result.inactiveDays).toBe(30);
     expect(result.totalAtRisk).toBe(250);
     expect(result.students).toEqual([
@@ -166,22 +190,47 @@ describe("AnalyticsService", () => {
         avg_minutes: "12.5",
         median_minutes: "9",
         p90_minutes: "30",
+        slow_chats: [
+          {
+            chatId: "chat-1",
+            clientName: "Анна Клиент",
+            inboundAt: "2026-06-02T10:00:00.000Z",
+            responseAt: "2026-06-02T10:30:00.000Z",
+            minutes: 30,
+          },
+        ],
       },
     ]);
-    const result = await service.chatsSla(actor, { from: "2026-06-01", to: "2026-06-08" });
+    const result = await service.chatsSla(actor, {
+      from: "2026-06-01",
+      to: "2026-06-08",
+      branchId: "11111111-1111-4111-8111-111111111111",
+    });
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("'administration'");
     expect(sql).toContain("percentile_cont");
+    expect(sql).toContain("app.user_crm_links");
+    expect(sql).toContain("scope_assignment.branch_id");
     expect(result).toEqual({
       from: "2026-06-01",
       to: "2026-06-08",
+      branchId: "11111111-1111-4111-8111-111111111111",
       inboundCount: 10,
       respondedCount: 8,
       responseRate: 0.8,
       avgMinutes: 12.5,
       medianMinutes: 9,
       p90Minutes: 30,
+      slowChats: [
+        {
+          chatId: "chat-1",
+          clientName: "Анна Клиент",
+          inboundAt: "2026-06-02T10:00:00.000Z",
+          responseAt: "2026-06-02T10:30:00.000Z",
+          minutes: 30,
+        },
+      ],
     });
   });
 

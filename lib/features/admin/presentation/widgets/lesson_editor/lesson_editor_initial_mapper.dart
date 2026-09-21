@@ -83,7 +83,7 @@ class LessonEditorInitialMapper {
           _text(lesson, 'client_charge_type') ??
           'none',
       client: client,
-      teacherId: _text(lesson, 'teacher_id'),
+      teacherId: _text(lesson, 'teacher_id') ?? input.initialTeacherId,
       branchId: _text(lesson, 'branch_id') ?? input.initialBranchId,
       roomId: _text(lesson, 'room_id') ?? input.initialRoomId,
       subscriptionId:

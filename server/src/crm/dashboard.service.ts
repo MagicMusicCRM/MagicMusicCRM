@@ -2,7 +2,11 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { AuditPresentationService } from "../audit/audit-presentation.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
-import { branchIdExpr } from "./branch-scope";
+import {
+  branchIdExpr,
+  currentActorRoleSql,
+  managerBranchScopeSql,
+} from "./branch-scope";
 import { CrmPolicy } from "./crm.policy";
 import { ActivityLogQuery } from "./dto/activity-log.query";
 import { ManagerDashboardQuery } from "./dto/manager-dashboard.query";
@@ -163,6 +167,20 @@ export class DashboardService {
     this.policy.assertManagerOnly(actor);
     const bounds = this.dashboardBounds(query);
     const canReadSchoolFinance = this.policy.canReadSchoolFinance(actor);
+    const role = currentActorRoleSql("$4");
+    const scope = (branchExpression: string) =>
+      managerBranchScopeSql({
+        roleExpression: role,
+        userIdExpression: "$4",
+        branchExpression,
+      });
+    const studentScope = scope(branchIdExpr("s"));
+    const studentProjectionScope = scope(branchIdExpr("st"));
+    const leadScope = scope(branchIdExpr("l"));
+    const lessonScope = scope("l.branch_id::text");
+    const auditBranch =
+      "coalesce(audit.metadata->>'branchId', audit.after_ref->>'branchId', audit.before_ref->>'branchId')";
+    const auditScope = scope(auditBranch);
     const result = await this.database.query<ManagerDashboardRow>(
       `
         select
@@ -174,6 +192,7 @@ export class DashboardService {
               and p.payment_date >= $1::timestamptz
               and p.payment_date < $2::timestamptz
               and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
+              and ${studentScope}
           ) else null end as revenue,
           case when $5::boolean then (
             select coalesce(sum(receivable.amount_minor), 0)::numeric / 100
@@ -182,6 +201,7 @@ export class DashboardService {
               on s.id = receivable.student_id and s.deleted_at is null
             where receivable.due_at < $2::timestamptz
               and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
+              and ${studentScope}
           ) else null end as expected_payments,
           case when $5::boolean then (
             select count(distinct projection.student_id)
@@ -190,6 +210,7 @@ export class DashboardService {
               on st.id = projection.student_id and st.deleted_at is null
             where projection.debt_minor > 0
               and ($3::uuid is null or ${branchIdExpr("st")} = $3::text)
+              and ${studentProjectionScope}
           ) else null end as debt_students,
           (
             select count(*)
@@ -197,6 +218,7 @@ export class DashboardService {
             where s.deleted_at is null
               and s.status = 'active'
               and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
+              and ${studentScope}
           ) as active_students,
           (
             select count(*)
@@ -205,12 +227,14 @@ export class DashboardService {
               and l.created_at >= $1::timestamptz
               and l.created_at < $2::timestamptz
               and ($3::uuid is null or ${branchIdExpr("l")} = $3::text)
+              and ${leadScope}
           ) as new_leads,
           (
             select count(*)
             from app.shared_tasks t
             where t.deleted_at is null
               and t.state = 'open'
+              and ($3::uuid is null or t.branch_id = $3::uuid)
               and exists (
                 select 1 from app.shared_task_visibility visibility
                 where visibility.task_id = t.id and visibility.user_id = $4
@@ -222,6 +246,7 @@ export class DashboardService {
             where t.deleted_at is null
               and t.state = 'open'
               and t.start_at is not null
+              and ($3::uuid is null or t.branch_id = $3::uuid)
               and t.start_at < case
                 when t.all_day then
                   date_trunc('day', timezone('Europe/Moscow', now()))
@@ -241,6 +266,7 @@ export class DashboardService {
               and l.scheduled_at >= $1::timestamptz
               and l.scheduled_at < $2::timestamptz
               and ($3::uuid is null or l.branch_id = $3)
+              and ${lessonScope}
           ) as trial_lessons,
           (
             select count(*)
@@ -250,6 +276,7 @@ export class DashboardService {
               and l.scheduled_at >= $1::timestamptz
               and l.scheduled_at < $2::timestamptz
               and ($3::uuid is null or l.branch_id = $3 or r.branch_id = $3)
+              and ${lessonScope}
               and (
                 l.teacher_id is null
                 or (l.room_id is not null and l.branch_id is not null and r.branch_id is not null and l.branch_id <> r.branch_id)
@@ -283,6 +310,7 @@ export class DashboardService {
               and l.scheduled_at >= $1::timestamptz
               and l.scheduled_at < $2::timestamptz
               and ($3::uuid is null or l.branch_id = $3)
+              and ${lessonScope}
           ) as room_load_lessons,
           (
             select count(*)
@@ -290,6 +318,8 @@ export class DashboardService {
             where audit.created_at >= $1::timestamptz
               and audit.created_at < $2::timestamptz
               and audit.action like 'crm.%'
+              and ($3::uuid is null or ${auditBranch} = $3::text)
+              and ${auditScope}
           ) as staff_activity
       `,
       [

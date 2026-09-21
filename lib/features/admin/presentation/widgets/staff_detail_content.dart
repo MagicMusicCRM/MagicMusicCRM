@@ -5,6 +5,8 @@ import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_model.dart';
 
+import 'personnel_embedded_card_frame.dart';
+
 typedef StaffDetailLinkCallback = void Function(String value);
 
 class StaffDetailContent extends StatelessWidget {
@@ -19,6 +21,8 @@ class StaffDetailContent extends StatelessWidget {
     required this.onLink,
     required this.onSave,
     required this.onCancel,
+    this.embedded = false,
+    this.onClose,
   });
 
   final StaffDetailController controller;
@@ -30,27 +34,48 @@ class StaffDetailContent extends StatelessWidget {
   final StaffDetailLinkCallback onLink;
   final VoidCallback onSave;
   final VoidCallback onCancel;
+  final bool embedded;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
+    final form = Form(
+      key: formKey,
+      child: _StaffDetailForm(
+        controller: controller,
+        currentRole: currentRole,
+        onProvision: onProvision,
+        onLifecycle: onLifecycle,
+        onRole: onRole,
+        onLink: onLink,
+      ),
+    );
+    final saveButton = FilledButton.icon(
+      key: const Key('staff-detail-save'),
+      onPressed: controller.saving || controller.isArchived ? null : onSave,
+      icon: controller.saving
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.save_outlined, size: 18),
+      label: Text(controller.saving ? 'Сохранение…' : 'Сохранить'),
+    );
+    if (embedded) {
+      return PersonnelEmbeddedCardFrame(
+        key: const Key('staff-detail-embedded'),
+        title: 'Карточка сотрудника',
+        icon: Icons.badge_outlined,
+        body: form,
+        action: saveButton,
+        saving: controller.saving,
+        onClose: onClose,
+      );
+    }
     return AlertDialog(
       title: const Text('Карточка сотрудника'),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: Form(
-            key: formKey,
-            child: _StaffDetailForm(
-              controller: controller,
-              currentRole: currentRole,
-              onProvision: onProvision,
-              onLifecycle: onLifecycle,
-              onRole: onRole,
-              onLink: onLink,
-            ),
-          ),
-        ),
-      ),
+      content: SizedBox(width: 460, child: SingleChildScrollView(child: form)),
       actions: [
         TextButton(
           onPressed: controller.saving ? null : onCancel,
@@ -61,16 +86,7 @@ class StaffDetailContent extends StatelessWidget {
             ),
           ),
         ),
-        FilledButton(
-          onPressed: controller.saving || controller.isArchived ? null : onSave,
-          child: controller.saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Сохранить'),
-        ),
+        saveButton,
       ],
     );
   }
@@ -95,31 +111,91 @@ class _StaffDetailForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _StaffSummary(controller: controller, currentRole: currentRole),
-        _StaffAccessActions(
-          controller: controller,
-          currentRole: currentRole,
-          onProvision: onProvision,
-          onLifecycle: onLifecycle,
-          onLink: onLink,
-        ),
-        const SizedBox(height: 12),
-        _IdentityFields(controller: controller, currentRole: currentRole),
-        const SizedBox(height: 12),
-        _AccessRoleField(
-          controller: controller,
-          currentRole: currentRole,
-          onRole: onRole,
-        ),
-        const SizedBox(height: 12),
-        _BranchSelector(controller: controller),
-        const SizedBox(height: 12),
-        _EmploymentFields(controller: controller),
-      ],
+    final identity = _StaffDetailSection(
+      title: 'Основные данные и доступ',
+      child: Column(
+        children: [
+          _IdentityFields(controller: controller, currentRole: currentRole),
+          _AccessRoleField(
+            controller: controller,
+            currentRole: currentRole,
+            onRole: onRole,
+          ),
+        ],
+      ),
+    );
+    final employment = _StaffDetailSection(
+      title: 'Работа и филиалы',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _BranchSelector(controller: controller),
+          const SizedBox(height: 12),
+          _EmploymentFields(controller: controller),
+        ],
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 720;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _StaffSummary(controller: controller, currentRole: currentRole),
+            _StaffAccessActions(
+              controller: controller,
+              currentRole: currentRole,
+              onProvision: onProvision,
+              onLifecycle: onLifecycle,
+              onLink: onLink,
+            ),
+            const SizedBox(height: 12),
+            if (wide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: identity),
+                  const SizedBox(width: 14),
+                  Expanded(child: employment),
+                ],
+              )
+            else ...[
+              identity,
+              const SizedBox(height: 12),
+              employment,
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _StaffDetailSection extends StatelessWidget {
+  const _StaffDetailSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
     );
   }
 }
@@ -141,13 +217,13 @@ class _StaffSummary extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        _SummaryChip(
+        PersonnelMetricChip(
           icon: Icons.badge_outlined,
           label: 'Роль в системе',
           value: staffRoleLabel(controller.draft.role),
           color: AppTheme.primaryGold,
         ),
-        _SummaryChip(
+        PersonnelMetricChip(
           icon: isAppAccount
               ? Icons.verified_user_rounded
               : Icons.person_off_rounded,
@@ -158,7 +234,7 @@ class _StaffSummary extends StatelessWidget {
               : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
         if (canManageCredentials)
-          _SummaryChip(
+          PersonnelMetricChip(
             icon: passwordConfigured
                 ? Icons.password_rounded
                 : Icons.no_encryption_gmailerrorred_rounded,
@@ -169,7 +245,7 @@ class _StaffSummary extends StatelessWidget {
                 : Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         if (branches.isNotEmpty)
-          _SummaryChip(
+          PersonnelMetricChip(
             icon: Icons.location_on_outlined,
             label: 'Филиалы',
             value: branches,
@@ -425,66 +501,6 @@ class _EmploymentFields extends StatelessWidget {
           onChanged: (value) => draft.birthday = value,
         ),
       ],
-    );
-  }
-}
-
-class _SummaryChip extends StatelessWidget {
-  const _SummaryChip({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-    this.wide = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  final bool wide;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: wide ? 220 : 132,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withAlpha(24),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(54)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 17, color: color),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

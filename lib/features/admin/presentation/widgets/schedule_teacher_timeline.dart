@@ -647,7 +647,13 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
       widget.entry.lesson,
       hasConflict: widget.entry.conflicts.isNotEmpty,
     );
-    final accent = projection.token.accent;
+    final settlementKey = LessonSettlementCorner.effectiveKey(
+      (widget.entry.lesson['settlement_type_key'] ??
+              widget.entry.lesson['settlementTypeKey'])
+          ?.toString(),
+      isTrial: widget.entry.isTrial,
+    );
+    final accent = LessonSettlementCorner.colorFor(settlementKey)!;
     final borderColor = widget.entry.highlighted ? AppColor.gold : accent;
     final end = widget.entry.startLocal.add(
       Duration(minutes: widget.entry.durationMinutes),
@@ -663,7 +669,7 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
           duration: AppMotion.effective(context, AppMotion.fast),
           transform: Matrix4.translationValues(0, _hovered ? -1 : 0, 0),
           decoration: BoxDecoration(
-            color: accent.withAlpha(_hovered ? 54 : 38),
+            color: LessonSettlementCorner.backgroundFor(settlementKey),
             borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(
               color: borderColor,
@@ -682,10 +688,7 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
                   builder: (context, constraints) {
                     final showTrailingMetadata = constraints.maxWidth >= 96;
                     return LessonSettlementCorner(
-                      settlementTypeKey: widget
-                          .entry
-                          .lesson['settlement_type_key']
-                          ?.toString(),
+                      settlementTypeKey: settlementKey,
                       child: Row(
                         children: [
                           if (widget.entry.clientContext ||
@@ -747,7 +750,7 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
                                 message: projection.label,
                                 child: Icon(
                                   projection.token.icon,
-                                  color: accent,
+                                  color: projection.token.accent,
                                   size: 13,
                                 ),
                               ),

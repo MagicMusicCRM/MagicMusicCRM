@@ -101,6 +101,36 @@ class MagicNotificationsService {
     await _api.delete<Map<String, dynamic>>('/notifications/devices/$id');
   }
 
+  Future<Map<String, dynamic>> listDeliveryJournal({
+    required DateTime from,
+    required DateTime toExclusive,
+    String? branchId,
+    String? channel,
+    String? status,
+    int limit = 100,
+    int offset = 0,
+  }) {
+    final query = <String, dynamic>{
+      'from': from.toUtc().toIso8601String(),
+      'to': toExclusive.toUtc().toIso8601String(),
+      'limit': limit,
+      'offset': offset,
+    };
+    if (branchId != null && branchId.trim().isNotEmpty) {
+      query['branchId'] = branchId.trim();
+    }
+    if (channel != null && channel.trim().isNotEmpty) {
+      query['channel'] = channel.trim();
+    }
+    if (status != null && status.trim().isNotEmpty) {
+      query['status'] = status.trim();
+    }
+    return _api.get<Map<String, dynamic>>(
+      '/admin/notifications/deliveries',
+      queryParameters: query,
+    );
+  }
+
   Future<Map<String, dynamic>> adminSend({
     required String target,
     String? role,

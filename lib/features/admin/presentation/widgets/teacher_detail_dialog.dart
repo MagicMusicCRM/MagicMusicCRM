@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_lifecycle_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/personnel_embedded_card_frame.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_access_flow.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_content.dart';
@@ -21,9 +26,18 @@ import 'magic_teacher_employment_reference_gateway.dart';
 import 'teacher_employment_reference_gateway.dart';
 
 class TeacherDetailDialog extends ConsumerStatefulWidget {
-  const TeacherDetailDialog({super.key, required this.teacher});
+  const TeacherDetailDialog({
+    super.key,
+    required this.teacher,
+    this.embedded = false,
+    this.onChanged,
+    this.onClose,
+  });
 
   final Map<String, dynamic> teacher;
+  final bool embedded;
+  final Future<void> Function()? onChanged;
+  final VoidCallback? onClose;
 
   static Future<bool?> show(
     BuildContext context,
@@ -94,9 +108,17 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   Future<void> _executeSave(TeacherDetailSaveCommand command) async {
     setState(() => _saving = true);
     try {
-      await command.execute(ref.read(magicCrmServiceProvider), _teacherId);
+      final updated = await command.execute(
+        ref.read(magicCrmServiceProvider),
+        _teacherId,
+      );
       if (!mounted) return;
-      Navigator.pop(context, true);
+      if (widget.embedded) {
+        setState(() => _teacher = updated);
+        await widget.onChanged?.call();
+      } else {
+        Navigator.pop(context, true);
+      }
       _showMessage('Данные сохранены');
     } catch (error) {
       if (mounted) {
@@ -178,7 +200,12 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       personId: _teacherId,
       personName: _nameController.text.trim(),
     );
-    if (saved == true && mounted) Navigator.pop(context, true);
+    if (saved != true || !mounted) return;
+    if (widget.embedded) {
+      await widget.onChanged?.call();
+    } else {
+      Navigator.pop(context, true);
+    }
   }
 
   Future<void> _changeAccessRole() async {
@@ -196,6 +223,38 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     _showMessage('Роль доступа обновлена');
   }
 
+  Future<void> _openSchedule() => openEntityLink(
+    context,
+    ref,
+    EntityLink.typed(
+      entityType: EntityLinkType.teacher,
+      entityId: _teacherId,
+      presentation: EntityPresentationReference(
+        primary: _nameController.text.trim(),
+      ),
+    ),
+    target: EntityOpenTarget.newTab,
+  );
+
+  Future<void> _openAvailability() => openEntityLink(
+    context,
+    ref,
+    EntityLink.typed(
+      entityType: EntityLinkType.report,
+      entityId: '__section__',
+      variant: 'configuration',
+      optionalFocus: EntityLinkFocus(
+        focus: 'learning',
+        filter: {'teacherId': _teacherId},
+      ),
+      presentation: EntityPresentationReference(
+        primary: 'График преподавателя',
+        context: _nameController.text.trim(),
+      ),
+    ),
+    target: EntityOpenTarget.newTab,
+  );
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -212,29 +271,65 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     }.contains(role);
     final canManageTeacherRates =
         snapshot != null && crmCanManageTeacherRates(snapshot);
+    final canOpenSchedule =
+        snapshot != null &&
+        (snapshot.allows('schedule.lesson.read.assigned') ||
+            snapshot.allows('schedule.lesson.write'));
+    final canOpenAvailability =
+        snapshot != null &&
+        (snapshot.allows('config.crm.read') ||
+            snapshot.allows('system.settings.manage'));
+    final content = TeacherDetailContent(
+      teacher: _teacher,
+      nameController: _nameController,
+      emailController: _emailController,
+      initialPhone: _canonicalPhone,
+      onPhoneChanged: (phone) => _canonicalPhone = phone,
+      employmentKey: _employmentKey,
+      employmentInitial: _employmentInitial,
+      employmentReferenceGateway: _employmentReferenceGateway,
+      actorRole: role,
+      canManageCredentials: canManageCredentials,
+      canManageTeacherRates: canManageTeacherRates,
+      canOpenSchedule: canOpenSchedule,
+      canOpenAvailability: canOpenAvailability,
+      saving: _saving,
+      onOpenSchedule: () => unawaited(_openSchedule()),
+      onOpenAvailability: () => unawaited(_openAvailability()),
+      onProvisionAccess: _provisionAccess,
+      onManageLifecycle: _manageLifecycle,
+      onChangeAccessRole: _changeAccessRole,
+    );
+    final saveButton = FilledButton.icon(
+      key: const Key('teacher-detail-save'),
+      onPressed: _saving || _teacher['lifecycle_state'] == 'archived'
+          ? null
+          : _save,
+      icon: _saving
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.save_outlined, size: 18),
+      label: Text(_saving ? 'Сохранение…' : 'Сохранить'),
+    );
+    if (widget.embedded) {
+      return PersonnelEmbeddedCardFrame(
+        key: const Key('teacher-detail-embedded'),
+        title: 'Карточка преподавателя',
+        icon: Icons.school_outlined,
+        body: content,
+        action: saveButton,
+        saving: _saving,
+        onClose: widget.onClose,
+      );
+    }
     return AlertDialog(
       title: const Text('Карточка преподавателя'),
       content: SizedBox(
         width: 620,
-        child: SingleChildScrollView(
-          child: TeacherDetailContent(
-            teacher: _teacher,
-            nameController: _nameController,
-            emailController: _emailController,
-            initialPhone: _canonicalPhone,
-            onPhoneChanged: (phone) => _canonicalPhone = phone,
-            employmentKey: _employmentKey,
-            employmentInitial: _employmentInitial,
-            employmentReferenceGateway: _employmentReferenceGateway,
-            actorRole: role,
-            canManageCredentials: canManageCredentials,
-            canManageTeacherRates: canManageTeacherRates,
-            saving: _saving,
-            onProvisionAccess: _provisionAccess,
-            onManageLifecycle: _manageLifecycle,
-            onChangeAccessRole: _changeAccessRole,
-          ),
-        ),
+        child: SingleChildScrollView(child: content),
       ),
       actions: [
         TextButton(
@@ -246,18 +341,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             ),
           ),
         ),
-        FilledButton(
-          onPressed: _saving || _teacher['lifecycle_state'] == 'archived'
-              ? null
-              : _save,
-          child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Сохранить'),
-        ),
+        saveButton,
       ],
     );
   }

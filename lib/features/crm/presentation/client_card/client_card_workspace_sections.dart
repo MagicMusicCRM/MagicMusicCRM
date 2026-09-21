@@ -209,6 +209,8 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       blocks.add(child);
     }
 
+    add(_buildDesktopAtGlance(cs));
+
     final overview = bySection['overview'];
     final contacts = bySection['contacts'];
     if (overview != null && contacts != null) {
@@ -264,7 +266,12 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canReadTasks,
   }) {
     return switch (section) {
-      'overview' => _buildClientInfoTab(cs, currentStatus, embedded: true),
+      'overview' => _buildClientInfoTab(
+        cs,
+        currentStatus,
+        embedded: true,
+        canWriteSchedule: canWriteSchedule,
+      ),
       'lessons' when _isStudent => _buildLessonsTab(
         cs,
         canReadSchedule: canReadSchedule,
@@ -289,7 +296,12 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         canReadTasks: canReadTasks,
       ),
       'contacts' => _buildFamilyTab(cs, embedded: true),
-      _ => _buildClientInfoTab(cs, currentStatus, embedded: true),
+      _ => _buildClientInfoTab(
+        cs,
+        currentStatus,
+        embedded: true,
+        canWriteSchedule: canWriteSchedule,
+      ),
     };
   }
 
@@ -470,7 +482,11 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canReadTasks,
   }) {
     return switch (section) {
-      'overview' => _buildClientInfoTab(cs, currentStatus),
+      'overview' => _buildClientInfoTab(
+        cs,
+        currentStatus,
+        canWriteSchedule: canWriteSchedule,
+      ),
       'lessons' when _isStudent => _buildLessonsTab(
         cs,
         canReadSchedule: canReadSchedule,
@@ -492,7 +508,11 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         canReadTasks: canReadTasks,
       ),
       'contacts' => _buildFamilyTab(cs),
-      _ => _buildClientInfoTab(cs, currentStatus),
+      _ => _buildClientInfoTab(
+        cs,
+        currentStatus,
+        canWriteSchedule: canWriteSchedule,
+      ),
     };
   }
 
@@ -508,7 +528,19 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       padding: const EdgeInsets.all(AppSpace.xl),
       children: [
         if (canReadSchedule) ...[
-          LeadLessonDateTray(lessons: const [], canWrite: canWriteSchedule),
+          LeadTrialLessonsSection(
+            lessons: _list(_leadCard?['trials']),
+            canWrite: canWriteSchedule,
+            onCreate: _createLeadTrialLesson,
+            onEdit: _openClientTrayLesson,
+            onCancel: _cancelClientTrayLesson,
+          ),
+          const SizedBox(height: AppSpace.md),
+          LeadLessonDateTray(
+            lessons: _list(_leadCard?['trials']),
+            canWrite: canWriteSchedule,
+            onOpenLesson: _openClientTrayLesson,
+          ),
           const SizedBox(height: AppSpace.lg),
         ],
         if (!canReadSchedule)

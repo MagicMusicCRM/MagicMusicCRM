@@ -168,7 +168,13 @@ void main() {
     );
 
     expect(find.byKey(const Key('client-internal-note')), findsOneWidget);
-    expect(find.text('Важен звонок перед занятием'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('client-internal-note')),
+        matching: find.text('Важен звонок перед занятием'),
+      ),
+      findsOneWidget,
+    );
     await tester.enterText(
       find.byKey(const Key('client-internal-note-input')),
       'Позвонить за час',

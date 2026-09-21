@@ -859,11 +859,29 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         await client.query(
           `
             insert into app.notification_recipients (notification_id, user_id, delivered_at)
-            values ($1, $2, now())
+            values ($1, $2, case when $3::boolean then now() else null end)
             on conflict (notification_id, user_id) do nothing
           `,
-          [notificationId, userId]
+          [notificationId, userId, input.channels.includes('in_app')]
         );
+        if (input.channels.includes('in_app')) {
+          await client.query(
+            `
+              insert into app.notification_deliveries (
+                notification_id, user_id, channel, provider, status,
+                attempt_count, updated_at
+              )
+              select $1, $2, 'in_app', 'bell', 'sent', 1, now()
+              where not exists (
+                select 1 from app.notification_deliveries
+                where notification_id = $1
+                  and user_id = $2
+                  and channel = 'in_app'
+              )
+            `,
+            [notificationId, userId]
+          );
+        }
         if (input.channels.includes('email')) {
           const user = await client.query<{ email: string }>(
             'select email from app.users where id = $1 and deleted_at is null limit 1',

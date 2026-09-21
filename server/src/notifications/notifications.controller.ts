@@ -6,9 +6,11 @@ import { Roles } from '../common/security/roles.decorator';
 import { RolesGuard } from '../common/security/roles.guard';
 import { AdminSendNotificationDto } from './dto/admin-send-notification.dto';
 import { ListNotificationsQuery } from './dto/list-notifications.query';
+import { ListNotificationDeliveriesQuery } from './dto/list-notification-deliveries.query';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 import { NotificationsService } from './notifications.service';
+import { NotificationDeliveryJournalService } from './notification-delivery-journal.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
@@ -44,7 +46,19 @@ export class NotificationsController {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin/notifications')
 export class AdminNotificationsController {
-  constructor(private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly notifications: NotificationsService,
+    private readonly deliveryJournal: NotificationDeliveryJournalService
+  ) {}
+
+  @Get('deliveries')
+  @Roles('manager', 'director', 'admin', 'system_admin')
+  listDeliveries(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: ListNotificationDeliveriesQuery
+  ) {
+    return this.deliveryJournal.list(actor, query);
+  }
 
   @Post()
   @Roles('manager', 'director', 'admin', 'system_admin')

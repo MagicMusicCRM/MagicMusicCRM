@@ -132,7 +132,11 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       tasks.close(
         fixture.admin,
         first.id,
-        { expectedVersion: first.version },
+        {
+          expectedVersion: first.version,
+          resultCode: "completed",
+          resultLabel: "Выполнено",
+        },
         {
           idempotencyKey: `close-${randomUUID()}`,
           requestId: `close-request-${randomUUID()}`,
@@ -310,6 +314,8 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       ) - offset,
     );
     const title = `All-day today ${randomUUID()}`;
+    const overdueBefore = (await tasks.list(fixture.director, { q: title }))
+      .counters.overdue;
     await tasks.create(
       fixture.director,
       {
@@ -327,7 +333,7 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     );
 
     const result = await tasks.list(fixture.director, { q: title });
-    expect(result.counters).toMatchObject({ open: 1, overdue: 0 });
+    expect(result.counters).toMatchObject({ open: 1, overdue: overdueBefore });
   });
 
   it("filters, groups by day and lets another manager reassign an open task", async () => {
@@ -487,13 +493,139 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       tasks.close(
         { ...fixture.teacher, role: "client" },
         created.id,
-        { expectedVersion: created.version },
+        {
+          expectedVersion: created.version,
+          resultCode: "completed",
+          resultLabel: "Выполнено",
+        },
         {
           idempotencyKey: `close-${randomUUID()}`,
           requestId: `close-request-${randomUUID()}`,
         },
       ),
     ).rejects.toBeDefined();
+  });
+
+  it("requires a structured result and an explanation for Other", async () => {
+    const created = await tasks.create(
+      fixture.director,
+      {
+        title: "Result is required",
+        allDay: false,
+        startAt: "2026-08-02T10:00:00.000Z",
+        endAt: "2026-08-02T11:00:00.000Z",
+        audiences: [{ type: "user", targetId: fixture.admin.userId }],
+        linkedEntity: { type: "student", id: fixture.studentId },
+      },
+      {
+        idempotencyKey: `create-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      },
+    );
+
+    await expect(
+      tasks.close(
+        fixture.admin,
+        created.id,
+        { expectedVersion: created.version } as never,
+        {
+          idempotencyKey: `close-${randomUUID()}`,
+          requestId: `close-request-${randomUUID()}`,
+        },
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+    await expect(
+      tasks.close(
+        fixture.admin,
+        created.id,
+        {
+          expectedVersion: created.version,
+          resultCode: "other",
+          resultLabel: "Другое",
+        },
+        {
+          idempotencyKey: `close-${randomUUID()}`,
+          requestId: `close-request-${randomUUID()}`,
+        },
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+    const closed = await tasks.close(
+      fixture.admin,
+      created.id,
+      {
+        expectedVersion: created.version,
+        resultCode: "other",
+        resultLabel: "Другое",
+        comment: "Клиент попросил вернуться к вопросу через месяц.",
+      },
+      {
+        idempotencyKey: `close-${randomUUID()}`,
+        requestId: `close-request-${randomUUID()}`,
+      },
+    );
+    expect(closed).toMatchObject({
+      resultCode: "other",
+      resultLabel: "Другое",
+    });
+
+    const facts = await pool.query<{
+      result_code: string;
+      result_label: string;
+      comment: string;
+      closed_by: string;
+      was_overdue: boolean;
+    }>(
+      `select result_code, result_label, comment, closed_by, was_overdue
+         from app.task_closes where task_id = $1`,
+      [created.id],
+    );
+    expect(facts.rows[0]).toMatchObject({
+      result_code: "other",
+      result_label: "Другое",
+      comment: "Клиент попросил вернуться к вопросу через месяц.",
+      closed_by: fixture.admin.userId,
+    });
+
+    const results = await tasks.results(fixture.director, {
+      resultCode: "other",
+      q: "вернуться к вопросу",
+    });
+    expect(results.summary).toEqual({
+      closed: 1,
+      overdue: expect.any(Number),
+      withoutResult: 0,
+    });
+    expect(results.items).toHaveLength(1);
+    expect(results.items[0]).toMatchObject({
+      taskId: created.id,
+      title: "Result is required",
+      client: {
+        type: "student",
+        id: fixture.studentId,
+        label: expect.any(String),
+      },
+      closedBy: {
+        id: fixture.admin.userId,
+        label: expect.any(String),
+        entityType: "staff",
+        entityId: fixture.staffId,
+      },
+      audiences: expect.arrayContaining([
+        expect.objectContaining({
+          type: "user",
+          targetId: fixture.admin.userId,
+          entityType: "staff",
+          entityId: fixture.staffId,
+        }),
+      ]),
+      result: {
+        code: "other",
+        label: "Другое",
+        comment: "Клиент попросил вернуться к вопросу через месяц.",
+      },
+    });
   });
 
   it("returns one stable result when two current audience members close concurrently", async () => {
@@ -518,7 +650,11 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       tasks.close(
         fixture.admin,
         created.id,
-        { expectedVersion: created.version },
+        {
+          expectedVersion: created.version,
+          resultCode: "completed",
+          resultLabel: "Выполнено",
+        },
         {
           idempotencyKey: `close-${randomUUID()}`,
           requestId: `close-request-${randomUUID()}`,
@@ -527,7 +663,11 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       tasks.close(
         fixture.manager,
         created.id,
-        { expectedVersion: created.version },
+        {
+          expectedVersion: created.version,
+          resultCode: "completed",
+          resultLabel: "Выполнено",
+        },
         {
           idempotencyKey: `close-${randomUUID()}`,
           requestId: `close-request-${randomUUID()}`,
@@ -582,7 +722,11 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     );
     expect(audit.rows[0]).toEqual({
       before_ref: { state: "open" },
-      after_ref: { state: "closed" },
+      after_ref: {
+        state: "closed",
+        resultCode: "completed",
+        resultLabel: "Выполнено",
+      },
       metadata: {
         changes: [
           {
@@ -590,6 +734,14 @@ describe("SharedTask API domain (PostgreSQL)", () => {
             from: "Открыта",
             to: "Закрыта",
             label: "Статус задачи",
+            valueType: "text",
+            displayMode: "values",
+          },
+          {
+            field: "result",
+            from: null,
+            to: "Выполнено",
+            label: "Результат выполнения",
             valueType: "text",
             displayMode: "values",
           },

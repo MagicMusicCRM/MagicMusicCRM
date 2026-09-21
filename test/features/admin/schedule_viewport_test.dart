@@ -212,7 +212,12 @@ void main() {
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           expect(tester.getTopLeft(find.byType(ScheduleDayCanvas)), top);
-          await tester.tap(find.byKey(const ValueKey('schedule-filter-apply')));
+          final apply = find.byKey(
+            const ValueKey('schedule-filter-apply'),
+          );
+          await tester.ensureVisible(apply);
+          await tester.pumpAndSettle();
+          await tester.tap(apply);
           await tester.pumpAndSettle();
           expect(
             find.byKey(const ValueKey('schedule-filter-apply')),

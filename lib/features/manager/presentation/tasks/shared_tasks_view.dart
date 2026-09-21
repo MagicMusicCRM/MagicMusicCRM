@@ -23,6 +23,7 @@ class SharedTasksView extends StatefulWidget {
     required this.onRefresh,
     required this.canCreate,
     required this.canEdit,
+    this.onOpenResults,
     this.embedded = false,
     this.showViewToolbar = true,
     this.scrollController,
@@ -40,6 +41,7 @@ class SharedTasksView extends StatefulWidget {
   final Future<void> Function() onRefresh;
   final bool canCreate;
   final bool canEdit;
+  final VoidCallback? onOpenResults;
   final bool embedded;
   final bool showViewToolbar;
   final ScrollController? scrollController;
@@ -138,16 +140,30 @@ class _SharedTasksViewState extends State<SharedTasksView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Задачи'),
-        actions: mobile || !widget.canCreate
-            ? null
-            : [
-                FilledButton.icon(
-                  onPressed: widget.onCreate,
-                  icon: const Icon(Icons.add_task_rounded),
-                  label: const Text('Новая задача'),
-                ),
-                const SizedBox(width: AppSpace.sm),
-              ],
+        actions: [
+          if (widget.onOpenResults != null)
+            mobile
+                ? IconButton(
+                    key: const Key('shared-task-open-results'),
+                    tooltip: 'Результаты выполнения',
+                    onPressed: widget.onOpenResults,
+                    icon: const Icon(Icons.fact_check_outlined),
+                  )
+                : OutlinedButton.icon(
+                    key: const Key('shared-task-open-results'),
+                    onPressed: widget.onOpenResults,
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Результаты выполнения'),
+                  ),
+          if (widget.onOpenResults != null) const SizedBox(width: AppSpace.sm),
+          if (!mobile && widget.canCreate)
+            FilledButton.icon(
+              onPressed: widget.onCreate,
+              icon: const Icon(Icons.add_task_rounded),
+              label: const Text('Новая задача'),
+            ),
+          const SizedBox(width: AppSpace.sm),
+        ],
       ),
       body: content,
       floatingActionButton: mobile && widget.canCreate

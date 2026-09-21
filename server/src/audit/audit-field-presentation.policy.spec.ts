@@ -110,6 +110,7 @@ describe('audit field presentation policy', () => {
     'entityType',
     'field',
     'kind',
+    'resultCode',
     'walletBalanceMinor',
   ])('suppresses classified technical field %s despite a values hint', (field) => {
     const input = {
@@ -123,6 +124,24 @@ describe('audit field presentation policy', () => {
 
     expect(createSafeAuditChange(input)).toBeNull();
     expect(presentAuditFieldChange(input)).toBeNull();
+  });
+
+  it('presents the task result label without exposing its storage code', () => {
+    expect(presentAuditFieldChange({
+      field: 'resultLabel',
+      from: null,
+      to: 'Выполнено',
+    })).toEqual({
+      key: 'resultLabel',
+      label: 'Результат выполнения',
+      before: null,
+      after: 'Выполнено',
+    });
+    expect(presentAuditFieldChange({
+      field: 'resultCode',
+      from: null,
+      to: 'completed',
+    })).toBeNull();
   });
 
   it.each([

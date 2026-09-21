@@ -138,6 +138,9 @@ describe("DashboardService", () => {
       "app.commerce_student_account_projection",
     );
     expect(overviewSql).not.toContain("app.expected_payments");
+    expect(overviewSql).toContain("scope_assignment.branch_id");
+    expect(overviewSql).toContain("t.branch_id = $3::uuid");
+    expect(overviewSql).toContain("audit.metadata->>'branchId'");
   });
 
   it("redacts and skips school finance for a manager", async () => {

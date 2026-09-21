@@ -21,6 +21,11 @@ import { ClientStatusReadService } from "./client-status-read.service";
 import { ReportingReadService } from "./reporting-read.service";
 import { ReportExportRequestDto } from "./dto/report-export.dto";
 import { ReportExportService } from "./report-export.service";
+import { SalesClientsQuery } from "./dto/sales-clients.query";
+import { SalesClientsReadService } from "./sales-clients-read.service";
+import { FinanceDebtQuery } from "./dto/finance-debt.query";
+import { FinanceDebtReadService } from "./finance-debt-read.service";
+import { UtilizationReadService } from "./utilization-read.service";
 
 @Controller("analytics")
 @UseGuards(JwtAuthGuard)
@@ -29,6 +34,9 @@ export class AnalyticsController {
     private readonly analytics: AnalyticsService,
     private readonly clientStatus: ClientStatusReadService,
     private readonly reporting: ReportingReadService,
+    private readonly salesClients: SalesClientsReadService,
+    private readonly financeDebt: FinanceDebtReadService,
+    private readonly utilization: UtilizationReadService,
     private readonly exports: ReportExportService,
   ) {}
 
@@ -72,6 +80,46 @@ export class AnalyticsController {
     return this.reporting.schoolFinance(actor, query);
   }
 
+  @Get("v4/sales-clients")
+  salesClientsSummary(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: SalesClientsQuery,
+  ) {
+    return this.salesClients.summary(actor, query);
+  }
+
+  @Get("v4/sales-clients/clients")
+  salesClientsList(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: SalesClientsQuery,
+  ) {
+    return this.salesClients.list(actor, query);
+  }
+
+  @Get("v4/finance-debt")
+  financeDebtSummary(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: FinanceDebtQuery,
+  ) {
+    return this.financeDebt.summary(actor, query);
+  }
+
+  @Get("v4/finance-debt/items")
+  financeDebtItems(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: FinanceDebtQuery,
+  ) {
+    return this.financeDebt.list(actor, query);
+  }
+
+  @Get("v4/utilization")
+  utilizationReport(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
+    return this.utilization.report(actor, query);
+  }
+
   @Post("v4/exports")
   async requestExport(
     @CurrentActor() actor: ActorContext,
@@ -109,7 +157,10 @@ export class AnalyticsController {
   }
 
   @Get("dashboard")
-  dashboard(@CurrentActor() actor: ActorContext, @Query() query: AnalyticsRangeQuery) {
+  dashboard(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
     return this.analytics.dashboard(actor, query as never);
   }
 
@@ -122,7 +173,10 @@ export class AnalyticsController {
   }
 
   @Get("branches")
-  branchComparison(@CurrentActor() actor: ActorContext, @Query() query: AnalyticsRangeQuery) {
+  branchComparison(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
     return this.analytics.branchComparison(actor, query);
   }
 
@@ -135,12 +189,18 @@ export class AnalyticsController {
   }
 
   @Get("debts")
-  debts(@CurrentActor() actor: ActorContext, @Query() query: AnalyticsRangeQuery) {
+  debts(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
     return this.analytics.debts(actor, query);
   }
 
   @Get("forecast")
-  revenueForecast(@CurrentActor() actor: ActorContext, @Query() query: AnalyticsRangeQuery) {
+  revenueForecast(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
     return this.analytics.revenueForecast(actor, query);
   }
 
@@ -153,7 +213,10 @@ export class AnalyticsController {
   }
 
   @Get("weekly-report")
-  weeklyReport(@CurrentActor() actor: ActorContext, @Query() query: AnalyticsRangeQuery) {
+  weeklyReport(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
     return this.analytics.weeklyReport(actor, query);
   }
 
@@ -162,11 +225,18 @@ export class AnalyticsController {
     @CurrentActor() actor: ActorContext,
     @Query() query: AnalyticsRangeQuery,
   ) {
-    return this.analytics.chatsSla(actor, { from: query.from, to: query.to });
+    return this.analytics.chatsSla(actor, {
+      from: query.from,
+      to: query.to,
+      branchId: query.branchId,
+    });
   }
 
   @Get("finance/monthly")
-  financeMonthly(@CurrentActor() actor: ActorContext, @Query() query: AnalyticsRangeQuery) {
+  financeMonthly(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
     return this.analytics.financeMonthly(actor, query);
   }
 
@@ -178,7 +248,10 @@ export class AnalyticsController {
   ): Promise<StreamableFile> {
     const csv = await this.analytics.financeMonthlyCsv(actor, query);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", 'attachment; filename="finance-monthly.csv"');
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="finance-monthly.csv"',
+    );
     return new StreamableFile(Buffer.from(csv, "utf-8"));
   }
 
@@ -206,7 +279,10 @@ export class AnalyticsController {
   }
 
   @Get("data-quality")
-  dataQuality(@CurrentActor() actor: ActorContext, @Query() query: AnalyticsRangeQuery) {
+  dataQuality(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
     return this.analytics.dataQuality(actor, query);
   }
 

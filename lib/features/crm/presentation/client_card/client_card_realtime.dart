@@ -19,8 +19,13 @@ extension _ClientCardRealtime on _ClientCardState {
       'comment' => {_CardRefreshRegion.comments},
       'homework' => {_CardRefreshRegion.homework},
       'finance' => {_CardRefreshRegion.commerce},
-      'lesson' ||
-      'group' => {_CardRefreshRegion.student, _CardRefreshRegion.context},
+      'lesson' || 'group' => {
+        // Trial lessons live in the lead half; regular lessons live in the
+        // student half. Refresh both halves that are present in the card.
+        _CardRefreshRegion.lead,
+        _CardRefreshRegion.student,
+        _CardRefreshRegion.context,
+      },
       'chat_work' => {_CardRefreshRegion.context},
       'lead' || 'student' => {
         _CardRefreshRegion.lead,

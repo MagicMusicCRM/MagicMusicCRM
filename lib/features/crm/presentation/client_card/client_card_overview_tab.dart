@@ -6,20 +6,32 @@ extension _ClientCardOverviewTab on _ClientCardState {
     ColorScheme cs,
     StatusRecord curStatus, {
     bool embedded = false,
+    bool canWriteSchedule = false,
   }) {
     if (_isStudent) {
       return _studentGuard(
         cs,
-        () => _buildClientInfoContent(cs, curStatus, embedded: embedded),
+        () => _buildClientInfoContent(
+          cs,
+          curStatus,
+          embedded: embedded,
+          canWriteSchedule: canWriteSchedule,
+        ),
       );
     }
-    return _buildClientInfoContent(cs, curStatus, embedded: embedded);
+    return _buildClientInfoContent(
+      cs,
+      curStatus,
+      embedded: embedded,
+      canWriteSchedule: canWriteSchedule,
+    );
   }
 
   Widget _buildClientInfoContent(
     ColorScheme cs,
     StatusRecord curStatus, {
     required bool embedded,
+    required bool canWriteSchedule,
   }) {
     final duplicateCandidates = _duplicateCandidates
         .where(_isCurrentLeadDuplicateCandidate)
@@ -213,6 +225,14 @@ extension _ClientCardOverviewTab on _ClientCardState {
           // вовсе (_loadingCard остался бы true), и секция крутила бы спиннер
           // вечно — поэтому она только при наличии лид-половины.
           if (_mode.hasLeadHalf) ...[
+            const SizedBox(height: AppSpace.lg),
+            LeadTrialLessonsSection(
+              lessons: _list(_leadCard?['trials']),
+              canWrite: canWriteSchedule,
+              onCreate: _createLeadTrialLesson,
+              onEdit: _openClientTrayLesson,
+              onCancel: _cancelClientTrayLesson,
+            ),
             const SizedBox(height: AppSpace.lg),
             _sectionTitle('Связи и активность'),
             _buildAggregateCard(cs, includeTasks: false),

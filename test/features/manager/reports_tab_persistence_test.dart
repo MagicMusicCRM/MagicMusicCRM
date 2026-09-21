@@ -30,6 +30,29 @@ class _FakeApiClient extends MagicApiClient {
   }) async {
     requests.add(path);
     queries[path] = Map<String, dynamic>.from(queryParameters ?? const {});
+    if (path == '/analytics/v4/sales-clients') {
+      return <String, dynamic>{
+            'observationDays': 90,
+            'funnel': <String, dynamic>{
+              'inquiries': 1,
+              'trialBooked': 1,
+              'trialAttended': 1,
+              'purchases': 1,
+              'firstPaidSales': 1,
+              'withoutTrialSales': 0,
+              'stalled': 0,
+              'conversionToTrial': 1.0,
+              'conversionToFirstPayment': 1.0,
+              'trialToFirstPayment': 1.0,
+            },
+            'speed': <String, dynamic>{},
+            'sources': <dynamic>[],
+          }
+          as T;
+    }
+    if (path == '/analytics/v4/sales-clients/clients') {
+      return <String, dynamic>{'total': 0, 'items': <dynamic>[]} as T;
+    }
     return <String, dynamic>{
           'items': <dynamic>[],
           'monthly': <dynamic>[],
@@ -95,7 +118,8 @@ void main() {
       expect(find.text('Расчёты преподавателей'), findsOneWidget);
       expect(find.text('Преподаватели'), findsNothing);
       expect(api.queries.containsKey('/crm/reports/teacher-stats'), isFalse);
-      await tester.tap(find.text('Расчёты преподавателей'));
+      final controller = tester.widget<TabBar>(find.byType(TabBar)).controller!;
+      controller.index = controller.length - 1;
       await tester.pumpAndSettle();
       expect(find.byType(Dialog), findsNothing);
       expect(find.text('Неделя'), findsOneWidget);
@@ -110,9 +134,9 @@ void main() {
       final reportCalls = api.requests
           .where((path) => path == '/crm/reports/teacher-stats')
           .length;
-      await tester.tap(find.text('Обзор'));
+      controller.index = 0;
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Расчёты преподавателей'));
+      controller.index = controller.length - 1;
       await tester.pumpAndSettle();
       expect(api.queries['/crm/reports/teacher-stats'], query);
       expect(
@@ -141,7 +165,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Неделя'), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
-    expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 2);
+    final directorController = tester
+        .widget<TabBar>(find.byType(TabBar))
+        .controller!;
+    expect(directorController.index, directorController.length - 1);
     final requestCount = api.requests.length;
     await tester.pumpWidget(host('teacher'));
     await tester.pumpAndSettle();
@@ -191,6 +218,183 @@ void main() {
       controller.index,
       1,
       reason: 'a rebuild with an unchanged initialTab must not reset the tab',
+    );
+  });
+
+  testWidgets('analytics exposes week month year and custom periods', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = _FakeApiClient();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        child: const MaterialApp(
+          home: Scaffold(body: ReportsWidget(role: 'director')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('dashboard-period-week')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('dashboard-period-month')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('dashboard-period-year')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('dashboard-period-custom')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('dashboard-period-year')));
+    await tester.pumpAndSettle();
+    final query = api.queries['/analytics/v4/client-status/summary']!;
+    final from = DateTime.parse(query['from'].toString()).toLocal();
+    final to = DateTime.parse(query['to'].toString()).toLocal();
+    expect(from, DateTime(DateTime.now().year));
+    expect(
+      to,
+      DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+        DateTime.now().day + 1,
+      ),
+    );
+  });
+
+  testWidgets(
+    'sales and clients is a working analytics tab with shared period',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 1500);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = _FakeApiClient();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [magicApiClientProvider.overrideWithValue(api)],
+          child: const MaterialApp(
+            home: Scaffold(body: ReportsWidget(role: 'director')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('analytics-sales-clients-tab')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('sales-clients-analytics')),
+        findsOneWidget,
+      );
+      expect(find.text('Когорта обращений'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('sales-dashboard-period-week')),
+      );
+      await tester.pumpAndSettle();
+      final query = api.queries['/analytics/v4/sales-clients']!;
+      final from = DateTime.parse(query['from'].toString()).toLocal();
+      final to = DateTime.parse(query['to'].toString()).toLocal();
+      final today = DateTime.now();
+      final day = DateTime(today.year, today.month, today.day);
+      expect(from, day.subtract(Duration(days: day.weekday - DateTime.monday)));
+      expect(to, day.add(const Duration(days: 1)));
+      expect(
+        api.queries['/analytics/v4/sales-clients/clients']?['segment'],
+        'stalled',
+      );
+    },
+  );
+
+  testWidgets('first analytics queue is reachable and finance is protected', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = _FakeApiClient();
+
+    Future<void> pumpRole(String role) => tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        child: MaterialApp(
+          home: Scaffold(body: ReportsWidget(role: role)),
+        ),
+      ),
+    );
+
+    await pumpRole('director');
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('analytics-finance-debt-tab')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('analytics-utilization-tab')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('analytics-employee-work-tab')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('analytics-finance-debt-tab')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('finance-debt-analytics')),
+      findsOneWidget,
+    );
+    expect(api.requests, contains('/analytics/v4/finance-debt'));
+
+    await tester.tap(find.byKey(const ValueKey('analytics-utilization-tab')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('utilization-analytics')), findsOneWidget);
+    expect(api.requests, contains('/analytics/v4/utilization'));
+
+    await tester.tap(find.byKey(const ValueKey('analytics-employee-work-tab')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('employee-work-analytics')),
+      findsOneWidget,
+    );
+    expect(api.requests, contains('/crm/shared-tasks/results'));
+    expect(
+      find.byKey(const ValueKey('employee-notification-deliveries-tab')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('employee-chat-sla-tab')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('employee-notification-deliveries-tab')),
+    );
+    await tester.pumpAndSettle();
+    expect(api.requests, contains('/admin/notifications/deliveries'));
+
+    await tester.tap(find.byKey(const ValueKey('employee-chat-sla-tab')));
+    await tester.pumpAndSettle();
+    expect(api.requests, contains('/analytics/chats/sla'));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpRole('manager');
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('analytics-finance-debt-tab')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('analytics-utilization-tab')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('analytics-employee-work-tab')),
+      findsOneWidget,
     );
   });
 

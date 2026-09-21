@@ -94,7 +94,13 @@ String _staffStatusLabel(String status) {
 
 class _TeachersList extends ConsumerWidget {
   final String searchQuery;
-  const _TeachersList({required this.searchQuery});
+  final String? selectedId;
+  final ValueChanged<Map<String, dynamic>>? onSelected;
+  const _TeachersList({
+    required this.searchQuery,
+    this.selectedId,
+    this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -155,8 +161,15 @@ class _TeachersList extends ConsumerWidget {
               }
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
+                color: selectedId == item['id']?.toString()
+                    ? AppColor.goldSoft
+                    : null,
                 child: ListTile(
                   onTap: () async {
+                    if (onSelected != null) {
+                      onSelected!(item);
+                      return;
+                    }
                     final updated = await TeacherDetailDialog.show(
                       context,
                       item,

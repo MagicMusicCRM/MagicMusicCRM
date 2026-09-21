@@ -24,4 +24,24 @@ describe("LeadCardService", () => {
     expect(String(query.mock.calls[0][0])).toContain("app.staff_branch_assignments");
     expect(query.mock.calls[0][1]).toEqual(["lead-a", actor.userId]);
   });
+
+  it("keeps only the actionable end of a trial reschedule chain", async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [] });
+    const service = new LeadCardService(
+      { query } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await (service as unknown as { listTrials(id: string): Promise<unknown> })
+      .listTrials("lead-a");
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("l.successor_id is null");
+    expect(sql).toContain("l.lifecycle_state <> 'cancelled'");
+    expect(query.mock.calls[0][1]).toEqual(["lead-a"]);
+  });
 });

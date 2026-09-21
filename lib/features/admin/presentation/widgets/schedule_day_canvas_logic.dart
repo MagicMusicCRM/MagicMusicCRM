@@ -62,6 +62,13 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
       _ScheduleDayCanvasState._edgeInset +
       (entry.startMinute / 60 - _startHour) * _hourHeight;
 
+  double _yForBlocked(ScheduleBlockedInterval interval) =>
+      _ScheduleDayCanvasState._edgeInset +
+      (interval.startLocal.hour +
+              interval.startLocal.minute / 60 -
+              _startHour) *
+          _hourHeight;
+
   DateTime _timeForY(double y, {DateTime? date}) {
     final minutes =
         (_startHour * 60 +
@@ -90,6 +97,9 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     final entries = widget.entries
         .where((entry) => entry.columnId == column.id)
         .toList();
+    final blocked = widget.blockedIntervals
+        .where((interval) => interval.columnId == column.id)
+        .toList();
     final lanes = _layoutOverlappingEntries(
       entries,
       minimumMinutes:
@@ -112,9 +122,61 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
               child: const SizedBox.expand(),
             ),
           ),
+          for (final interval in blocked) _blockedInterval(interval, colWidth),
           for (final entry in entries)
             _entryBlock(entry, colWidth, lane: lanes[entry]),
         ],
+      ),
+    );
+  }
+
+  Widget _blockedInterval(ScheduleBlockedInterval interval, double colWidth) {
+    final top = _yForBlocked(interval);
+    final minutes = interval.endLocal.difference(interval.startLocal).inMinutes;
+    final height = ((minutes / 60) * _hourHeight)
+        .clamp(18.0, _gridHeight)
+        .clamp(0.0, _gridHeight - top);
+    final reason = interval.reason?.trim();
+    return Positioned(
+      key: ValueKey(
+        'schedule-blocked-${interval.columnId}-'
+        '${interval.startLocal.toIso8601String()}',
+      ),
+      left: 3,
+      right: 3,
+      top: top,
+      height: height,
+      child: Tooltip(
+        message: reason?.isNotEmpty == true
+            ? 'Преподаватель недоступен: $reason'
+            : 'Преподаватель недоступен',
+        child: Semantics(
+          label: reason?.isNotEmpty == true
+              ? 'Недоступно: $reason'
+              : 'Недоступно',
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColor.danger.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: AppColor.danger.withValues(alpha: 0.45),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            child: Text(
+              reason?.isNotEmpty == true
+                  ? 'Недоступно · $reason'
+                  : 'Недоступно',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColor.danger,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -11,6 +11,9 @@ import { AnalyticsRefreshWorker } from "./analytics-refresh.worker";
 import { ClientStatusReadService } from "./client-status-read.service";
 import { ReportingReadService } from "./reporting-read.service";
 import { ReportExportService } from "./report-export.service";
+import { SalesClientsReadService } from "./sales-clients-read.service";
+import { FinanceDebtReadService } from "./finance-debt-read.service";
+import { UtilizationReadService } from "./utilization-read.service";
 
 @Module({
   imports: [
@@ -26,6 +29,9 @@ import { ReportExportService } from "./report-export.service";
     AnalyticsRefreshWorker,
     ClientStatusReadService,
     ReportingReadService,
+    SalesClientsReadService,
+    FinanceDebtReadService,
+    UtilizationReadService,
     ReportExportService,
     JwtAuthGuard,
   ],

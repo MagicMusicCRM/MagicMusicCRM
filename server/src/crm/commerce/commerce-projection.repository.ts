@@ -362,7 +362,16 @@ export class CommerceProjectionRepository {
             select jsonb_agg(
               jsonb_build_object(
                 'installmentNumber', installment.installment_number,
-                'dueAt', installment.due_at,
+                'dueAt', coalesce(
+                  installment.actual_due_at,
+                  installment.due_at
+                ),
+                'dueKind', case
+                  when installment.due_policy = 'consumption'
+                    and installment.actual_due_at is null then 'forecast'
+                  when installment.due_policy = 'consumption' then 'actual'
+                  else 'fixed'
+                end,
                 'amountMinor', installment.amount_minor::text,
                 'currencyCode', installment.currency_code,
                 'status', coalesce((
@@ -381,12 +390,20 @@ export class CommerceProjectionRepository {
             from (
               select
                 item.*,
-                sum(
+                due_fact.due_at as actual_due_at,
+                greatest(
+                  financial.obligation_minor - coalesce(sum(
+                    case when item.status = 'void' then 0 else item.amount_minor end
+                  ) over (), 0),
+                  0
+                ) + sum(
                   case when item.status = 'void' then 0 else item.amount_minor end
                 ) over (
                   order by item.installment_number
                 ) as cumulative_minor
               from app.subscription_installments item
+              left join app.subscription_installment_due_facts due_fact
+                on due_fact.installment_id = item.id
               where item.issued_subscription_id = issued.id
             ) installment
           ) installment_projection on true

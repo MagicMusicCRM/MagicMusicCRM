@@ -8,11 +8,12 @@ import {
   AdminNotificationsController,
   NotificationsController
 } from './notifications.controller';
+import { NotificationDeliveryJournalService } from './notification-delivery-journal.service';
 
 @Module({
   imports: [NotificationDeliveryModule, DatabaseModule, JwtModule.register({})],
   controllers: [NotificationsController, AdminNotificationsController],
-  providers: [JwtAuthGuard, RolesGuard],
+  providers: [JwtAuthGuard, RolesGuard, NotificationDeliveryJournalService],
   exports: [NotificationDeliveryModule]
 })
 export class NotificationsModule {}

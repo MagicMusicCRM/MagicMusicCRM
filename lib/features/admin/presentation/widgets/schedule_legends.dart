@@ -70,7 +70,7 @@ class _ScheduleLessonLegend extends StatelessWidget {
           for (final token in LessonStateToken.values) statusChip(token),
           TextButton.icon(
             icon: const Icon(Icons.info_outline, size: 16),
-            label: const Text('Уголки — тип списания'),
+            label: const Text('Фон — тип списания · значок — статус'),
             onPressed: () => showMagicDialog<void>(
               context: context,
               builder: (context) => AlertDialog(
@@ -80,7 +80,7 @@ class _ScheduleLessonLegend extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Фон и значок показывают статус занятия. Цветной уголок — тип списания.',
+                      'Фон показывает тип списания. Статус занятия, включая завершение, показывает значок.',
                     ),
                     const SizedBox(height: 12),
                     for (final key in const [

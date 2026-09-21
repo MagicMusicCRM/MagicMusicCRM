@@ -304,6 +304,8 @@ export class LeadCardService {
         where l.deleted_at is null
           and l.lead_id = $1
           and l.is_trial = true
+          and l.successor_id is null
+          and l.lifecycle_state <> 'cancelled'
         order by l.scheduled_at desc, l.id desc
         limit 20
       `,

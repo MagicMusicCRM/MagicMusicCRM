@@ -4,6 +4,181 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/utils/money_format.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
+
+/// Рабочий блок пробных занятий в карточке лида.
+///
+/// Данные остаются обычными lessons: виджет только даёт быстрый доступ к
+/// созданию, редактору и каноническому сценарию отмены.
+class LeadTrialLessonsSection extends StatelessWidget {
+  const LeadTrialLessonsSection({
+    super.key,
+    required this.lessons,
+    required this.canWrite,
+    this.onCreate,
+    this.onEdit,
+    this.onCancel,
+  });
+
+  final List<Map<String, dynamic>> lessons;
+  final bool canWrite;
+  final VoidCallback? onCreate;
+  final ValueChanged<Map<String, dynamic>>? onEdit;
+  final ValueChanged<Map<String, dynamic>>? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final sorted = [...lessons]..sort((a, b) => _date(b).compareTo(_date(a)));
+    return Container(
+      key: const Key('lead-trial-lessons-section'),
+      padding: const EdgeInsets.all(AppSpace.lg),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.event_available_rounded, color: AppColor.gold),
+              const SizedBox(width: AppSpace.sm),
+              const Expanded(
+                child: Text(
+                  'Пробные занятия',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (canWrite && onCreate != null)
+                FilledButton.tonalIcon(
+                  key: const Key('lead-trial-create'),
+                  onPressed: onCreate,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Записать на пробное'),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.md),
+          if (sorted.isEmpty)
+            Text(
+              'Пробные занятия не назначены',
+              style: TextStyle(color: cs.onSurfaceVariant),
+            )
+          else
+            for (var index = 0; index < sorted.length; index++) ...[
+              if (index > 0) const Divider(height: AppSpace.lg),
+              _TrialLessonRow(
+                lesson: sorted[index],
+                canWrite: canWrite,
+                onEdit: onEdit,
+                onCancel: onCancel,
+              ),
+            ],
+        ],
+      ),
+    );
+  }
+
+  static DateTime _date(Map<String, dynamic> lesson) =>
+      DateTime.tryParse(lesson['scheduled_at']?.toString() ?? '') ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+}
+
+class _TrialLessonRow extends StatelessWidget {
+  const _TrialLessonRow({
+    required this.lesson,
+    required this.canWrite,
+    required this.onEdit,
+    required this.onCancel,
+  });
+
+  final Map<String, dynamic> lesson;
+  final bool canWrite;
+  final ValueChanged<Map<String, dynamic>>? onEdit;
+  final ValueChanged<Map<String, dynamic>>? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final id = lesson['id']?.toString() ?? '';
+    final scheduledAt = DateTime.tryParse(
+      lesson['scheduled_at']?.toString() ?? '',
+    );
+    final projection = LessonStateProjection.fromMap(lesson);
+    final location = [
+      lesson['teacher_name']?.toString().trim(),
+      lesson['room_name']?.toString().trim(),
+    ].where((value) => value != null && value.isNotEmpty).join(' · ');
+    final direction =
+        lesson['group_name']?.toString().trim() ??
+        lesson['discipline_name']?.toString().trim() ??
+        '';
+    final isCancelled =
+        (lesson['lifecycle_state'] ?? lesson['status'])?.toString() ==
+        'cancelled';
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColor.gold.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(AppRadius.control),
+          ),
+          child: const Icon(Icons.music_note_rounded, color: AppColor.gold),
+        ),
+        const SizedBox(width: AppSpace.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                scheduledAt == null
+                    ? 'Дата не указана'
+                    : DateFormat(
+                        'd MMMM yyyy, HH:mm',
+                        'ru',
+                      ).format(scheduledAt.toLocal()),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              if (direction.isNotEmpty) Text(direction),
+              if (location.isNotEmpty)
+                Text(location, style: TextStyle(color: cs.onSurfaceVariant)),
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                projection.label,
+                style: TextStyle(
+                  color: projection.token.accent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (canWrite && onEdit != null)
+          IconButton(
+            key: ValueKey('lead-trial-edit-$id'),
+            tooltip: 'Изменить занятие',
+            onPressed: () => onEdit!(lesson),
+            icon: const Icon(Icons.edit_outlined),
+          ),
+        if (canWrite && onCancel != null && !isCancelled)
+          IconButton(
+            key: ValueKey('lead-trial-cancel-$id'),
+            tooltip: 'Отменить занятие',
+            onPressed: () => onCancel!(lesson),
+            icon: const Icon(Icons.event_busy_outlined),
+          ),
+      ],
+    );
+  }
+}
 
 /// Compact lesson history shown for leads without recurring schedule controls.
 class LeadLessonDateTray extends StatefulWidget {
@@ -111,8 +286,13 @@ class _LeadLessonDateTrayState extends State<LeadLessonDateTray> {
 
   Widget _dateSquare(DateTime dt, Map<String, dynamic> lesson) {
     final projection = LessonStateProjection.fromMap(lesson);
-    final accent = projection.token.accent;
     final isTrial = lesson['is_trial'] == true;
+    final settlementKey = LessonSettlementCorner.effectiveKey(
+      (lesson['settlement_type_key'] ?? lesson['settlementTypeKey'])
+          ?.toString(),
+      isTrial: isTrial,
+    );
+    final accent = LessonSettlementCorner.colorFor(settlementKey)!;
     final notes = (lesson['notes'] ?? '').toString().trim();
     // ✔ Владелец 17.07: «оплаты по дням в расписании». Считает сервер — сумма
     // платежей, привязанных к этому занятию. null означает «за этот день
@@ -145,7 +325,7 @@ class _LeadLessonDateTrayState extends State<LeadLessonDateTray> {
               height: 30,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: projection.token.soft,
+                color: LessonSettlementCorner.backgroundFor(settlementKey),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: accent.withValues(alpha: 0.45)),
               ),
@@ -156,6 +336,15 @@ class _LeadLessonDateTrayState extends State<LeadLessonDateTray> {
                   fontWeight: FontWeight.w700,
                   color: accent,
                 ),
+              ),
+            ),
+            Positioned(
+              left: 2,
+              bottom: 1,
+              child: Icon(
+                projection.token.icon,
+                size: 9,
+                color: projection.token.accent,
               ),
             ),
             if (isTrial)

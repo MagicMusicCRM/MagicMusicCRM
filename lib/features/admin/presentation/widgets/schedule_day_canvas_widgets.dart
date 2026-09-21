@@ -108,7 +108,12 @@ class _LessonCard extends StatelessWidget {
       entry.lesson,
       hasConflict: entry.conflicts.isNotEmpty,
     );
-    final accent = projection.token.accent;
+    final settlementKey = LessonSettlementCorner.effectiveKey(
+      (entry.lesson['settlement_type_key'] ?? entry.lesson['settlementTypeKey'])
+          ?.toString(),
+      isTrial: entry.isTrial,
+    );
+    final accent = LessonSettlementCorner.colorFor(settlementKey)!;
     final borderColor = entry.highlighted ? AppColor.gold : accent;
     final start = entry.startLocal;
     final end = start.add(Duration(minutes: entry.durationMinutes));
@@ -140,7 +145,7 @@ class _LessonCard extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
             decoration: BoxDecoration(
-              color: projection.token.soft,
+              color: LessonSettlementCorner.backgroundFor(settlementKey),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: borderColor,
@@ -148,10 +153,7 @@ class _LessonCard extends StatelessWidget {
               ),
             ),
             child: LessonSettlementCorner(
-              settlementTypeKey:
-                  (entry.lesson['settlement_type_key'] ??
-                          entry.lesson['settlementTypeKey'])
-                      ?.toString(),
+              settlementTypeKey: settlementKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -184,7 +186,7 @@ class _LessonCard extends StatelessWidget {
                           message: projection.label,
                           child: Icon(
                             projection.token.icon,
-                            color: accent,
+                            color: projection.token.accent,
                             size: 12,
                           ),
                         ),

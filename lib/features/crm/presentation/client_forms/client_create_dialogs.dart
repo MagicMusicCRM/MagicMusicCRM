@@ -54,6 +54,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
   String? _submitError;
   bool _loading = true;
   bool _saving = false;
+  bool _showAdditionalInformation = false;
   MagicMutationIdentity? _createIdentity;
   String? _createFingerprint;
 
@@ -155,7 +156,12 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
   Future<void> _save() async {
     final errors = _validate();
     if (errors.isNotEmpty) {
-      setState(() => _fieldErrors = errors);
+      setState(() {
+        _fieldErrors = errors;
+        if (_containsAdditionalFieldError(errors)) {
+          _showAdditionalInformation = true;
+        }
+      });
       return;
     }
     setState(() {
@@ -199,6 +205,9 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
         _saving = false;
         if (fieldError != null) {
           _fieldErrors = {fieldError.$1: fieldError.$2};
+          if (_containsAdditionalFieldError(_fieldErrors)) {
+            _showAdditionalInformation = true;
+          }
         } else {
           _submitError = error is MagicApiException && error.statusCode == 403
               ? 'Недостаточно прав для создания заявки.'
@@ -241,8 +250,21 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
     }
   }
 
+  bool _isPrimaryLeadField(Map<String, dynamic> field) =>
+      field['required'] == true || field['key']?.toString() == 'category';
+
+  bool _containsAdditionalFieldError(Map<String, String> errors) {
+    return _fields
+        .where((field) => !_isPrimaryLeadField(field))
+        .any((field) => errors.containsKey('customFields.${field['key']}'));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final primaryFields = _fields.where(_isPrimaryLeadField).toList();
+    final additionalFields = _fields
+        .where((field) => !_isPrimaryLeadField(field))
+        .toList();
     return _AdaptiveClientDialog(
       title: 'Новый лид',
       loading: _loading,
@@ -382,12 +404,55 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                     onSelected: (item) => setState(() => _sourceId = item?.id),
                   ),
                 _ClientFieldInputs(
-                  fields: _fields,
+                  fields: primaryFields,
                   values: _customValues,
                   errors: _fieldErrors,
                   enabled: !_saving,
                   onChanged: (id, value) => _customValues[id] = value,
                 ),
+                if (additionalFields.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  InkWell(
+                    key: const ValueKey('lead-additional-toggle'),
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    onTap: _saving
+                        ? null
+                        : () => setState(
+                            () => _showAdditionalInformation =
+                                !_showAdditionalInformation,
+                          ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpace.sm,
+                        vertical: AppSpace.md,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _showAdditionalInformation
+                                ? Icons.expand_less_rounded
+                                : Icons.expand_more_rounded,
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          const Expanded(
+                            child: Text(
+                              'Дополнительная информация',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_showAdditionalInformation)
+                    _ClientFieldInputs(
+                      fields: additionalFields,
+                      values: _customValues,
+                      errors: _fieldErrors,
+                      enabled: !_saving,
+                      onChanged: (id, value) => _customValues[id] = value,
+                    ),
+                ],
               ],
             ),
     );

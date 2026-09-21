@@ -2815,9 +2815,11 @@ void main() {
       final r = await service.getAnalyticsChatSla(
         from: '2026-06-01',
         to: '2026-06-30',
+        branchId: 'branch-1',
       );
 
       expect(adapter.requests.single.queryParameters['from'], '2026-06-01');
+      expect(adapter.requests.single.queryParameters['branchId'], 'branch-1');
       expect(r['avgResponseMs'], 45000);
     });
 

@@ -20,7 +20,11 @@ class TeacherDetailContent extends StatelessWidget {
     required this.actorRole,
     required this.canManageCredentials,
     required this.canManageTeacherRates,
+    required this.canOpenSchedule,
+    required this.canOpenAvailability,
     required this.saving,
+    required this.onOpenSchedule,
+    required this.onOpenAvailability,
     required this.onProvisionAccess,
     required this.onManageLifecycle,
     required this.onChangeAccessRole,
@@ -37,95 +41,176 @@ class TeacherDetailContent extends StatelessWidget {
   final String actorRole;
   final bool canManageCredentials;
   final bool canManageTeacherRates;
+  final bool canOpenSchedule;
+  final bool canOpenAvailability;
   final bool saving;
+  final VoidCallback onOpenSchedule;
+  final VoidCallback onOpenAvailability;
   final VoidCallback onProvisionAccess;
   final VoidCallback onManageLifecycle;
   final VoidCallback onChangeAccessRole;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TeacherDetailSummary(
-          teacher: teacher,
-          canManageCredentials: canManageCredentials,
-        ),
-        if (canManageCredentials) ...[
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.tonalIcon(
-              onPressed: teacher['lifecycle_state'] == 'archived'
-                  ? null
-                  : onProvisionAccess,
-              icon: const Icon(Icons.key_rounded),
-              label: Text(
-                teacher['is_app_account'] == true
-                    ? 'Данные для входа'
-                    : 'Создать доступ',
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: onManageLifecycle,
-              icon: Icon(
-                teacher['lifecycle_state'] == 'archived'
-                    ? Icons.restore_rounded
-                    : Icons.person_off_outlined,
-              ),
-              label: Text(
-                teacher['lifecycle_state'] == 'archived'
-                    ? 'Восстановить преподавателя'
-                    : 'Отключить преподавателя',
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        TextField(
-          controller: nameController,
-          decoration: const InputDecoration(labelText: 'Имя Фамилия'),
-        ),
-        const SizedBox(height: 12),
-        RuPhoneField(
-          initialCanonical: initialPhone,
-          onCanonicalChanged: onPhoneChanged,
-        ),
-        const SizedBox(height: 12),
-        if (canManageCredentials) ...[
+    final identity = _TeacherDetailSection(
+      title: 'Основные данные и доступ',
+      child: Column(
+        children: [
           TextField(
-            controller: emailController,
-            readOnly: true,
-            decoration: InputDecoration(
-              labelText: 'Почта для входа',
-              helperText: teacherDetailCredentialHelper(teacher),
-            ),
-            keyboardType: TextInputType.emailAddress,
+            controller: nameController,
+            decoration: const InputDecoration(labelText: 'Имя Фамилия'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          RuPhoneField(
+            initialCanonical: initialPhone,
+            onCanonicalChanged: onPhoneChanged,
+          ),
+          if (canManageCredentials) ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: emailController,
+              readOnly: true,
+              decoration: InputDecoration(
+                labelText: 'Почта для входа',
+                helperText: teacherDetailCredentialHelper(teacher),
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+          ],
+          const SizedBox(height: 10),
+          _AccessRoleField(
+            role: teacher['app_role']?.toString() ?? 'teacher',
+            canChange:
+                const {'director', 'system_admin'}.contains(actorRole) &&
+                (teacher['profile_user_id']?.toString().isNotEmpty ?? false),
+            saving: saving,
+            onChange: onChangeAccessRole,
+          ),
         ],
-        _AccessRoleField(
-          role: teacher['app_role']?.toString() ?? 'teacher',
-          canChange:
-              const {'director', 'system_admin'}.contains(actorRole) &&
-              (teacher['profile_user_id']?.toString().isNotEmpty ?? false),
-          saving: saving,
-          onChange: onChangeAccessRole,
-        ),
-        const SizedBox(height: 22),
-        TeacherEmploymentFields(
-          key: employmentKey,
-          gateway: employmentReferenceGateway,
-          initial: employmentInitial,
-          canManageRate: canManageTeacherRates,
-          enabled: !saving,
-        ),
-      ],
+      ),
+    );
+    final employment = _TeacherDetailSection(
+      title: 'Работа, филиалы и оплата',
+      child: TeacherEmploymentFields(
+        key: employmentKey,
+        gateway: employmentReferenceGateway,
+        initial: employmentInitial,
+        canManageRate: canManageTeacherRates,
+        enabled: !saving,
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 760;
+        final details = wide
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 4, child: identity),
+                  const SizedBox(width: 14),
+                  Expanded(flex: 6, child: employment),
+                ],
+              )
+            : Column(
+                children: [identity, const SizedBox(height: 12), employment],
+              );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TeacherDetailSummary(
+              teacher: teacher,
+              canManageCredentials: canManageCredentials,
+            ),
+            if (canOpenSchedule || canOpenAvailability) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (canOpenSchedule)
+                    OutlinedButton.icon(
+                      key: const Key('teacher-open-schedule'),
+                      onPressed: onOpenSchedule,
+                      icon: const Icon(Icons.calendar_month_outlined),
+                      label: const Text('Открыть расписание'),
+                    ),
+                  if (canOpenAvailability)
+                    OutlinedButton.icon(
+                      key: const Key('teacher-open-availability'),
+                      onPressed: onOpenAvailability,
+                      icon: const Icon(Icons.schedule_outlined),
+                      label: const Text('График и недоступность'),
+                    ),
+                ],
+              ),
+            ],
+            if (canManageCredentials) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: teacher['lifecycle_state'] == 'archived'
+                        ? null
+                        : onProvisionAccess,
+                    icon: const Icon(Icons.key_rounded),
+                    label: Text(
+                      teacher['is_app_account'] == true
+                          ? 'Данные для входа'
+                          : 'Создать доступ',
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onManageLifecycle,
+                    icon: Icon(
+                      teacher['lifecycle_state'] == 'archived'
+                          ? Icons.restore_rounded
+                          : Icons.person_off_outlined,
+                    ),
+                    label: Text(
+                      teacher['lifecycle_state'] == 'archived'
+                          ? 'Восстановить преподавателя'
+                          : 'Отключить преподавателя',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            details,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TeacherDetailSection extends StatelessWidget {
+  const _TeacherDetailSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
     );
   }
 }

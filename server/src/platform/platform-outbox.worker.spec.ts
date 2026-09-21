@@ -5,6 +5,61 @@ describe("PlatformOutboxWorker", () => {
     query: jest.fn().mockResolvedValue({ rows: [] }),
   });
 
+  it("resolves a committed Lead create to the persisted Lead before publishing", async () => {
+    const event = {
+      eventId: "event-lead-create",
+      type: "crm.lead.create.committed",
+      occurredAt: new Date(),
+      aggregateType: "client_create_command",
+      aggregateId: "create-lead-0001",
+      aggregateVersion: 1,
+      requestId: "request-lead-0001",
+      payload: {},
+      attempts: 1,
+    };
+    const integrity = {
+      claimOutbox: jest.fn().mockResolvedValue([event]),
+      markOutboxPublished: jest.fn().mockResolvedValue(true),
+      markOutboxFailed: jest.fn().mockResolvedValue("retry"),
+    };
+    const realtime = {
+      isReady: () => true,
+      emitCrmChanged: jest.fn(),
+    };
+    const database = {
+      query: jest.fn().mockResolvedValue({ rows: [{ lead_id: "lead-a" }] }),
+    };
+    const worker = new PlatformOutboxWorker(
+      integrity as never,
+      realtime as never,
+      { notifyInboundLead: jest.fn() } as never,
+      database as never,
+    );
+
+    await expect(worker.runOnce("worker-lead")).resolves.toEqual({
+      claimed: 1,
+      published: 1,
+      retry: 0,
+      deadLetter: 0,
+    });
+    expect(database.query).toHaveBeenCalledWith(
+      expect.stringContaining("app.idempotency_records"),
+      [event.eventId],
+    );
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith({
+      entity: "lead",
+      action: "created",
+      id: "lead-a",
+      branchId: null,
+      affectedUserIds: [],
+    });
+    expect(integrity.markOutboxPublished).toHaveBeenCalledWith(
+      event.eventId,
+      "worker-lead",
+    );
+    expect(integrity.markOutboxFailed).not.toHaveBeenCalled();
+  });
+
   it("delivers bulk teacher-rate changes as global lesson invalidations without financial writes", async () => {
     const event = {
       eventId: "event-rate", type: "crm.lesson_teacher_rate.changed",

@@ -99,6 +99,24 @@ class _FakeClient extends MagicApiClient {
           }
           as T;
     }
+    if (path == '/crm/schedule-reference') {
+      final startsAt = _today().add(const Duration(hours: 2));
+      return <String, dynamic>{
+            'teacherBranchAssigned': true,
+            'branchHoursConfigured': true,
+            'teacherRules': [
+              {
+                'available': false,
+                'startsAt': startsAt.toIso8601String(),
+                'endsAt': startsAt
+                    .add(const Duration(hours: 1))
+                    .toIso8601String(),
+                'reason': 'Совещание',
+              },
+            ],
+          }
+          as T;
+    }
     if (path == '/crm/schedule/matrix' || path == '/crm/lessons') {
       return <String, dynamic>{
             'items': [
@@ -340,7 +358,7 @@ void main() {
       expect(find.text('Забронировано'), findsOneWidget);
       expect(find.text('Завершено'), findsOneWidget);
       expect(find.text('Конфликт'), findsOneWidget);
-      expect(find.text('Уголки — тип списания'), findsOneWidget);
+      expect(find.text('Фон — тип списания · значок — статус'), findsOneWidget);
       expect(find.textContaining('Бесплат'), findsNothing);
       // …and the old per-cell instruction is gone (owner rule #10).
       expect(find.text('Нажмите,\nчтобы назначить'), findsNothing);
@@ -389,6 +407,39 @@ void main() {
       expect(find.text('Ольга Ученик'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+      'teacher week shows a teacher picker and unavailable intervals',
+      (tester) async {
+        tester.view.physicalSize = const Size(1500, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(_host(const ScheduleWidget()));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Неделя'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('schedule-day-mode-switcher')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('По преподавателям').last);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('schedule-teacher-week-view')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const ValueKey('schedule-teacher-week-selector-teacher-a'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Недоступно · Совещание'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('manager repair keeps teacher compensation server-owned', (
       tester,

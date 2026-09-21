@@ -61,6 +61,8 @@ export const AUDIT_FIELD_PRESENTATION_POLICIES = {
   lifecycleState: { label: 'Статус', valueType: 'text', displayMode: 'changed_only' },
   name: { label: 'Имя', valueType: 'text', displayMode: 'values' },
   personType: { label: 'Тип персоны', valueType: 'text', displayMode: 'changed_only' },
+  resultCode: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },
+  resultLabel: { label: 'Результат выполнения', valueType: 'text', displayMode: 'values' },
   state: { label: 'Статус', valueType: 'text', displayMode: 'changed_only' },
   value: { label: 'Значение', valueType: 'text', displayMode: 'changed_only' },
   walletBalanceMinor: { label: 'Техническое значение', valueType: 'technical', displayMode: 'hidden' },

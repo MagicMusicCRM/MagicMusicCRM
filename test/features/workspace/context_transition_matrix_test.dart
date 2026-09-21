@@ -174,6 +174,16 @@ void main() {
     );
     final directChat = CrmNavigationRequest.directChat('client-a');
     final clients = EntityRouteRegistry.sectionRootLink('clients');
+    final staff = EntityLink.typed(
+      entityType: EntityLinkType.user,
+      entityId: 'staff-1',
+      variant: 'staff',
+    );
+    final personnelTeacher = EntityLink.typed(
+      entityType: EntityLinkType.teacher,
+      entityId: 'teacher-1',
+      variant: 'personnel_teacher',
+    );
 
     expect(schedule.link.rawEntityType, 'lesson_list');
     expect(schedule.link.entityId, '__section__');
@@ -181,6 +191,22 @@ void main() {
     expect(crmTabForEntityLink(schedule.link, 'manager'), 2);
     expect(crmTabForEntityLink(schedule.link, 'teacher'), 1);
     expect(crmTabForEntityLink(clients, 'teacher'), 2);
+    expect(crmTabForEntityLink(staff, 'manager'), 4);
+    expect(crmTabForEntityLink(personnelTeacher, 'manager'), 4);
+    final staffRoute = EntityRouteRegistry().resolve(staff, actor('manager'));
+    final teacherRoute = EntityRouteRegistry().resolve(
+      personnelTeacher,
+      actor('manager'),
+    );
+    expect(staffRoute.state, EntityRouteState.resolved);
+    expect(teacherRoute.state, EntityRouteState.resolved);
+    expect(
+      Uri.parse(staffRoute.location!).queryParameters['section'],
+      'personnel',
+    );
+    expect(staffRoute.canonicalLocation?.requiredCapabilities, {
+      'crm.client.read.basic',
+    });
     expect(crmTabForEntityLink(permissions.link, 'manager'), 8);
     expect(permissions.link.optionalFocus?.filter['query'], 'user@example.com');
     expect(crmTabForEntityLink(permissions.link, 'teacher'), isNull);

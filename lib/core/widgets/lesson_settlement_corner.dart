@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/design_tokens.dart';
 
-/// A secondary settlement cue; the existing lifecycle background stays intact.
+/// Canonical settlement-type surface. Lifecycle is shown by an icon, while
+/// payment warnings remain secondary cues and never replace this background.
 class LessonSettlementCorner extends StatelessWidget {
   const LessonSettlementCorner({
     super.key,
@@ -40,6 +41,16 @@ class LessonSettlementCorner extends StatelessWidget {
     _ => AppColor.settlementUnpaid,
   };
 
+  static String effectiveKey(String? key, {bool isTrial = false}) {
+    final normalized = key?.trim();
+    if (normalized?.isNotEmpty == true) return normalized!;
+    return isTrial ? 'trial_lesson' : 'lesson';
+  }
+
+  static Color backgroundFor(String? key, {bool isTrial = false}) =>
+      (colorFor(effectiveKey(key, isTrial: isTrial)) ?? AppColor.text2)
+          .withValues(alpha: 0.11);
+
   @override
   Widget build(BuildContext context) {
     final color = colorFor(settlementTypeKey);
@@ -47,47 +58,18 @@ class LessonSettlementCorner extends StatelessWidget {
     final label = labelFor(settlementTypeKey)!;
     return Semantics(
       label: 'Тип списания: $label',
-      child: Stack(
-        fit: expand ? StackFit.expand : StackFit.loose,
-        clipBehavior: Clip.none,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(right: timeline ? 0 : 12),
-            child: child,
+      child: Tooltip(
+        message: label,
+        child: DecoratedBox(
+          key: ValueKey('settlement-background-$settlementTypeKey'),
+          decoration: BoxDecoration(
+            color: backgroundFor(settlementTypeKey),
+            border: Border.all(color: color.withValues(alpha: 0.42)),
+            borderRadius: BorderRadius.circular(timeline ? 3 : 6),
           ),
-          Positioned(
-            top: timeline ? -1 : 0,
-            right: timeline ? -1 : 0,
-            child: Tooltip(
-              message: label,
-              child: CustomPaint(
-                key: ValueKey('settlement-corner-$settlementTypeKey'),
-                size: const Size(11, 11),
-                painter: _CornerPainter(color),
-              ),
-            ),
-          ),
-        ],
+          child: child,
+        ),
       ),
     );
   }
-}
-
-class _CornerPainter extends CustomPainter {
-  const _CornerPainter(this.color);
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width - 3, 0)
-      ..quadraticBezierTo(size.width, 0, size.width, 3)
-      ..lineTo(size.width, size.height)
-      ..close();
-    canvas.drawPath(path, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_CornerPainter oldDelegate) => oldDelegate.color != color;
 }

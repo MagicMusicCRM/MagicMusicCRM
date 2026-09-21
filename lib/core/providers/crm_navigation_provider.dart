@@ -86,6 +86,12 @@ final crmNavigationRequestProvider =
 
 int? crmTabForEntityLink(EntityLink link, String role) {
   if (link.entityType == EntityLinkType.chat) return 0;
+  final isPersonnelCard =
+      (link.entityType == EntityLinkType.user &&
+          link.rawEntityType == 'staff') ||
+      (link.entityType == EntityLinkType.teacher &&
+          link.rawEntityType == 'personnel_teacher');
+  if (isPersonnelCard) return role == 'teacher' ? null : 4;
   final isScheduleReport =
       link.entityType == EntityLinkType.report &&
       link.rawEntityType == 'lesson_list' &&
@@ -105,6 +111,10 @@ int? crmTabForEntityLink(EntityLink link, String role) {
   if (link.entityType == EntityLinkType.report &&
       link.rawEntityType == 'configuration') {
     return role == 'teacher' ? null : 8;
+  }
+  if (link.entityType == EntityLinkType.report &&
+      link.rawEntityType == 'personnel') {
+    return role == 'teacher' ? null : 4;
   }
   if (role == 'teacher') {
     return switch (link.entityType) {
