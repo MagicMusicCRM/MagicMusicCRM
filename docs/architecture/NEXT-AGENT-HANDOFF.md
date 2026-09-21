@@ -1,4 +1,30 @@
-# MagicMusicCRM — актуальная передача 222
+# MagicMusicCRM — актуальная передача 224
+
+## Production 1.5.44+224 — выпущен 2026-09-21
+
+Владелец прямо разрешил production-выпуск для ручного тестирования. Source/tag:
+`e4e14b6ae80921b8f94a305c2fe85184d35ea9e7` / `v1.5.44`. Сервер
+`magicmusiccrm-server:1.5.44-224-final`, image
+`sha256:8954adc55c080e3398cb94f4caf6768bc9f437271c755dabd7fc090094b960a0`,
+схема `0160_requeue_lead_create_outbox`. Public readiness — OK,
+reconciliation — `issues=[]`; финансовые факты на фиксированном cutoff не
+изменились.
+
+Два прежних Lead-create dead-letter события безопасно переотправлены: pending и
+dead-letter равны нулю, добавлены две audit-записи requeue. Windows Setup/ZIP и
+Android APK/AAB build 224 опубликованы; оба update-канала, публичная история,
+размеры и SHA-256 проверены. Pre/post encrypted backups `20260921T160417Z` и
+`20260921T161342Z` скопированы вне сервера и восстановлены в изоляции на точных
+candidate/recovery images — PASS.
+
+Совместимый резерв: `magicmusiccrm-server:223-recovery-0160-e4e14b6ae809`,
+image `sha256:3a605547374559233590643fc68a7808a8382c68eea77e01455c6351f49bcd4e`.
+Миграции и живую историю не откатывать. Подробности:
+[release 224 audit](../audits/release-224-production.md).
+
+Ручной authenticated UAT новых задач, аналитики и плотных карточек выполняет
+владелец на production; автоматические проверки его не подменяют. Ниже —
+исторические этапы.
 
 ## Production 1.5.42+222 — выпущен 2026-09-16
 
