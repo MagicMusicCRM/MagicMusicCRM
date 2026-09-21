@@ -50,6 +50,19 @@ void main() {
     }
   });
 
+  test('legacy collaboration links open the unified history section', () {
+    for (final section in const ['comments', 'tasks', 'history']) {
+      final controller = ClientCardWorkspaceController(
+        initialSection: section,
+        restoredOffset: 81,
+      );
+
+      expect(controller.selectedSection, 'history_tasks');
+      expect(controller.taskScrollController.initialScrollOffset, 81);
+      controller.dispose();
+    }
+  });
+
   test('only the newest post-frame intent runs and dispose makes it inert', () {
     final callbacks = <FrameCallback>[];
     final controller = ClientCardWorkspaceController(

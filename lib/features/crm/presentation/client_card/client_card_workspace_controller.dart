@@ -85,6 +85,9 @@ class ClientCardWorkspaceController {
     desktopScrollController.dispose();
   }
 
-  static String _normalizedSection(String section) =>
-      section == 'custom_fields' ? 'overview' : section;
+  static String _normalizedSection(String section) => switch (section) {
+    'custom_fields' => 'overview',
+    'comments' || 'tasks' || 'history' => 'history_tasks',
+    _ => section,
+  };
 }

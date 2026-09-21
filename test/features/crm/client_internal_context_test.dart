@@ -100,6 +100,7 @@ void main() {
         seed: _student,
         entityType: 'student',
         routed: true,
+        initialSection: 'history_tasks',
         capabilitySnapshot: const CapabilitySnapshot(
           accountId: 'restricted-admin',
           role: 'admin',
@@ -164,6 +165,7 @@ void main() {
       seed: _student,
       entityType: 'student',
       routed: true,
+      initialSection: 'profile',
       container: container,
     );
 
@@ -219,6 +221,11 @@ void main() {
       tester.widget<EditableText>(noteEditor).controller.text,
       'Позвонить за час',
     );
+
+    await tester.tap(
+      find.byKey(const Key('client-section-jump-history_tasks')),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('client-operational-history')), findsOneWidget);
     expect(find.text('Оплата удалена из статистики'), findsOneWidget);
@@ -296,6 +303,7 @@ void main() {
         seed: _student,
         entityType: 'student',
         routed: true,
+        initialSection: 'history_tasks',
       );
 
       expect(

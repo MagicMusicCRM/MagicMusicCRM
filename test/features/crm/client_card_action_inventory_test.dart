@@ -108,15 +108,21 @@ void main() {
         reason: section,
       );
     }
-    expect(
-      find.byKey(const Key('subscription-add'), skipOffstage: false),
-      findsOneWidget,
+    await tester.tap(
+      find.byKey(const Key('client-section-jump-subscriptions')),
     );
-    expect(
-      find.byKey(const Key('assign-homework'), skipOffstage: false),
-      findsOneWidget,
-    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('subscription-add')), findsOneWidget);
+    expect(find.byKey(const Key('assign-homework')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('client-section-jump-progress')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('assign-homework')), findsOneWidget);
+    expect(find.byKey(const Key('subscription-add')), findsNothing);
     expect(find.text('Действия'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('client-section-jump-payments')));
+    await tester.pumpAndSettle();
 
     for (final key in const [
       Key('payment-movements-expansion'),
@@ -133,7 +139,7 @@ void main() {
   });
 
   testWidgets(
-    'desktop paired sections share row height when subscription content is taller',
+    'desktop overview summarizes the client and mounts one working section',
     (tester) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1;
@@ -163,16 +169,40 @@ void main() {
         routed: true,
       );
 
+      expect(find.byKey(const Key('client-overview-core')), findsOneWidget);
+      expect(
+        find.byKey(const Key('client-overview-subscription')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('client-overview-lessons')), findsOneWidget);
+      expect(
+        find.byKey(const Key('client-desktop-section-subscriptions')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(const Key('client-section-jump-subscriptions')),
+      );
+      await tester.pumpAndSettle();
       final subscriptions = find.byKey(
         const Key('client-desktop-section-subscriptions'),
       );
-      final progress = find.byKey(const Key('client-desktop-section-progress'));
       expect(subscriptions, findsOneWidget);
-      expect(progress, findsOneWidget);
       expect(tester.getSize(subscriptions).height, greaterThan(0));
       expect(
-        tester.getSize(subscriptions).height,
-        moreOrLessEquals(tester.getSize(progress).height, epsilon: 0.1),
+        find.byKey(const Key('client-desktop-section-progress')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const Key('client-section-jump-progress')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('client-desktop-section-subscriptions')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('client-desktop-section-progress')),
+        findsOneWidget,
       );
     },
   );

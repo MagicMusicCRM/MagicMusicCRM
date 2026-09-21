@@ -363,7 +363,7 @@ void main() {
       routed: true,
       settle: false,
     );
-    expect(find.text('Лид→Ученик'), findsOneWidget);
+    expect(find.text('Лид → Ученик'), findsOneWidget);
     await captureEvidence(tester, 'client-lead-student-link');
     expect(tester.takeException(), isNull);
   });

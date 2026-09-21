@@ -67,6 +67,7 @@ void main() {
         routed: true,
       );
 
+      await _openSection(tester, 'contacts');
       await tester.ensureVisible(find.byKey(const Key('client-app-access')));
       await tester.pumpAndSettle();
       expect(
@@ -142,10 +143,12 @@ void main() {
       routed: true,
     );
 
+    await _openSection(tester, 'profile');
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Электронная почта'),
       'new@example.com',
     );
+    await _openSection(tester, 'contacts');
     await tester.ensureVisible(find.byKey(const Key('client-send-invite')));
     await tester.tap(find.byKey(const Key('client-send-invite')));
     await tester.pump();
@@ -177,10 +180,12 @@ void main() {
       routed: true,
     );
 
+    await _openSection(tester, 'profile');
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Электронная почта'),
       'broken@',
     );
+    await _openSection(tester, 'contacts');
     await tester.ensureVisible(find.byKey(const Key('client-send-invite')));
     await tester.tap(find.byKey(const Key('client-send-invite')));
     await tester.pumpAndSettle();
@@ -198,7 +203,7 @@ void main() {
     final api = FakeCardApiClient(
       role: 'manager',
       student: _studentWithEmail('old@example.com'),
-    )..studentPatchFailures = 1;
+    )..studentPatchFailures = 2;
     await pumpClientCard(
       tester,
       api: api,
@@ -207,15 +212,19 @@ void main() {
       routed: true,
     );
 
+    await _openSection(tester, 'profile');
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Электронная почта'),
       'new@example.com',
     );
+    await _openSection(tester, 'contacts');
     await tester.ensureVisible(find.byKey(const Key('client-send-invite')));
     await tester.tap(find.byKey(const Key('client-send-invite')));
     await tester.pumpAndSettle();
 
-    expect(api.updateStudentBodies, hasLength(1));
+    // Leaving the profile starts autosave; the explicit invite flush retries
+    // once after that save fails, while still keeping the invite fail-closed.
+    expect(api.updateStudentBodies, hasLength(2));
     expect(_invitePosts(api), isEmpty);
     expect(find.textContaining('Сначала сохраните'), findsWidgets);
     await tester.pump(const Duration(seconds: 4));
@@ -240,10 +249,12 @@ void main() {
       routed: true,
     );
 
+    await _openSection(tester, 'profile');
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Электронная почта'),
       '',
     );
+    await _openSection(tester, 'contacts');
     await tester.ensureVisible(find.byKey(const Key('client-send-invite')));
     await tester.tap(find.byKey(const Key('client-send-invite')));
     await tester.pump();
@@ -272,3 +283,10 @@ Map<String, dynamic> _studentWithEmail(String email) => <String, dynamic>{
 
 Iterable<CardPostCall> _invitePosts(FakeCardApiClient api) => api.postRequests
     .where((request) => request.path == '/crm/students/student-1/invite');
+
+Future<void> _openSection(WidgetTester tester, String section) async {
+  final target = find.byKey(Key('client-section-jump-$section'));
+  await tester.ensureVisible(target);
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}

@@ -188,12 +188,15 @@ void main() {
         textScale: 1.25,
       );
 
-      expect(find.byKey(const Key('client-at-glance')), findsOneWidget);
+      expect(
+        find.byKey(const Key('client-desktop-selected-overview')),
+        findsOneWidget,
+      );
       for (final key in const [
-        'client-at-glance-note',
-        'client-at-glance-next-lesson',
-        'client-at-glance-stage',
-        'client-at-glance-contacts',
+        'client-overview-note',
+        'client-overview-core',
+        'client-overview-subscription',
+        'client-overview-lessons',
       ]) {
         final tile = find.byKey(Key(key));
         expect(tile, findsOneWidget);

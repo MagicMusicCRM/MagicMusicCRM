@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 
 import 'schedule_reference_controller.dart';
 import 'schedule_reference_dialogs.dart';
@@ -377,7 +378,7 @@ class _TeacherRecurringRuleRow extends StatelessWidget {
     DateTime? current,
   ) async {
     final now = DateUtils.dateOnly(DateTime.now());
-    final next = await showDatePicker(
+    final next = await showMagicDatePicker(
       context: context,
       initialDate: current ?? now,
       firstDate: DateTime(2020),

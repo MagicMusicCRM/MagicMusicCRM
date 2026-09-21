@@ -158,17 +158,14 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const Key('client-desktop-section-subscriptions')),
+      findsNothing,
+    );
+    expect(
       tester
-          .getSize(
-            find.byKey(const Key('client-desktop-section-subscriptions')),
-          )
+          .getSize(find.byKey(const Key('client-desktop-section-progress')))
           .height,
-      moreOrLessEquals(
-        tester
-            .getSize(find.byKey(const Key('client-desktop-section-progress')))
-            .height,
-        epsilon: 0.1,
-      ),
+      greaterThan(0),
     );
   });
 }
