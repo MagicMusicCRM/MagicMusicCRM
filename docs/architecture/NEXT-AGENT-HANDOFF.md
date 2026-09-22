@@ -1,4 +1,28 @@
-# MagicMusicCRM — актуальная передача 224
+# MagicMusicCRM — актуальная передача 225
+
+## Production 1.5.45+225 — выпущен 2026-09-22
+
+Владелец прямо разрешил client release для ручного production UAT. Source/tag:
+`d8bd74ba54f48b8a3a4f1a11b60dd12df2454fd1` / `v1.5.45`. Выпущены плотная
+Holli Hop-подобная карточка клиента, полноценные секционные карточки Staff и
+Teacher, управление несколькими рабочими интервалами и занятыми периодами
+преподавателя, а также явная защита ручного изменения ставки/компенсации.
+
+Между `v1.5.44` и кандидатом нет server diff, поэтому API не переключался:
+production остаётся на `magicmusiccrm-server:1.5.44-224-final`, image
+`sha256:8954adc55c080e3398cb94f4caf6768bc9f437271c755dabd7fc090094b960a0`,
+schema `0160_requeue_lead_create_outbox`. После публикации readiness — OK,
+outbox `0/0`, reconciliation — `issues=[]`.
+
+Windows Setup/ZIP и подписанные Android APK/AAB build 225 опубликованы. Оба
+update-канала, публичная история, размеры и SHA-256 четырёх файлов проверены;
+GitHub Release `v1.5.45` опубликован. Свежий encrypted backup
+`20260922T140929Z` скопирован вне сервера и восстановлен в изоляции на точных
+production/recovery images — PASS. Rollback update-manifests build 224 сохранены.
+Подробности: [release 225 audit](../audits/release-225-production.md).
+
+Следующее действие владельца — authenticated UAT build 225. Автоматические
+проверки подтверждают доставку и контракты, но не заменяют визуальную приёмку.
 
 ## Production 1.5.44+224 — выпущен 2026-09-21
 
