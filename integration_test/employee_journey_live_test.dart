@@ -521,7 +521,16 @@ void main() {
       );
       await evidence('concurrent-edit-conflict');
       await card(id, section: 'overview');
-      expect(find.text('Первый'), findsWidgets);
+      await tap(find.byKey(const Key('client-edit-name')));
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('client-name-first')))
+            .controller!
+            .text,
+        'Первый',
+        reason: 'Reopened name editor reads the persisted first name',
+      );
+      await tap(find.text('Отмена'));
       await evidence('reopened-saved-state');
       await tester.pumpWidget(const SizedBox.shrink());
       expect(tester.takeException(), isNull);
