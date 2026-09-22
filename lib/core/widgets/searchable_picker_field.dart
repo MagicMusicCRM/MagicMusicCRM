@@ -40,6 +40,7 @@ class SearchablePickerField extends StatefulWidget {
   final Future<List<SearchableSelectItem>> Function(String query)? onSearch;
   final bool isNullable;
   final bool enabled;
+  final bool showSearchHint;
 
   const SearchablePickerField({
     super.key,
@@ -54,6 +55,7 @@ class SearchablePickerField extends StatefulWidget {
     this.onSearch,
     this.isNullable = true,
     this.enabled = true,
+    this.showSearchHint = true,
   });
 
   @override
@@ -214,7 +216,7 @@ class _SearchablePickerFieldState extends State<SearchablePickerField> {
         requestFocusOnTap: true,
         label: Text(widget.label),
         hintText: widget.placeholder,
-        helperText: widget.hintText,
+        helperText: widget.showSearchHint ? widget.hintText : null,
         errorText: widget.errorText,
         leadingIcon: _searching
             ? const Padding(

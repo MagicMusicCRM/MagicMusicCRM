@@ -1,11 +1,12 @@
 part of 'client_card.dart';
 
 extension _ClientCardTasksTab on _ClientCardState {
-  Widget _buildTasksTab(ColorScheme cs) {
+  Widget _buildTasksTab(ColorScheme cs, {bool compactEmpty = false}) {
     final targetType = _isConverted ? 'student' : widget.entityType;
     final targetId = _isConverted ? _studentId : _entityId;
     return SharedTasksPanel(
       embedded: true,
+      compactEmpty: compactEmpty,
       linkedEntity: EntityLink.typed(
         entityType: EntityLinkType.client,
         entityId: targetId,

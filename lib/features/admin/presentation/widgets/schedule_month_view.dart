@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
-import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'schedule_legends.dart';
 import 'schedule_shared.dart';
 
@@ -316,8 +316,6 @@ class ScheduleMonthView extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final start = parseLessonTime(lesson);
     final conflicts = conflictTypes(lesson['conflict_types']);
-    final relationContext = clientContext || searchContext;
-    final related = relationContext && isContextClientLesson(lesson);
     final projection = LessonStateProjection.fromMap(
       lesson,
       hasConflict: conflicts.isNotEmpty,
@@ -337,84 +335,58 @@ class ScheduleMonthView extends StatelessWidget {
         studentNames[lesson['student_id']?.toString()] ??
         lesson['group_name']?.toString() ??
         (leadName.isNotEmpty ? leadName : 'Занятие');
-    return Container(
-      key: ValueKey('schedule-month-lesson-${lesson['id']}'),
-      margin: const EdgeInsets.only(bottom: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(
-        color: LessonSettlementCorner.backgroundFor(settlementKey),
-        borderRadius: BorderRadius.circular(4),
-        border: Border(left: BorderSide(color: color, width: 2)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final trial =
-              lesson['is_trial'] == true &&
-              lesson['settlement_type_key'] == null;
-          final showTrialText =
-              trial && constraints.maxWidth >= (relationContext ? 90 : 70);
-          final showTrialIcon =
-              trial && constraints.maxWidth >= (relationContext ? 38 : 22);
-          final showStatusIcon =
-              (!trial && constraints.maxWidth >= (relationContext ? 36 : 24)) ||
-              constraints.maxWidth >= (relationContext ? 112 : 92);
-          return LessonSettlementCorner(
-            settlementTypeKey: settlementKey,
-            expand: false,
-            child: Row(
-              children: [
-                if (relationContext && constraints.maxWidth >= 36) ...[
-                  Icon(
-                    related
-                        ? Icons.person_pin_circle_outlined
-                        : Icons.people_outline_rounded,
-                    size: 10,
-                    color: color,
-                  ),
-                  const SizedBox(width: 2),
-                ],
-                if (showStatusIcon) ...[
-                  Tooltip(
-                    message: projection.label,
-                    child: Icon(
-                      projection.token.icon,
-                      size: 10,
-                      color: projection.token.accent,
+    return Tooltip(
+      message: [
+        name,
+        if (start != null) DateFormat('dd.MM.yyyy HH:mm').format(start),
+        if (lesson['duration_minutes'] != null)
+          '${lesson['duration_minutes']} мин',
+        if (lesson['teacher_name'] != null) lesson['teacher_name'].toString(),
+        if (lesson['room_name'] != null) lesson['room_name'].toString(),
+        projection.label,
+        if (clientContext || searchContext)
+          isContextClientLesson(lesson)
+              ? 'Связанное занятие'
+              : 'Другое занятие',
+        ?LessonSettlementCorner.labelFor(settlementKey),
+        if (lessonHasSubscriptionCoverage(lesson)) 'Абонемент',
+      ].join('\n'),
+      child: Container(
+        key: ValueKey('schedule-month-lesson-${lesson['id']}'),
+        margin: const EdgeInsets.only(bottom: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        decoration: BoxDecoration(
+          color: LessonSettlementCorner.backgroundFor(settlementKey),
+          borderRadius: BorderRadius.circular(4),
+          border: Border(left: BorderSide(color: color, width: 2)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final showStatusIcon =
+                projection.tileIcon != null && constraints.maxWidth >= 24;
+            return LessonSettlementCorner(
+              surfaceOwnedByParent: true,
+              settlementTypeKey: settlementKey,
+              expand: false,
+              child: Row(
+                children: [
+                  if (showStatusIcon) ...[
+                    Icon(projection.tileIcon, size: 12, color: AppColor.text),
+                    const SizedBox(width: 2),
+                  ],
+                  Expanded(
+                    child: Text(
+                      '$time$name',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: cs.onSurface, fontSize: 9.5),
                     ),
                   ),
-                  const SizedBox(width: 2),
                 ],
-                if (showTrialText) ...[
-                  const LessonTrialBadge(compact: true),
-                  const SizedBox(width: 3),
-                ] else if (showTrialIcon) ...[
-                  const Tooltip(
-                    message: 'Пробное',
-                    child: Icon(
-                      Icons.star_rounded,
-                      size: 10,
-                      color: AppColor.gold,
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                ],
-                Expanded(
-                  child: Text(
-                    '$time$name',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: cs.onSurface, fontSize: 9.5),
-                  ),
-                ),
-                if (lessonHasSubscriptionCoverage(lesson) &&
-                    constraints.maxWidth >= 64) ...[
-                  const SizedBox(width: 2),
-                  const LessonSubscriptionBadge(compact: true, iconOnly: true),
-                ],
-              ],
-            ),
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
     );
   }

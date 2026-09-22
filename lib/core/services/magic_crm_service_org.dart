@@ -413,12 +413,16 @@ extension MagicCrmOrg on MagicCrmService {
 
   Future<List<Map<String, dynamic>>> listGroups({
     String? branchId,
+    String? search,
     int limit = 100,
     bool includeArchived = false,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
     if (branchId != null) queryParameters['branchId'] = branchId;
     if (includeArchived) queryParameters['includeArchived'] = true;
+    if (search != null && search.trim().isNotEmpty) {
+      queryParameters['q'] = search.trim();
+    }
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/groups',

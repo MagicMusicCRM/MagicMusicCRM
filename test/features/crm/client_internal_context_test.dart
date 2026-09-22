@@ -222,8 +222,8 @@ void main() {
       'Позвонить за час',
     );
 
-    await tester.tap(
-      find.byKey(const Key('client-section-jump-history_tasks')),
+    await tester.ensureVisible(
+      find.byKey(const Key('client-section-heading-history_tasks')),
     );
     await tester.pumpAndSettle();
 
@@ -310,8 +310,8 @@ void main() {
         find.byKey(const Key('client-operational-history')),
         findsOneWidget,
       );
-      expect(find.byType(AuditEventCard), findsNWidgets(10));
-      expect(find.text('Понятное действие 10'), findsOneWidget);
+      expect(find.byType(AuditEventCard), findsNWidgets(3));
+      expect(find.text('Понятное действие 10'), findsNothing);
       expect(find.text('Понятное действие 11'), findsNothing);
       expect(find.text('Занятие из legacy-ленты'), findsNothing);
       expect(find.textContaining('Версия'), findsNothing);
@@ -329,6 +329,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Было: До 1'), findsOneWidget);
 
+      await tester.ensureVisible(more);
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AuditEventCard), findsNWidgets(10));
       await tester.ensureVisible(more);
       await tester.tap(more);
       await tester.pumpAndSettle();

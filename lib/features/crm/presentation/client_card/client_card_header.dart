@@ -1,6 +1,80 @@
 part of 'client_card.dart';
 
 extension _ClientCardHeader on _ClientCardState {
+  Widget _buildEditableClientName() => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Flexible(
+        child: Text(
+          [
+                _isStudent &&
+                        _clientFirstName == null &&
+                        _clientLastName == null
+                    ? _studentContact().name
+                    : _clientFirstName,
+                _clientLastName,
+                _storedCustomField('middleName'),
+              ]
+              .whereType<String>()
+              .where((part) => part.trim().isNotEmpty)
+              .join(' '),
+          key: const Key('client-header-name'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
+      ),
+      if (_canWriteClient)
+        IconButton(
+          key: const Key('client-edit-name'),
+          tooltip: 'Изменить ФИО',
+          onPressed: _editClientName,
+          icon: const Icon(Icons.edit_outlined, color: AppColor.gold, size: 21),
+          visualDensity: VisualDensity.compact,
+        ),
+    ],
+  );
+
+  Future<void> _editClientName() async {
+    if (!_canWriteClient) return;
+    final entity = _isStudent ? 'students' : 'leads';
+    final middleField = _customFieldSchema
+        .where(
+          (f) =>
+              f.entity == entity &&
+              f.key == 'middleName' &&
+              f.placements.contains('edit'),
+        )
+        .firstOrNull;
+    final result =
+        await showMagicDialog<({String first, String last, String? middle})>(
+          context: context,
+          builder: (_) => _ClientNameEditor(
+            first: _clientFirstName ?? '',
+            last: _clientLastName ?? '',
+            middle: _storedCustomField('middleName') ?? '',
+            editMiddle: middleField != null,
+            requireMiddle: middleField?.required ?? false,
+          ),
+        );
+    if (!mounted || result == null || !_canWriteClient) return;
+    _updateClientCore('firstName', result.first);
+    _updateClientCore('lastName', result.last.isEmpty ? null : result.last);
+    if (middleField != null) {
+      _updateCustomDataForEntity(
+        entity,
+        'middleName',
+        result.middle?.isEmpty == true ? null : result.middle,
+      );
+    }
+    // A separate editor committed these values; update any mounted form fields.
+    _emitState(() => _editorEpoch++);
+  }
+
   /// В чёрном ли списке клиент — по любой из половин карточки. Сервер отдаёт
   /// флаг на каждой (см. blacklist.ts); достаточно одной, чтобы это был бан.
   bool get _isBlacklisted =>
@@ -75,11 +149,11 @@ extension _ClientCardHeader on _ClientCardState {
   Widget _buildHeader(ColorScheme cs, StatusRecord curStatus) {
     final banned = _isBlacklisted;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpace.xl,
-        AppSpace.lg,
+        widget.routed ? 8 : AppSpace.lg,
         AppSpace.md,
-        AppSpace.md,
+        widget.routed ? 6 : AppSpace.md,
       ),
       child: Row(
         children: [
@@ -108,17 +182,7 @@ extension _ClientCardHeader on _ClientCardState {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${_leadData['name'] ?? ''} ${_leadData['last_name'] ?? ''}'
-                      .trim(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                  ),
-                ),
+                _buildEditableClientName(),
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Row(
@@ -309,4 +373,107 @@ extension _ClientCardHeader on _ClientCardState {
       ),
     );
   }
+}
+
+class _ClientNameEditor extends StatefulWidget {
+  const _ClientNameEditor({
+    required this.first,
+    required this.last,
+    required this.middle,
+    required this.editMiddle,
+    required this.requireMiddle,
+  });
+  final String first, last, middle;
+  final bool editMiddle, requireMiddle;
+  @override
+  State<_ClientNameEditor> createState() => _ClientNameEditorState();
+}
+
+class _ClientNameEditorState extends State<_ClientNameEditor> {
+  final _form = GlobalKey<FormState>();
+  late final _first = TextEditingController(text: widget.first);
+  late final _last = TextEditingController(text: widget.last);
+  late final _middle = TextEditingController(text: widget.middle);
+
+  @override
+  void dispose() {
+    _first.dispose();
+    _last.dispose();
+    _middle.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_form.currentState!.validate()) return;
+    Navigator.pop(context, (
+      first: _first.text.trim(),
+      last: _last.text.trim(),
+      middle: widget.editMiddle ? _middle.text.trim() : null,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Изменить ФИО'),
+    content: SizedBox(
+      width: 420,
+      child: Form(
+        key: _form,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              key: const Key('client-name-last'),
+              controller: _last,
+              decoration: const InputDecoration(labelText: 'Фамилия'),
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              key: const Key('client-name-first'),
+              controller: _first,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Имя *'),
+              textCapitalization: TextCapitalization.words,
+              validator: (value) =>
+                  value == null || value.trim().isEmpty ? 'Введите имя' : null,
+              textInputAction: widget.editMiddle
+                  ? TextInputAction.next
+                  : TextInputAction.done,
+              onFieldSubmitted: widget.editMiddle ? null : (_) => _submit(),
+            ),
+            if (widget.editMiddle) ...[
+              const SizedBox(height: 16),
+              TextFormField(
+                key: const Key('client-name-middle'),
+                controller: _middle,
+                decoration: InputDecoration(
+                  labelText: widget.requireMiddle ? 'Отчество *' : 'Отчество',
+                ),
+                textCapitalization: TextCapitalization.words,
+                validator: (value) =>
+                    widget.requireMiddle &&
+                        (value == null || value.trim().isEmpty)
+                    ? 'Введите отчество'
+                    : null,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(
+        key: const Key('client-name-apply'),
+        onPressed: _submit,
+        child: const Text('Применить'),
+      ),
+    ],
+  );
 }

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
-import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 
 import 'schedule_day_canvas.dart';
@@ -661,7 +660,9 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
     final time = '${_hm(widget.entry.startLocal)}-${_hm(end)}';
     return Tooltip(
       message:
-          '${widget.entry.title}\n$time\n${widget.entry.subtitle}\n${projection.label}',
+          '${widget.entry.title}\n$time\n${widget.entry.subtitle}\n${projection.label}\n${LessonSettlementCorner.labelFor(settlementKey)}'
+          '${widget.entry.clientContext || widget.entry.searchContext ? '\n${widget.entry.relatedClient ? 'Связанное занятие' : 'Другое занятие'}' : ''}'
+          '${lessonHasSubscriptionCoverage(widget.entry.lesson) ? '\nАбонемент' : ''}',
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
@@ -688,25 +689,10 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
                   builder: (context, constraints) {
                     final showTrailingMetadata = constraints.maxWidth >= 96;
                     return LessonSettlementCorner(
+                      surfaceOwnedByParent: true,
                       settlementTypeKey: settlementKey,
                       child: Row(
                         children: [
-                          if (widget.entry.clientContext ||
-                              widget.entry.searchContext) ...[
-                            Tooltip(
-                              message: widget.entry.relatedClient
-                                  ? 'Связанное занятие'
-                                  : 'Другое занятие',
-                              child: Icon(
-                                widget.entry.relatedClient
-                                    ? Icons.person_pin_circle_outlined
-                                    : Icons.people_outline_rounded,
-                                color: accent,
-                                size: 12,
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                          ],
                           Expanded(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -743,39 +729,14 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
                               ],
                             ),
                           ),
-                          if (showTrailingMetadata)
+                          if (showTrailingMetadata &&
+                              projection.tileIcon != null)
                             Padding(
                               padding: const EdgeInsets.only(left: 3),
-                              child: Tooltip(
-                                message: projection.label,
-                                child: Icon(
-                                  projection.token.icon,
-                                  color: projection.token.accent,
-                                  size: 13,
-                                ),
-                              ),
-                            ),
-                          if (showTrailingMetadata &&
-                              widget.entry.isTrial &&
-                              widget.entry.lesson['settlement_type_key'] ==
-                                  null)
-                            const Padding(
-                              padding: EdgeInsets.only(left: 3),
-                              child: LessonTrialBadge(compact: true),
-                            ),
-                          if (constraints.maxWidth >=
-                                  (widget.entry.clientContext ||
-                                          widget.entry.searchContext
-                                      ? 36
-                                      : 20) &&
-                              lessonHasSubscriptionCoverage(
-                                widget.entry.lesson,
-                              ))
-                            const Padding(
-                              padding: EdgeInsets.only(left: 3),
-                              child: LessonSubscriptionBadge(
-                                compact: true,
-                                iconOnly: true,
+                              child: Icon(
+                                projection.tileIcon,
+                                color: AppColor.text,
+                                size: 13,
                               ),
                             ),
                         ],

@@ -127,10 +127,9 @@ class _LessonCard extends StatelessWidget {
         timeStr,
         entry.subtitle,
         projection.label,
-        ?LessonSettlementCorner.labelFor(
-          entry.lesson['settlement_type_key']?.toString(),
-        ),
-        if (entry.isTrial) 'Пробное',
+        if (entry.clientContext || entry.searchContext)
+          entry.relatedClient ? 'Связанное занятие' : 'Другое занятие',
+        ?LessonSettlementCorner.labelFor(settlementKey),
         if (lessonHasSubscriptionCoverage(entry.lesson)) 'Абонемент',
         if (entry.conflicts.isNotEmpty) 'Конфликт расписания',
       ].where((line) => line.isNotEmpty).join('\n'),
@@ -139,7 +138,6 @@ class _LessonCard extends StatelessWidget {
           final scale = MediaQuery.textScalerOf(context).scale(1);
           final showTime = constraints.maxHeight >= 34 * scale;
           final showSubtitle = constraints.maxHeight >= 52 * scale;
-          final showBadges = constraints.maxWidth >= 130;
           return Container(
             key: ValueKey('schedule-lesson-${entry.id}'),
             clipBehavior: Clip.antiAlias,
@@ -153,6 +151,7 @@ class _LessonCard extends StatelessWidget {
               ),
             ),
             child: LessonSettlementCorner(
+              surfaceOwnedByParent: true,
               settlementTypeKey: settlementKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,16 +159,6 @@ class _LessonCard extends StatelessWidget {
                   Flexible(
                     child: Row(
                       children: [
-                        if (entry.clientContext || entry.searchContext) ...[
-                          Icon(
-                            entry.relatedClient
-                                ? Icons.person_pin_circle_outlined
-                                : Icons.people_outline_rounded,
-                            color: accent,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 3),
-                        ],
                         Expanded(
                           child: Text(
                             entry.title,
@@ -182,29 +171,8 @@ class _LessonCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        Tooltip(
-                          message: projection.label,
-                          child: Icon(
-                            projection.token.icon,
-                            color: projection.token.accent,
-                            size: 12,
-                          ),
-                        ),
-                        if (showBadges &&
-                            lessonHasSubscriptionCoverage(entry.lesson)) ...[
-                          const SizedBox(width: 3),
-                          const LessonSubscriptionBadge(
-                            compact: true,
-                            iconOnly: true,
-                          ),
-                        ],
-                        if (showBadges &&
-                            entry.isTrial &&
-                            showSubtitle &&
-                            entry.lesson['settlement_type_key'] == null) ...[
-                          const SizedBox(width: 3),
-                          const LessonTrialBadge(compact: true),
-                        ],
+                        if (projection.tileIcon case final icon?)
+                          Icon(icon, color: AppColor.text, size: 13),
                       ],
                     ),
                   ),
@@ -227,7 +195,7 @@ class _LessonCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: accent,
+                        color: AppColor.text,
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
                       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -190,13 +191,71 @@ void main() {
         findsOneWidget,
       );
       final short = find.byKey(const ValueKey('schedule-lesson-1-1'));
-      final cell = find.byKey(const ValueKey('student-timeline-t1'));
+      final cell = find.byKey(const ValueKey('student-timeline-t7'));
       expect(tester.getSize(short).height, lessThanOrEqualTo(20));
       expect(tester.getSize(cell).width, lessThan(45));
+      for (final tile in [short, cell]) {
+        expect(
+          find.descendant(of: tile, matching: find.byType(Tooltip)),
+          findsNothing,
+          reason:
+              'One full-lesson tooltip owns the whole tile, including its edge.',
+        );
+        expect(
+          find.descendant(of: tile, matching: find.byType(Icon)),
+          findsNothing,
+          reason:
+              'A scheduled lesson needs no duplicate booked/payment/type badges.',
+        );
+      }
+      expect(
+        find.descendant(of: cell, matching: find.byType(DecoratedBox)),
+        findsOneWidget,
+        reason: 'The date cell has exactly one painted surface.',
+      );
+      final tooltip = tester.widget<Tooltip>(
+        find.ancestor(of: cell, matching: find.byType(Tooltip)).first,
+      );
+      expect(tooltip.message, contains('Пробный урок'));
+      expect(tooltip.message, contains('60 мин'));
+      for (final key in [..._keys, 'partially_paid_miss', 'penalty_lesson']) {
+        final background = LessonSettlementCorner.backgroundFor(key);
+        expect(
+          background.a,
+          1,
+          reason: 'Use an opaque semantic fill, not a barely visible overlay.',
+        );
+        expect(
+          (AppColor.text.computeLuminance() + .05) /
+              (background.computeLuminance() + .05),
+          lessThanOrEqualTo(1 / 4.5),
+        );
+      }
       await expectLater(
         find.byKey(const Key('visual')),
         matchesGoldenFile('goldens/lesson_settlement_corners.png'),
       );
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer();
+      addTearDown(mouse.removePointer);
+      for (final tile in [short, cell]) {
+        final fullTooltip = tester
+            .widget<Tooltip>(
+              find.ancestor(of: tile, matching: find.byType(Tooltip)).first,
+            )
+            .message!;
+        for (final point in [
+          tester.getTopLeft(tile) + const Offset(3, 3),
+          tester.getCenter(tile),
+        ]) {
+          await mouse.moveTo(const Offset(1, 1));
+          await tester.pumpAndSettle();
+          await mouse.moveTo(point);
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pumpAndSettle();
+          expect(find.text(fullTooltip), findsOneWidget);
+        }
+      }
     },
   );
 }

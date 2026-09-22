@@ -51,6 +51,15 @@ class AppColor {
   static const Color settlementFree = Color(0xFF00796D);
   static const Color settlementPaidMiss = Color(0xFFB72D58);
   static const Color settlementUnpaid = Color(0xFF374151);
+  // Opaque fills shared by calendars, client timelines and filter swatches.
+  static const Color settlementLessonFill = Color(0xFF99C9FF);
+  static const Color settlementTrialFill = Color(0xFFCAB0F4);
+  static const Color settlementPartialFill = Color(0xFFFFD36E);
+  static const Color settlementFreeFill = Color(0xFF72D8C0);
+  static const Color settlementPaidMissFill = Color(0xFFF4A5B9);
+  static const Color settlementPartialMissFill = Color(0xFFFFAD69);
+  static const Color settlementUnpaidFill = Color(0xFFB9C2CF);
+  static const Color settlementPenaltyFill = Color(0xFFFF968A);
 
   // ── Surfaces and borders ─────────────────────────────────────────────────
   static const Color bg = AppPalette.paper125;

@@ -158,7 +158,7 @@ void main() {
   });
 
   testWidgets(
-    'desktop first screen keeps the four client essentials visible at 125%',
+    'desktop first screen keeps editable contacts, note, name and core fields at 125%',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(1366, 768);
@@ -189,14 +189,14 @@ void main() {
       );
 
       expect(
-        find.byKey(const Key('client-desktop-selected-overview')),
+        find.byKey(const Key('client-desktop-continuous-page')),
         findsOneWidget,
       );
       for (final key in const [
-        'client-overview-note',
-        'client-overview-core',
-        'client-overview-subscription',
-        'client-overview-lessons',
+        'client-internal-note-input',
+        'client-edit-name',
+        'client-section-heading-profile',
+        'client-book-trial',
       ]) {
         final tile = find.byKey(Key(key));
         expect(tile, findsOneWidget);

@@ -3,8 +3,8 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 /// Closed visual vocabulary for operational lesson surfaces.
 ///
-/// Trial and subscription coverage use separate badges. Lesson backgrounds
-/// always express lifecycle, including when a subscription reserves the lesson.
+/// Tile backgrounds express settlement type. A single optional icon expresses
+/// completion or an exceptional state; scheduled lessons need no status icon.
 enum LessonStateToken {
   booked,
   completed,
@@ -29,6 +29,9 @@ class LessonStateProjection {
   final String state;
   final String label;
   final bool coveredBySubscription;
+
+  IconData? get tileIcon =>
+      token == LessonStateToken.booked ? null : token.icon;
 
   const LessonStateProjection({
     required this.token,

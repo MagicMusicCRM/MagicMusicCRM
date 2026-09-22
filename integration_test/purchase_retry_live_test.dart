@@ -116,7 +116,7 @@ void main() {
             ),
           );
           await h.quiet();
-          await h.tap(key('client-section-jump-subscriptions'));
+          await h.tap(key('client-section-heading-subscriptions'));
           await h.tap(key('subscription-add'));
           await h.quiet();
         }
@@ -259,7 +259,7 @@ void main() {
               ),
             );
             await h.quiet();
-            await h.tap(key('client-section-jump-subscriptions'));
+            await h.tap(key('client-section-heading-subscriptions'));
             expect(
               (await crm.getStudentCommerceProjection(
                 student,

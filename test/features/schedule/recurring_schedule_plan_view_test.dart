@@ -245,7 +245,7 @@ void main() {
     expect(find.textContaining('15:00'), findsNothing);
     expect(
       find.byKey(const ValueKey('student-timeline-no-charge-unpaid')),
-      findsOneWidget,
+      findsNothing,
     );
     final tooltip = tester.widget<Tooltip>(
       find.ancestor(of: tile, matching: find.byType(Tooltip)).first,
@@ -453,9 +453,7 @@ void main() {
     );
 
     await tester.tap(
-      find.byKey(
-        const ValueKey('student-timeline-successor-lesson-rescheduled'),
-      ),
+      find.byKey(const ValueKey('student-timeline-lesson-rescheduled')),
     );
     await tester.pumpAndSettle();
 

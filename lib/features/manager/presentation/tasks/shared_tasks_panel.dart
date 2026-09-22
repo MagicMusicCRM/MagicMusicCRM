@@ -24,6 +24,7 @@ class SharedTasksPanel extends ConsumerStatefulWidget {
     super.key,
     this.dataSource,
     this.embedded = false,
+    this.compactEmpty = false,
     this.initialLink,
     this.linkedEntity,
     this.scrollController,
@@ -35,6 +36,7 @@ class SharedTasksPanel extends ConsumerStatefulWidget {
 
   final SharedTasksDataSource? dataSource;
   final bool embedded;
+  final bool compactEmpty;
   final EntityLink? initialLink;
   final EntityLink? linkedEntity;
   final ScrollController? scrollController;
@@ -356,6 +358,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
           ? () => setState(() => _showResults = true)
           : null,
       embedded: widget.embedded,
+      compactEmpty: widget.compactEmpty,
       showViewToolbar: widget.linkedEntity == null,
       scrollController: widget.scrollController,
     );

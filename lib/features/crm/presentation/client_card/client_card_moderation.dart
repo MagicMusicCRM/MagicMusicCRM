@@ -28,12 +28,15 @@ extension _ClientCardModeration on _ClientCardState {
             color: banned ? AppTheme.danger : cs.onSurfaceVariant,
           ),
         ),
-        onChanged: _blacklistBusy ? null : (value) => _toggleBlacklist(value),
+        onChanged: _blacklistBusy || !_canWriteClient
+            ? null
+            : (value) => _toggleBlacklist(value),
       ),
     );
   }
 
   Future<void> _toggleBlacklist(bool value) async {
+    if (!_canWriteClient) return;
     String? reason;
     if (value) {
       reason = await _askBlacklistReason();

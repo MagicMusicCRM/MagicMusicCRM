@@ -44,7 +44,7 @@ extension _ClientCardContactEditors on _ClientCardState {
       ...selected,
     }.toList();
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: InputDecorator(
         decoration: _inputDecoration(cs, label: 'Направления', isDense: true),
         child: options.isEmpty
@@ -58,11 +58,14 @@ extension _ClientCardContactEditors on _ClientCardState {
                 children: options.map((name) {
                   return FilterChip(
                     label: Text(name),
+                    labelStyle: Theme.of(context).textTheme.bodyMedium,
                     selected: selected.contains(name),
                     visualDensity: VisualDensity.compact,
                     selectedColor: AppColor.gold.withValues(alpha: 0.22),
                     checkmarkColor: AppColor.gold,
-                    onSelected: (_) => _toggleDiscipline(entity, name),
+                    onSelected: _canWriteClient
+                        ? (_) => _toggleDiscipline(entity, name)
+                        : null,
                   );
                 }).toList(),
               ),
@@ -142,7 +145,7 @@ extension _ClientCardContactEditors on _ClientCardState {
   Widget _buildContactPersonsEditor(ColorScheme cs, String entity) {
     final persons = _contactPersonsForEntity(entity);
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -239,10 +242,12 @@ extension _ClientCardContactEditors on _ClientCardState {
                           color: AppTheme.danger,
                         ),
                         tooltip: 'Удалить',
-                        onPressed: () => _writeContactPersons(
-                          entity,
-                          [...persons]..removeAt(i),
-                        ),
+                        onPressed: !_canWriteClient
+                            ? null
+                            : () => _writeContactPersons(
+                                entity,
+                                [...persons]..removeAt(i),
+                              ),
                       ),
                     ],
                   ),

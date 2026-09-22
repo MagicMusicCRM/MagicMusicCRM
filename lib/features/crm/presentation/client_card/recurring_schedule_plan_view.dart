@@ -6,7 +6,6 @@ import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/models/student_lesson_timeline.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
-import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/widgets/settlement_type_filter.dart';
 
@@ -44,6 +43,7 @@ class RecurringSchedulePlanView extends StatefulWidget {
     required this.onOpenTimelineItem,
     this.emptyState,
     this.onOpenFallbackLesson,
+    this.timelineFirst = false,
   });
 
   final List<SchedulePlan> plans;
@@ -72,6 +72,7 @@ class RecurringSchedulePlanView extends StatefulWidget {
   final Future<void> Function(String lessonId) onOpenTimelineItem;
   final Widget? emptyState;
   final ValueChanged<Map<String, dynamic>>? onOpenFallbackLesson;
+  final bool timelineFirst;
 
   @override
   State<RecurringSchedulePlanView> createState() =>
@@ -88,12 +89,26 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
         .where((plan) => !plan.isActive && !plan.isArchived)
         .toList();
     final archived = widget.plans.where((plan) => plan.isArchived).toList();
+    final timeline = StudentLessonTimelineView(
+      page: widget.timelinePage ?? const StudentLessonTimelinePage.empty(),
+      loading: widget.timelineLoading,
+      paging: widget.timelinePaging,
+      error: widget.timelineError,
+      onPrevious: widget.onPreviousTimeline,
+      onNext: widget.onNextTimeline,
+      onRetry: widget.onRetryTimeline,
+      onOpen: _openTimelineItem,
+    );
     return SizedBox(
       width: double.infinity,
       child: Column(
         key: const Key('recurring-schedule-plan-section'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.timelineFirst && !widget.groupMode) ...[
+            timeline,
+            const SizedBox(height: AppSpace.md),
+          ],
           _sectionHeader(),
           if (widget.canWrite && !widget.canCreatePlan)
             Text(
@@ -148,19 +163,8 @@ class _RecurringSchedulePlanViewState extends State<RecurringSchedulePlanView> {
               lessons: widget.fallbackLessons,
               onOpen: widget.onOpenFallbackLesson,
             )
-          else
-            StudentLessonTimelineView(
-              page:
-                  widget.timelinePage ??
-                  const StudentLessonTimelinePage.empty(),
-              loading: widget.timelineLoading,
-              paging: widget.timelinePaging,
-              error: widget.timelineError,
-              onPrevious: widget.onPreviousTimeline,
-              onNext: widget.onNextTimeline,
-              onRetry: widget.onRetryTimeline,
-              onOpen: _openTimelineItem,
-            ),
+          else if (!widget.timelineFirst)
+            timeline,
         ],
       ),
     );
@@ -788,6 +792,23 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
       );
       final offset = _scroll.hasClients ? _scroll.offset : 0.0;
       final busy = widget.paging || widget.loading;
+      final filter = SizedBox(
+        key: const Key('timeline-settlement-legend'),
+        width: 300,
+        child: SettlementTypeFilter(
+          selected: _settlementTypes,
+          labels: {
+            ...settlementTypeLabels,
+            for (final item in widget.page.items)
+              if (item.settlement.settlementTypeKey != null &&
+                  !settlementTypeLabels.containsKey(
+                    item.settlement.settlementTypeKey,
+                  ))
+                item.settlement.settlementTypeKey!: 'Другой тип списания',
+          },
+          onChanged: (value) => setState(() => _settlementTypes = value),
+        ),
+      );
       return Container(
         key: const Key('student-lesson-timeline'),
         width: double.infinity,
@@ -809,6 +830,7 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                   ),
                 ),
+                if (constraints.maxWidth >= 650) filter,
                 IconButton(
                   key: const Key('student-lesson-timeline-previous'),
                   onPressed: !busy && (offset > 1 || widget.page.hasPrevious)
@@ -828,28 +850,8 @@ class _StudentLessonTimelineViewState extends State<StudentLessonTimelineView> {
                 ),
               ],
             ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                key: const Key('timeline-settlement-legend'),
-                width: 360,
-                child: SettlementTypeFilter(
-                  selected: _settlementTypes,
-                  labels: {
-                    ...settlementTypeLabels,
-                    for (final item in widget.page.items)
-                      if (item.settlement.settlementTypeKey != null &&
-                          !settlementTypeLabels.containsKey(
-                            item.settlement.settlementTypeKey,
-                          ))
-                        item.settlement.settlementTypeKey!:
-                            'Другой тип списания',
-                  },
-                  onChanged: (value) =>
-                      setState(() => _settlementTypes = value),
-                ),
-              ),
-            ),
+            if (constraints.maxWidth < 650)
+              Align(alignment: Alignment.centerLeft, child: filter),
             const SizedBox(height: AppSpace.sm),
             if (widget.loading && widget.page.items.isEmpty)
               const LinearProgressIndicator(color: AppColor.gold)
@@ -1060,7 +1062,7 @@ class _StudentTimelineItem extends StatelessWidget {
       _originLabel(item.origin.kind),
       '${DateFormat('dd.MM.yyyy HH:mm').format(local)} · ${item.durationMinutes} мин',
       state.label,
-      ?LessonSettlementCorner.labelFor(item.settlement.settlementTypeKey),
+      ?LessonSettlementCorner.labelFor(settlementKey),
       if (state.coveredBySubscription) 'Абонемент',
       if (!state.coveredBySubscription && noChargeReason != null)
         noChargeReason,
@@ -1088,6 +1090,7 @@ class _StudentTimelineItem extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
             ),
             child: LessonSettlementCorner(
+              surfaceOwnedByParent: true,
               settlementTypeKey: settlementKey,
               timeline: true,
               child: Column(
@@ -1099,7 +1102,7 @@ class _StudentTimelineItem extends StatelessWidget {
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: state.token.accent,
+                      color: AppColor.text,
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1109,41 +1112,8 @@ class _StudentTimelineItem extends StatelessWidget {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          state.token.icon,
-                          size: 10,
-                          color: state.token.accent,
-                        ),
-                        if (state.coveredBySubscription) ...[
-                          const SizedBox(width: 4),
-                          const LessonSubscriptionBadge(
-                            compact: true,
-                            iconOnly: true,
-                          ),
-                        ],
-                        if (!state.coveredBySubscription &&
-                            noChargeReason != null) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.money_off_rounded,
-                            key: ValueKey(
-                              'student-timeline-no-charge-${item.id}',
-                            ),
-                            size: 10,
-                            color: state.token.accent,
-                          ),
-                        ],
-                        if (successor) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.redo_rounded,
-                            key: ValueKey(
-                              'student-timeline-successor-${item.id}',
-                            ),
-                            size: 10,
-                            color: state.token.accent,
-                          ),
-                        ],
+                        if (state.tileIcon case final icon?)
+                          Icon(icon, size: 13, color: AppColor.text),
                       ],
                     ),
                   ),

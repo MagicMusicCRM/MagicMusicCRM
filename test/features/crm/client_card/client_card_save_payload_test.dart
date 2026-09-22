@@ -693,9 +693,12 @@ void main() {
     );
     expect(api.studentCardLoadCount, 1);
 
-    final commentInput = find.byType(TextField).last;
+    final commentInput = find.byKey(const Key('client-comment-input'));
     await tester.ensureVisible(commentInput);
     await tester.enterText(commentInput, 'Тестовая заметка');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Отправить комментарий'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Отправить комментарий'));
     await tester.pumpAndSettle();
 

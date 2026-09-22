@@ -204,7 +204,10 @@ void main() {
         expect(find.byType(Dialog), findsNothing);
         expect(find.byKey(const Key('client-payments-tab')), findsOneWidget);
         expect(find.text('Оплаты и личный счёт'), findsOneWidget);
-        expect(find.text('Обзор'), findsWidgets);
+        expect(
+          find.text(width < 840 ? 'Обзор' : 'Информация об ученике'),
+          findsWidgets,
+        );
         expect(find.text('Занятия'), findsWidgets);
         expect(find.text('Абонементы'), findsWidgets);
         expect(find.text('Прогресс'), findsWidgets);
@@ -219,7 +222,7 @@ void main() {
             const Key('client-custom-fields-expansion'),
             skipOffstage: false,
           ),
-          width < 840 ? findsOneWidget : findsNothing,
+          findsOneWidget,
         );
         expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
         expect(tester.takeException(), isNull);
@@ -329,7 +332,7 @@ void main() {
   );
 
   testWidgets(
-    'desktop client card uses a dense selected workspace with lazy calendar',
+    'desktop client card is a continuous editable workspace with lazy calendar',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(1200, 900);
@@ -468,76 +471,42 @@ void main() {
 
       expect(find.byKey(const Key('client-desktop-canvas')), findsOneWidget);
       expect(
-        find.byKey(const Key('client-desktop-selected-overview')),
+        find.byKey(const Key('client-desktop-continuous-page')),
         findsOneWidget,
       );
+      final sidebar = find.byKey(const Key('client-desktop-contact-sidebar'));
+      expect(sidebar, findsOneWidget);
       expect(
-        find.byKey(const Key('client-desktop-section-rail')),
-        findsOneWidget,
+        find.byKey(const Key('client-desktop-section-jumps')),
+        findsNothing,
       );
       expect(
         tester.getTopLeft(find.byKey(const Key('client-desktop-canvas'))).dx,
-        greaterThan(
-          tester
-              .getTopRight(find.byKey(const Key('client-desktop-section-rail')))
-              .dx,
-        ),
+        greaterThan(tester.getTopRight(sidebar).dx),
       );
-      for (final section in const [
-        ('overview', 'Обзор'),
-        ('profile', 'Данные клиента'),
-        ('contacts', 'Контакты'),
-        ('lessons', 'Занятия'),
-        ('subscriptions', 'Абонементы'),
-        ('progress', 'Прогресс'),
-        ('payments', 'Оплаты'),
-        ('history_tasks', 'История и задачи'),
+      for (final section in [
+        'profile',
+        'lessons',
+        'subscriptions',
+        'progress',
+        'payments',
+        'history_tasks',
+        'contacts',
       ]) {
         expect(
-          find.descendant(
-            of: find.byKey(Key('client-section-jump-${section.$1}')),
-            matching: find.text(section.$2),
-          ),
+          find.byKey(Key('client-desktop-section-$section')),
           findsOneWidget,
-        );
-        expect(
-          find.byKey(Key('client-desktop-section-${section.$1}')),
-          findsNothing,
         );
       }
       expect(find.text('Документы'), findsNothing);
-      expect(find.byKey(const Key('client-overview-core')), findsOneWidget);
       expect(
-        find.byKey(const Key('client-overview-subscription')),
+        find.widgetWithText(TextFormField, 'Электронная почта'),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const Key('client-overview-next-lesson')),
-        findsOneWidget,
+      await tester.ensureVisible(
+        find.byKey(const Key('client-section-heading-lessons')),
       );
-
-      await tester.tap(find.byKey(const Key('client-section-jump-profile')));
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('client-desktop-selected-profile')),
-        findsOneWidget,
-      );
-      expect(find.widgetWithText(TextFormField, 'Имя'), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('client-section-jump-lessons')));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('client-desktop-selected-lessons')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('client-desktop-section-lessons')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('client-desktop-section-overview')),
-        findsNothing,
-      );
       expect(
         find.byKey(const Key('client-calendar-expansion')),
         findsOneWidget,
@@ -747,7 +716,7 @@ void main() {
     expect(find.byType(ClientCardRouteSurface), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     expect(
-      find.byKey(const Key('client-section-jump-overview')),
+      find.byKey(const Key('client-desktop-continuous-page')),
       findsOneWidget,
     );
   });
@@ -822,13 +791,14 @@ void main() {
     workspace.selectTab(clientTabId);
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('client-section-jump-profile')));
+    await tester.tap(find.byKey(const Key('client-edit-name')));
     await tester.pumpAndSettle();
 
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Имя'),
+      find.byKey(const Key('client-name-first')),
       'Свежая Анна',
     );
+    await tester.tap(find.byKey(const Key('client-name-apply')));
     await tester.pump();
     expect(find.text('Сохраняем…'), findsWidgets);
     expect(
@@ -1022,7 +992,11 @@ void main() {
     router.push('/students/student-1?section=overview');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('client-section-jump-payments')));
+    await tester.ensureVisible(
+      find.byKey(const Key('client-section-heading-payments')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('client-section-heading-payments')));
     await tester.pumpAndSettle();
 
     expect(router.state.uri.queryParameters['section'], 'payments');

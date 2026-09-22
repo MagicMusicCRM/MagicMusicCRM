@@ -97,7 +97,6 @@ part 'client_card_assignment_editors.dart';
 part 'client_card_comment_editor.dart';
 part 'client_card_family_access.dart';
 part 'client_card_workspace_sections.dart';
-part 'client_card_at_glance.dart';
 part 'client_card_desktop_dashboard.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
@@ -155,6 +154,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _saving = false;
   late final ClientCardDraftController _draft;
   bool _converting = false;
+  bool _addingToGroup = false;
   bool _replacingSubscription = false;
   bool _cancellingSubscription = false;
   bool _creatingPayment = false;

@@ -147,7 +147,7 @@ void main() {
       routed: true,
     );
 
-    final progress = find.byKey(const Key('client-section-jump-progress'));
+    final progress = find.byKey(const Key('client-section-heading-progress'));
     await tester.ensureVisible(progress);
     await tester.tap(progress);
     await tester.pumpAndSettle();
@@ -159,7 +159,7 @@ void main() {
     );
     expect(
       find.byKey(const Key('client-desktop-section-subscriptions')),
-      findsNothing,
+      findsOneWidget,
     );
     expect(
       tester

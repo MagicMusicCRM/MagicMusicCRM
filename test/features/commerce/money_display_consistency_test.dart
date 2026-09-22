@@ -120,6 +120,8 @@ void main() {
         expect(find.text(expected), findsNWidgets(2));
 
         await tester.ensureVisible(find.text('Поступления и списания'));
+        await tester.pumpAndSettle();
+        expect(find.text('Поступления и списания').hitTestable(), findsOneWidget);
         await tester.tap(find.text('Поступления и списания'));
         await tester.pumpAndSettle();
         final movement = find.byKey(

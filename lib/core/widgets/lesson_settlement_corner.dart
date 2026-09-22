@@ -10,12 +10,16 @@ class LessonSettlementCorner extends StatelessWidget {
     required this.child,
     this.timeline = false,
     this.expand = true,
+    this.surfaceOwnedByParent = false,
   });
 
   final String? settlementTypeKey;
   final Widget child;
   final bool timeline;
   final bool expand;
+
+  /// Calendar/timeline tiles already own their outline and full tooltip.
+  final bool surfaceOwnedByParent;
 
   static String? labelFor(String? key) => switch (key) {
     null || '' => null,
@@ -32,7 +36,7 @@ class LessonSettlementCorner extends StatelessWidget {
 
   static Color? colorFor(String? key) => switch (key) {
     null || '' => null,
-    'lesson' => AppColor.text2,
+    'lesson' => AppColor.actionBlue,
     'trial_lesson' => AppColor.settlementTrial,
     'partially_paid_lesson' ||
     'partially_paid_miss' => AppColor.settlementPartial,
@@ -48,11 +52,25 @@ class LessonSettlementCorner extends StatelessWidget {
   }
 
   static Color backgroundFor(String? key, {bool isTrial = false}) =>
-      (colorFor(effectiveKey(key, isTrial: isTrial)) ?? AppColor.text2)
-          .withValues(alpha: 0.11);
+      switch (effectiveKey(key, isTrial: isTrial)) {
+        'lesson' => AppColor.settlementLessonFill,
+        'trial_lesson' => AppColor.settlementTrialFill,
+        'partially_paid_lesson' => AppColor.settlementPartialFill,
+        'free_lesson' => AppColor.settlementFreeFill,
+        'paid_miss' => AppColor.settlementPaidMissFill,
+        'partially_paid_miss' => AppColor.settlementPartialMissFill,
+        'penalty_lesson' => AppColor.settlementPenaltyFill,
+        _ => AppColor.settlementUnpaidFill,
+      };
 
   @override
   Widget build(BuildContext context) {
+    if (surfaceOwnedByParent) {
+      return KeyedSubtree(
+        key: ValueKey('settlement-background-$settlementTypeKey'),
+        child: child,
+      );
+    }
     final color = colorFor(settlementTypeKey);
     if (color == null) return child;
     final label = labelFor(settlementTypeKey)!;

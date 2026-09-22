@@ -247,7 +247,7 @@ void main() {
             await open();
             await details();
             await reference(EntityLinkType.client);
-            await h.tap(key('client-section-jump-history_tasks'));
+            await h.tap(key('client-section-heading-history_tasks'));
             await h.quiet();
             final cards = tester.widgetList<AuditEventCard>(
               find.byType(AuditEventCard),

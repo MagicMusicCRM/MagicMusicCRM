@@ -58,8 +58,12 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           KeyedSubtree(
-            key: const Key('client-desktop-section-rail'),
-            child: _buildDesktopIdentitySidebar(cs, currentStatus, tabs),
+            key: const Key('client-desktop-contact-sidebar'),
+            child: _buildDesktopIdentitySidebar(
+              cs,
+              canReadSchedule: canReadSchedule,
+              canWriteSchedule: canWriteSchedule,
+            ),
           ),
           VerticalDivider(width: 1, color: cs.outlineVariant),
           Expanded(
@@ -105,11 +109,6 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canReadTasks,
   }) {
     final bySection = {for (final tab in tabs) tab.$3: tab};
-    final selected = _selectedSection == 'profile'
-        ? 'profile'
-        : bySection.containsKey(_selectedSection)
-        ? _selectedSection
-        : tabs.first.$3;
     Widget card(
       (IconData, String, String) tab, {
       _EqualHeightMetrics? equalHeight,
@@ -131,39 +130,71 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       ),
     );
 
-    if (selected == 'profile') {
-      return KeyedSubtree(
-        key: const Key('client-desktop-selected-profile'),
-        child: _desktopSectionCard(
-          cs,
-          key: _desktopSectionKeys['profile']!,
-          section: 'profile',
-          icon: Icons.badge_outlined,
-          title: 'Данные клиента',
-          child: _buildClientInfoTab(
-            cs,
-            currentStatus,
-            embedded: true,
-            canWriteSchedule: canWriteSchedule,
+    return Column(
+      key: const Key('client-desktop-continuous-page'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        KeyedSubtree(
+          key: _desktopSectionKeys['overview'],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_internalContextAllowed) ...[
+                _buildClientNoteEditor(compact: true),
+                const SizedBox(height: 10),
+              ],
+              _desktopSectionCard(
+                cs,
+                key: _desktopSectionKeys['profile']!,
+                section: 'profile',
+                icon: Icons.badge_outlined,
+                title: _isStudent
+                    ? 'Информация об ученике'
+                    : 'Информация о клиенте',
+                child: _isStudent
+                    ? _studentGuard(
+                        cs,
+                        () => _buildDesktopClientFields(cs, currentStatus),
+                      )
+                    : _buildDesktopClientFields(cs, currentStatus),
+              ),
+            ],
           ),
         ),
-      );
-    }
-
-    final selectedTab = bySection[selected]!;
-    if (selected != 'overview') {
-      return KeyedSubtree(
-        key: Key('client-desktop-selected-$selected'),
-        child: card(selectedTab),
-      );
-    }
-
-    return _buildDesktopOverviewDashboard(
-      cs,
-      currentStatus,
-      canReadClientFinance: canReadClientFinance,
-      canReadSchedule: canReadSchedule,
-      canReadTasks: canReadTasks,
+        const SizedBox(height: 10),
+        if (bySection['lessons'] case final tab?) card(tab),
+        const SizedBox(height: 10),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final subscription = bySection['subscriptions'];
+            final progress = bySection['progress'];
+            if (constraints.maxWidth >= 760 &&
+                subscription != null &&
+                progress != null) {
+              return _EqualHeightPair(
+                gap: 10,
+                leftBuilder: (metrics) =>
+                    card(subscription, equalHeight: metrics),
+                rightBuilder: (metrics) => card(progress, equalHeight: metrics),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (subscription != null) card(subscription),
+                const SizedBox(height: 10),
+                if (progress != null) card(progress),
+              ],
+            );
+          },
+        ),
+        for (final section in ['payments', 'history_tasks', 'contacts'])
+          if (bySection[section] case final tab?) ...[
+            const SizedBox(height: 10),
+            card(tab),
+          ],
+        _buildDesktopClientAdministration(cs),
+      ],
     );
   }
 
@@ -206,7 +237,11 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         cs,
         canReadTasks: canReadTasks,
       ),
-      'contacts' => _buildFamilyTab(cs, embedded: true),
+      'contacts' => _buildFamilyTab(
+        cs,
+        embedded: true,
+        includeContactPersons: false,
+      ),
       _ => _buildClientInfoTab(
         cs,
         currentStatus,
@@ -230,11 +265,12 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         InkWell(
+          key: Key('client-section-heading-$section'),
           onTap: () => _selectSection(section),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpace.xl,
-              vertical: AppSpace.md,
+              vertical: 8,
             ),
             child: Row(
               children: [
@@ -301,7 +337,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               (
                 'Задачи',
                 Icons.task_alt_rounded,
-                SizedBox(height: 520, child: _buildStudentTasksTab(cs)),
+                _buildStudentTasksTab(cs, compactEmpty: true),
               ),
             (
               'Комментарии',
@@ -320,7 +356,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               (
                 'Задачи',
                 Icons.task_alt_rounded,
-                SizedBox(height: 520, child: _buildTasksTab(cs)),
+                _buildTasksTab(cs, compactEmpty: true),
               ),
             (
               'Комментарии',
@@ -718,7 +754,11 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     });
   }
 
-  Widget _buildCustomFieldsExpansion(ColorScheme cs) {
+  Widget _buildCustomFieldsExpansion(
+    ColorScheme cs, {
+    Set<String> excludedKeys = const {},
+    bool compact = false,
+  }) {
     return Container(
       key: const Key('client-custom-fields-expansion'),
       clipBehavior: Clip.antiAlias,
@@ -728,6 +768,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         border: Border.all(color: cs.outlineVariant),
       ),
       child: ExpansionTile(
+        dense: compact,
         initiallyExpanded: _customFieldsExpanded,
         maintainState: false,
         onExpansionChanged: (expanded) {
@@ -738,7 +779,9 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
           'Дополнительные поля',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
-        subtitle: const Text('Пользовательские данные клиента и ученика'),
+        subtitle: compact
+            ? null
+            : const Text('Пользовательские данные клиента и ученика'),
         children: _customFieldsExpanded
             ? [
                 Divider(height: 1, color: cs.outlineVariant),
@@ -758,6 +801,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
                           _isStudent ? 'students' : 'leads',
                           excludedKeys: _ClientCardState
                               ._customKeysWithDedicatedEditor
+                              .union(excludedKeys)
                               .union(
                                 _ClientCardState
                                     ._primaryBusinessCustomFieldKeys,

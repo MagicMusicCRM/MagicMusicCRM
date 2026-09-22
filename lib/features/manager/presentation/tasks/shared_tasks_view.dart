@@ -25,6 +25,7 @@ class SharedTasksView extends StatefulWidget {
     required this.canEdit,
     this.onOpenResults,
     this.embedded = false,
+    this.compactEmpty = false,
     this.showViewToolbar = true,
     this.scrollController,
   });
@@ -43,6 +44,7 @@ class SharedTasksView extends StatefulWidget {
   final bool canEdit;
   final VoidCallback? onOpenResults;
   final bool embedded;
+  final bool compactEmpty;
   final bool showViewToolbar;
   final ScrollController? scrollController;
 
@@ -135,7 +137,21 @@ class _SharedTasksViewState extends State<SharedTasksView> {
         );
       },
     );
-    if (widget.embedded) return content;
+    if (widget.embedded) {
+      if (!widget.compactEmpty) return content;
+      return SizedBox(
+        height:
+            widget.state.hasLoaded &&
+                !widget.state.loading &&
+                !widget.state.showContentNotice &&
+                widget.state.error == null &&
+                widget.state.items.isEmpty &&
+                !widget.state.query.calendarMode
+            ? 150 * MediaQuery.textScalerOf(context).scale(1)
+            : 520,
+        child: content,
+      );
+    }
     final mobile = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
@@ -210,11 +226,13 @@ class _SharedTasksViewState extends State<SharedTasksView> {
         ),
       );
     } else if (state.items.isEmpty) {
-      content = const MagicPageState(
-        kind: MagicPageStateKind.empty,
-        title: 'Нет задач',
-        message: 'Создайте задачу, чтобы она появилась в этом списке.',
-      );
+      content = widget.compactEmpty
+          ? const Center(child: Text('Нет задач по выбранному фильтру'))
+          : const MagicPageState(
+              kind: MagicPageStateKind.empty,
+              title: 'Нет задач',
+              message: 'Создайте задачу, чтобы она появилась в этом списке.',
+            );
     } else {
       content = RefreshIndicator(
         onRefresh: widget.onRefresh,
@@ -656,24 +674,22 @@ class _DesktopTaskFilter extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     key: const Key('shared-task-desktop-filter'),
     padding: const EdgeInsets.all(12),
-    child: Row(
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (final entry in _stateFilters)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(entry.$2),
-              selected: value == entry.$1,
-              onSelected: (_) => onChanged(entry.$1),
-            ),
+          ChoiceChip(
+            label: Text(entry.$2),
+            selected: value == entry.$1,
+            onSelected: (_) => onChanged(entry.$1),
           ),
-        const Spacer(),
         Text(
           'Открыто: ${counters['open'] ?? 0}',
           style: const TextStyle(color: AppColor.text2),
         ),
         if (onCreate != null) ...[
-          const SizedBox(width: AppSpace.md),
           FilledButton.icon(
             onPressed: onCreate,
             icon: const Icon(Icons.add_task_rounded),

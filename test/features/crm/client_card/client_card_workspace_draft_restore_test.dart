@@ -117,12 +117,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('client-section-jump-profile')));
+    await tester.tap(find.byKey(const Key('client-edit-name')));
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Имя'),
+      find.byKey(const Key('client-name-first')),
       'До закрытия',
     );
+    await tester.tap(find.byKey(const Key('client-name-apply')));
     await tester.pump();
 
     const formKey = 'client-card:lead:lead-1';

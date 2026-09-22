@@ -1,14 +1,20 @@
 part of 'client_card.dart';
 
 extension _ClientCardAssignmentEditors on _ClientCardState {
-  Widget _buildBranchDropdown(ColorScheme cs, String label) {
+  Widget _buildBranchDropdown(
+    ColorScheme cs,
+    String label, {
+    bool compact = false,
+  }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: SearchablePickerField(
+        enabled: _canWriteClient,
         label: label,
         selectedId: _clientBranchId,
         placeholder: 'Выберите филиал',
         hintText: 'Введите название филиала',
+        showSearchHint: !compact,
         isNullable: false,
         items: _branches
             .map(
@@ -23,16 +29,18 @@ extension _ClientCardAssignmentEditors on _ClientCardState {
     );
   }
 
-  Widget _buildSourceDropdown(ColorScheme cs) {
+  Widget _buildSourceDropdown(ColorScheme cs, {bool compact = false}) {
     final current = _clientSourceId;
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: SearchablePickerField(
+        enabled: _canWriteClient,
         key: ValueKey('client-source-$_editorEpoch'),
         label: 'Рекламный источник *',
         selectedId: current,
         placeholder: 'Выберите источник',
         hintText: 'Введите название источника',
+        showSearchHint: !compact,
         isNullable: false,
         items: _sources
             .where(
@@ -131,6 +139,7 @@ extension _ClientCardAssignmentEditors on _ClientCardState {
   }
 
   Future<void> _pickResponsible(String entity) async {
+    if (!_canWriteClient) return;
     final crm = ref.read(magicCrmServiceProvider);
 
     Future<List<SearchableSelectItem>> search(String query) async {
@@ -175,10 +184,10 @@ extension _ClientCardAssignmentEditors on _ClientCardState {
   Widget _buildResponsiblePicker(ColorScheme cs, String entity) {
     final value = _responsibleDisplayValue(entity);
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        onTap: () => _pickResponsible(entity),
+        onTap: _canWriteClient ? () => _pickResponsible(entity) : null,
         child: InputDecorator(
           decoration: _inputDecoration(
             cs,
@@ -192,8 +201,10 @@ extension _ClientCardAssignmentEditors on _ClientCardState {
                 : IconButton(
                     tooltip: 'Очистить',
                     icon: const Icon(Icons.close_rounded, size: 16),
-                    onPressed: () =>
-                        _setResponsible(entity, name: null, userId: null),
+                    onPressed: _canWriteClient
+                        ? () =>
+                              _setResponsible(entity, name: null, userId: null)
+                        : null,
                   ),
           ),
           child: Text(

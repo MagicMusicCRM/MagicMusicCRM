@@ -10,7 +10,7 @@ extension _ClientCardCustomFields on _ClientCardState {
     String? errorText,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: TextFormField(
         // Keyed on the data epoch, NOT the live value: a value-derived key
         // recreated the field on every keystroke, dropping cursor/IME state.
@@ -108,16 +108,22 @@ extension _ClientCardCustomFields on _ClientCardState {
 
   Widget _buildCustomFieldControl(
     ColorScheme cs,
-    CrmCustomFieldDefinition field,
-  ) {
+    CrmCustomFieldDefinition field, {
+    bool compact = false,
+  }) {
     if (!field.placements.contains('edit')) {
       return _buildReadOnlyCustomField(cs, field);
     }
     final rawValue = _customFieldRawValue(field);
     final label = field.required ? '${field.label} *' : field.label;
     return switch (field.type) {
-      'select' ||
-      'radio' => _buildSingleChoiceCustomField(cs, field, label, rawValue),
+      'select' || 'radio' => _buildSingleChoiceCustomField(
+        cs,
+        field,
+        label,
+        rawValue,
+        compact: compact,
+      ),
       'boolean' || 'toggle' => _buildBooleanCustomField(field, label, rawValue),
       'date' => _buildDateCustomField(cs, field, rawValue?.toString()),
       'datetime' => _buildDateTimeCustomField(cs, field, rawValue?.toString()),
@@ -150,7 +156,7 @@ extension _ClientCardCustomFields on _ClientCardState {
     final rawValue = _customFieldRawValue(field);
     final value = _readOnlyCustomFieldValue(field.type, rawValue);
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: InputDecorator(
         key: ValueKey('custom-field-readonly-${field.key}'),
         decoration: _inputDecoration(cs, label: field.label, isDense: true),
@@ -228,7 +234,7 @@ extension _ClientCardCustomFields on _ClientCardState {
 
     final label = _ageLabel();
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: InputDecorator(
         decoration: _inputDecoration(
           cs,

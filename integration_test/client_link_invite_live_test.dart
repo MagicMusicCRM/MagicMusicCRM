@@ -133,7 +133,7 @@ void main() {
         'Без email приглашение не отправляется и показано объяснение',
         () async {
           await open('student', sid);
-          await h.tap(key('client-section-jump-contacts'));
+          await h.tap(key('client-section-heading-contacts'));
           final n = h.requests
               .where(
                 (r) =>
@@ -163,7 +163,7 @@ void main() {
         'EMAIL',
         'Заполнить email подтверждённого аккаунта и сохранить перед приглашением',
         () async {
-          await h.tap(key('client-section-jump-overview'));
+          await h.tap(key('client-section-heading-profile'));
           final field = find.widgetWithText(TextFormField, 'Электронная почта');
           await h.tap(field);
           await tester.enterText(field, email);
@@ -176,7 +176,7 @@ void main() {
         'INVITE',
         'Кнопка приглашения отправляет команду и связывает подтверждённый аккаунт',
         () async {
-          await h.tap(key('client-section-jump-contacts'));
+          await h.tap(key('client-section-heading-contacts'));
           await h.tap(key('client-send-invite'));
           await h.quiet();
           expect(find.text('Приглашение отправлено'), findsWidgets);
@@ -190,7 +190,7 @@ void main() {
         'Привязанный аккаунт виден после повторного открытия карточки',
         () async {
           await open('student', sid);
-          await h.tap(key('client-section-jump-contacts'));
+          await h.tap(key('client-section-heading-contacts'));
           expect((await crm.getClientLinkedUsers('student', sid)).length, 1);
           expect(find.byKey(const Key('client-app-access')), findsOneWidget);
         },

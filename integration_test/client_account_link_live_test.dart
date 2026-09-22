@@ -80,7 +80,7 @@ void main() {
               'Account section loaded',
             );
             await h.quiet();
-            await h.tap(find.byKey(const Key('client-section-jump-contacts')));
+            await h.tap(find.byKey(const Key('client-section-heading-contacts')));
           }
 
           Future<List<Map<String, dynamic>>> linked() async {
@@ -147,7 +147,7 @@ void main() {
             'Сохранить имя после привязки аккаунта без переоткрытия',
             () async {
               await h.tap(
-                find.byKey(const Key('client-section-jump-overview')),
+                find.byKey(const Key('client-section-heading-profile')),
               );
               final name = find.widgetWithText(TextFormField, 'Имя');
               await h.tap(name);

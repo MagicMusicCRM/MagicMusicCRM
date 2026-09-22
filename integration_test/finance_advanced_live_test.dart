@@ -92,7 +92,7 @@ void main() {
             ),
           );
           await h.quiet();
-          await h.tap(key('client-section-jump-payments'));
+          await h.tap(key('client-section-heading-payments'));
           await h.quiet();
         }
 

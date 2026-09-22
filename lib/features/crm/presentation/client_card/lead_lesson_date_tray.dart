@@ -303,9 +303,11 @@ class _LeadLessonDateTrayState extends State<LeadLessonDateTray> {
     final tooltip = [
       DateFormat('dd.MM.yyyy HH:mm', 'ru').format(dt.toLocal()),
       projection.label,
+      ?LessonSettlementCorner.labelFor(settlementKey),
+      if (lesson['teacher_name'] != null) lesson['teacher_name'].toString(),
+      if (lesson['room_name'] != null) lesson['room_name'].toString(),
       if (lessonHasSubscriptionCoverage(lesson))
         LessonSubscriptionBadge.tooltip,
-      if (isTrial) 'Пробное занятие',
       if (paid != null) 'Оплачено: ${formatPaymentMajor(paid)}',
       if (notes.isNotEmpty) notes,
     ].join('\n');
@@ -318,96 +320,30 @@ class _LeadLessonDateTrayState extends State<LeadLessonDateTray> {
         onTap: widget.canWrite && widget.onOpenLesson != null
             ? () => widget.onOpenLesson!(lesson)
             : null,
-        child: Stack(
-          children: [
-            Container(
-              width: 46,
-              height: 30,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: LessonSettlementCorner.backgroundFor(settlementKey),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: accent.withValues(alpha: 0.45)),
-              ),
-              child: Text(
+        child: Container(
+          width: 46,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: LessonSettlementCorner.backgroundFor(settlementKey),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: accent.withValues(alpha: 0.45)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
                 DateFormat('d.MM').format(dt.toLocal()),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: accent,
+                  color: AppColor.text,
                 ),
               ),
-            ),
-            Positioned(
-              left: 2,
-              bottom: 1,
-              child: Icon(
-                projection.token.icon,
-                size: 9,
-                color: projection.token.accent,
-              ),
-            ),
-            if (isTrial)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColor.gold,
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(4),
-                      bottomLeft: Radius.circular(4),
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Text(
-                    'П',
-                    style: TextStyle(
-                      fontSize: 6,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            // Оплаченный день — уголок с рублём внизу слева: правый верхний уже
-            // занят пропуском, а день бывает и пропущенным, и оплаченным.
-            if (paid != null)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                child: Container(
-                  width: 12,
-                  height: 10,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: AppColor.success,
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(4),
-                      topRight: Radius.circular(4),
-                    ),
-                  ),
-                  child: const Text(
-                    '₽',
-                    style: TextStyle(
-                      fontSize: 7,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            if (lessonHasSubscriptionCoverage(lesson))
-              const Positioned(
-                bottom: 0,
-                right: 0,
-                child: LessonSubscriptionBadge(compact: true, iconOnly: true),
-              ),
-          ],
+              if (projection.tileIcon case final icon?)
+                Icon(icon, size: 13, color: AppColor.text),
+            ],
+          ),
         ),
       ),
     );

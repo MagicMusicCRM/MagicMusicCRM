@@ -46,7 +46,11 @@ extension _ClientCardCollaborationTabs on _ClientCardState {
   }
 
   // ── Tab: Семья ───────────────────────────────────────────────────────────
-  Widget _buildFamilyTab(ColorScheme cs, {bool embedded = false}) {
+  Widget _buildFamilyTab(
+    ColorScheme cs, {
+    bool embedded = false,
+    bool includeContactPersons = true,
+  }) {
     const padding = EdgeInsets.fromLTRB(
       AppSpace.xl,
       AppSpace.lg,
@@ -78,7 +82,8 @@ extension _ClientCardCollaborationTabs on _ClientCardState {
         // #14: контактные лица живут на одной вкладке с семьёй — из Инфо
         // дубль убран.
         const SizedBox(height: AppSpace.lg),
-        _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
+        if (includeContactPersons)
+          _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
         // #9: строка «Контакты» из выгрузки HolliHop (custom_data.contacts) —
         // только чтение, показывается когда заполнена.
         if (_storedCustomField('contacts') != null)

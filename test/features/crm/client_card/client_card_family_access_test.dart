@@ -285,7 +285,7 @@ Iterable<CardPostCall> _invitePosts(FakeCardApiClient api) => api.postRequests
     .where((request) => request.path == '/crm/students/student-1/invite');
 
 Future<void> _openSection(WidgetTester tester, String section) async {
-  final target = find.byKey(Key('client-section-jump-$section'));
+  final target = find.byKey(Key('client-section-heading-$section'));
   await tester.ensureVisible(target);
   await tester.tap(target);
   await tester.pumpAndSettle();

@@ -95,7 +95,7 @@ void main() {
           }
 
           Future<void> familySection() =>
-              h.tap(find.byKey(const Key('client-section-jump-contacts')));
+              h.tap(find.byKey(const Key('client-section-heading-contacts')));
           Future<void> addSheet() async {
             await familySection();
             await h.tap(find.widgetWithText(TextButton, 'Добавить'));
@@ -223,7 +223,7 @@ void main() {
             }
           }
           Future<void> commentsSection() =>
-              h.tap(find.byKey(const Key('client-section-jump-history_tasks')));
+              h.tap(find.byKey(const Key('client-section-heading-history_tasks')));
           final commentField = find.byWidgetPredicate(
             (w) =>
                 w is TextField &&

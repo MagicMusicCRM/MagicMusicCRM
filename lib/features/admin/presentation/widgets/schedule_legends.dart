@@ -3,7 +3,6 @@ import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
-import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 
 class ScheduleMonthLegend extends StatelessWidget {
   const ScheduleMonthLegend({super.key});
@@ -38,15 +37,17 @@ class _ScheduleLessonLegend extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: token.soft,
+          color: cs.surface,
           borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: accent.withValues(alpha: 0.35)),
+          border: Border.all(color: AppColor.borderSoft),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(token.icon, size: 13, color: accent),
-            const SizedBox(width: 5),
+            if (token != LessonStateToken.booked) ...[
+              Icon(token.icon, size: 13, color: accent),
+              const SizedBox(width: 5),
+            ],
             Text(
               token.label,
               style: TextStyle(
@@ -126,8 +127,6 @@ class _ScheduleLessonLegend extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          const LessonSubscriptionBadge(),
         ],
       ),
     );

@@ -5,7 +5,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 /// (client_card_sheets.dart). None of these touch card state — they are plain
 /// factories, so they live outside the State class and can be reused freely.
 
-InputDecorationTheme _clientCardInputTheme() {
+InputDecorationTheme _clientCardInputTheme({bool compact = false}) {
   final radius = BorderRadius.circular(AppRadius.control);
   final enabledBorder = OutlineInputBorder(
     borderRadius: radius,
@@ -15,7 +15,16 @@ InputDecorationTheme _clientCardInputTheme() {
     filled: true,
     fillColor: AppColor.surface,
     isDense: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+    contentPadding: EdgeInsets.symmetric(
+      horizontal: compact ? 10 : 14,
+      vertical: compact ? 8 : 13,
+    ),
+    prefixIconConstraints: compact
+        ? const BoxConstraints(minWidth: 32, minHeight: 36)
+        : null,
+    suffixIconConstraints: compact
+        ? const BoxConstraints(minWidth: 32, minHeight: 36)
+        : null,
     labelStyle: const TextStyle(
       color: AppColor.text2,
       fontSize: 13,
@@ -55,8 +64,8 @@ InputDecorationTheme _clientCardInputTheme() {
 ///
 /// It keeps native Flutter controls and their overlay menus on the same
 /// semantic surface without changing any picker behaviour or app-wide theme.
-ThemeData clientCardControlTheme(ThemeData base) {
-  final inputTheme = _clientCardInputTheme();
+ThemeData clientCardControlTheme(ThemeData base, {bool compact = false}) {
+  final inputTheme = _clientCardInputTheme(compact: compact);
   final menuButtonStyle = ButtonStyle(
     minimumSize: const WidgetStatePropertyAll(Size.fromHeight(46)),
     padding: const WidgetStatePropertyAll(
@@ -81,6 +90,16 @@ ThemeData clientCardControlTheme(ThemeData base) {
     ),
   );
   return base.copyWith(
+    visualDensity: compact ? VisualDensity.compact : base.visualDensity,
+    iconButtonTheme: compact
+        ? IconButtonThemeData(
+            style: IconButton.styleFrom(
+              minimumSize: const Size(32, 32),
+              padding: const EdgeInsets.all(4),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          )
+        : base.iconButtonTheme,
     inputDecorationTheme: inputTheme,
     dropdownMenuTheme: DropdownMenuThemeData(
       textStyle: const TextStyle(color: AppColor.text, fontSize: 15),
@@ -113,6 +132,7 @@ InputDecoration clientCardInputDecoration(
   String? helperText,
   String? errorText,
   bool isDense = false,
+  bool compact = false,
   Widget? suffixIcon,
 }) {
   return InputDecoration(
@@ -122,7 +142,7 @@ InputDecoration clientCardInputDecoration(
     errorText: errorText,
     isDense: isDense,
     suffixIcon: suffixIcon,
-  ).applyDefaults(_clientCardInputTheme());
+  ).applyDefaults(_clientCardInputTheme(compact: compact));
 }
 
 /// Primary gold action button used in sheet action rows.

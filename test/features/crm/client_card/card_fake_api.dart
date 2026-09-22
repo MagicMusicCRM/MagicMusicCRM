@@ -1170,8 +1170,11 @@ Future<void> pumpClientCard(
   CapabilitySnapshot? capabilitySnapshot,
   ValueChanged<bool?>? onClosed,
   double textScale = 1,
+  ThemeData? theme,
+  double topChromeHeight = 0,
 }) async {
   final app = MaterialApp(
+    theme: theme,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(
         context,
@@ -1195,7 +1198,23 @@ Future<void> pumpClientCard(
                     initialViewState: initialViewState,
                     capabilitySnapshot: capabilitySnapshot,
                   );
-                  return routed ? Material(child: card) : card;
+                  return routed
+                      ? Material(
+                          child: Column(
+                            children: [
+                              if (topChromeHeight > 0)
+                                SizedBox(
+                                  height: topChromeHeight,
+                                  child: const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text('Клиенты › Карточка клиента'),
+                                  ),
+                                ),
+                              Expanded(child: card),
+                            ],
+                          ),
+                        )
+                      : card;
                 },
               ).then((result) => onClosed?.call(result));
             },

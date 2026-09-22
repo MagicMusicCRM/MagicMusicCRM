@@ -5,15 +5,16 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
     ColorScheme cs,
     CrmCustomFieldDefinition field,
     String label,
-    Object? rawValue,
-  ) {
+    Object? rawValue, {
+    bool compact = false,
+  }) {
     final current = rawValue?.toString() ?? '';
     final selectedId = field.options.contains(current) ? current : null;
     if (field.type == 'radio') {
       return _buildRadioCustomField(cs, field, label, selectedId);
     }
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: IgnorePointer(
         ignoring: !_canWriteClient,
         child: SearchablePickerField(
@@ -21,6 +22,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
           selectedId: selectedId,
           placeholder: 'Выберите значение',
           hintText: field.hint ?? 'Введите значение для поиска',
+          showSearchHint: !compact || field.hint != null,
           items: [
             for (final option in field.options)
               SearchableSelectItem(id: option, label: option),
@@ -39,7 +41,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
     String? selectedId,
   ) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: InputDecorator(
         decoration: _inputDecoration(cs, label: label, isDense: true),
         child: Wrap(
@@ -111,7 +113,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
         .map((value) => value.toString())
         .toSet();
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: InputDecorator(
         decoration: _inputDecoration(cs, label: label, isDense: true),
         child: Wrap(
@@ -148,7 +150,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
     TextInputType? keyboard,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: TextFormField(
         // Epoch key, not value key — see _buildClientTextField.
         key: ValueKey('${field.entity}-${field.key}-$_editorEpoch'),
@@ -196,7 +198,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
         : 'Не выбрано';
     final label = field.required ? '${field.label} *' : field.label;
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.control),
         onTap: !_canWriteClient
@@ -249,7 +251,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
     final current = value == null ? null : DateTime.tryParse(value)?.toLocal();
     final label = field.required ? '${field.label} *' : field.label;
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.control),
         onTap: () async {

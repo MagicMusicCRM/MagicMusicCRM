@@ -56,9 +56,11 @@ class ClientInternalNoteCard extends StatefulWidget {
     required this.onDraftChanged,
     this.initialDraft,
     this.error,
+    this.compact = false,
   });
 
   final bool loading;
+  final bool compact;
   final String? error;
   final ClientInternalNote? note;
   final Future<ClientInternalNote> Function(String body, int expectedVersion)
@@ -271,7 +273,7 @@ class _ClientInternalNoteCardState extends State<ClientInternalNoteCard> {
     final note = widget.note;
     return Container(
       key: const Key('client-internal-note'),
-      padding: const EdgeInsets.all(AppSpace.lg),
+      padding: EdgeInsets.all(widget.compact ? 10 : AppSpace.lg),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border.all(color: cs.outlineVariant),
@@ -280,26 +282,48 @@ class _ClientInternalNoteCardState extends State<ClientInternalNoteCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.sticky_note_2_outlined, color: AppColor.gold),
-              SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: Text(
-                  'Заметка о клиенте',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          if (!widget.compact)
+            const Row(
+              children: [
+                Icon(Icons.sticky_note_2_outlined, color: AppColor.gold),
+                SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    'Заметка о клиенте',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpace.sm),
+              ],
+            ),
+          if (!widget.compact) const SizedBox(height: AppSpace.sm),
           TextField(
             key: const Key('client-internal-note-input'),
             controller: _controller,
-            minLines: 2,
-            maxLines: 5,
+            minLines: widget.compact ? 1 : 2,
+            maxLines: widget.compact ? 3 : 5,
             maxLength: 20000,
-            decoration: const InputDecoration(
+            style: widget.compact ? const TextStyle(fontSize: 14) : null,
+            decoration: InputDecoration(
+              labelText: widget.compact ? 'Заметка о клиенте' : null,
+              suffixIcon: widget.compact && _saveError == null
+                  ? Tooltip(
+                      message: [
+                        _dirty || _saving ? 'Сохраняем…' : 'Сохранено',
+                        if (note?.updatedAt != null)
+                          '${note?.updatedByName ?? 'Вы'} · ${DateFormat('dd.MM.yyyy HH:mm').format(note!.updatedAt!.toLocal())}',
+                      ].join('\n'),
+                      child: Icon(
+                        _dirty || _saving
+                            ? Icons.sync_rounded
+                            : Icons.check_circle_outline_rounded,
+                        size: 17,
+                        color: _dirty || _saving
+                            ? AppColor.text2
+                            : AppColor.success,
+                      ),
+                    )
+                  : null,
+              counterText: widget.compact ? '' : null,
               hintText: 'Общий контекст для администраторов и руководителей',
               alignLabelWithHint: true,
             ),
@@ -329,69 +353,70 @@ class _ClientInternalNoteCardState extends State<ClientInternalNoteCard> {
             ),
             const SizedBox(height: AppSpace.sm),
           ],
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: AppSpace.sm,
-            runSpacing: AppSpace.sm,
-            children: [
-              if (note?.updatedAt != null)
-                Text(
-                  '${note?.updatedByName?.trim().isNotEmpty == true ? note!.updatedByName : 'Вы'} · '
-                  '${DateFormat('dd.MM.yyyy HH:mm').format(note!.updatedAt!.toLocal())}',
-                  style: const TextStyle(color: AppColor.text2, fontSize: 12),
-                )
-              else
-                const Text(
-                  'Заметка пока не заполнена',
-                  style: TextStyle(color: AppColor.text2, fontSize: 12),
-                ),
-              if (_saveError != null)
-                FilledButton.icon(
-                  key: const Key('client-internal-note-retry'),
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          setState(() => _conflict = false);
-                          unawaited(_save());
-                        },
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text('Повторить'),
-                )
-              else
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _dirty || _saving
-                          ? Icons.sync_rounded
-                          : Icons.check_circle_outline_rounded,
-                      size: 17,
-                      color: _dirty || _saving
-                          ? cs.onSurfaceVariant
-                          : AppColor.success,
-                    ),
-                    const SizedBox(width: AppSpace.xs),
-                    Text(
-                      _dirty || _saving ? 'Сохраняем…' : 'Сохранено',
-                      style: TextStyle(
+          if (!widget.compact || _saveError != null || _conflict)
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                if (note?.updatedAt != null)
+                  Text(
+                    '${note?.updatedByName?.trim().isNotEmpty == true ? note!.updatedByName : 'Вы'} · '
+                    '${DateFormat('dd.MM.yyyy HH:mm').format(note!.updatedAt!.toLocal())}',
+                    style: const TextStyle(color: AppColor.text2, fontSize: 12),
+                  )
+                else if (_controller.text.trim().isEmpty)
+                  const Text(
+                    'Заметка пока не заполнена',
+                    style: TextStyle(color: AppColor.text2, fontSize: 12),
+                  ),
+                if (_saveError != null)
+                  FilledButton.icon(
+                    key: const Key('client-internal-note-retry'),
+                    onPressed: _saving
+                        ? null
+                        : () {
+                            setState(() => _conflict = false);
+                            unawaited(_save());
+                          },
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Повторить'),
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _dirty || _saving
+                            ? Icons.sync_rounded
+                            : Icons.check_circle_outline_rounded,
+                        size: 17,
                         color: _dirty || _saving
                             ? cs.onSurfaceVariant
                             : AppColor.success,
-                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
+                      const SizedBox(width: AppSpace.xs),
+                      Text(
+                        _dirty || _saving ? 'Сохраняем…' : 'Сохранено',
+                        style: TextStyle(
+                          color: _dirty || _saving
+                              ? cs.onSurfaceVariant
+                              : AppColor.success,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
         ],
       ),
     );
   }
 }
 
-class ClientOperationalHistoryView extends ConsumerWidget {
+class ClientOperationalHistoryView extends ConsumerStatefulWidget {
   const ClientOperationalHistoryView({
     super.key,
     required this.loading,
@@ -414,15 +439,29 @@ class ClientOperationalHistoryView extends ConsumerWidget {
   final VoidCallback onLoadMore;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ClientOperationalHistoryView> createState() =>
+      _ClientOperationalHistoryViewState();
+}
+
+class _ClientOperationalHistoryViewState
+    extends ConsumerState<ClientOperationalHistoryView> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final loading = widget.loading;
+    final items = widget.items;
+    final error = widget.error;
+    final hasMore = widget.hasMore;
+    final loadingMore = widget.loadingMore;
     if (loading && items.isEmpty) return const SkeletonBox(height: 160);
     if (error != null && items.isEmpty) {
       return MagicPageState(
         kind: MagicPageStateKind.error,
         title: 'Не удалось загрузить историю действий',
-        message: error!,
+        message: error,
         actionLabel: 'Повторить',
-        onAction: onRetry,
+        onAction: widget.onRetry,
       );
     }
     return Column(
@@ -443,23 +482,42 @@ class ClientOperationalHistoryView extends ConsumerWidget {
             ),
           )
         else
-          for (final item in items) ...[
-            _clientAuditCard(context, ref, item, capabilitySnapshot),
+          for (final item in _expanded ? items : items.take(3)) ...[
+            _clientAuditCard(context, ref, item, widget.capabilitySnapshot),
             const SizedBox(height: AppSpace.sm),
           ],
-        if (hasMore)
+        if ((!_expanded && items.length > 3) || hasMore)
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               key: const Key('client-operational-history-more'),
-              onPressed: loadingMore ? null : onLoadMore,
+              onPressed: loadingMore
+                  ? null
+                  : () {
+                      if (!_expanded && items.length > 3) {
+                        setState(() => _expanded = true);
+                      } else {
+                        setState(() => _expanded = true);
+                        widget.onLoadMore();
+                      }
+                    },
               icon: loadingMore
                   ? const SizedBox.square(
                       dimension: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.expand_more_rounded),
-              label: const Text('Показать ещё'),
+              label: Text(_expanded ? 'Показать ещё' : 'Показать всю историю'),
+            ),
+          ),
+        if (_expanded)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const Key('client-operational-history-collapse'),
+              onPressed: () => setState(() => _expanded = false),
+              icon: const Icon(Icons.expand_less_rounded),
+              label: const Text('Свернуть до 3 действий'),
             ),
           ),
       ],

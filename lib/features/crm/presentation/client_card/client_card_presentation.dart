@@ -233,14 +233,13 @@ extension _ClientCardPresentation on _ClientCardState {
 
   // Pill badge for the header («Ученик» / «Лид → Ученик»).
   Widget _buildStudentHeader(ColorScheme cs, StatusRecord curStatus) {
-    final contact = _studentContact();
     final converted = _isConverted;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpace.xl,
-        AppSpace.lg,
+        widget.routed ? 8 : AppSpace.lg,
         AppSpace.md,
-        AppSpace.md,
+        widget.routed ? 6 : AppSpace.md,
       ),
       child: Row(
         children: [
@@ -263,16 +262,7 @@ extension _ClientCardPresentation on _ClientCardState {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  contact.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                  ),
-                ),
+                _buildEditableClientName(),
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Row(

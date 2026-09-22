@@ -88,7 +88,7 @@ void main() {
             );
             await h.quiet();
             await h.tap(
-              find.byKey(const Key('client-section-jump-subscriptions')),
+              find.byKey(const Key('client-section-heading-subscriptions')),
             );
           }
 

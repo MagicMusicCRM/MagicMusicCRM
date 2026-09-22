@@ -182,7 +182,7 @@ void main() {
           'Student card loaded from HTTP',
         );
         await tester.pump(const Duration(seconds: 1));
-        final jump = find.byKey(Key('client-section-jump-$section'));
+        final jump = find.byKey(Key('client-section-heading-$section'));
         if (jump.evaluate().isNotEmpty) {
           await tap(jump);
           await tester.pump(const Duration(milliseconds: 500));

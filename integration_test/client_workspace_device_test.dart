@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
@@ -11,8 +13,13 @@ const _student = <String, dynamic>{
   'firstName': 'Анна',
   'lastName': 'Соколова',
   'status': 'active',
+  'version': 2,
+  'phone': '+79990000000',
+  'email': 'anna@example.test',
   'branchId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   'branchName': 'Сокол',
+  'sourceId': 'source-1',
+  'customData': {'responsibleName': 'Мария Управляющая', 'discipline': 'Вокал'},
 };
 
 void main() {
@@ -21,13 +28,47 @@ void main() {
   testWidgets('desktop card owns actions and exact staff context', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.physicalSize = const Size(1366, 768);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final api = FakeCardApiClient(
       role: 'manager',
       student: _student,
+      branches: const [
+        {'id': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'name': 'Сокол'},
+      ],
+      sources: const [
+        {'id': 'source-1', 'displayName': 'Рекомендация', 'isActive': true},
+      ],
+      disciplines: const [
+        {'id': 'vocal', 'name': 'Вокал'},
+        {'id': 'guitar', 'name': 'Гитара'},
+      ],
+      customFields: const [
+        {
+          'entity': 'students',
+          'key': 'learningGoal',
+          'label': 'Цель обучения',
+          'type': 'text',
+          'width': 'half',
+        },
+        {
+          'entity': 'students',
+          'key': 'level',
+          'label': 'Уровень',
+          'type': 'select',
+          'width': 'half',
+          'options': ['Начинающий', 'Продолжающий'],
+        },
+        {
+          'entity': 'students',
+          'key': 'birthday',
+          'label': 'Дата рождения',
+          'type': 'date',
+          'width': 'half',
+        },
+      ],
       internalNote: const {
         'id': 'note-1',
         'body': 'Важен звонок перед занятием',
@@ -66,6 +107,8 @@ void main() {
       seed: _student,
       entityType: 'student',
       routed: true,
+      textScale: 1.25,
+      theme: AppTheme.production,
       capabilitySnapshot: const CapabilitySnapshot(
         accountId: 'manager-a',
         role: 'manager',
@@ -85,26 +128,37 @@ void main() {
     );
 
     expect(
-      find.byKey(const Key('client-desktop-section-jumps')),
+      find.byKey(const Key('client-desktop-continuous-page')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('client-desktop-section-jumps')), findsNothing);
+    expect(find.byType(RuPhoneField), findsOneWidget);
+    expect(
+      find.byKey(const Key('client-edit-name')).hitTestable(),
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('subscription-add'), skipOffstage: false),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const Key('assign-homework'), skipOffstage: false),
-      findsNothing,
-    );
-    expect(find.text('Действия'), findsNothing);
-    expect(
-      find.byKey(const Key('client-desktop-selected-overview')),
+      find.byKey(const Key('client-internal-note-input')).hitTestable(),
       findsOneWidget,
     );
-    await captureEvidence(tester, 'windows-client-workspace-overview');
-
-    await tester.tap(find.byKey(const Key('client-section-jump-profile')));
+    expect(find.byKey(const Key('subscription-add')), findsOneWidget);
+    expect(find.byKey(const Key('assign-homework')), findsOneWidget);
+    await captureEvidence(tester, 'windows-client-continuous-1366x768-125');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Электронная почта'),
+      'updated@example.test',
+    );
+    await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
+    expect(api.updateStudentBody?['email'], 'updated@example.test');
+    await tester.tap(find.byKey(const Key('client-edit-name')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('client-name-first')), 'Мария');
+    await tester.tap(find.byKey(const Key('client-name-apply')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(api.updateStudentBody?['firstName'], 'Мария');
     expect(
       tester
           .widget<TextField>(
@@ -129,19 +183,21 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
 
-    await tester.tap(
-      find.byKey(const Key('client-section-jump-subscriptions')),
+    await tester.ensureVisible(
+      find.byKey(const Key('client-section-heading-subscriptions')),
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('subscription-add')), findsOneWidget);
-    await captureEvidence(tester, 'windows-client-workspace-subscriptions');
+    await captureEvidence(tester, 'windows-client-continuous-subscriptions');
 
-    await tester.tap(find.byKey(const Key('client-section-jump-progress')));
+    await tester.ensureVisible(
+      find.byKey(const Key('client-section-heading-progress')),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('assign-homework')), findsOneWidget);
 
-    await tester.tap(
-      find.byKey(const Key('client-section-jump-history_tasks')),
+    await tester.ensureVisible(
+      find.byKey(const Key('client-section-heading-history_tasks')),
     );
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('audit-event-expand')));
@@ -150,7 +206,9 @@ void main() {
     expect(find.text('Причина: Дубль банковской операции'), findsOneWidget);
     expect(find.textContaining('Анна Администратор'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('client-section-jump-payments')));
+    await tester.ensureVisible(
+      find.byKey(const Key('client-section-heading-payments')),
+    );
     await tester.pumpAndSettle();
 
     for (final key in const [

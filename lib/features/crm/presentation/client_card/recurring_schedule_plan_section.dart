@@ -31,6 +31,7 @@ class RecurringSchedulePlanSection extends ConsumerStatefulWidget {
     required this.onChanged,
     this.onOpenLesson,
     this.groupMembers = const [],
+    this.timelineFirst = false,
   }) : assert((studentId == null) != (groupId == null));
 
   final String? studentId;
@@ -41,6 +42,7 @@ class RecurringSchedulePlanSection extends ConsumerStatefulWidget {
   final String? defaultBranchId;
   final List<Map<String, dynamic>> subscriptions;
   final bool canWrite;
+  final bool timelineFirst;
   final VoidCallback onChanged;
   final ValueChanged<Map<String, dynamic>>? onOpenLesson;
   final List<GroupScheduleMemberOption> groupMembers;
@@ -115,6 +117,7 @@ class _RecurringSchedulePlanSectionState
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) => RecurringSchedulePlanView(
+        timelineFirst: widget.timelineFirst,
         plans: _controller.plans,
         loading: _controller.loading,
         error: _controller.error,

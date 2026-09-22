@@ -48,25 +48,7 @@ extension _ClientCardOverviewTab on _ClientCardState {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_internalContextAllowed) ...[
-            ClientInternalNoteCard(
-              loading: _internalContextLoading,
-              error: _internalContextError,
-              note: _internalNote,
-              onSave: _saveInternalNote,
-              onReload: _reloadInternalNote,
-              onRetry: _fetchInternalContext,
-              onPendingChanged: (pending) {
-                if (!mounted || pending == _internalNotePending) return;
-                _emitState(() => _internalNotePending = pending);
-              },
-              onFlushChanged: (flush) => _flushInternalNote = flush,
-              initialDraft: _workspaceInternalNoteDraft,
-              onDraftChanged: (draft) {
-                _workspaceInternalNoteDraft = draft;
-                _internalNoteIsPending = draft != null;
-                _syncWorkspaceFormDirty();
-              },
-            ),
+            _buildClientNoteEditor(),
             const SizedBox(height: AppSpace.lg),
           ],
           _sectionTitle('Клиент'),

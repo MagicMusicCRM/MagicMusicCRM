@@ -6,7 +6,6 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_teacher_timeline.dart';
@@ -259,23 +258,25 @@ void main() {
               of: card,
               matching: find.byIcon(Icons.event_available_outlined),
             );
-            expect(lifecycle, findsOneWidget);
-            expect(tester.widget<Icon>(lifecycle).color, AppColor.actionBlue);
+            expect(lifecycle, findsNothing);
             final coverage = find.descendant(
               of: card,
               matching: find.byType(LessonSubscriptionBadge),
             );
-            expect(
-              coverage,
-              reservation == 'reserved' ? findsOneWidget : findsNothing,
+            expect(coverage, findsNothing);
+            final tooltip = tester.widget<Tooltip>(
+              find.ancestor(of: card, matching: find.byType(Tooltip)).first,
             );
-            if (reservation == 'reserved') {
-              final icon = find.descendant(
-                of: coverage,
-                matching: find.byIcon(Icons.card_membership_outlined),
-              );
-              expect(tester.widget<Icon>(icon).color, AppColor.success);
-            }
+            expect(
+              tooltip.message,
+              reservation == 'reserved'
+                  ? contains('Абонемент')
+                  : isNot(contains('Абонемент')),
+            );
+            expect(
+              find.descendant(of: card, matching: find.byType(Tooltip)),
+              findsNothing,
+            );
             expect(tester.takeException(), isNull);
           }
 

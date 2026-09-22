@@ -29,117 +29,126 @@ void main() {
     expect(clientCardSource, contains('client_card_presentation.dart'));
   });
 
-  testWidgets('desktop owns one action per section and collapses finance', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final api = FakeCardApiClient(role: 'manager', student: _student);
+  testWidgets(
+    'desktop keeps sections together and collapses detailed finance',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = FakeCardApiClient(role: 'manager', student: _student);
 
-    await pumpClientCard(
-      tester,
-      api: api,
-      seed: _student,
-      entityType: 'student',
-      routed: true,
-    );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: _student,
+        entityType: 'student',
+        routed: true,
+      );
 
-    expect(
-      find.byKey(const Key('client-desktop-section-jumps')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('client-section-jump-history_tasks')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('client-section-jump-progress')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('client-section-jump-documents')),
-      findsNothing,
-    );
-    const orderedSections = [
-      'overview',
-      'contacts',
-      'lessons',
-      'subscriptions',
-      'progress',
-      'payments',
-      'history_tasks',
-    ];
-    final tops = [
-      for (final section in orderedSections)
-        tester.getTopLeft(find.byKey(Key('client-section-jump-$section'))).dy,
-    ];
-    expect(tops, orderedEquals([...tops]..sort()));
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('client-section-jump-contacts')),
-        matching: find.text('Контакты'),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('→ Контакты'), findsNothing);
-
-    for (final section in const [
-      'subscriptions',
-      'history_tasks',
-      'contacts',
-    ]) {
-      await tester.tap(find.byKey(Key('client-section-jump-$section')));
-      await tester.pumpAndSettle();
-      final target = find.byKey(Key('client-desktop-section-$section'));
-      expect(target, findsOneWidget);
       expect(
-        tester.getSize(target).height,
-        greaterThan(0),
-        reason: '$section must occupy visible canvas space',
+        find.byKey(const Key('client-desktop-section-jumps')),
+        findsNothing,
       );
       expect(
-        tester
-            .getRect(target)
-            .overlaps(
-              tester.getRect(find.byKey(const Key('client-desktop-canvas'))),
-            ),
-        isTrue,
-        reason: section,
+        find.byKey(const Key('client-section-heading-history_tasks')),
+        findsOneWidget,
       );
-    }
-    await tester.tap(
-      find.byKey(const Key('client-section-jump-subscriptions')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('subscription-add')), findsOneWidget);
-    expect(find.byKey(const Key('assign-homework')), findsNothing);
-
-    await tester.tap(find.byKey(const Key('client-section-jump-progress')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('assign-homework')), findsOneWidget);
-    expect(find.byKey(const Key('subscription-add')), findsNothing);
-    expect(find.text('Действия'), findsNothing);
-
-    await tester.tap(find.byKey(const Key('client-section-jump-payments')));
-    await tester.pumpAndSettle();
-
-    for (final key in const [
-      Key('payment-movements-expansion'),
-      Key('payment-installments-expansion'),
-    ]) {
-      final expansion = tester.widget<ExpansionTile>(
+      expect(
+        find.byKey(const Key('client-section-heading-progress')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('client-section-heading-documents')),
+        findsNothing,
+      );
+      const orderedSections = [
+        'profile',
+        'lessons',
+        'subscriptions',
+        'progress',
+        'payments',
+        'history_tasks',
+        'contacts',
+      ];
+      final tops = [
+        for (final section in orderedSections)
+          tester
+              .getTopLeft(find.byKey(Key('client-section-heading-$section')))
+              .dy,
+      ];
+      expect(tops, orderedEquals([...tops]..sort()));
+      expect(
         find.descendant(
-          of: find.byKey(key),
-          matching: find.byType(ExpansionTile),
+          of: find.byKey(const Key('client-section-heading-contacts')),
+          matching: find.text('Контакты'),
         ),
+        findsOneWidget,
       );
-      expect(expansion.initiallyExpanded, isFalse);
-    }
-  });
+      expect(find.text('→ Контакты'), findsNothing);
+
+      for (final section in const [
+        'subscriptions',
+        'history_tasks',
+        'contacts',
+      ]) {
+        await tester.ensureVisible(
+          find.byKey(Key('client-section-heading-$section')),
+        );
+        await tester.pumpAndSettle();
+        final target = find.byKey(Key('client-desktop-section-$section'));
+        expect(target, findsOneWidget);
+        expect(
+          tester.getSize(target).height,
+          greaterThan(0),
+          reason: '$section must occupy visible canvas space',
+        );
+        expect(
+          tester
+              .getRect(target)
+              .overlaps(
+                tester.getRect(find.byKey(const Key('client-desktop-canvas'))),
+              ),
+          isTrue,
+          reason: section,
+        );
+      }
+      await tester.ensureVisible(
+        find.byKey(const Key('client-section-heading-subscriptions')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('subscription-add')), findsOneWidget);
+      expect(find.byKey(const Key('assign-homework')), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('client-section-heading-progress')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('assign-homework')), findsOneWidget);
+      expect(find.byKey(const Key('subscription-add')), findsOneWidget);
+      expect(find.text('Действия'), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('client-section-heading-payments')),
+      );
+      await tester.pumpAndSettle();
+
+      for (final key in const [
+        Key('payment-movements-expansion'),
+        Key('payment-installments-expansion'),
+      ]) {
+        final expansion = tester.widget<ExpansionTile>(
+          find.descendant(
+            of: find.byKey(key),
+            matching: find.byType(ExpansionTile),
+          ),
+        );
+        expect(expansion.initiallyExpanded, isFalse);
+      }
+    },
+  );
 
   testWidgets(
-    'desktop overview summarizes the client and mounts one working section',
+    'desktop subscriptions and homework share a row and remain accessible',
     (tester) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1;
@@ -169,41 +178,32 @@ void main() {
         routed: true,
       );
 
-      expect(find.byKey(const Key('client-overview-core')), findsOneWidget);
-      expect(
-        find.byKey(const Key('client-overview-subscription')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('client-overview-lessons')), findsOneWidget);
-      expect(
-        find.byKey(const Key('client-desktop-section-subscriptions')),
-        findsNothing,
-      );
-
-      await tester.tap(
-        find.byKey(const Key('client-section-jump-subscriptions')),
-      );
-      await tester.pumpAndSettle();
       final subscriptions = find.byKey(
         const Key('client-desktop-section-subscriptions'),
       );
+      final progress = find.byKey(const Key('client-desktop-section-progress'));
       expect(subscriptions, findsOneWidget);
-      expect(tester.getSize(subscriptions).height, greaterThan(0));
+      expect(progress, findsOneWidget);
       expect(
-        find.byKey(const Key('client-desktop-section-progress')),
-        findsNothing,
+        tester.getTopLeft(subscriptions).dy,
+        tester.getTopLeft(progress).dy,
       );
-
-      await tester.tap(find.byKey(const Key('client-section-jump-progress')));
+      expect(
+        tester.getSize(subscriptions).height,
+        tester.getSize(progress).height,
+      );
+      expect(find.text('Аб-нт 12 уроков «УТРО»'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('subscription-add')));
       await tester.pumpAndSettle();
       expect(
-        find.byKey(const Key('client-desktop-section-subscriptions')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const Key('client-desktop-section-progress')),
+        find.byKey(const Key('subscription-add')).hitTestable(),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const Key('assign-homework')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 

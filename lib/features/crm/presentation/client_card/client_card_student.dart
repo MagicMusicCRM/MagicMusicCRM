@@ -1,6 +1,11 @@
 part of 'client_card.dart';
 
 extension _ClientCardStudent on _ClientCardState {
+  double get _clientFieldGap =>
+      widget.routed && MediaQuery.sizeOf(context).width >= 840
+      ? 8
+      : AppSpace.md;
+
   Widget _studentFinanceGuard(ColorScheme cs, Widget Function() child) {
     return _studentGuard(
       cs,
@@ -75,10 +80,11 @@ extension _ClientCardStudent on _ClientCardState {
 
   // Read-only «Исходный лид» card for the converted Инфо tab: source, request
   // ── Student tab: Задачи ──────────────────────────────────────────────────
-  Widget _buildStudentTasksTab(ColorScheme cs) {
+  Widget _buildStudentTasksTab(ColorScheme cs, {bool compactEmpty = false}) {
     return _studentGuard(cs, () {
       return SharedTasksPanel(
         embedded: true,
+        compactEmpty: compactEmpty,
         linkedEntity: EntityLink.typed(
           entityType: EntityLinkType.client,
           entityId: _studentId,
@@ -105,9 +111,9 @@ extension _ClientCardStudent on _ClientCardState {
       return ListView(
         shrinkWrap: embedded,
         physics: embedded ? const NeverScrollableScrollPhysics() : null,
-        padding: const EdgeInsets.all(AppSpace.xl),
+        padding: EdgeInsets.all(embedded ? 12 : AppSpace.xl),
         children: [
-          if (_commerceStudent != null) ...[
+          if (_commerceStudent != null && !embedded) ...[
             _lessonBalanceSummary(
               _commerceStudent!.lessonBalance,
               indicators: _studentIndicators,
@@ -134,11 +140,24 @@ extension _ClientCardStudent on _ClientCardState {
                     },
               ],
               canWrite: canWriteSchedule,
+              timelineFirst: embedded,
               onChanged: _fetchStudentData,
               onOpenLesson: _openClientTrayLesson,
             ),
             const SizedBox(height: AppSpace.xl),
           ],
+          if (embedded && _commerceStudent != null)
+            ExpansionTile(
+              title: const Text('Баланс занятий и оплат'),
+              children: [
+                _lessonBalanceSummary(
+                  _commerceStudent!.lessonBalance,
+                  indicators: _studentIndicators,
+                  onSubscriptions: () => _selectSection('subscriptions'),
+                  onPayments: () => _selectSection('payments'),
+                ),
+              ],
+            ),
           if (!canReadSchedule)
             const MagicPageState(
               kind: MagicPageStateKind.forbidden,
@@ -606,11 +625,11 @@ extension _ClientCardStudent on _ClientCardState {
   Widget _buildStudentActionBar(ColorScheme cs) {
     final busy = _loadingStudent || _student == null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpace.xl,
-        AppSpace.md,
+        widget.routed ? 6 : AppSpace.md,
         AppSpace.xl,
-        AppSpace.lg,
+        widget.routed ? 6 : AppSpace.lg,
       ),
       child: Align(
         alignment: Alignment.centerRight,
@@ -1062,6 +1081,7 @@ extension _ClientCardStudent on _ClientCardState {
     errorText: errorText,
     isDense: isDense,
     suffixIcon: suffixIcon,
+    compact: widget.routed && MediaQuery.sizeOf(context).width >= 840,
   );
 
   /// #9: статус из HolliHop — подписью под пикером статуса, а не отдельной
@@ -1073,7 +1093,7 @@ extension _ClientCardStudent on _ClientCardState {
 
   Widget _buildStatusPicker(ColorScheme cs, StatusRecord current) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         // Легаси-фолбэк 'new' (лид «Без статуса») и имена статусов в списке
@@ -1104,7 +1124,7 @@ extension _ClientCardStudent on _ClientCardState {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(s.$2),
+                Flexible(child: Text(s.$2, overflow: TextOverflow.ellipsis)),
               ],
             ),
           );
@@ -1133,12 +1153,12 @@ extension _ClientCardStudent on _ClientCardState {
     );
   }
 
-  Widget _buildStudentStatusPicker(ColorScheme cs) {
+  Widget _buildStudentStatusPicker(ColorScheme cs, {bool compact = false}) {
     final current = _student?['status']?.toString() ?? '';
     final funnel = _studentFunnel;
     if (funnel == null) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: AppSpace.md),
+        padding: EdgeInsets.only(bottom: _clientFieldGap),
         child: InputDecorator(
           decoration: _inputDecoration(
             cs,
@@ -1164,7 +1184,7 @@ extension _ClientCardStudent on _ClientCardState {
       (stage) => stage.key == current && stage.active,
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      padding: EdgeInsets.only(bottom: _clientFieldGap),
       child: AppDropdownButtonFormField<String>(
         menuMaxHeight: 256,
         key: ValueKey('student-funnel-status-${funnel.scopeVersion}-$current'),
@@ -1175,6 +1195,8 @@ extension _ClientCardStudent on _ClientCardState {
           label: 'Этап воронки',
           helperText: configuredCurrent == null && current.isNotEmpty
               ? 'Старый статус нужно сопоставить с этапом.'
+              : compact
+              ? null
               : 'Доступны только разрешённые переходы.',
           isDense: true,
         ),
@@ -1190,14 +1212,16 @@ extension _ClientCardStudent on _ClientCardState {
                 DropdownMenuItem(value: stage.key, child: Text(stage.label)),
           ),
         ],
-        onChanged: (value) {
-          if (value == null) return;
-          _emitState(() {
-            _student?['status'] = value;
-            _edited = true;
-            _draft.studentStatusEdit = _draft.revision;
-          });
-        },
+        onChanged: !_canWriteClient
+            ? null
+            : (value) {
+                if (value == null) return;
+                _emitState(() {
+                  _student?['status'] = value;
+                  _edited = true;
+                  _draft.studentStatusEdit = _draft.revision;
+                });
+              },
       ),
     );
   }

@@ -198,12 +198,24 @@ void main() {
     await tester.pumpAndSettle();
 
     void expectCoverage() {
+      final selected = find.byKey(
+        const ValueKey('schedule-lesson-lesson-selected'),
+      );
+      final tip = tester.widget<Tooltip>(
+        find.ancestor(of: selected, matching: find.byType(Tooltip)).first,
+      );
+      expect(tip.message, contains('Абонемент'));
+      expect(tip.message, contains('Перенесено'));
+      expect(
+        find.descendant(of: selected, matching: find.byType(Tooltip)),
+        findsNothing,
+      );
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('schedule-lesson-lesson-selected')),
           matching: find.byType(LessonSubscriptionBadge),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.descendant(
@@ -214,22 +226,25 @@ void main() {
       );
     }
 
-    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.text2);
-    expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.actionBlue);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
     expectCoverage();
 
     await tester.tap(find.byKey(const ValueKey('schedule-day-mode-switcher')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('По преподавателям').last);
     await tester.pumpAndSettle();
-    expect(_timelineLessonBorder(tester, 'lesson-selected'), AppColor.text2);
-    expect(_timelineLessonBorder(tester, 'lesson-other'), AppColor.text2);
+    expect(
+      _timelineLessonBorder(tester, 'lesson-selected'),
+      AppColor.actionBlue,
+    );
+    expect(_timelineLessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
     expectCoverage();
 
     await tester.tap(find.text('Неделя'));
     await tester.pumpAndSettle();
-    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.text2);
-    expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.actionBlue);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
     expectCoverage();
 
     await tester.tap(find.text('Месяц'));
@@ -239,13 +254,23 @@ void main() {
     );
     final monthBox =
         tester.widget<Container>(monthLesson).decoration as BoxDecoration;
-    expect((monthBox.border! as Border).left.color, AppColor.text2);
+    expect((monthBox.border! as Border).left.color, AppColor.actionBlue);
     expect(
       find.descendant(
         of: monthLesson,
         matching: find.byType(LessonSubscriptionBadge),
       ),
-      findsOneWidget,
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<Tooltip>(
+            find
+                .ancestor(of: monthLesson, matching: find.byType(Tooltip))
+                .first,
+          )
+          .message,
+      contains('Абонемент'),
     );
     expect(tester.takeException(), isNull);
   });
@@ -355,17 +380,17 @@ void main() {
       );
       expect(
         _lessonMarker('lesson-selected', Icons.person_pin_circle_outlined),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         _lessonMarker('lesson-other', Icons.people_outline_rounded),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         _lessonBorder(tester, 'lesson-selected'),
         AppColor.settlementTrial,
       );
-      expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+      expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
 
       await tester.tap(
         find.byKey(const ValueKey('schedule-day-mode-switcher')),
@@ -376,17 +401,20 @@ void main() {
       expect(find.byType(ScheduleTeacherTimeline), findsOneWidget);
       expect(
         _lessonMarker('lesson-selected', Icons.person_pin_circle_outlined),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         _lessonMarker('lesson-other', Icons.people_outline_rounded),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         _timelineLessonBorder(tester, 'lesson-selected'),
         AppColor.settlementTrial,
       );
-      expect(_timelineLessonBorder(tester, 'lesson-other'), AppColor.text2);
+      expect(
+        _timelineLessonBorder(tester, 'lesson-other'),
+        AppColor.actionBlue,
+      );
 
       await tester.tap(find.text('Неделя'));
       await tester.pumpAndSettle();
@@ -396,17 +424,17 @@ void main() {
       );
       expect(
         _lessonMarker('lesson-selected', Icons.person_pin_circle_outlined),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         _lessonMarker('lesson-other', Icons.people_outline_rounded),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         _lessonBorder(tester, 'lesson-selected'),
         AppColor.settlementTrial,
       );
-      expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+      expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
 
       await tester.tap(find.text('Месяц'));
       await tester.pumpAndSettle();
@@ -489,7 +517,7 @@ void main() {
         findsOneWidget,
       );
       expect(_lessonBorder(tester, 'lesson-lead'), AppColor.settlementTrial);
-      expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+      expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
       expect(tester.takeException(), isNull);
     },
   );
@@ -530,13 +558,13 @@ void main() {
     expect(_lessonBorder(tester, 'lesson-selected'), AppColor.gold);
     await tester.pump(const Duration(seconds: 4));
     expect(_lessonBorder(tester, 'lesson-selected'), AppColor.settlementTrial);
-    expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
 
     await tester.tap(find.text('Неделя'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('schedule-week-view')), findsOneWidget);
     expect(_lessonBorder(tester, 'lesson-selected'), AppColor.settlementTrial);
-    expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
 
     await tester.tap(find.text('Месяц'));
     await tester.pumpAndSettle();

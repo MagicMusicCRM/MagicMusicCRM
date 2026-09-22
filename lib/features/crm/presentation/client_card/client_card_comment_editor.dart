@@ -50,6 +50,7 @@ extension _ClientCardCommentEditor on _ClientCardState {
           children: [
             Expanded(
               child: TextField(
+                key: const Key('client-comment-input'),
                 controller: _commentCtrl,
                 decoration: _inputDecoration(
                   cs,
