@@ -140,6 +140,6 @@ msix_config:
   publisher_display_name: "Magic Music"
   identity_name: "com.magicmusic.crm"
   publisher: "CN=MagicMusic, O=MagicMusic, L=Moscow, C=RU"
-  msix_version: 1.5.45.225
+  msix_version: 1.5.46.226
   logo_path: assets/icon.png
   install_certificate: true
