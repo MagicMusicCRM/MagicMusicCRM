@@ -12,7 +12,7 @@ async function runTaskDeliveryAudit({pool,fixture,baseUrl,output,check}){
   await verify('CREATE-'+variant,'director','Создать задачу и напоминание '+variant,async()=>{const key=randomUUID();tasks[variant]=ok(await call('director','POST','/crm/shared-tasks',inputs[variant],key));const replay=ok(await call('director','POST','/crm/shared-tasks',inputs[variant],key));assert.equal(replay.id,tasks[variant].id);});
  }
  assert(Object.values(tasks).every(t=>t.id));
- await verify('CLOSE','admin','Закрыть задачу до срока напоминания',async()=>{ok(await call('admin','POST','/crm/shared-tasks/'+tasks.closed.id+'/close',{expectedVersion:tasks.closed.version}));});
+ await verify('CLOSE','admin','Закрыть задачу до срока напоминания',async()=>{ok(await call('admin','POST','/crm/shared-tasks/'+tasks.closed.id+'/close',{expectedVersion:tasks.closed.version,resultCode:'completed',resultLabel:'Выполнено'}));});
  await verify('DISABLE','director','Убрать напоминание до срока',async()=>{ok(await call('director','PATCH','/crm/shared-tasks/'+tasks.disabled.id,{...inputs.disabled,expectedVersion:tasks.disabled.version,reminders:[]}));});
  const ids=Object.values(tasks).map(t=>t.id);
  async function snapshot(){return{reminders:(await pool.query('select * from app.shared_task_reminders where task_id=any($1::uuid[]) order by task_id',[ids])).rows,notifications:(await pool.query("select id,title,data from app.notifications where data->>'entityId'=any($1::text[]) order by id",[ids])).rows};}

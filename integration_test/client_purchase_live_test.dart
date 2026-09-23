@@ -198,11 +198,17 @@ void main() {
                     (await crm.getLeadCard(id))['linked_students'] as List;
                 expect(linked, hasLength(1));
                 studentId = (linked.single as Map)['id'] as String;
-                expect(
-                  closed,
-                  isTrue,
-                  reason: 'Lead conversion closes the originating card',
-                );
+                expect(closed, isFalse);
+                await h.waitFor(() {
+                  final header = find.byKey(const Key('client-header-name'));
+                  if (header.evaluate().isEmpty) return false;
+                  final name = tester.widget<Text>(header).data ?? '';
+                  return name.contains('Покупатель') &&
+                      name.contains('PURCHASE-$role');
+                }, 'Converted card shows the student name');
+                expect(find.text('Без имени'), findsNothing);
+                expect(find.text('Ученик не найден'), findsNothing);
+                expect(find.text('PURCHASE-PACKAGE'), findsWidgets);
               }
               final commerce = (await crm.getStudentCommerceProjection(
                 studentId!,

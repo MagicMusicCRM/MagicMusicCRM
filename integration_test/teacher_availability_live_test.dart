@@ -75,15 +75,15 @@ void main() {
         of: assignments,
         matching: find.widgetWithText(CheckboxListTile, name),
       );
-      Finder toggle(String day) => find.descendant(
-        of: availability,
-        matching: find.descendant(
-          of: find.byWidgetPredicate(
-            (w) => w is ScheduleTimeRow && w.label == day,
-          ),
-          matching: find.byType(Switch),
-        ),
+      Finder day(int weekday) =>
+          find.byKey(ValueKey('teacher-availability-day-$weekday'));
+      Finder workingIntervals(int weekday) => find.descendant(
+        of: day(weekday),
+        matching: find.byTooltip('Удалить рабочий интервал'),
       );
+      Future<void> removeSunday() async => h.tap(workingIntervals(7).first);
+      Future<void> addSunday() async =>
+          h.tap(find.byKey(const Key('teacher-availability-add-7')));
       Future<void> datePicker(bool cancel) async {
         await h.tap(
           find.descendant(
@@ -180,7 +180,7 @@ void main() {
         'AVAILABILITY-SAVE',
         'Изменить рабочий день после сохранения назначений без конфликта собственной версии',
         () async {
-          await h.tap(toggle('Воскресенье'));
+          await removeSunday();
           await persist(availability);
           expect(
             ((await read())['availability'] as List).where(
@@ -189,7 +189,7 @@ void main() {
             hasLength(6),
           );
           await open();
-          expect(tester.widget<Switch>(toggle('Воскресенье')).value, false);
+          expect(workingIntervals(7), findsNothing);
         },
       );
       await h.check(
@@ -260,17 +260,17 @@ void main() {
         'Смена преподавателя не переносит изменения в чужой график',
         () async {
           await selectTeacher(otherTeacherId);
-          expect(tester.widget<Switch>(toggle('Воскресенье')).value, true);
+          expect(workingIntervals(7), findsOneWidget);
           expect((await read(otherTeacherId))['availability'], hasLength(7));
           await selectTeacher(teacherId);
-          expect(tester.widget<Switch>(toggle('Воскресенье')).value, false);
+          expect(workingIntervals(7), findsNothing);
         },
       );
       await h.check(
         'STALE',
         'Старая версия доступности не перезаписывает конкурентное сохранение',
         () async {
-          await h.tap(toggle('Воскресенье'));
+          await addSunday();
           final before = await read();
           final rules = (before['availability'] as List)
               .map(
@@ -294,7 +294,7 @@ void main() {
             stored.singleWhere((r) => r['weekday'] == 1)['localStart'],
             '09:00',
           );
-          expect(tester.widget<Switch>(toggle('Воскресенье')).value, true);
+          expect(workingIntervals(7), findsOneWidget);
           expect(
             h.requests.any(
               (r) => r['step'] == h.currentStep && r['status'] == 409,
@@ -317,14 +317,9 @@ void main() {
         'Повторное открытие показывает серверные дни и время',
         () async {
           await open();
-          expect(tester.widget<Switch>(toggle('Воскресенье')).value, false);
+          expect(workingIntervals(7), findsNothing);
           expect(
-            find.descendant(
-              of: find.byWidgetPredicate(
-                (w) => w is ScheduleTimeRow && w.label == 'Понедельник',
-              ),
-              matching: find.text('09:00'),
-            ),
+            find.descendant(of: day(1), matching: find.text('09:00')),
             findsOneWidget,
           );
         },

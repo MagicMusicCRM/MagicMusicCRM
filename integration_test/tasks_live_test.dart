@@ -65,6 +65,14 @@ void main() {
           final row = await read(title);
           final id = row['id'].toString();
           await h.tap(find.byKey(Key('close-shared-task-$id')));
+          expect(
+            find.byKey(const Key('shared-task-result-select')),
+            findsOneWidget,
+          );
+          expect((await read(title))['version'], row['version']);
+          await h.tap(find.byKey(const Key('shared-task-result-select')));
+          await h.tap(find.text('Выполнено').last);
+          await h.tap(find.byKey(const Key('shared-task-close-submit')));
           await h.waitFor(
             () => find.byKey(Key('close-shared-task-$id')).evaluate().isEmpty,
             'Closed task leaves open list',

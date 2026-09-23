@@ -796,7 +796,7 @@ extension _ClientCardStudent on _ClientCardState {
       });
       await Future.wait([
         _fetchCard(preserveVisibleContent: true),
-        _fetchStudentData(studentId: studentId, preserveVisibleContent: true),
+        _fetchStudentData(studentId: studentId),
         _fetchFamily(),
         _fetchClientAccess(),
         _fetchInternalContext(),

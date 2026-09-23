@@ -234,7 +234,13 @@ void main() {
             'Изменение имени сохраняет категорию и уровень',
             () async {
               await open();
-              await edit('Имя', 'Сохранённые параметры');
+              await h.tap(find.byKey(const Key('client-edit-name')));
+              await tester.enterText(
+                find.byKey(const Key('client-name-first')),
+                'Сохранённые параметры',
+              );
+              await h.tap(find.byKey(const Key('client-name-apply')));
+              await settle();
               expect((await row())['first_name'], 'Сохранённые параметры');
               await assertCustom('category', 'Взрослые');
               await assertCustom('level', 'Начальный');
@@ -246,11 +252,23 @@ void main() {
               );
             },
           );
-          if (entity == 'lead' && pipeline.activeStages.length < 2) {
+          final currentStatus = (await row())['status']?.toString();
+          final currentStage = pipeline.stages
+              .where((stage) => stage.key == currentStatus)
+              .firstOrNull;
+          final canChangeStatus = entity == 'lead'
+              ? pipeline.activeStages.length >= 2
+              : pipeline.activeStages.any(
+                  (stage) =>
+                      stage.key != currentStatus &&
+                      (currentStage == null ||
+                          currentStage.allowedTransitions.contains(stage.key)),
+                );
+          if (!canChangeStatus) {
             h.blocked(
               '$entity-STATUS-CHANGE',
               'Выбрать другой доступный статус',
-              'Only one lead stage exists; use --audit-statuses for configured transitions',
+              'No permitted transition from the current stage; use --audit-statuses with a configured transition',
             );
             continue;
           }

@@ -74,7 +74,7 @@ export class IssueSubscriptionDto {
 
   @IsOptional()
   @IsArray()
-  @ArrayMinSize(2)
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => IssueSubscriptionInstallmentDto)
   installments?: IssueSubscriptionInstallmentDto[];

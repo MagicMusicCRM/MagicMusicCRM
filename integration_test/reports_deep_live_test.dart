@@ -75,7 +75,7 @@ void main() {
             final before = Map.from(
               lastQuery('/client-status')['query'] as Map,
             );
-            await h.tap(find.byKey(const Key('dashboard-period')).first);
+            await h.tap(find.byKey(const Key('dashboard-period-custom')).first);
             await h.quiet();
             final loc = MaterialLocalizations.of(
               tester.element(find.byType(DateRangePickerDialog)),

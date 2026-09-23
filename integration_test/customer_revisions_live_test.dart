@@ -5,7 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/workspace/people_search_action.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_financial_section.dart';
@@ -13,6 +16,8 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_dialog.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms_api.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lesson_settlement_report_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 import 'live_audit_harness.dart';
@@ -86,6 +91,15 @@ void main() {
         'MANUAL',
         'Администратор выбирает обычную оплату преподавателю',
         () async {
+          await h.tap(key('lesson-compensation-edit-toggle'));
+          expect(
+            tester
+                .widget<CheckboxListTile>(
+                  key('lesson-compensation-edit-toggle'),
+                )
+                .value,
+            true,
+          );
           await h.tap(key('lesson-compensation-rule-field'));
           await h.tap(find.text('Полная стандартная ставка').last);
           await h.quiet();
@@ -266,5 +280,266 @@ void main() {
       await h.finish();
     },
     timeout: const Timeout(Duration(minutes: 8)),
+  );
+
+  testWidgets(
+    'lead card creates a trial lesson in the calendar',
+    (tester) async {
+      final h = LiveAuditHarness(tester, 'admin', 'lead-trial');
+      await h.initialize(size: const Size(1440, 1100));
+      final crm = h.scope.read(magicCrmServiceProvider);
+      final forms = h.scope.read(clientFormsApiProvider);
+      final access = await h.scope.read(capabilitySnapshotProvider.future);
+      final branch = h.fixture['branchId'] as String;
+      final source = (await forms.listSources()).first;
+      final pipeline = await crm.getClientPipeline(
+        clientType: 'lead',
+        branchId: branch,
+      );
+      final created = await forms.createLead(
+        identity: MagicMutationIdentity.create('audit.fixture.lead-trial'),
+        firstName: 'Пробное',
+        lastName: 'Занятие',
+        phone: '+79995554434',
+        sourceId: source['id'] as String,
+        branchId: branch,
+        status: pipeline.activeStages.first.key,
+        customFields: [],
+      );
+      final leadId = created['id'] as String;
+      String? trialId;
+      Finder key(String value) => find.byKey(ValueKey(value));
+      Future<void> selectFirst(String fieldKey) async {
+        final field = key(fieldKey);
+        final picker = tester.widget<SearchablePickerField>(field);
+        final label = picker.items.first.label;
+        await h.tap(field);
+        await h.tap(find.widgetWithText(MenuItemButton, label).last);
+        await h.quiet();
+      }
+
+      await h.check(
+        'OPEN',
+        'Открыть запись на пробное из карточки лида',
+        () async {
+          final row = Map<String, dynamic>.from(
+            (await crm.getLeadCard(leadId))['lead'] as Map,
+          );
+          await h.mount(
+            Scaffold(
+              body: ClientCard(
+                lead: row,
+                entityType: 'lead',
+                routed: true,
+                initialSection: 'overview',
+                capabilitySnapshot: access,
+              ),
+            ),
+          );
+          await h.quiet();
+          await h.tap(key('lead-trial-create'));
+          await h.quiet();
+          final editor = tester.widget<CreateLessonDialog>(
+            find.byType(CreateLessonDialog),
+          );
+          expect(editor.leadId, leadId);
+          expect(editor.initialIsTrial, true);
+          expect(find.textContaining('Пробное Занятие'), findsWidgets);
+        },
+      );
+      await h.check(
+        'CREATE',
+        'Сохранить пробное и перечитать в карточке и календаре',
+        () async {
+          await selectFirst('lesson-teacher-field');
+          await selectFirst('lesson-room-field');
+          final tomorrow = DateTime.now().add(const Duration(days: 1));
+          await h.tap(key('lesson-date-field'));
+          await h.tap(
+            find
+                .descendant(
+                  of: find.byType(DatePickerDialog),
+                  matching: find.text('${tomorrow.day}'),
+                )
+                .last,
+          );
+          await h.tap(find.text('OK').last);
+          await h.tap(find.widgetWithText(FilledButton, 'Создать'));
+          await h.quiet();
+          final card = await crm.getLeadCard(leadId);
+          final trials = (card['trials'] as List).cast<Map<String, dynamic>>();
+          expect(trials, hasLength(1));
+          final lessonId = trials.single['id'] as String;
+          trialId = lessonId;
+          final calendar = (await crm.listLessons(
+            lessonId: lessonId,
+            limit: 1,
+          )).single;
+          expect(calendar['lead_id'], leadId);
+          expect(calendar['is_trial'], true);
+          expect(calendar['scheduled_at'], trials.single['scheduled_at']);
+          h.facts.add({
+            'step': h.currentStep,
+            'leadId': leadId,
+            'lessonId': lessonId,
+            'cardTrial': trials.single,
+            'calendarLesson': calendar,
+          });
+        },
+      );
+      if (trialId == null) {
+        h.blocked(
+          'EDIT',
+          'Перенести пробное из строки карточки',
+          'Trial was not created',
+        );
+        h.blocked(
+          'CANCEL',
+          'Отменить пробное из строки карточки',
+          'Trial was not created',
+        );
+      } else {
+        await h.check(
+          'EDIT',
+          'Перенести пробное из строки карточки и сверить текущее время',
+          () async {
+            final old = (await crm.listLessons(
+              lessonId: trialId,
+              limit: 1,
+            )).single;
+            await h.tap(key('lead-trial-edit-$trialId'));
+            await h.quiet();
+            expect(find.byType(CreateLessonDialog), findsOneWidget);
+            final target = DateTime.now().add(const Duration(days: 2));
+            await h.tap(key('lesson-date-field'));
+            await h.tap(
+              find
+                  .descendant(
+                    of: find.byType(DatePickerDialog),
+                    matching: find.text('${target.day}'),
+                  )
+                  .last,
+            );
+            await h.tap(find.text('OK').last);
+            await h.tap(key('lesson-edit-reason'));
+            await tester.enterText(
+              key('lesson-edit-reason'),
+              'Перенос пробного занятия по просьбе клиента',
+            );
+            await h.tap(find.widgetWithText(FilledButton, 'Рассчитать'));
+            await h.quiet();
+            expect(key('lesson-decision-preview'), findsOneWidget);
+            await h.tap(
+              find.widgetWithText(FilledButton, 'Подтвердить изменения'),
+            );
+            await h.quiet();
+            final card = await crm.getLeadCard(leadId);
+            final trials = (card['trials'] as List)
+                .cast<Map<String, dynamic>>();
+            expect(trials, hasLength(1));
+            trialId = trials.single['id'] as String;
+            final current = (await crm.listLessons(
+              lessonId: trialId,
+              limit: 1,
+            )).single;
+            expect(current['scheduled_at'], trials.single['scheduled_at']);
+            expect(current['scheduled_at'], isNot(old['scheduled_at']));
+            expect(
+              DateTime.parse(current['scheduled_at'] as String).toLocal().day,
+              target.day,
+            );
+            expect(key('lead-trial-edit-$trialId'), findsOneWidget);
+            h.facts.add({
+              'step': h.currentStep,
+              'before': old,
+              'current': current,
+              'cardTrial': trials.single,
+            });
+          },
+        );
+        if (trialId == null) {
+          h.blocked(
+            'CANCEL',
+            'Отменить пробное из строки карточки',
+            'Move was not confirmed',
+          );
+        } else {
+          await h.check(
+            'CANCEL',
+            'Отменить пробное из строки карточки с сохранением истории',
+            () async {
+              await h.tap(key('lead-trial-cancel-$trialId'));
+              await h.quiet();
+              await h.tap(key('lesson-decision-reason'));
+              await tester.enterText(
+                key('lesson-decision-reason'),
+                'Отмена пробного занятия по просьбе клиента',
+              );
+              await h.tap(key('lesson-decision-submit'));
+              await h.quiet();
+              expect(key('lesson-decision-preview'), findsOneWidget);
+              await h.tap(key('lesson-decision-submit'));
+              await h.quiet();
+              final card = await crm.getLeadCard(leadId);
+              final trials = (card['trials'] as List)
+                  .cast<Map<String, dynamic>>();
+              final cancelled = (await crm.listLessons(
+                lessonId: trialId,
+                limit: 1,
+                includeClosed: true,
+              )).single;
+              expect(
+                cancelled['lifecycle_state'] ?? cancelled['status'],
+                'cancelled',
+              );
+              expect(key('lead-trial-cancel-$trialId'), findsNothing);
+              final history = await crm.getClientOperationalHistory(
+                clientType: 'lead',
+                clientId: leadId,
+                limit: 20,
+              );
+              final moved = history.items.where(
+                (event) => event.actionKey == 'crm.lesson_rescheduled',
+              );
+              final cancelledEvents = history.items.where(
+                (event) => event.actionKey == 'crm.lesson_cancelled',
+              );
+              h.facts.add({
+                'step': h.currentStep,
+                'cardTrials': trials,
+                'calendarLesson': cancelled,
+                'history': [
+                  for (final event in history.items)
+                    {
+                      'actionKey': event.actionKey,
+                      'reason': event.reason,
+                      'summary': event.summary,
+                      'title': event.title,
+                    },
+                ],
+              });
+              expect(
+                moved.any(
+                  (event) =>
+                      event.summary ==
+                      'Перенос пробного занятия по просьбе клиента',
+                ),
+                isTrue,
+              );
+              expect(
+                cancelledEvents.any(
+                  (event) =>
+                      event.summary ==
+                      'Отмена пробного занятия по просьбе клиента',
+                ),
+                isTrue,
+              );
+            },
+          );
+        }
+      }
+      await h.finish();
+    },
+    timeout: const Timeout(Duration(minutes: 10)),
   );
 }
