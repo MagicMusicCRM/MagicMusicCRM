@@ -1591,6 +1591,10 @@ async function main() {
   if (process.argv.includes('--audit-purchase') || process.argv.includes('--audit-subscription-cancel') || process.argv.includes('--audit-partial-purchase')) {
     await request('POST', '/crm/subscription-packages', { name: 'PURCHASE-PACKAGE', branchId: fixture.branch,
       unitCount: 8, basePriceMinor: '800000', currencyCode: 'RUB', validityDays: 90 }, 201);
+    if (process.argv.includes('--audit-partial-purchase')) {
+      await request('POST', '/crm/subscription-packages', { name: 'AUDIT-14400', branchId: fixture.branch,
+        unitCount: 4, basePriceMinor: '1440000', currencyCode: 'RUB', validityDays: 90 }, 201);
+    }
     await check('Subscription sale, cancellation, payment and lead conversion through actual form', () =>
       runDeviceTest(process.argv.includes('--audit-partial-purchase') ? 'partial_purchase_live_test.dart' : 'client_purchase_live_test.dart', 'purchase-windows.log', {
         HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password,

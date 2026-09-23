@@ -98,6 +98,11 @@ void main() {
               'Purchase form loaded',
             );
             await h.quiet();
+            await h.tap(find.byKey(const Key('subscription-package-selector')));
+            await h.tap(
+              find.widgetWithText(MenuItemButton, 'PURCHASE-PACKAGE').last,
+            );
+            await h.quiet();
           }
 
           Future<void> assertNoPurchase() async {
@@ -463,6 +468,119 @@ void main() {
               },
             );
           }
+        }
+        if (role == 'director') {
+          await h.check(
+            'EXACT-14400-7200-2',
+            '14 400 ₽, первый взнос 7 200 ₽, всего два платежа',
+            () async {
+              final branch = h.fixture['branchId'] as String;
+              final pipeline = await crm.getClientPipeline(
+                clientType: 'student',
+                branchId: branch,
+              );
+              final created = await forms.createStudent(
+                identity: MagicMutationIdentity.create(
+                  'audit.exact.installment',
+                ),
+                firstName: 'Точный',
+                lastName: 'AUDIT-14400',
+                phone: '+79995554434',
+                sourceId: source['id'] as String,
+                branchId: branch,
+                status: pipeline.activeStages.first.key,
+                customFields: [],
+              );
+              final studentId = created['id'] as String;
+              final student = await crm.getStudent(studentId);
+              await h.mount(
+                Scaffold(
+                  body: ClientCard(
+                    lead: student,
+                    entityType: 'student',
+                    routed: true,
+                    initialSection: 'subscriptions',
+                    capabilitySnapshot: access,
+                    onClose: (_) {},
+                  ),
+                ),
+              );
+              await h.quiet();
+              await h.tap(
+                find.byKey(const Key('client-section-heading-subscriptions')),
+              );
+              await h.tap(find.byKey(const Key('subscription-add')));
+              await h.quiet();
+              await h.tap(
+                find.byKey(const Key('subscription-package-selector')),
+              );
+              await h.tap(
+                find.widgetWithText(MenuItemButton, 'AUDIT-14400').last,
+              );
+              await h.tap(
+                find.byKey(const Key('subscription-funding-installment')),
+              );
+              await tester.enterText(
+                find.widgetWithText(TextFormField, 'Оплачено сейчас'),
+                '7200',
+              );
+              await tester.enterText(
+                find.byKey(const Key('subscription-purchase-reason')),
+                'AUDIT-EXACT-14400',
+              );
+              await tester.pump();
+              expect(
+                find.byKey(const Key('subscription-installment-preview')),
+                findsOneWidget,
+              );
+              await h.tap(find.byKey(const Key('subscription-issue-submit')));
+              await h.waitFor(
+                () => find.byType(SubscriptionIssueForm).evaluate().isEmpty,
+                'Exact purchase closes the form',
+              );
+              final subscription = (await crm.getStudentCommerceProjection(
+                studentId,
+              )).student.subscriptions.single;
+              expect(subscription.units.total, 4);
+              expect(subscription.units.paid, 2);
+              expect(
+                subscription.financial.obligationMinor,
+                BigInt.from(1440000),
+              );
+              expect(
+                subscription.financial.actualPaidMinor,
+                BigInt.from(720000),
+              );
+              expect(
+                subscription.financial.remainingObligationMinor,
+                BigInt.from(720000),
+              );
+              expect(subscription.installments, hasLength(1));
+              expect(
+                subscription.installments.single.amountMinor,
+                BigInt.from(720000),
+              );
+              h.facts.add({
+                'step': h.currentStep,
+                'studentId': studentId,
+                'subscriptionId': subscription.id,
+                'paidUnits': subscription.units.paid,
+                'actualPaidMinor': subscription.financial.actualPaidMinor
+                    .toString(),
+                'obligationMinor': subscription.financial.obligationMinor
+                    .toString(),
+                'futureInstallments': subscription.installments
+                    .map(
+                      (row) => {
+                        'amountMinor': row.amountMinor.toString(),
+                        'status': row.status,
+                        'dueKind': row.dueKind,
+                      },
+                    )
+                    .toList(),
+              });
+            },
+          );
         }
         await h.finish();
       },
