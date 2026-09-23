@@ -11,9 +11,9 @@ void main() {
     final raw = await rootBundle.loadString(releaseHistoryAssetPath);
     final releases = parseReleaseHistory(raw);
 
-    expect(releases.first.version, '1.5.46+226');
-    expect(releases.first.buildNumber, 226);
-    expect(releases, hasLength(66));
+    expect(releases.first.version, '1.5.47+227');
+    expect(releases.first.buildNumber, 227);
+    expect(releases, hasLength(67));
     expect(releases.last.version, '1.0.0');
     expect(
       releases.map((release) => release.buildNumber),
