@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
@@ -364,6 +365,23 @@ void main() {
                 .last,
           );
           await h.tap(find.text('OK').last);
+          await h.tap(key('lesson-time-field'));
+          final timePicker = find.byType(TimePickerDialog);
+          await h.tap(
+            find.descendant(
+              of: timePicker,
+              matching: find.byIcon(Icons.keyboard_outlined),
+            ),
+          );
+          final inputs = find.descendant(
+            of: timePicker,
+            matching: find.byType(TextField),
+          );
+          await tester.enterText(inputs.first, '12');
+          await tester.enterText(inputs.last, '00');
+          await h.tap(
+            find.descendant(of: timePicker, matching: find.text('OK')).last,
+          );
           await h.tap(find.widgetWithText(FilledButton, 'Создать'));
           await h.quiet();
           final card = await crm.getLeadCard(leadId);
@@ -464,6 +482,105 @@ void main() {
             'Move was not confirmed',
           );
         } else {
+          await h.check(
+            'REPEAT-MOVES',
+            'Три переноса: в открытой и повторно открытой карточке один текущий урок',
+            () async {
+              String label(Map<String, dynamic> lesson) =>
+                  DateFormat('d MMMM yyyy, HH:mm', 'ru').format(
+                    DateTime.parse(lesson['scheduled_at'] as String).toLocal(),
+                  );
+              final previousLabels = <String>[];
+              for (final offset in [3, 4]) {
+                final old = (await crm.listLessons(
+                  lessonId: trialId,
+                  limit: 1,
+                )).single;
+                previousLabels.add(label(old));
+                await h.tap(key('lead-trial-edit-$trialId'));
+                await h.quiet();
+                final target = DateTime.now().add(Duration(days: offset));
+                await h.tap(key('lesson-date-field'));
+                await h.tap(
+                  find
+                      .descendant(
+                        of: find.byType(DatePickerDialog),
+                        matching: find.text('${target.day}'),
+                      )
+                      .last,
+                );
+                await h.tap(find.text('OK').last);
+                await h.tap(key('lesson-edit-reason'));
+                await tester.enterText(
+                  key('lesson-edit-reason'),
+                  'Повторный перенос $offset по просьбе клиента',
+                );
+                await h.tap(find.widgetWithText(FilledButton, 'Рассчитать'));
+                await h.quiet();
+                await h.tap(
+                  find.widgetWithText(FilledButton, 'Подтвердить изменения'),
+                );
+                await h.quiet();
+                final trials =
+                    ((await crm.getLeadCard(leadId))['trials'] as List)
+                        .cast<Map<String, dynamic>>();
+                expect(trials, hasLength(1));
+                trialId = trials.single['id'] as String;
+                expect(
+                  trials.single['scheduled_at'],
+                  isNot(old['scheduled_at']),
+                );
+                expect(find.text(label(trials.single)), findsOneWidget);
+                for (final previous in previousLabels) {
+                  expect(find.text(previous), findsNothing);
+                }
+              }
+              final fresh = Map<String, dynamic>.from(
+                (await crm.getLeadCard(leadId))['lead'] as Map,
+              );
+              await h.mount(
+                Scaffold(
+                  body: ClientCard(
+                    key: UniqueKey(),
+                    lead: fresh,
+                    entityType: 'lead',
+                    routed: true,
+                    initialSection: 'overview',
+                    capabilitySnapshot: access,
+                    onClose: (_) {},
+                  ),
+                ),
+              );
+              await h.quiet();
+              final current =
+                  ((await crm.getLeadCard(leadId))['trials'] as List)
+                      .cast<Map<String, dynamic>>()
+                      .single;
+              expect(find.text(label(current)), findsOneWidget);
+              for (final previous in previousLabels) {
+                expect(find.text(previous), findsNothing);
+              }
+              final history = await crm.getClientOperationalHistory(
+                clientType: 'lead',
+                clientId: leadId,
+                limit: 20,
+              );
+              expect(
+                history.items.where(
+                  (event) => event.actionKey == 'crm.lesson_rescheduled',
+                ),
+                hasLength(3),
+              );
+              h.facts.add({
+                'step': h.currentStep,
+                'leadId': leadId,
+                'currentLessonId': trialId,
+                'currentAt': current['scheduled_at'],
+                'rescheduleEvents': 3,
+                'priorVisibleRows': 0,
+              });
+            },
+          );
           await h.check(
             'CANCEL',
             'Отменить пробное из строки карточки с сохранением истории',
