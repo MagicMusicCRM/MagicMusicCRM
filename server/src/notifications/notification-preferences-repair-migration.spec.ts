@@ -15,6 +15,8 @@ describe('0161 notification preference repair', () => {
         );
         insert into app.notification_preferences (role, event_type, enabled, channels)
         values ('manager', 'new_lead', false, array['in_app']);
+        insert into app.notification_preferences (role, event_type, enabled, channels)
+        values ('manager', 'task_reminder_hour', true, array['push']);
       `);
       const sql = await readFile(
         resolve(process.cwd(), 'db/migrations/0161_restore_notification_preferences.up.sql'),
@@ -26,7 +28,11 @@ describe('0161 notification preference repair', () => {
         role: string; event_type: string; enabled: boolean; channels: string[]
       }>(`select role, event_type, enabled, channels
           from app.notification_preferences order by role, event_type`)).rows;
-      expect(rows).toHaveLength(20);
+      expect(rows).toHaveLength(5);
+      expect(rows.filter((row) => row.event_type === 'new_lead')).toHaveLength(4);
+      expect(rows.find((row) => row.event_type === 'task_reminder_hour'))
+        .toEqual({ role: 'manager', event_type: 'task_reminder_hour',
+          enabled: true, channels: ['push'] });
       expect(rows.find((row) => row.role === 'manager' && row.event_type === 'new_lead'))
         .toEqual({ role: 'manager', event_type: 'new_lead', enabled: false, channels: ['in_app'] });
       expect(rows.find((row) => row.role === 'admin' && row.event_type === 'new_lead'))

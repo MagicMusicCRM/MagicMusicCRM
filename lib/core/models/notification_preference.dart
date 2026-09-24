@@ -38,15 +38,8 @@ class NotificationPreference {
   }
 }
 
-/// Display order and labels for the matrix. Kept next to the model so the
-/// screen never invents its own copy of the server's event vocabulary.
-const notificationEventLabels = <String, String>{
-  'new_lead': 'Новая заявка',
-  'task_reminder_day': 'Задача: за сутки',
-  'task_reminder_hour': 'Задача: за час',
-  'task_reminder_min10': 'Задача: за 10 минут',
-  'task_reminder_overdue': 'Задача просрочена',
-};
+/// Only active role preference exposed by the API.
+const notificationEventLabels = <String, String>{'new_lead': 'Новая заявка'};
 
 const notificationRoleLabels = <String, String>{
   'admin': 'Админ',

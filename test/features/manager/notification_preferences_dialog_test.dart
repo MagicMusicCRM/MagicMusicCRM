@@ -27,6 +27,12 @@ class _FakeNotifications implements MagicNotificationsService {
       enabled: false,
       channels: ['push'],
     ),
+    NotificationPreference(
+      role: 'manager',
+      eventType: 'task_reminder_hour',
+      enabled: true,
+      channels: ['push'],
+    ),
   ];
 
   @override
@@ -114,6 +120,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Новая заявка'), findsOneWidget);
+    expect(find.text('Задача: за час'), findsNothing);
     expect(find.text('Управляющий'), findsOneWidget);
     expect(find.text('Педагог'), findsOneWidget);
 

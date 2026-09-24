@@ -293,7 +293,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The whole preference matrix (role × event), for the settings screen.
+   * Active role preferences for the settings screen. Historical task reminder
+   * rows are retained in storage but do not control shared-task delivery.
    * Deliberately unfiltered by the caller's own role: this configures who the
    * school notifies, not what the caller personally receives.
    */
@@ -309,6 +310,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       `
         select role, event_type, enabled, channels, updated_at
         from app.notification_preferences
+        where event_type = 'new_lead'
         order by event_type asc, role asc
       `
     );
@@ -375,7 +377,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     const roleChannels = await this.loadRoleChannels('new_lead');
     const roles = [...roleChannels.keys()];
     if (roles.length === 0) return; // every role opted out — a valid setting
-    // Text comparison instead of ::app.user_role — see processTaskReminderKind.
+    // Text comparison supports director on databases whose role enum predates it.
     const users = await this.database.query<{ id: string; role: string }>(
       `
         select id, role::text as role from app.users

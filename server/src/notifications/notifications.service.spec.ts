@@ -6,6 +6,8 @@ import { NotificationWorker } from './notification-worker.service';
 import { NotificationsPolicy } from './notifications.policy';
 import { NotificationsService } from './notifications.service';
 import { RealtimeBus } from '../realtime/realtime-bus';
+import { validateSync } from 'class-validator';
+import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 
 describe('NotificationsService', () => {
   const admin = { userId: 'admin-a', role: 'admin' as const };
@@ -1111,6 +1113,29 @@ describe('NotificationsService', () => {
 
   describe('preferences', () => {
     const actor = { userId: 'director-1', role: 'director' as const };
+
+    it('lists only active lead preferences, hiding historical task reminder rows', async () => {
+      const { service, database } = createService();
+      database.query.mockResolvedValueOnce({ rows: [
+        { role: 'manager', event_type: 'new_lead', enabled: true,
+          channels: ['in_app'], updated_at: new Date('2026-09-24T00:00:00Z') }
+      ] } as never);
+
+      const result = await service.listPreferences(actor);
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]?.eventType).toBe('new_lead');
+      expect(String(database.query.mock.calls[0]?.[0])).toContain("where event_type = 'new_lead'");
+    });
+
+    it('rejects legacy task reminder preference updates', () => {
+      const dto = Object.assign(new UpdateNotificationPreferenceDto(), {
+        role: 'manager', eventType: 'task_reminder_hour',
+        enabled: false, channels: ['push']
+      });
+
+      expect(validateSync(dto).some((error) => error.property === 'eventType')).toBe(true);
+    });
 
     it('upserts a preference and audits who changed it', async () => {
       const { service, database, audit } = createService();

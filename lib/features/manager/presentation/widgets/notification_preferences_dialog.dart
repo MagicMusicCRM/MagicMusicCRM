@@ -7,14 +7,7 @@ import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 
-/// Who gets which notification, per role (spec §4).
-///
-/// Recipients used to be a literal in two SQL queries, so "перестаньте будить
-/// педагогов" was a deploy. This edits app.notification_preferences instead.
-///
-/// Note it does NOT cover two rules that stay in code: the task assignee always
-/// hears about their own task, and lesson reminders follow the lesson's
-/// students. Neither is a role broadcast.
+/// Controls inbound lead notifications by staff role and delivery channel.
 class NotificationPreferencesDialog extends ConsumerStatefulWidget {
   const NotificationPreferencesDialog({super.key});
 
@@ -116,8 +109,7 @@ class _NotificationPreferencesDialogState
                 ],
               ),
               Text(
-                'Кому уходят рассылки. Исполнитель всегда получает уведомления '
-                'по своей задаче. Это правило не настраивается.',
+                'Кому сообщать о новых входящих заявках и какими каналами.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,

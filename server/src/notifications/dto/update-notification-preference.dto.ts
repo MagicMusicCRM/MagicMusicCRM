@@ -1,13 +1,7 @@
 import { ArrayUnique, IsArray, IsBoolean, IsIn } from 'class-validator';
 
-/** Event types a role can subscribe to. Mirrors the seed in migration 0062. */
-const NOTIFICATION_EVENT_TYPES = [
-  'new_lead',
-  'task_reminder_day',
-  'task_reminder_hour',
-  'task_reminder_min10',
-  'task_reminder_overdue'
-] as const;
+/** Role preferences only control inbound lead notifications. */
+const NOTIFICATION_EVENT_TYPES = ['new_lead'] as const;
 
 /**
  * Roles that can be configured. 'client' is absent on purpose: these are staff
