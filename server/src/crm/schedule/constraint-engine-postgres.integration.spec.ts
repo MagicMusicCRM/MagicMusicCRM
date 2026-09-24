@@ -232,7 +232,7 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
            teacher_id, kind, available, timezone_name, weekday,
            local_start, local_end, valid_from, valid_until
          ) values ($1, 'recurring', false, 'Europe/Moscow', 1,
-           '12:00', '13:00', '2026-01-01', '2026-12-31') returning id`,
+           '12:00', '13:00', '2026-01-01', null) returning id`,
         [fixture.teacherId],
       );
       const unavailable = await engine.validate(
