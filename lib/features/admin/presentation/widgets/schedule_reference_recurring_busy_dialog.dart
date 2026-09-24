@@ -101,6 +101,7 @@ class _RecurringBusyDialogState extends State<_RecurringBusyDialog> {
   );
 
   Widget _dayField() => AppDropdownButtonFormField<int>(
+    menuMaxHeight: 256,
     initialValue: weekday,
     decoration: const InputDecoration(labelText: 'День недели'),
     items: [
