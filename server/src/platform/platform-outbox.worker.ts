@@ -135,6 +135,13 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
         event.eventId,
       );
     }
+    if (event.type === "workflow.task.changed" && event.payload.action === "created") {
+      await this.notifications.notifySharedTaskCreated(
+        eventId(event),
+        event.eventId,
+        stringList(event.payload.affectedUserIds),
+      );
+    }
     const lessonChange = lessonChangeFor(event);
     if (lessonChange) {
       await this.notifications.notifyLessonChanged({

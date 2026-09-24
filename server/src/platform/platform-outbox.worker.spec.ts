@@ -5,6 +5,47 @@ describe("PlatformOutboxWorker", () => {
     query: jest.fn().mockResolvedValue({ rows: [] }),
   });
 
+  it("notifies only the captured task audience and preserves one notification id on retry", async () => {
+    const event = {
+      eventId: "task-event-a",
+      type: "workflow.task.changed",
+      occurredAt: new Date(),
+      aggregateType: "workflow:task",
+      aggregateId: "task-a",
+      aggregateVersion: 1,
+      requestId: "request-a",
+      payload: {
+        action: "created",
+        affectedUserIds: ["manager-a", "admin-a"],
+      },
+      attempts: 1,
+    };
+    const integrity = {
+      claimOutbox: jest.fn().mockResolvedValue([event]),
+      markOutboxPublished: jest.fn().mockResolvedValue(true),
+      markOutboxFailed: jest.fn(),
+    };
+    const realtime = { isReady: () => true, emitCrmChanged: jest.fn() };
+    const notifications = { notifySharedTaskCreated: jest.fn().mockResolvedValue(undefined) };
+    const worker = new PlatformOutboxWorker(
+      integrity as never,
+      realtime as never,
+      notifications as never,
+      emptyDatabase() as never,
+    );
+
+    await expect(worker.runOnce("worker-a")).resolves.toMatchObject({ published: 1 });
+    expect(notifications.notifySharedTaskCreated).toHaveBeenCalledWith(
+      "task-a", "task-event-a", ["manager-a", "admin-a"],
+    );
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith(expect.objectContaining({
+      entity: "task", action: "created", id: "task-a",
+      affectedUserIds: ["manager-a", "admin-a"],
+    }));
+    expect(notifications.notifySharedTaskCreated.mock.invocationCallOrder[0])
+      .toBeLessThan(integrity.markOutboxPublished.mock.invocationCallOrder[0]);
+  });
+
   it("resolves a committed Lead create to the persisted Lead before publishing", async () => {
     const event = {
       eventId: "event-lead-create",

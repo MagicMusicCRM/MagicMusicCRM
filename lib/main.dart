@@ -204,6 +204,9 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
           unawaited(
             ref.read(notificationServiceProvider).syncCurrentDeviceToken(),
           );
+          unawaited(
+            ref.read(notificationServiceProvider).resumePendingNavigation(),
+          );
         }
       });
     });

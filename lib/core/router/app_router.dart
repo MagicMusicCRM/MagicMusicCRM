@@ -384,7 +384,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/client',
         builder: (context, state) => CapabilityShellGate(
-          builder: (_, _) => const ClientDashboardScreen(),
+          builder: (_, _) => ClientDashboardScreen(
+            initialSection: state.uri.queryParameters['section'],
+          ),
         ),
       ),
       GoRoute(

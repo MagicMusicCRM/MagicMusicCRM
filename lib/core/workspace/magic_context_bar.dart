@@ -79,9 +79,9 @@ class MagicContextBar extends StatelessWidget {
             if (trailing != null) ...[
               const SizedBox(width: AppSpace.sm),
               SizedBox(
-                width: (MediaQuery.sizeOf(context).width * .25).clamp(
-                  220.0,
-                  320.0,
+                width: (MediaQuery.sizeOf(context).width * .25 + 48).clamp(
+                  268.0,
+                  368.0,
                 ),
                 child: trailing,
               ),

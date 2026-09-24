@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/magic_context_bar.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
@@ -107,6 +108,11 @@ class ProductionWorkspaceView extends StatelessWidget {
             }
           },
           child: Scaffold(
+            appBar: AppBar(
+              toolbarHeight: 48,
+              backgroundColor: AppColor.surfaceSoft,
+              actions: const [NotificationBellWidget()],
+            ),
             floatingActionButton: peopleSearchAction,
             body: SafeArea(child: tabBuilder(context, tab)),
             bottomNavigationBar: ResponsiveNavigationShell(
@@ -158,14 +164,22 @@ class ProductionWorkspaceView extends StatelessWidget {
                         controller: controller,
                         tab: tab,
                         location: showContextBar ? location : null,
-                        trailing:
-                            desktopPeopleSearch != null &&
-                                tab.tabId == controller.state.activeTabId
-                            ? KeyedSubtree(
-                                key: ValueKey(
-                                  tab.currentRoute.link.toJson().toString(),
-                                ),
-                                child: desktopPeopleSearch!,
+                        trailing: tab.tabId == controller.state.activeTabId
+                            ? Row(
+                                children: [
+                                  const NotificationBellWidget(),
+                                  if (desktopPeopleSearch != null)
+                                    Expanded(
+                                      child: KeyedSubtree(
+                                        key: ValueKey(
+                                          tab.currentRoute.link
+                                              .toJson()
+                                              .toString(),
+                                        ),
+                                        child: desktopPeopleSearch!,
+                                      ),
+                                    ),
+                                ],
                               )
                             : null,
                         currentTitle: tab.titleHint,

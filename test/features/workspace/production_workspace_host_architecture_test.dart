@@ -1,14 +1,30 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
+import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
+import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_view.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
+
+class _EmptyNotifications implements MagicNotificationsService {
+  @override
+  Future<List<Map<String, dynamic>>> list({
+    bool? unread,
+    int limit = 50,
+    String? cursor,
+  }) async => const [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError(invocation.memberName.toString());
+}
 
 void main() {
   testWidgets('view owns the exact 840 responsive scope boundary', (
@@ -33,34 +49,42 @@ void main() {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = Size(width, 800);
       await tester.pumpWidget(
-        MaterialApp(
-          home: ProductionWorkspaceView(
-            controller: controller,
-            tabBuilder: (context, tab) => Text(
-              'desktop:${WorkspaceNavigationScope.maybeOf(context)?.isDesktop}',
+        ProviderScope(
+          overrides: [
+            magicNotificationsServiceProvider.overrideWithValue(
+              _EmptyNotifications(),
             ),
-            navigationFor: (tab, {required isDesktop}) =>
-                ProductionWorkspaceNavigationData(
-                  sectionTabs: const [0],
-                  destinations: const [
-                    ResponsiveNavDestination(
-                      icon: Icons.chat_bubble_outline,
-                      selectedIcon: Icons.chat_bubble,
-                      label: 'Чат',
-                    ),
-                  ],
-                  selectedIndex: 0,
-                ),
-            locationFor: (_) => null,
-            onLayoutModeChanged: (_) {},
-            onTabVisible: (_, {required isDesktop}) {},
-            onSectionSelected: (_) {},
-            onBack: (_) async {},
-            onNavigate: (_, _) async {},
-            onLimitReached: () {},
-            resolveDirty: (_) async => DirtyCloseDecision.cancel,
-            saveDirty: (_) async {},
-            discardDirty: (_) async {},
+          ],
+          child: MaterialApp(
+            home: ProductionWorkspaceView(
+              controller: controller,
+              desktopPeopleSearch: const Text('Найти человека'),
+              tabBuilder: (context, tab) => Text(
+                'desktop:${WorkspaceNavigationScope.maybeOf(context)?.isDesktop}',
+              ),
+              navigationFor: (tab, {required isDesktop}) =>
+                  ProductionWorkspaceNavigationData(
+                    sectionTabs: const [0],
+                    destinations: const [
+                      ResponsiveNavDestination(
+                        icon: Icons.chat_bubble_outline,
+                        selectedIcon: Icons.chat_bubble,
+                        label: 'Чат',
+                      ),
+                    ],
+                    selectedIndex: 0,
+                  ),
+              locationFor: (_) => null,
+              onLayoutModeChanged: (_) {},
+              onTabVisible: (_, {required isDesktop}) {},
+              onSectionSelected: (_) {},
+              onBack: (_) async {},
+              onNavigate: (_, _) async {},
+              onLimitReached: () {},
+              resolveDirty: (_) async => DirtyCloseDecision.cancel,
+              saveDirty: (_) async {},
+              discardDirty: (_) async {},
+            ),
           ),
         ),
       );
@@ -75,6 +99,11 @@ void main() {
     await pump(840);
     expect(find.byType(DesktopWorkspaceShell), findsOneWidget);
     expect(find.text('desktop:true'), findsOneWidget);
+    expect(find.byType(NotificationBellWidget), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byType(NotificationBellWidget)).dx,
+      lessThan(tester.getTopLeft(find.text('Найти человека')).dx),
+    );
   });
 
   test('runtime view and host keep the approved dependency ownership', () {

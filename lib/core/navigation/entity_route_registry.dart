@@ -519,8 +519,9 @@ class EntityRouteRegistry {
         'schedule.lesson.read.assigned',
         'schedule.lesson.write',
       }),
-      buildLocation: (link, snapshot) =>
-          _staffRoute(link, snapshot, 'schedule'),
+      buildLocation: (link, snapshot) => snapshot.role == 'client'
+          ? '/client?section=lessons'
+          : _staffRoute(link, snapshot, 'schedule'),
     ),
     EntityLinkType.task: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('workflow.task.read'),
@@ -529,18 +530,23 @@ class EntityRouteRegistry {
     EntityLinkType.subscription: EntityRouteRegistration(
       isAllowed: (_, snapshot) =>
           snapshot.allows('commerce.client_finance.read'),
-      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'clients'),
+      buildLocation: (link, snapshot) => snapshot.role == 'client'
+          ? '/client?section=subscription'
+          : _staffRoute(link, snapshot, 'clients'),
     ),
     EntityLinkType.payment: EntityRouteRegistration(
       isAllowed: (_, snapshot) =>
           snapshot.allows('commerce.client_finance.read'),
-      buildLocation: (link, snapshot) => _staffRoute(
-        link,
-        snapshot,
-        link.optionalFocus?.filter['studentId']?.toString().isNotEmpty == true
-            ? 'clients'
-            : 'finance',
-      ),
+      buildLocation: (link, snapshot) => snapshot.role == 'client'
+          ? '/client?section=subscription'
+          : _staffRoute(
+              link,
+              snapshot,
+              link.optionalFocus?.filter['studentId']?.toString().isNotEmpty ==
+                      true
+                  ? 'clients'
+                  : 'finance',
+            ),
     ),
     EntityLinkType.user: EntityRouteRegistration(
       isAllowed: (link, snapshot) => link.rawEntityType == 'staff'

@@ -10,6 +10,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/lazy_indexed_stack.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
+import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/subscription_status_card.dart';
@@ -25,7 +26,9 @@ final clientPaymentsProvider = FutureProvider<List<Payment>>((ref) async {
 });
 
 class ClientDashboardScreen extends ConsumerStatefulWidget {
-  const ClientDashboardScreen({super.key});
+  const ClientDashboardScreen({super.key, this.initialSection});
+
+  final String? initialSection;
 
   @override
   ConsumerState<ClientDashboardScreen> createState() =>
@@ -34,6 +37,17 @@ class ClientDashboardScreen extends ConsumerStatefulWidget {
 
 class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = switch (widget.initialSection) {
+      'lessons' => 1,
+      'subscription' => 2,
+      'profile' => 3,
+      _ => 0,
+    };
+  }
 
   void _openSchool() {
     Navigator.of(context).push<void>(
@@ -106,6 +120,11 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
 
     if (isDesktop) {
       return Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 48,
+          backgroundColor: AppColor.surfaceSoft,
+          actions: const [NotificationBellWidget()],
+        ),
         body: Row(
           children: [
             ResponsiveNavigationShell(
@@ -121,6 +140,11 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
     }
 
     return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 48,
+        backgroundColor: AppColor.surfaceSoft,
+        actions: const [NotificationBellWidget()],
+      ),
       body: SafeArea(child: body),
       bottomNavigationBar: ResponsiveNavigationShell(
         isDesktop: false,

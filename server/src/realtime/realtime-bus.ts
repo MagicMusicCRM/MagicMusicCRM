@@ -26,6 +26,8 @@ export interface CrmChangedPayload {
   branchId?: string | null;
   /** Optional recipient scoping; used to fan a hint to specific user rooms too. */
   affectedUserIds?: string[] | null;
+  /** Event kind for recipient-scoped notification hints; never includes message data. */
+  notificationType?: string;
 }
 
 export interface AccessInvalidatedPayload {

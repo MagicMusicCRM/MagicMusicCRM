@@ -13,7 +13,21 @@ import 'package:magic_music_crm/features/auth/providers/release_gate_provider.da
 /// purpose (the task is for admins/managers), clients never see CRM events.
 const _leadNotificationRoles = {'admin', 'manager', 'director'};
 
-/// KVA-240: app-level listener that turns realtime «lead created» events into
+bool isInboundLeadNotificationForUser(
+  CrmChangedEvent? event,
+  String? role,
+  String? userId,
+) =>
+    event != null &&
+    event.entity == 'notification' &&
+    event.action == 'created' &&
+    event.notificationType == 'new_lead' &&
+    role != null &&
+    _leadNotificationRoles.contains(role) &&
+    userId != null &&
+    event.affectedUserIds.contains(userId);
+
+/// KVA-240: app-level listener that turns recipient-scoped inbound notifications into
 /// a desktop system notification (with the standard Windows toast sound).
 ///
 /// Desktop-only on purpose: FCM does not work on Windows/Linux, while mobile
@@ -21,13 +35,16 @@ const _leadNotificationRoles = {'admin', 'manager', 'director'};
 /// app level (not inside a screen) it fires from any section of the app.
 final leadNotificationListenerProvider = Provider<void>((ref) {
   if (kIsWeb || !(Platform.isWindows || Platform.isLinux)) return;
+  final seenNotificationIds = <String>{};
   ref.listen(crmRealtimeProvider, (previous, next) {
     final event = next.value;
-    if (event == null || event.entity != 'lead' || event.action != 'created') {
-      return;
-    }
     final role = ref.read(releaseGateStatusProvider).asData?.value.role;
-    if (role == null || !_leadNotificationRoles.contains(role)) return;
+    final userId = ref.read(currentUserIdProvider).asData?.value;
+    if (!isInboundLeadNotificationForUser(event, role, userId)) return;
+    if (event!.id != null && !seenNotificationIds.add(event.id!)) return;
+    if (seenNotificationIds.length > 256) {
+      seenNotificationIds.remove(seenNotificationIds.first);
+    }
     // The app's own tone, plus the toast. Desktop has no push at all — this
     // toast IS the notification surface, and it only ever fires with the app
     // running, so the "no banner while open" rule (which exists to stop a push
@@ -54,6 +71,7 @@ final leadNotificationListenerProvider = Provider<void>((ref) {
 /// the server push for the same task). Desktop-only, same rationale as leads.
 final taskNotificationListenerProvider = Provider<void>((ref) {
   if (kIsWeb || !(Platform.isWindows || Platform.isLinux)) return;
+  final seenTaskIds = <String>{};
   ref.listen(crmRealtimeProvider, (previous, next) {
     final event = next.value;
     if (event == null || event.entity != 'task' || event.action != 'created') {
@@ -61,6 +79,8 @@ final taskNotificationListenerProvider = Provider<void>((ref) {
     }
     final userId = ref.read(currentUserIdProvider).asData?.value;
     if (userId == null || !event.affectedUserIds.contains(userId)) return;
+    if (event.id != null && !seenTaskIds.add(event.id!)) return;
+    if (seenTaskIds.length > 256) seenTaskIds.remove(seenTaskIds.first);
     // Молчим, если человек уже в «Задачах» — новая задача там появится сама.
     if (shouldSoundFor(
       view: ref.read(activeViewProvider),

@@ -71,6 +71,7 @@ describe("platform integrity utilities", () => {
         successorId: "successor-id",
         changedFields: ["status"],
         accessVersion: 2,
+        affectedUserIds: ["user-a", "user-b"],
       }),
     ).toEqual({
       entityId: "safe-id",
@@ -78,6 +79,7 @@ describe("platform integrity utilities", () => {
       successorId: "successor-id",
       changedFields: ["status"],
       accessVersion: 2,
+      affectedUserIds: ["user-a", "user-b"],
     });
     expect(safeAuditReason("schedule.conflict")).toBe("schedule.conflict");
     expect(() => safeAuditReason("free-form private reason")).toThrow(

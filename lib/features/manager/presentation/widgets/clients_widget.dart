@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
@@ -164,10 +163,6 @@ class _Header extends StatelessWidget {
                       onSelect: onSelectSegment,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // D1: the notification center (read + mark-read), surfaced where
-                  // the «+1 лид» badge appears — it was built but never mounted.
-                  const NotificationBellWidget(),
                 ],
               )
             else

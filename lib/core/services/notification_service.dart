@@ -14,6 +14,12 @@ import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/firebase_options.dart';
 import 'package:magic_music_crm/core/services/alert_policy.dart';
 import 'package:magic_music_crm/core/services/alert_sound_service.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/router/app_router.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/services/notification_tap_target.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 void _logNotification(String message) {
   if (kDebugMode) {
@@ -116,6 +122,8 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   StreamSubscription<String>? _tokenRefreshSubscription;
+  EntityLink? _pendingEntityLink;
+  bool _openingEntityLink = false;
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
@@ -292,8 +300,14 @@ class NotificationService {
     }
   }
 
-  /// Core navigation handler — extracts chat metadata and triggers UI navigation
+  /// Open a server-provided entity through the same capability gate as the bell.
   void _handleNotificationClick(Map<String, dynamic> data) {
+    final link = notificationTapTarget(data);
+    if (link != null) {
+      _pendingEntityLink = link;
+      unawaited(resumePendingNavigation());
+      return;
+    }
     final senderId = data['sender_id']?.toString();
     final chatId = data['chat_id']?.toString();
     final receiverId = data['receiver_id']?.toString();
@@ -301,6 +315,8 @@ class NotificationService {
     // For direct chats: navigate to partner (sender)
     // For group chats: navigate by chat_id
     final targetPartnerId = senderId ?? receiverId;
+    if (targetPartnerId == null && chatId == null) return;
+    _pendingEntityLink = null;
 
     _logNotification(
       'Notification navigation: hasPartner=${targetPartnerId != null}, hasChat=${chatId != null}',
@@ -314,6 +330,26 @@ class NotificationService {
             groupChatId: chatId,
           ),
         );
+  }
+
+  /// A cold-start push can arrive before the login session is restored.
+  Future<void> resumePendingNavigation() async {
+    if (_openingEntityLink || _pendingEntityLink == null) return;
+    if (ref.read(magicAuthStateProvider).asData?.value == null) return;
+    _openingEntityLink = true;
+    try {
+      final link = _pendingEntityLink!;
+      final snapshot = await ref.read(capabilitySnapshotProvider.future);
+      final route = EntityRouteRegistry().resolve(link, snapshot);
+      _pendingEntityLink = null;
+      if (route.canOpen && route.location != null) {
+        ref.read(routerProvider).push(route.location!);
+      }
+    } catch (error) {
+      _logNotification('Notification navigation deferred: $error');
+    } finally {
+      _openingEntityLink = false;
+    }
   }
 
   Future<void> _saveTokenToDatabase(String? token) async {

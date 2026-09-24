@@ -463,6 +463,46 @@ describe('NotificationsService', () => {
     expect(String(client.query.mock.calls[5][0])).toContain('where not exists');
   });
 
+  it('materializes one task assignment notification for the captured audience', async () => {
+    const { service, database, realtime } = createService();
+    const client = {
+      query: jest.fn(async (sql: string, params?: unknown[]) =>
+        sql.includes('insert into app.notifications')
+          ? { rows: [{ id: params?.[0] }] }
+          : { rows: [] }
+      )
+    };
+    database.transaction.mockImplementation(async (work) => work(client as never));
+
+    await service.notifySharedTaskCreated(
+      'task-a',
+      '11111111-1111-5111-8111-111111111111',
+      ['manager-a', 'manager-a', 'admin-a']
+    );
+
+    const notificationInsert = client.query.mock.calls.find((call) =>
+      String(call[0]).includes('insert into app.notifications')
+    );
+    expect(notificationInsert?.[1]).toEqual([
+      '11111111-1111-5111-8111-111111111111',
+      'task_assigned',
+      'У вас новая задача',
+      expect.any(String),
+      JSON.stringify({ entityType: 'task', entityId: 'task-a' }),
+      null
+    ]);
+    const recipients = client.query.mock.calls.filter((call) =>
+      String(call[0]).includes('insert into app.notification_recipients')
+    );
+    expect(recipients.map((call) => call[1]?.[1])).toEqual([
+      'manager-a', 'admin-a'
+    ]);
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith(expect.objectContaining({
+      entity: 'notification',
+      affectedUserIds: ['manager-a', 'admin-a']
+    }));
+  });
+
   it('routes a rescheduled lesson to its successor and informs the removed teacher', async () => {
     const { service, database } = createService();
     database.query
@@ -918,6 +958,7 @@ describe('NotificationsService', () => {
             entity: 'notification',
             action: 'created',
             id: notificationId,
+            notificationType: 'new_lead',
             affectedUserIds: ['manager-a', 'admin-a', 'manager-b']
           }
         }
@@ -1005,6 +1046,7 @@ describe('NotificationsService', () => {
             entity: 'notification',
             action: 'created',
             id: notificationId,
+            notificationType: 'new_lead',
             affectedUserIds: ['manager-a']
           }
         }

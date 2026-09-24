@@ -13,6 +13,7 @@ class CrmChangedEvent {
 
   /// Recipient-scoped user ids (e.g. a task's assignee) for targeted UI hints.
   final List<String> affectedUserIds;
+  final String? notificationType;
 
   const CrmChangedEvent({
     required this.entity,
@@ -20,6 +21,7 @@ class CrmChangedEvent {
     this.id,
     this.branchId,
     this.affectedUserIds = const [],
+    this.notificationType,
   });
 
   factory CrmChangedEvent.fromMap(Map<String, dynamic> map) => CrmChangedEvent(
@@ -27,6 +29,7 @@ class CrmChangedEvent {
     action: map['action']?.toString() ?? '',
     id: map['id']?.toString(),
     branchId: map['branchId']?.toString(),
+    notificationType: map['notificationType']?.toString(),
     affectedUserIds:
         (map['affectedUserIds'] as List?)?.map((e) => e.toString()).toList() ??
         const [],

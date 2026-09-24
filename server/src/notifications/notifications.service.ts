@@ -445,8 +445,27 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       entity: 'notification',
       action: 'created',
       id: notificationId,
+      notificationType: 'new_lead',
       affectedUserIds: recipients.map((recipient) => recipient.id)
     });
+  }
+
+  async notifySharedTaskCreated(
+    taskId: string,
+    notificationId: string,
+    userIds: string[]
+  ): Promise<void> {
+    if (userIds.length === 0) return;
+    await this.createNotification({
+      type: 'task_assigned',
+      title: 'У вас новая задача',
+      body: 'Вам назначена задача. Откройте раздел «Задачи».',
+      data: { entityType: 'task', entityId: taskId },
+      userIds,
+      channels: ['in_app', 'push'],
+      notificationId
+    });
+    this.schedulePushDispatch();
   }
 
   private async loadInboundLeadRecipients(

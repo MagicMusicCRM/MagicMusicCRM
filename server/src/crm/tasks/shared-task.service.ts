@@ -62,6 +62,11 @@ export class SharedTaskService {
     this.policy.assertCanWriteCrm(actor);
     this.assertMetadata(metadata);
     const values = await this.validate(dto);
+    const affectedUserIds = [...new Set(
+      (await this.repository.previewAudienceRecipients(values.audiences)).rows
+        .map((row) => row.user_id)
+        .filter((id): id is string => id !== null),
+    )];
     const taskId = this.deterministicId(
       `${actor.userId}\0workflow.shared-task.create\0${metadata.idempotencyKey}`,
     );
@@ -83,7 +88,7 @@ export class SharedTaskService {
       },
       outbox: {
         type: "workflow.task.changed",
-        payload: { taskId, action: "created" },
+        payload: { action: "created", affectedUserIds },
       },
       mutate: async (client, version) => {
         await this.repository.create(client, {
@@ -104,11 +109,6 @@ export class SharedTaskService {
         );
         return { taskId, taskVersion: version };
       },
-    });
-    this.realtime.emitCrmChanged({
-      entity: "task",
-      action: "created",
-      id: taskId,
     });
     return this.loadWithAudiencePreview(taskId);
   }

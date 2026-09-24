@@ -84,6 +84,17 @@ describe("SharedTask API domain (PostgreSQL)", () => {
         }),
       ],
     });
+    const assignmentEvent = await pool.query<{
+      payload: { affectedUserIds: string[] };
+    }>(
+      `select payload from app.platform_outbox_events
+       where event_type = 'workflow.task.changed' and aggregate_id = $1
+       order by occurred_at desc limit 1`,
+      [first.id],
+    );
+    expect(new Set(assignmentEvent.rows[0]?.payload.affectedUserIds)).toEqual(
+      new Set(first.recipientSummary.recipients.map((recipient) => recipient.userId)),
+    );
 
     const focused = await tasks.list(fixture.director, {
       taskId: first.id,
