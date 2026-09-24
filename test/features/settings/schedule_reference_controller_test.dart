@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_controller.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_cards.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_settings.dart';
 
 void main() {
@@ -171,6 +172,231 @@ void main() {
       },
     );
 
+    test(
+      'weekly busy hours stay separate from working hours through save',
+      () async {
+        final api = _ScheduleReferenceApi(
+          teacherAvailability: const [
+            {
+              'kind': 'recurring',
+              'available': true,
+              'timezone': 'Europe/Moscow',
+              'weekday': 1,
+              'localStart': '09:00',
+              'localEnd': '18:00',
+              'validFrom': '2026-01-01',
+            },
+            {
+              'kind': 'recurring',
+              'available': false,
+              'timezone': 'Europe/Moscow',
+              'weekday': 1,
+              'localStart': '12:00',
+              'localEnd': '13:00',
+              'validFrom': '2026-01-01',
+              'reason': 'Другая школа',
+            },
+          ],
+        );
+        final controller = _controller(api);
+        await controller.loadCatalogs();
+
+        expect(controller.recurringRulesFor(1), hasLength(1));
+        expect(
+          controller.state.teacherDraft!.unavailableRecurring,
+          hasLength(1),
+        );
+        final oldRule =
+            controller.state.teacherDraft!.unavailableRecurring.single;
+        controller.replaceUnavailableRecurringRule(oldRule, {
+          ...oldRule,
+          'localStart': '13:00',
+          'localEnd': '14:00',
+        });
+        controller.addUnavailableRecurringRule({
+          'kind': 'recurring',
+          'available': false,
+          'timezone': 'Europe/Moscow',
+          'weekday': 3,
+          'localStart': '10:00',
+          'localEnd': '11:00',
+          'validFrom': '2026-09-01',
+        });
+        await controller.saveAvailability();
+
+        final rules =
+            api.lastPut(
+                  '/crm/schedule-reference/teachers/teacher-a/availability',
+                )['rules']
+                as List<dynamic>;
+        expect(rules, hasLength(3));
+        expect(rules.where((row) => row['available'] == true), hasLength(1));
+        expect(rules.where((row) => row['available'] == false), hasLength(2));
+        expect(rules, contains(containsPair('localStart', '13:00')));
+        expect(rules, isNot(contains(containsPair('localStart', '12:00'))));
+        expect(rules.last, isNot(contains('validUntil')));
+
+        final reloaded = _controller(
+          _ScheduleReferenceApi(
+            teacherAvailability: [
+              for (final row in rules) Map<String, dynamic>.from(row as Map),
+            ],
+          ),
+        );
+        await reloaded.loadCatalogs();
+        expect(reloaded.recurringRulesFor(1), hasLength(1));
+        expect(reloaded.state.teacherDraft!.unavailableRecurring, hasLength(2));
+        reloaded.dispose();
+
+        controller.removeUnavailableRecurringRule(
+          controller.state.teacherDraft!.unavailableRecurring.last,
+        );
+        await controller.saveAvailability();
+        final remaining =
+            api.lastPut(
+                  '/crm/schedule-reference/teachers/teacher-a/availability',
+                )['rules']
+                as List<dynamic>;
+        expect(remaining, hasLength(2));
+        controller.dispose();
+      },
+    );
+
+    testWidgets('weekly busy period can be added from the card and saved', (
+      tester,
+    ) async {
+      final api = _ScheduleReferenceApi();
+      final controller = _controller(api);
+      await controller.loadCatalogs();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AnimatedBuilder(
+                animation: controller,
+                builder: (context, _) => TeacherAvailabilityCard(
+                  controller: controller,
+                  onSave: () => controller.saveAvailability(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final add = find.byKey(const ValueKey('weekly-unavailable-add'));
+      await tester.ensureVisible(add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.text('Занято каждую неделю'), findsWidgets);
+      await tester.tap(find.widgetWithText(FilledButton, 'Добавить'));
+      await tester.pumpAndSettle();
+      expect(controller.state.teacherDraft!.unavailableRecurring, hasLength(1));
+      expect(
+        controller.state.teacherDraft!.unavailableRecurring.single['available'],
+        false,
+      );
+      expect(find.textContaining('без даты окончания'), findsWidgets);
+
+      final edit = find.byTooltip('Изменить еженедельную занятость');
+      await tester.ensureVisible(edit);
+      await tester.tap(edit);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).last, 'Другая школа');
+      await tester.tap(find.widgetWithText(FilledButton, 'Сохранить').last);
+      await tester.pumpAndSettle();
+      expect(controller.state.teacherDraft!.unavailableRecurring, hasLength(1));
+      expect(
+        controller.state.teacherDraft!.unavailableRecurring.single['reason'],
+        'Другая школа',
+      );
+
+      final save = find.widgetWithText(FilledButton, 'Сохранить');
+      await tester.ensureVisible(save);
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      final rules =
+          api.lastPut(
+                '/crm/schedule-reference/teachers/teacher-a/availability',
+              )['rules']
+              as List<dynamic>;
+      expect(rules.where((row) => row['available'] == false), hasLength(1));
+      expect(rules.last['reason'], 'Другая школа');
+      controller.dispose();
+    });
+
+    testWidgets('weekly busy dialog fits a narrow personnel card', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = _controller(_ScheduleReferenceApi());
+      await controller.loadCatalogs();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: TeacherAvailabilityCard(
+                controller: controller,
+                onSave: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      final add = find.byKey(const ValueKey('weekly-unavailable-add'));
+      await tester.ensureVisible(add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.text('Занято каждую неделю'), findsWidgets);
+      expect(tester.takeException(), isNull);
+      controller.dispose();
+    });
+
+    testWidgets('read-only card exposes busy periods without edit actions', (
+      tester,
+    ) async {
+      final controller = _controller(
+        _ScheduleReferenceApi(
+          teacherAvailability: const [
+            {
+              'kind': 'recurring',
+              'available': false,
+              'timezone': 'Europe/Moscow',
+              'weekday': 1,
+              'localStart': '12:00',
+              'localEnd': '13:00',
+              'validFrom': '2026-01-01',
+            },
+          ],
+        ),
+        canEdit: false,
+      );
+      await controller.loadCatalogs();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: TeacherAvailabilityCard(
+                controller: controller,
+                onSave: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.textContaining('Понедельник · 12:00–13:00'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('weekly-unavailable-add')),
+        findsNothing,
+      );
+      expect(find.byTooltip('Изменить еженедельную занятость'), findsNothing);
+      controller.dispose();
+    });
+
     test('late schedule response cannot replace the newer selection', () async {
       final first = Completer<Map<String, dynamic>>();
       final second = Completer<Map<String, dynamic>>();
@@ -293,6 +519,14 @@ void main() {
         'endsAt': '2026-08-27T13:00:00Z',
         'reason': 'Недоступен',
       });
+      controller.addUnavailableRecurringRule({
+        'kind': 'recurring',
+        'available': false,
+        'weekday': 1,
+        'localStart': '12:00',
+        'localEnd': '13:00',
+        'validFrom': '2026-01-01',
+      });
       await controller.saveAssignments();
       await controller.saveAvailability();
 
@@ -305,6 +539,7 @@ void main() {
         original,
       );
       expect(controller.state.teacherDraft!.intervals, isEmpty);
+      expect(controller.state.teacherDraft!.unavailableRecurring, isEmpty);
 
       final branchController = _controller(
         api,

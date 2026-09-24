@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 
 import 'schedule_reference_controller.dart';
+import 'schedule_reference_busy_cards.dart';
 import 'schedule_reference_dialogs.dart';
 import 'schedule_reference_models.dart';
 
@@ -150,7 +151,6 @@ class TeacherAvailabilityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final draft = controller.state.teacherDraft;
     final canEdit = controller.canEdit && !controller.availabilityLocked;
     final canMutate = _canMutate(canEdit, controller.state.saving);
     return ScheduleReferenceCard(
@@ -163,10 +163,19 @@ class TeacherAvailabilityCard extends StatelessWidget {
           : null,
       children: [
         const Text(
-          'Для каждого дня можно задать несколько рабочих интервалов и срок действия. '
-          'Разовые занятые периоды добавляются ниже.',
+          'Занятые периоды в других местах можно задать на одну дату или '
+          'повторять каждую неделю. Рабочие часы редактируются ниже.',
         ),
         const SizedBox(height: 12),
+        TeacherWeeklyBusySection(controller: controller, editable: canMutate),
+        const Divider(height: 28),
+        TeacherDateBusySection(controller: controller, editable: canMutate),
+        const Divider(height: 28),
+        const Text(
+          'Рабочие часы по дням недели',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
         for (final day in scheduleReferenceDayNames.entries)
           _TeacherRecurringDayEditor(
             weekday: day.key,
@@ -174,48 +183,8 @@ class TeacherAvailabilityCard extends StatelessWidget {
             controller: controller,
             editable: canMutate,
           ),
-        const Divider(height: 28),
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Недоступность по датам',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-            if (canEdit)
-              TextButton.icon(
-                onPressed: _whenEnabled(canMutate, () => _addInterval(context)),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Добавить'),
-              ),
-          ],
-        ),
-        for (final row in draft?.intervals ?? const <Map<String, dynamic>>[])
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(_intervalLabel(row)),
-            subtitle: row['reason'] == null
-                ? null
-                : Text(row['reason'].toString()),
-            trailing: canEdit
-                ? IconButton(
-                    tooltip: 'Удалить период',
-                    onPressed: _whenEnabled(
-                      canMutate,
-                      () => controller.removeUnavailableInterval(row),
-                    ),
-                    icon: const Icon(Icons.delete_outline_rounded),
-                  )
-                : null,
-          ),
       ],
     );
-  }
-
-  Future<void> _addInterval(BuildContext context) async {
-    final interval = await showUnavailableIntervalDialog(context);
-    if (interval != null) controller.addUnavailableInterval(interval);
   }
 }
 
@@ -497,16 +466,6 @@ class ScheduleReferenceCard extends StatelessWidget {
 String _reason(Map<String, dynamic> row) {
   final value = row['reason']?.toString().trim() ?? '';
   return value.isEmpty ? '' : ' · $value';
-}
-
-String _intervalLabel(Map<String, dynamic> row) {
-  final start = DateTime.tryParse(row['startsAt']?.toString() ?? '')?.toLocal();
-  final end = DateTime.tryParse(row['endsAt']?.toString() ?? '')?.toLocal();
-  if (start == null) return 'Период недоступности';
-  final format = DateFormat('dd.MM.yyyy HH:mm');
-  return end == null
-      ? 'с ${format.format(start)}'
-      : '${format.format(start)} - ${format.format(end)}';
 }
 
 T? _whenEnabled<T>(bool enabled, T callback) => enabled ? callback : null;

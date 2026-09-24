@@ -82,6 +82,7 @@ class TeacherScheduleDraft {
     required this.assignments,
     required this.recurring,
     required this.extraRecurring,
+    required this.unavailableRecurring,
     required this.intervals,
   });
 
@@ -93,10 +94,15 @@ class TeacherScheduleDraft {
     }
     final recurring = <int, Map<String, dynamic>>{};
     final extraRecurring = <Map<String, dynamic>>[];
+    final unavailableRecurring = <Map<String, dynamic>>[];
     final intervals = <Map<String, dynamic>>[];
     for (final row in scheduleReferenceMaps(json['availability'])) {
       final weekday = row['weekday'];
       if (row['kind'] == 'recurring' && weekday is num) {
+        if (row['available'] == false) {
+          unavailableRecurring.add({...row});
+          continue;
+        }
         final day = weekday.toInt();
         if (recurring.containsKey(day)) {
           extraRecurring.add({...row});
@@ -112,6 +118,7 @@ class TeacherScheduleDraft {
       assignments: assignments,
       recurring: recurring,
       extraRecurring: extraRecurring,
+      unavailableRecurring: unavailableRecurring,
       intervals: intervals,
     );
   }
@@ -120,6 +127,7 @@ class TeacherScheduleDraft {
   final Map<String, Map<String, dynamic>> assignments;
   final Map<int, Map<String, dynamic>> recurring;
   final List<Map<String, dynamic>> extraRecurring;
+  final List<Map<String, dynamic>> unavailableRecurring;
   final List<Map<String, dynamic>> intervals;
 
   TeacherScheduleDraft copyWith({
@@ -127,12 +135,14 @@ class TeacherScheduleDraft {
     Map<String, Map<String, dynamic>>? assignments,
     Map<int, Map<String, dynamic>>? recurring,
     List<Map<String, dynamic>>? extraRecurring,
+    List<Map<String, dynamic>>? unavailableRecurring,
     List<Map<String, dynamic>>? intervals,
   }) => TeacherScheduleDraft(
     version: version ?? this.version,
     assignments: assignments ?? this.assignments,
     recurring: recurring ?? this.recurring,
     extraRecurring: extraRecurring ?? this.extraRecurring,
+    unavailableRecurring: unavailableRecurring ?? this.unavailableRecurring,
     intervals: intervals ?? this.intervals,
   );
 }

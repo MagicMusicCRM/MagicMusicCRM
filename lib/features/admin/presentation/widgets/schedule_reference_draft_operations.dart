@@ -176,6 +176,48 @@ TeacherScheduleDraft withoutRecurringRule(
     if (!_sameRecurringRule(row, target)) row,
 ]);
 
+TeacherScheduleDraft withUnavailableRecurringRule(
+  TeacherScheduleDraft draft,
+  Map<String, dynamic> rule, {
+  Map<String, dynamic>? replacing,
+}) {
+  final weekday = rule['weekday'];
+  final start = rule['localStart']?.toString() ?? '';
+  final end = rule['localEnd']?.toString() ?? '';
+  final from = rule['validFrom']?.toString() ?? '';
+  final until = rule['validUntil']?.toString();
+  if (weekday is! int ||
+      weekday < 1 ||
+      weekday > 7 ||
+      start.compareTo(end) >= 0 ||
+      from.isEmpty ||
+      (until != null && until.compareTo(from) < 0)) {
+    throw ArgumentError('Invalid recurring unavailability rule.');
+  }
+  return draft.copyWith(
+    unavailableRecurring: [
+      for (final row in draft.unavailableRecurring)
+        if (!identical(row, replacing)) {...row},
+      cleanScheduleReferenceMap({
+        ...rule,
+        'kind': 'recurring',
+        'available': false,
+        'reason': rule['reason']?.toString().trim(),
+      }),
+    ],
+  );
+}
+
+TeacherScheduleDraft withoutUnavailableRecurringRule(
+  TeacherScheduleDraft draft,
+  Map<String, dynamic> rule,
+) => draft.copyWith(
+  unavailableRecurring: [
+    for (final row in draft.unavailableRecurring)
+      if (!identical(row, rule)) {...row},
+  ],
+);
+
 List<Map<String, dynamic>> _allRecurringRules(TeacherScheduleDraft draft) => [
   for (final row in draft.recurring.values) {...row},
   for (final row in draft.extraRecurring) {...row},
@@ -296,5 +338,6 @@ List<Map<String, dynamic>> teacherAvailabilityPayload(
 ) => [
   for (final row in draft.recurring.values) cleanScheduleReferenceMap(row),
   for (final row in draft.extraRecurring) cleanScheduleReferenceMap(row),
+  for (final row in draft.unavailableRecurring) cleanScheduleReferenceMap(row),
   for (final row in draft.intervals) cleanScheduleReferenceMap(row),
 ];
