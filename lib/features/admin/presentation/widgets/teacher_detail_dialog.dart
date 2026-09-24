@@ -280,6 +280,10 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
         snapshot != null &&
         (snapshot.allows('config.crm.edit') ||
             snapshot.allows('system.settings.manage'));
+    final canViewAvailability =
+        snapshot != null &&
+        (snapshot.allows('config.crm.read') ||
+            snapshot.allows('system.settings.manage'));
     final content = TeacherDetailContent(
       teacher: _teacher,
       nameController: _nameController,
@@ -293,6 +297,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       canManageCredentials: canManageCredentials,
       canManageTeacherRates: canManageTeacherRates,
       canOpenSchedule: canOpenSchedule,
+      canViewAvailability: canViewAvailability,
       canEditAvailability: canEditAvailability,
       saving: _saving,
       onOpenSchedule: () => unawaited(_openSchedule()),
@@ -314,7 +319,13 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.save_outlined, size: 18),
-      label: Text(_saving ? 'Сохранение…' : 'Сохранить'),
+      label: Text(
+        _saving
+            ? 'Сохранение профиля…'
+            : widget.embedded
+            ? 'Сохранить профиль'
+            : 'Сохранить',
+      ),
     );
     if (widget.embedded) {
       return PersonnelEmbeddedCardFrame(

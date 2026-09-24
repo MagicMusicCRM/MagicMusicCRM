@@ -454,7 +454,7 @@ void main() {
       await tester.tap(find.text('Смирнова Ольга'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('staff-personnel-section-access')));
+      await tester.ensureVisible(find.byKey(const Key('staff-card-access')));
       await tester.pumpAndSettle();
       expect(find.text('Роль доступа'), findsOneWidget);
       expect(
@@ -630,7 +630,7 @@ void main() {
     await tester.tap(find.text('Мария Петрова'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('teacher-personnel-section-access')));
+    await tester.ensureVisible(find.byKey(const Key('teacher-card-access')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('teacher-change-access-role')), findsOneWidget);
     expect(
@@ -768,7 +768,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Смирнова Ольга'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('staff-personnel-section-access')));
+    await tester.ensureVisible(find.byKey(const Key('staff-card-access')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Создать доступ'));
     await tester.pumpAndSettle();
@@ -840,7 +840,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Смирнова Ольга'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('staff-personnel-section-access')));
+    await tester.ensureVisible(find.byKey(const Key('staff-card-access')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Данные для входа'));
     await tester.pumpAndSettle();
@@ -888,21 +888,21 @@ void main() {
       await tester.tap(find.text('Смирнова Ольга'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('staff-personnel-section-access')));
+      await tester.ensureVisible(find.byKey(const Key('staff-card-access')));
       await tester.pumpAndSettle();
       expect(
         find.text('Доступ не создан. Карточку можно сохранить без него'),
         findsOneWidget,
       );
-      await tester.tap(
-        find.byKey(const Key('staff-personnel-section-employment')),
+      await tester.ensureVisible(
+        find.byKey(const Key('staff-card-employment')),
       );
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Должность'),
         'Старший администратор',
       );
-      final save = find.widgetWithText(FilledButton, 'Сохранить');
+      final save = find.byKey(const Key('staff-detail-save'));
       await tester.ensureVisible(save);
       await tester.tap(save);
       await tester.pumpAndSettle();
@@ -945,23 +945,19 @@ void main() {
       await tester.tap(find.text('Мария Петрова'));
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.byKey(const Key('teacher-personnel-section-access')),
-      );
+      await tester.ensureVisible(find.byKey(const Key('teacher-card-access')));
       await tester.pumpAndSettle();
       expect(
         find.text('Доступ не создан. Карточку можно сохранить без него'),
         findsOneWidget,
       );
-      await tester.tap(
-        find.byKey(const Key('teacher-personnel-section-overview')),
-      );
+      await tester.ensureVisible(find.byKey(const Key('teacher-card-profile')));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextField, 'Имя Фамилия'),
         'Марина Петрова',
       );
-      final save = find.widgetWithText(FilledButton, 'Сохранить').last;
+      final save = find.byKey(const Key('teacher-detail-save'));
       await tester.ensureVisible(save);
       await tester.tap(save);
       await tester.pumpAndSettle();
@@ -1008,21 +1004,19 @@ void main() {
     await tester.tap(find.text('Мария Петрова'));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byKey(const Key('teacher-personnel-section-employment')),
+    await tester.ensureVisible(
+      find.byKey(const Key('teacher-card-employment')),
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('Базовая ставка'), findsNothing);
     expect(find.widgetWithText(TextFormField, 'Оклад, ₽/мес'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const Key('teacher-personnel-section-overview')),
-    );
+    await tester.ensureVisible(find.byKey(const Key('teacher-card-profile')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Имя Фамилия'),
       'Марина Петрова',
     );
-    final save = find.widgetWithText(FilledButton, 'Сохранить').last;
+    final save = find.byKey(const Key('teacher-detail-save'));
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();

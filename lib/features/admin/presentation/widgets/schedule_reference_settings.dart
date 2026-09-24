@@ -18,6 +18,7 @@ class ScheduleReferenceSettings extends ConsumerStatefulWidget {
     this.initialBranchId,
     this.initialTeacherId,
     this.lockedTeacherId,
+    this.inline = false,
   });
 
   final bool canEdit;
@@ -25,6 +26,7 @@ class ScheduleReferenceSettings extends ConsumerStatefulWidget {
   final String? initialBranchId;
   final String? initialTeacherId;
   final String? lockedTeacherId;
+  final bool inline;
 
   @override
   ConsumerState<ScheduleReferenceSettings> createState() =>
@@ -77,5 +79,6 @@ class _ScheduleReferenceSettingsState
   Widget build(BuildContext context) => ScheduleReferenceView(
     controller: _controller,
     onRetry: _controller.loadCatalogs,
+    inline: widget.inline,
   );
 }

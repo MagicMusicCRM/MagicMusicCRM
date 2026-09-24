@@ -201,16 +201,17 @@ void main() {
       findsOneWidget,
     );
     for (final section in const [
-      'overview',
+      'profile',
       'employment',
       'access',
       'history',
     ]) {
-      expect(
-        find.byKey(Key('staff-personnel-section-$section')),
-        findsOneWidget,
-      );
+      expect(find.byKey(Key('staff-card-$section')), findsOneWidget);
     }
+    expect(
+      find.byKey(const Key('staff-personnel-section-access')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
 
     tester.view.physicalSize = const Size(430, 932);
@@ -284,23 +285,22 @@ void main() {
       findsOneWidget,
     );
     for (final section in const [
-      'overview',
+      'profile',
       'schedule',
       'employment',
       'access',
       'history',
     ]) {
-      expect(
-        find.byKey(Key('teacher-personnel-section-$section')),
-        findsOneWidget,
-      );
+      expect(find.byKey(Key('teacher-card-$section')), findsOneWidget);
     }
+    expect(
+      find.byKey(const Key('teacher-personnel-section-access')),
+      findsNothing,
+    );
     expect(find.byKey(const Key('teacher-open-schedule')), findsOneWidget);
     expect(find.byKey(const Key('teacher-open-availability')), findsNothing);
 
-    await tester.tap(
-      find.byKey(const Key('teacher-personnel-section-schedule')),
-    );
+    await tester.ensureVisible(find.byKey(const Key('teacher-card-schedule')));
     await tester.pumpAndSettle();
     await captureModalLayout(tester, 'windows-teacher-card-availability');
     expect(api.requests, contains('/crm/branches'));
@@ -325,8 +325,8 @@ void main() {
     );
     expect(find.text('Недоступность по датам'), findsOneWidget);
 
-    await tester.tap(
-      find.byKey(const Key('teacher-personnel-section-employment')),
+    await tester.ensureVisible(
+      find.byKey(const Key('teacher-card-employment')),
     );
     await tester.pumpAndSettle();
     expect(
@@ -334,12 +334,10 @@ void main() {
       findsOneWidget,
     );
     await captureModalLayout(tester, 'windows-teacher-card-rate-guard');
-    await tester.tap(find.byKey(const Key('teacher-personnel-section-access')));
+    await tester.ensureVisible(find.byKey(const Key('teacher-card-access')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('teacher-personal-access')), findsOneWidget);
-    await tester.tap(
-      find.byKey(const Key('teacher-personnel-section-history')),
-    );
+    await tester.ensureVisible(find.byKey(const Key('teacher-card-history')));
     await tester.pumpAndSettle();
     expect(api.requests, contains('/crm/teachers/teacher-a/lifecycle-history'));
     expect(find.text('График и занятые периоды изменены'), findsOneWidget);
@@ -348,9 +346,7 @@ void main() {
 
     tester.view.physicalSize = const Size(430, 932);
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('teacher-personnel-section-overview')),
-    );
+    await tester.ensureVisible(find.byKey(const Key('teacher-card-profile')));
     await tester.pumpAndSettle();
     await captureModalLayout(tester, 'mobile-teacher-card-overview');
     expect(find.byKey(const Key('teacher-detail-embedded')), findsOneWidget);
@@ -358,6 +354,49 @@ void main() {
       find.byKey(const Key('teacher-detail-save')).hitTestable(),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('teacher card does not load restricted schedule references', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1366, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = _PersonnelApi();
+    const snapshot = CapabilitySnapshot(
+      accountId: 'account-a',
+      role: 'manager',
+      accessVersion: 1,
+      capabilities: {'crm.client.read.basic'},
+      scopes: {},
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.production,
+          home: Scaffold(
+            body: PersonnelWorkspace(
+              snapshot: snapshot,
+              initialLink: EntityLink.typed(
+                entityType: EntityLinkType.teacher,
+                entityId: 'teacher-a',
+                variant: 'personnel_teacher',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('teacher-card-profile')), findsOneWidget);
+    expect(find.byKey(const Key('teacher-card-schedule')), findsNothing);
+    expect(api.requests, isNot(contains('/crm/schedule-reference')));
     expect(tester.takeException(), isNull);
   });
 }

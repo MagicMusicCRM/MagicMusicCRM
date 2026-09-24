@@ -94,11 +94,11 @@ void main() {
       await tester.tap(find.text('750 ₽').last);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Уровни'));
-      await tester.pumpAndSettle();
+      expect(find.text('Уровни обучения'), findsOneWidget);
+      expect(find.text('Категории учеников'), findsOneWidget);
+      await tester.ensureVisible(find.text('Начальный'));
       await tester.tap(find.text('Начальный'));
-      await tester.tap(find.text('Категории'));
-      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Дети'));
       await tester.tap(find.text('Дети'));
 
       final value = key.currentState!.validateAndRead();
@@ -182,11 +182,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Центральный'), findsOneWidget);
-    await tester.tap(find.text('Уровни'));
-    await tester.pump();
+    expect(find.text('Уровни обучения'), findsOneWidget);
     expect(find.text('Сохранённый уровень'), findsOneWidget);
-    await tester.tap(find.text('Категории'));
-    await tester.pump();
+    expect(find.text('Категории учеников'), findsOneWidget);
     expect(find.text('Сохранённая категория'), findsOneWidget);
 
     final value = key.currentState!.validateAndRead();

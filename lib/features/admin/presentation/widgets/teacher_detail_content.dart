@@ -24,6 +24,7 @@ class TeacherDetailContent extends StatelessWidget {
     required this.canManageCredentials,
     required this.canManageTeacherRates,
     required this.canOpenSchedule,
+    required this.canViewAvailability,
     required this.canEditAvailability,
     required this.saving,
     required this.onOpenSchedule,
@@ -46,6 +47,7 @@ class TeacherDetailContent extends StatelessWidget {
   final bool canManageCredentials;
   final bool canManageTeacherRates;
   final bool canOpenSchedule;
+  final bool canViewAvailability;
   final bool canEditAvailability;
   final bool saving;
   final VoidCallback onOpenSchedule;
@@ -187,75 +189,72 @@ class TeacherDetailContent extends StatelessWidget {
     );
     if (embedded) {
       final teacherId = teacher['id']?.toString();
-      return PersonnelSectionedCardBody(
-        keyPrefix: 'teacher',
-        sections: [
-          PersonnelCardSection(
-            id: 'overview',
-            label: 'Обзор',
-            icon: Icons.dashboard_outlined,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TeacherDetailSummary(
-                  teacher: teacher,
-                  canManageCredentials: canManageCredentials,
+      Widget section(String name, Widget child) =>
+          KeyedSubtree(key: Key('teacher-card-$name'), child: child);
+      final profile = section('profile', identity);
+      final work = section('employment', employment);
+      final schedule = section(
+        'schedule',
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: Theme.of(
+                context,
+              ).colorScheme.outlineVariant.withValues(alpha: 0.75),
+            ),
+          ),
+          child: teacherId == null || teacherId.isEmpty
+              ? const Center(
+                  child: Text('Не удалось определить преподавателя.'),
+                )
+              : ScheduleReferenceSettings(
+                  canEdit: canEditAvailability,
+                  section: ScheduleReferenceSection.teacherSchedule,
+                  initialTeacherId: teacherId,
+                  lockedTeacherId: teacherId,
+                  inline: true,
                 ),
-                if (scheduleActions.children.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  scheduleActions,
-                ],
-                const SizedBox(height: 12),
-                identity,
-              ],
+        ),
+      );
+      final permissions = section('access', access);
+      final history = section(
+        'history',
+        PersonnelHistorySummary(
+          createdAt: teacher['created_at'] ?? teacher['createdAt'],
+          lifecycleState: teacher['lifecycle_state']?.toString() ?? 'active',
+          offboardedAt: teacher['offboarded_at'] ?? teacher['offboardedAt'],
+          offboardReason:
+              teacher['offboard_reason'] ?? teacher['offboardReason'],
+          personId: teacherId,
+          personType: 'teacher',
+          canViewActivity: canManageCredentials,
+        ),
+      );
+      return PersonnelCardCanvas(
+        summary: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TeacherDetailSummary(
+              teacher: teacher,
+              canManageCredentials: canManageCredentials,
             ),
-          ),
-          PersonnelCardSection(
-            id: 'schedule',
-            label: 'Расписание',
-            icon: Icons.event_available_outlined,
-            lazy: true,
-            child: teacherId == null || teacherId.isEmpty
-                ? const Text('Не удалось определить преподавателя.')
-                : SizedBox(
-                    height: 680,
-                    child: ScheduleReferenceSettings(
-                      canEdit: canEditAvailability,
-                      section: ScheduleReferenceSection.teacherSchedule,
-                      initialTeacherId: teacherId,
-                      lockedTeacherId: teacherId,
-                    ),
-                  ),
-          ),
-          PersonnelCardSection(
-            id: 'employment',
-            label: 'Условия оплаты',
-            icon: Icons.payments_outlined,
-            child: employment,
-          ),
-          PersonnelCardSection(
-            id: 'access',
-            label: 'Доступ',
-            icon: Icons.admin_panel_settings_outlined,
-            child: access,
-          ),
-          PersonnelCardSection(
-            id: 'history',
-            label: 'История',
-            icon: Icons.history_rounded,
-            lazy: true,
-            child: PersonnelHistorySummary(
-              createdAt: teacher['created_at'] ?? teacher['createdAt'],
-              lifecycleState:
-                  teacher['lifecycle_state']?.toString() ?? 'active',
-              offboardedAt: teacher['offboarded_at'] ?? teacher['offboardedAt'],
-              offboardReason:
-                  teacher['offboard_reason'] ?? teacher['offboardReason'],
-              personId: teacherId,
-              personType: 'teacher',
-              canViewActivity: canManageCredentials,
-            ),
-          ),
+            if (scheduleActions.children.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.md),
+              scheduleActions,
+            ],
+          ],
+        ),
+        desktopLeft: [profile, work],
+        desktopRight: [if (canViewAvailability) schedule, permissions, history],
+        mobileSections: [
+          profile,
+          if (canViewAvailability) schedule,
+          work,
+          permissions,
+          history,
         ],
       );
     }
@@ -331,11 +330,15 @@ class _TeacherDetailSection extends StatelessWidget {
               children: [
                 Icon(icon, size: 19, color: AppColor.gold),
                 const SizedBox(width: AppSpace.sm),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],

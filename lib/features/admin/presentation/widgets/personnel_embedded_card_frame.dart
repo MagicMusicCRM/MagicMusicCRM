@@ -4,159 +4,54 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 
-class PersonnelCardSection {
-  const PersonnelCardSection({
-    required this.id,
-    required this.label,
-    required this.icon,
-    required this.child,
-    this.lazy = false,
-  });
-
-  final String id;
-  final String label;
-  final IconData icon;
-  final Widget child;
-  final bool lazy;
-}
-
-class PersonnelSectionedCardBody extends StatefulWidget {
-  const PersonnelSectionedCardBody({
+class PersonnelCardCanvas extends StatelessWidget {
+  const PersonnelCardCanvas({
     super.key,
-    required this.keyPrefix,
-    required this.sections,
+    required this.summary,
+    required this.desktopLeft,
+    required this.desktopRight,
+    required this.mobileSections,
   });
 
-  final String keyPrefix;
-  final List<PersonnelCardSection> sections;
+  final Widget summary;
+  final List<Widget> desktopLeft;
+  final List<Widget> desktopRight;
+  final List<Widget> mobileSections;
 
   @override
-  State<PersonnelSectionedCardBody> createState() =>
-      _PersonnelSectionedCardBodyState();
-}
-
-class _PersonnelSectionedCardBodyState
-    extends State<PersonnelSectionedCardBody> {
-  String? _selected;
-  final Set<String> _visited = {};
-
-  void _select(String section) {
-    setState(() {
-      _selected = section;
-      _visited.add(section);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final sections = widget.sections;
-    if (sections.isEmpty) return const SizedBox.shrink();
-    final selected = sections.any((section) => section.id == _selected)
-        ? _selected!
-        : sections.first.id;
-    final colors = Theme.of(context).colorScheme;
-    final navigation = MagicDesktopScrollbar(
-      axis: Axis.horizontal,
-      builder: (context, controller) => SingleChildScrollView(
-        controller: controller,
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final section in sections) ...[
-              if (section != sections.first) const SizedBox(width: AppSpace.sm),
-              Material(
-                color: section.id == selected
-                    ? AppColor.goldSoft
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppRadius.chip),
-                child: InkWell(
-                  key: Key(
-                    '${widget.keyPrefix}-personnel-section-${section.id}',
-                  ),
-                  borderRadius: BorderRadius.circular(AppRadius.chip),
-                  onTap: () => _select(section.id),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpace.md,
-                      vertical: AppSpace.sm,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppRadius.chip),
-                      border: Border.all(
-                        color: section.id == selected
-                            ? AppColor.goldLine
-                            : colors.outlineVariant,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          section.icon,
-                          size: 16,
-                          color: section.id == selected
-                              ? AppColor.gold
-                              : colors.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          section.label,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: section.id == selected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: section.id == selected
-                                ? AppColor.gold
-                                : colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Padding(
+      padding: const EdgeInsets.all(AppSpace.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          summary,
+          const SizedBox(height: AppSpace.md),
+          if (constraints.maxWidth >= 960)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _column(desktopLeft)),
+                const SizedBox(width: AppSpace.md),
+                Expanded(child: _column(desktopRight)),
+              ],
+            )
+          else
+            _column(mobileSections),
+        ],
       ),
-    );
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final section in sections)
-          if (!section.lazy ||
-              section.id == selected ||
-              _visited.contains(section.id))
-            Offstage(
-              offstage: section.id != selected,
-              child: TickerMode(
-                enabled: section.id == selected,
-                child: KeyedSubtree(
-                  key: ValueKey(
-                    '${widget.keyPrefix}-personnel-content-${section.id}',
-                  ),
-                  child: section.child,
-                ),
-              ),
-            ),
+    ),
+  );
+
+  Widget _column(List<Widget> sections) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (var index = 0; index < sections.length; index++) ...[
+        if (index > 0) const SizedBox(height: AppSpace.md),
+        sections[index],
       ],
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpace.lg,
-            vertical: AppSpace.md,
-          ),
-          child: navigation,
-        ),
-        Divider(height: 1, color: colors.outlineVariant.withValues(alpha: 0.6)),
-        Padding(padding: const EdgeInsets.all(AppSpace.lg), child: content),
-      ],
-    );
-  }
+    ],
+  );
 }
 
 class PersonnelHistorySummary extends StatelessWidget {
@@ -508,7 +403,11 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
           Expanded(
             child: ColoredBox(
               color: colors.surface,
-              child: SingleChildScrollView(child: body),
+              child: MagicDesktopScrollbar(
+                axis: Axis.vertical,
+                builder: (context, controller) =>
+                    SingleChildScrollView(controller: controller, child: body),
+              ),
             ),
           ),
           Divider(

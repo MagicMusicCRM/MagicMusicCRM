@@ -122,7 +122,6 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
   num? _rate;
   String? _loadError;
   String? _selectionError;
-  int _settingsSection = 0;
   int _disciplineLoadGeneration = 0;
 
   @override
@@ -394,46 +393,29 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
           const SizedBox(height: 16),
           _chips(title: 'Филиалы *', options: _branches, selected: _branchIds),
           const SizedBox(height: 14),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 0, label: Text('Дисциплины')),
-                ButtonSegment(value: 1, label: Text('Уровни')),
-                ButtonSegment(value: 2, label: Text('Категории')),
-              ],
-              selected: {_settingsSection},
-              onSelectionChanged: !widget.enabled
-                  ? null
-                  : (selection) =>
-                        setState(() => _settingsSection = selection.first),
-            ),
+          _loadingDisciplines
+              ? const Center(child: CircularProgressIndicator())
+              : _chips(
+                  title: 'Дисциплины преподавателя (необязательно)',
+                  options: _disciplines,
+                  selected: _disciplineIds,
+                  lockArchived: true,
+                  emptyText: 'Добавьте дисциплины в общем справочнике.',
+                ),
+          const SizedBox(height: 14),
+          _stringChips(
+            title: 'Уровни обучения',
+            options: _levelOptions,
+            selected: _levels,
+            emptyText: 'Добавьте варианты уровней в настройках.',
           ),
-          const SizedBox(height: 10),
-          if (_settingsSection == 0)
-            _loadingDisciplines
-                ? const Center(child: CircularProgressIndicator())
-                : _chips(
-                    title: 'Дисциплины преподавателя (необязательно)',
-                    options: _disciplines,
-                    selected: _disciplineIds,
-                    lockArchived: true,
-                    emptyText: 'Добавьте дисциплины в общем справочнике.',
-                  )
-          else if (_settingsSection == 1)
-            _stringChips(
-              title: 'Уровни обучения',
-              options: _levelOptions,
-              selected: _levels,
-              emptyText: 'Добавьте варианты уровней в настройках.',
-            )
-          else
-            _stringChips(
-              title: 'Категории учеников',
-              options: _categoryOptions,
-              selected: _categories,
-              emptyText: 'Добавьте варианты категорий в настройках.',
-            ),
+          const SizedBox(height: 14),
+          _stringChips(
+            title: 'Категории учеников',
+            options: _categoryOptions,
+            selected: _categories,
+            emptyText: 'Добавьте варианты категорий в настройках.',
+          ),
           if (_selectionError != null) ...[
             const SizedBox(height: 8),
             Text(

@@ -14,10 +14,12 @@ class ScheduleReferenceView extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onRetry,
+    this.inline = false,
   });
 
   final ScheduleReferenceController controller;
   final Future<void> Function() onRetry;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -49,7 +51,7 @@ class ScheduleReferenceView extends StatelessWidget {
           ),
         ),
         if (controller.state.loading) const LinearProgressIndicator(),
-        Expanded(child: _body(context)),
+        if (inline) _body(context) else Expanded(child: _body(context)),
       ],
     );
   }
@@ -80,6 +82,8 @@ class ScheduleReferenceView extends StatelessWidget {
       );
     }
     return ListView(
+      shrinkWrap: inline,
+      physics: inline ? const NeverScrollableScrollPhysics() : null,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
         if (controller.section == ScheduleReferenceSection.branchHours)

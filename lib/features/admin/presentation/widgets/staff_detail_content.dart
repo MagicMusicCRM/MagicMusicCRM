@@ -66,7 +66,13 @@ class StaffDetailContent extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.save_outlined, size: 18),
-      label: Text(controller.saving ? 'Сохранение…' : 'Сохранить'),
+      label: Text(
+        controller.saving
+            ? 'Сохранение профиля…'
+            : embedded
+            ? 'Сохранить профиль'
+            : 'Сохранить',
+      ),
     );
     if (embedded) {
       return PersonnelEmbeddedCardFrame(
@@ -174,46 +180,39 @@ class _StaffDetailForm extends StatelessWidget {
     );
     if (embedded) {
       final staff = controller.staff;
-      return PersonnelSectionedCardBody(
-        keyPrefix: 'staff',
-        sections: [
-          PersonnelCardSection(
-            id: 'overview',
-            label: 'Обзор',
-            icon: Icons.dashboard_outlined,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                StaffSummary(controller: controller, currentRole: currentRole),
-                const SizedBox(height: 12),
-                _StaffDetailSection(
-                  title: 'Основные данные',
-                  icon: Icons.person_outline_rounded,
-                  child: _IdentityFields(
-                    controller: controller,
-                    currentRole: currentRole,
-                  ),
-                ),
-              ],
-            ),
+      Widget section(String name, Widget child) =>
+          KeyedSubtree(key: Key('staff-card-$name'), child: child);
+      final profile = section(
+        'profile',
+        _StaffDetailSection(
+          title: 'Основные данные',
+          icon: Icons.person_outline_rounded,
+          child: _IdentityFields(
+            controller: controller,
+            currentRole: currentRole,
+            showAccessEmail: false,
           ),
-          PersonnelCardSection(
-            id: 'employment',
-            label: 'Работа и филиалы',
-            icon: Icons.work_outline_rounded,
-            child: employment,
-          ),
-          PersonnelCardSection(
-            id: 'access',
-            label: 'Доступ',
-            icon: Icons.admin_panel_settings_outlined,
-            child: access,
-          ),
-          buildStaffHistorySection(
-            staff,
-            canViewActivity: canManageStaffCredentials(currentRole),
-          ),
-        ],
+        ),
+      );
+      final work = section('employment', employment);
+      final permissions = section('access', access);
+      final history = section(
+        'history',
+        PersonnelHistorySummary(
+          createdAt: staff['created_at'] ?? staff['createdAt'],
+          lifecycleState: staff['lifecycle_state']?.toString() ?? 'active',
+          offboardedAt: staff['offboarded_at'] ?? staff['offboardedAt'],
+          offboardReason: staff['offboard_reason'] ?? staff['offboardReason'],
+          personId: staff['id']?.toString(),
+          personType: 'staff',
+          canViewActivity: canManageStaffCredentials(currentRole),
+        ),
+      );
+      return PersonnelCardCanvas(
+        summary: StaffSummary(controller: controller, currentRole: currentRole),
+        desktopLeft: [profile, work],
+        desktopRight: [permissions, history],
+        mobileSections: [profile, work, permissions, history],
       );
     }
     return LayoutBuilder(
@@ -287,11 +286,15 @@ class _StaffDetailSection extends StatelessWidget {
               children: [
                 Icon(icon, size: 19, color: AppColor.gold),
                 const SizedBox(width: AppSpace.sm),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],
@@ -309,10 +312,15 @@ class _StaffDetailSection extends StatelessWidget {
 }
 
 class _IdentityFields extends StatelessWidget {
-  const _IdentityFields({required this.controller, required this.currentRole});
+  const _IdentityFields({
+    required this.controller,
+    required this.currentRole,
+    this.showAccessEmail = true,
+  });
 
   final StaffDetailController controller;
   final String currentRole;
+  final bool showAccessEmail;
 
   @override
   Widget build(BuildContext context) {
@@ -338,7 +346,7 @@ class _IdentityFields extends StatelessWidget {
           onCanonicalChanged: controller.setCanonicalPhone,
         ),
         const SizedBox(height: 12),
-        if (canManageStaffCredentials(currentRole)) ...[
+        if (showAccessEmail && canManageStaffCredentials(currentRole)) ...[
           TextFormField(
             key: ValueKey(draft.email),
             initialValue: draft.email,
