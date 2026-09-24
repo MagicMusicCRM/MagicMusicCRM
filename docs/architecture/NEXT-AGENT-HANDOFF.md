@@ -1,4 +1,24 @@
-# MagicMusicCRM — актуальная передача 226
+# MagicMusicCRM — актуальная передача 228
+
+## Production 1.5.48+228 — выпущен 25.09.2026 (Europe/Moscow)
+
+По прямой команде владельца выпущены уведомления в общем заголовке и новые
+карточки персонала с разовой/еженедельной занятостью преподавателя. Source/tag:
+`c4dde126bc7f37252110d252b97d8ca6c608c9c1` / `v1.5.48`.
+API `magicmusiccrm-server:1.5.48-228-final`, image
+`sha256:a1312c700e0538f412ec97d7dae9e55378535f654ae54419516efc9c4cc33665`,
+schema `0161_restore_notification_preferences`. Два update-канала и четыре
+публичных пакета build 228 проверены по SHA-256. Readiness `ok`, outbox `0/0`,
+reconciliation `issues=[]`; пред- и послевыпускные encrypted backups сохранены
+вне сервера и восстановлены в изоляции.
+
+Для отката API нужен **совместимый** образ с кодом 227 и миграцией 0161:
+`magicmusiccrm-server:1.5.47-227-compat-228`, source
+`cab9ace7b6672aad7286f911643c13003a09485f`. Старый image 227 отвергает
+новую схему и не подходит. Manifest build 227 сохранены; down-миграции и
+переписывание финансовой/учебной/audit-истории запрещены. Полная приёмка под
+рабочими ролями и PUSH на устройствах не заявлена. Подробности:
+[release 228 audit](../audits/release-228-production.md).
 
 ## Production 1.5.46+226 — выпущен 23.09.2026 (Europe/Moscow)
 
