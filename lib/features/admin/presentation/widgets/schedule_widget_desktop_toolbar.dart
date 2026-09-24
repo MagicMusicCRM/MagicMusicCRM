@@ -9,7 +9,8 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final narrow = constraints.maxWidth < 900 * textScale;
     final teacherWeek =
-        _currentView == ScheduleView.week &&
+        (_currentView == ScheduleView.week ||
+            (_showScheduleTabs && _currentView == ScheduleView.day)) &&
         _dayViewMode == DayViewMode.byTeacher;
     final singleRow =
         constraints.maxWidth >=
@@ -142,7 +143,8 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                   navigation,
                   const SizedBox(width: 8),
                   views,
-                  if (_currentView != ScheduleView.month) mode,
+                  if (!_showScheduleTabs && _currentView != ScheduleView.month)
+                    mode,
                   if (teacherWeek) _buildWeekTeacherSelector(firstLoad),
                   const SizedBox(width: 8),
                   Expanded(child: search),
@@ -165,7 +167,8 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                     children: [
                       if (narrow) ...[views, const SizedBox(width: 8)],
                       Expanded(child: search),
-                      if (_currentView != ScheduleView.month) ...[
+                      if (!_showScheduleTabs &&
+                          _currentView != ScheduleView.month) ...[
                         const SizedBox(width: 8),
                         mode,
                       ],
@@ -214,7 +217,10 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
             ? null
             : (value) {
                 if (value == null || value == _filterTeacherId) return;
-                _emitState(() => _filterTeacherId = value);
+                _emitState(() {
+                  _filterTeacherId = value;
+                  if (_showScheduleTabs) _teacherScheduleId = value;
+                });
                 _fetchAll();
               },
       ),
@@ -235,7 +241,8 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                 initialBranchId: _selectedBranchId,
                 initialMode: _dayViewMode,
                 branches: _branches,
-                isDayView: _currentView == ScheduleView.day,
+                isDayView:
+                    _currentView == ScheduleView.day && !_showScheduleTabs,
                 initialOnlyTrial: _onlyTrial,
                 initialOnlyConflicts: _onlyConflicts,
                 initialTeacherId: _filterTeacherId,

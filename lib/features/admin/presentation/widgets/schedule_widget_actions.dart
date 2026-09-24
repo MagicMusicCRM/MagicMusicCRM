@@ -676,7 +676,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
       final teacherIds = tNames.keys.toList()
         ..sort((left, right) => tNames[left]!.compareTo(tNames[right]!));
       final selectedWeekTeacher =
-          _currentView == ScheduleView.week &&
+          (_currentView == ScheduleView.week ||
+                  (_showScheduleTabs && _currentView == ScheduleView.day)) &&
               _dayViewMode == DayViewMode.byTeacher
           ? (widget.fixedTeacherId ??
                 _filterTeacherId ??
@@ -696,6 +697,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
         _teacherNames = tNames;
         if (selectedWeekTeacher != null) {
           _filterTeacherId = selectedWeekTeacher;
+          if (_showScheduleTabs) _teacherScheduleId = selectedWeekTeacher;
         }
         _studentNames = sNames;
         _isLoading = false;
@@ -732,27 +734,36 @@ extension _ScheduleActions on _ScheduleWidgetState {
   Future<void> _fetchTeacherWeekReference() async {
     final branchId = _selectedBranchId;
     final teacherId = widget.fixedTeacherId ?? _filterTeacherId;
-    if (_currentView != ScheduleView.week ||
+    if ((_currentView != ScheduleView.week &&
+            !(_showScheduleTabs && _currentView == ScheduleView.day)) ||
         _dayViewMode != DayViewMode.byTeacher ||
         branchId == null ||
         teacherId == null) {
       return;
     }
     final generation = ++_teacherWeekReferenceGeneration;
-    _emitState(() => _teacherWeekReferenceLoading = true);
+    _emitState(() {
+      _teacherWeekReference = null;
+      _teacherWeekReferenceLoading = true;
+    });
     final monday = DateTime(
       _selectedDate.year,
       _selectedDate.month,
       _selectedDate.day,
     ).subtract(Duration(days: _selectedDate.weekday - 1));
+    final fromUtc = DateTime.utc(
+      monday.year,
+      monday.month,
+      monday.day,
+    ).subtract(Duration(minutes: _selectedBranchOffset));
     try {
       final reference = await ref
           .read(magicCrmServiceProvider)
           .getScheduleReference(
             branchId: branchId,
             teacherId: teacherId,
-            from: monday,
-            to: monday.add(const Duration(days: 7)),
+            from: fromUtc,
+            to: fromUtc.add(const Duration(days: 7, hours: 1)),
           );
       if (!mounted || generation != _teacherWeekReferenceGeneration) return;
       _emitState(() {
@@ -979,7 +990,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
       _compensationRules.isNotEmpty ||
       _onlyTrial ||
       _onlyConflicts ||
-      _filterTeacherId != null ||
+      (_filterTeacherId != null &&
+          !(_showScheduleTabs && _dayViewMode == DayViewMode.byTeacher)) ||
       _filterRoomId != null ||
       _filterClientId != null;
 
@@ -988,7 +1000,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
       (_compensationRules.isNotEmpty ? 1 : 0) +
       (_onlyTrial ? 1 : 0) +
       (_onlyConflicts ? 1 : 0) +
-      (_filterTeacherId != null ? 1 : 0);
+      (_filterTeacherId != null &&
+              !(_showScheduleTabs && _dayViewMode == DayViewMode.byTeacher)
+          ? 1
+          : 0);
 
   List<Map<String, dynamic>> _lessonsForDate(
     DateTime date, {
@@ -1099,6 +1114,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
     });
     _fetchAvailabilityForSelectedDay();
     _fetchDayLessons(_selectedDate);
+    if (_showScheduleTabs && _dayViewMode == DayViewMode.byTeacher) {
+      _fetchTeacherWeekReference();
+    }
   }
 
   void _nextDay() {
@@ -1108,6 +1126,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
     });
     _fetchAvailabilityForSelectedDay();
     _fetchDayLessons(_selectedDate);
+    if (_showScheduleTabs && _dayViewMode == DayViewMode.byTeacher) {
+      _fetchTeacherWeekReference();
+    }
   }
 
   void _onMonthDayTap(DateTime date) {
@@ -1379,7 +1400,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       initialBranchId: _selectedBranchId,
       initialMode: _dayViewMode,
       branches: _branches,
-      isDayView: _currentView == ScheduleView.day,
+      isDayView: _currentView == ScheduleView.day && !_showScheduleTabs,
       initialOnlyTrial: _onlyTrial,
       initialOnlyConflicts: _onlyConflicts,
       initialTeacherId: _filterTeacherId,
@@ -1417,6 +1438,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
       _compensationRules = result.compensationRules;
       _onlyConflicts = result.onlyConflicts;
       _filterTeacherId = result.teacherId;
+      if (_showScheduleTabs) {
+        if (_dayViewMode == DayViewMode.byTeacher) {
+          _teacherScheduleId = result.teacherId;
+        } else {
+          _roomTeacherFilterId = result.teacherId;
+        }
+      }
       if (_selectedTeacherId != null &&
           !_filteredLessons.any(
             (lesson) => lesson['teacher_id']?.toString() == _selectedTeacherId,

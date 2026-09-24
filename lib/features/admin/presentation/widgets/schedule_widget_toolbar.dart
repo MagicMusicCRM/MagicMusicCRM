@@ -28,7 +28,10 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
         onDayTap: _onMonthDayTap,
       ),
       ScheduleView.week => _buildWeekView(),
-      ScheduleView.day => _buildDayView(),
+      ScheduleView.day =>
+        _showScheduleTabs && _dayViewMode == DayViewMode.byTeacher
+            ? _buildWeekView(singleDay: true)
+            : _buildDayView(),
     };
   }
 
@@ -124,6 +127,11 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
               _buildDateNavigation(),
               const SizedBox(height: AppSpace.sm),
               _buildBranchSelector(),
+              if (_showScheduleTabs &&
+                  _dayViewMode == DayViewMode.byTeacher) ...[
+                const SizedBox(height: AppSpace.sm),
+                _buildWeekTeacherSelector(firstLoad),
+              ],
             ],
           ],
         ),
@@ -168,10 +176,11 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
         key: const ValueKey('schedule-view-switcher'),
         segments: [
           if (widget.allowMonth)
-            const ButtonSegment(
-              value: ScheduleView.month,
-              label: Text('Месяц'),
-            ),
+            if (_dayViewMode != DayViewMode.byTeacher || !_showScheduleTabs)
+              const ButtonSegment(
+                value: ScheduleView.month,
+                label: Text('Месяц'),
+              ),
           const ButtonSegment(value: ScheduleView.week, label: Text('Неделя')),
           const ButtonSegment(value: ScheduleView.day, label: Text('День')),
         ],
@@ -208,10 +217,15 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
 
   void _switchView(ScheduleView view) {
     if (view == ScheduleView.month && !widget.allowMonth) return;
+    if (view == ScheduleView.month &&
+        _showScheduleTabs &&
+        _dayViewMode == DayViewMode.byTeacher)
+      return;
     if (_currentView == view) return;
     _emitState(() {
       _clearHighlight();
       _currentView = view;
+      if (_dayViewMode == DayViewMode.byRoom) _roomScheduleView = view;
     });
     if (view == ScheduleView.day) {
       _fetchAvailabilityForSelectedDay();

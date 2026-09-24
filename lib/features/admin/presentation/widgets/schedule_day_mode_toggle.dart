@@ -64,3 +64,93 @@ class ScheduleDayModeToggle extends StatelessWidget {
     );
   }
 }
+
+/// Workspace tabs use the same quiet pill treatment as Leads / Students.
+class ScheduleWorkspaceModeTabs extends StatelessWidget {
+  const ScheduleWorkspaceModeTabs({
+    super.key,
+    required this.mode,
+    required this.onModeChanged,
+  });
+
+  final DayViewMode mode;
+  final ValueChanged<DayViewMode> onModeChanged;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColor.input,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: AppColor.divider),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _tab(
+                'По аудиториям',
+                Icons.meeting_room_outlined,
+                DayViewMode.byRoom,
+              ),
+              _tab(
+                'По преподавателям',
+                Icons.school_outlined,
+                DayViewMode.byTeacher,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _tab(String label, IconData icon, DayViewMode value) {
+    final selected = mode == value;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        key: ValueKey('schedule-workspace-tab-${value.name}'),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        onTap: () => onModeChanged(value),
+        child: AnimatedContainer(
+          duration: AppMotion.fast,
+          curve: AppMotion.ease,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? AppColor.selectionBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(
+              color: selected ? AppColor.selectionBorder : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? AppColor.selectionText : AppColor.text2,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? AppColor.selectionText : AppColor.text2,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

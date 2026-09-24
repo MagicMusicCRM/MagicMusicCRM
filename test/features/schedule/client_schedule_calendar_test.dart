@@ -109,6 +109,75 @@ ContextViewState _dayState() => ContextViewState(
   date: DateTime(2026, 8, 4),
 );
 
+class _BusyTeacherCalendarApi extends FakeCardApiClient {
+  _BusyTeacherCalendarApi()
+    : super(
+        branches: _branches,
+        rooms: _rooms,
+        teachers: const [
+          {'id': 'teacher-1', 'firstName': 'Мария', 'lastName': 'Педагог'},
+          {'id': 'teacher-2', 'firstName': 'Яна', 'lastName': 'Учитель'},
+        ],
+        scheduleMatrix: [
+          ..._lessons,
+          {
+            ..._lessons.first,
+            'id': 'lesson-second-teacher',
+            'teacherId': 'teacher-2',
+            'teacherName': 'Яна Учитель',
+            'scheduledAt': '2026-08-04T13:00:00.000Z',
+          },
+        ],
+      );
+
+  final List<Map<String, dynamic>> referenceQueries = [];
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/schedule-reference') {
+      referenceQueries.add({...?queryParameters});
+      return <String, dynamic>{
+            'teacherBranchAssigned': false,
+            'teacher': {
+              'assignments': [
+                {
+                  'branchId': 'branch-a',
+                  'activeFrom': '2026-08-04',
+                  'activeUntil': '2026-08-04',
+                },
+              ],
+            },
+            'branchHoursConfigured': true,
+            'branchWindows': [
+              for (var day = 3; day <= 9; day++)
+                {
+                  'opensAt': DateTime.utc(2026, 8, day, 5).toIso8601String(),
+                  'closesAt': DateTime.utc(2026, 8, day, 19).toIso8601String(),
+                },
+            ],
+            'teacherRules': const [
+              {
+                'available': false,
+                'startsAt': '2026-08-04T10:00:00.000Z',
+                'endsAt': '2026-08-04T12:00:00.000Z',
+                'reason': 'Занят в другом месте',
+              },
+            ],
+          }
+          as T;
+    }
+    return super.get<T>(
+      path,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
+}
+
 Widget _calendarApp(
   FakeCardApiClient api, {
   ContextViewState? initial,
@@ -154,6 +223,109 @@ Widget _calendarApp(
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  testWidgets('teacher tab shows grey busy time in a vertical day grid', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final api = _BusyTeacherCalendarApi();
+    await tester.pumpWidget(
+      _calendarApp(
+        api,
+        clientContext: false,
+        initial: ContextViewState(
+          filters: const {'view': 'month', 'branchId': 'branch-a'},
+          date: DateTime(2026, 8, 4),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Месяц'), findsOneWidget);
+
+    await tester.tap(find.text('По преподавателям'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('schedule-teacher-week-view')),
+      findsOneWidget,
+    );
+    expect(
+      api.referenceQueries.last['from'],
+      DateTime.utc(2026, 8, 2, 21).toIso8601String(),
+    );
+    final week = tester.widget<ScheduleDayCanvas>(
+      find.byKey(const ValueKey('schedule-teacher-week-view')),
+    );
+    expect(
+      week.blockedIntervals.any((item) => item.columnId == '2026-08-03'),
+      isTrue,
+    );
+    await tester.tap(find.text('День'));
+    await tester.pumpAndSettle();
+
+    final day = tester.widget<ScheduleDayCanvas>(
+      find.byKey(const ValueKey('schedule-teacher-day-view')),
+    );
+    expect(day.columns, hasLength(1));
+    expect(day.entries.any((entry) => entry.id == 'lesson-selected'), isTrue);
+    expect(
+      day.entries.any((entry) => entry.id == 'lesson-second-teacher'),
+      isFalse,
+    );
+    expect(
+      day.blockedIntervals.any(
+        (interval) =>
+            interval.startLocal == DateTime(2026, 8, 4, 13) &&
+            interval.endLocal == DateTime(2026, 8, 4, 15) &&
+            interval.reason == 'Занят в другом месте',
+      ),
+      isTrue,
+    );
+    final busyBlock = find.byKey(
+      const ValueKey('schedule-blocked-2026-08-04-2026-08-04T13:00:00.000'),
+    );
+    expect(busyBlock, findsOneWidget);
+    final decoration =
+        tester
+                .widget<Container>(
+                  find
+                      .descendant(
+                        of: busyBlock,
+                        matching: find.byType(Container),
+                      )
+                      .first,
+                )
+                .decoration
+            as BoxDecoration;
+    expect(decoration.color, AppColor.text2.withValues(alpha: 0.17));
+
+    await tester.tap(
+      find.byKey(const ValueKey('schedule-teacher-week-selector-teacher-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Яна Учитель').last);
+    await tester.pumpAndSettle();
+    final anotherTeacherDay = tester.widget<ScheduleDayCanvas>(
+      find.byKey(const ValueKey('schedule-teacher-day-view')),
+    );
+    expect(
+      anotherTeacherDay.entries.map((entry) => entry.id),
+      contains('lesson-second-teacher'),
+    );
+    expect(
+      anotherTeacherDay.entries.map((entry) => entry.id),
+      isNot(contains('lesson-selected')),
+    );
+
+    await tester.tap(find.text('По аудиториям'));
+    await tester.pumpAndSettle();
+    expect(find.text('Месяц'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('schedule-teacher-day-view')),
+      findsNothing,
+    );
+  });
 
   testWidgets('inactive client section does not prefetch schedule', (
     tester,
@@ -230,15 +402,14 @@ void main() {
     expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
     expectCoverage();
 
-    await tester.tap(find.byKey(const ValueKey('schedule-day-mode-switcher')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('По преподавателям').last);
+    await tester.tap(find.text('По преподавателям'));
     await tester.pumpAndSettle();
     expect(
-      _timelineLessonBorder(tester, 'lesson-selected'),
-      AppColor.actionBlue,
+      find.byKey(const ValueKey('schedule-teacher-day-view')),
+      findsOneWidget,
     );
-    expect(_timelineLessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.actionBlue);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
     expectCoverage();
 
     await tester.tap(find.text('Неделя'));
@@ -247,6 +418,8 @@ void main() {
     expect(_lessonBorder(tester, 'lesson-other'), AppColor.actionBlue);
     expectCoverage();
 
+    await tester.tap(find.text('По аудиториям'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Месяц'));
     await tester.pumpAndSettle();
     final monthLesson = find.byKey(

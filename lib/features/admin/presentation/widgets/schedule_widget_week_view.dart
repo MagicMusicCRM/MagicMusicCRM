@@ -1,7 +1,7 @@
 part of 'schedule_widget.dart';
 
 extension _ScheduleWeekView on _ScheduleWidgetState {
-  Widget _buildWeekView() {
+  Widget _buildWeekView({bool singleDay = false}) {
     final teacherMode = _dayViewMode == DayViewMode.byTeacher;
     final selectedTeacherId = widget.fixedTeacherId ?? _filterTeacherId;
     if (teacherMode && _selectedBranchId == null) {
@@ -17,11 +17,12 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
       _selectedDate.month,
       _selectedDate.day,
     ).subtract(Duration(days: _selectedDate.weekday - 1));
-    final weekEnd = monday.add(const Duration(days: 7));
+    final firstDay = singleDay ? _selectedDate : monday;
+    final weekEnd = firstDay.add(Duration(days: singleDay ? 1 : 7));
     final cs = Theme.of(context).colorScheme;
     final columns = <ScheduleColumn>[];
-    for (var i = 0; i < 7; i++) {
-      final date = monday.add(Duration(days: i));
+    for (var i = 0; i < (singleDay ? 1 : 7); i++) {
+      final date = firstDay.add(Duration(days: i));
       final isToday = DateUtils.isSameDay(date, DateTime.now());
       columns.add(
         ScheduleColumn(
@@ -51,7 +52,7 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
       final displayDate = start == null ? null : scheduleDisplayDate(start);
       if (start == null ||
           displayDate == null ||
-          displayDate.isBefore(monday) ||
+          displayDate.isBefore(firstDay) ||
           !displayDate.isBefore(weekEnd)) {
         continue;
       }
@@ -94,15 +95,24 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
     final canvas = ScheduleDayCanvas(
       fitToViewport: _fitDayToViewport,
       key: ValueKey(
-        teacherMode ? 'schedule-teacher-week-view' : 'schedule-week-view',
+        teacherMode
+            ? (singleDay
+                  ? 'schedule-teacher-day-view'
+                  : 'schedule-teacher-week-view')
+            : 'schedule-week-view',
       ),
-      date: monday,
+      date: firstDay,
       columns: columns,
       entries: entries,
       blockedIntervals: teacherMode
           ? _teacherWeekBlockedIntervals(monday)
+                .where(
+                  (item) => !singleDay || item.columnId == dateOnly(firstDay),
+                )
+                .toList()
           : const [],
-      allowCreate: widget.canWrite,
+      allowCreate:
+          widget.canWrite && (!teacherMode || _teacherWeekReference != null),
       onCreateSlot: (_, start, duration) => _openWeekCreate(
         start,
         duration,
@@ -113,11 +123,20 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
       onVerticalOffsetChanged: _updateDayScrollOffset,
     );
     if (!teacherMode) return canvas;
-    final assigned = _teacherWeekReference?['teacherBranchAssigned'] != false;
+    final assigned =
+        _teacherWeekReference != null &&
+        List.generate(
+          singleDay ? 1 : 7,
+          (index) => firstDay.add(Duration(days: index)),
+        ).any((day) => _teacherAssignedOnDate(_teacherWeekReference!, day));
     return Column(
       children: [
         if (_teacherWeekReferenceLoading)
           const LinearProgressIndicator(minHeight: 2, color: AppColor.gold)
+        else if (_teacherWeekReference == null)
+          const _TeacherAvailabilityNotice(
+            'Доступность преподавателя не загружена. Обновите расписание.',
+          )
         else if (!assigned)
           Container(
             width: double.infinity,
@@ -133,55 +152,138 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
     );
   }
 
+  bool _teacherAssignedOnDate(Map<String, dynamic> reference, DateTime day) {
+    final teacher = reference['teacher'];
+    final assignments = teacher is Map ? teacher['assignments'] : null;
+    if (assignments is! List) {
+      return reference['teacherBranchAssigned'] == true;
+    }
+    final date = dateOnly(day);
+    return assignments.whereType<Map>().any((row) {
+      final start = row['activeFrom']?.toString();
+      final end = row['activeUntil']?.toString();
+      return row['branchId']?.toString() == _selectedBranchId &&
+          start != null &&
+          start.compareTo(date) <= 0 &&
+          (end == null || end.compareTo(date) >= 0);
+    });
+  }
+
   List<ScheduleBlockedInterval> _teacherWeekBlockedIntervals(DateTime monday) {
-    final rawRules = _teacherWeekReference?['teacherRules'];
-    if (rawRules is! List) return const [];
+    final reference = _teacherWeekReference;
+    if (reference == null) return const [];
+    final rawRules = (reference['teacherRules'] as List? ?? const [])
+        .whereType<Map>()
+        .toList();
+    final branchWindows = (reference['branchWindows'] as List? ?? const [])
+        .whereType<Map>()
+        .toList();
     final offset = _selectedBranchOffset;
     DateTime? local(Object? raw) {
       final parsed = DateTime.tryParse(raw?.toString() ?? '');
       if (parsed == null) return null;
-      return parsed.isUtc
-          ? parsed.toUtc().add(Duration(minutes: offset))
-          : parsed;
+      if (!parsed.isUtc) return parsed;
+      final shifted = parsed.toUtc().add(Duration(minutes: offset));
+      return DateTime(
+        shifted.year,
+        shifted.month,
+        shifted.day,
+        shifted.hour,
+        shifted.minute,
+        shifted.second,
+        shifted.millisecond,
+      );
     }
 
     final result = <ScheduleBlockedInterval>[];
-    for (final raw in rawRules.whereType<Map>()) {
-      if (raw['available'] != false) continue;
-      final startsAt = local(raw['startsAt'] ?? raw['starts_at']);
-      final endsAt = local(raw['endsAt'] ?? raw['ends_at']);
-      if (startsAt == null || endsAt == null || !endsAt.isAfter(startsAt)) {
-        continue;
+    final positiveRules = rawRules
+        .where((row) => row['available'] == true)
+        .toList();
+    for (var index = 0; index < 7; index++) {
+      final day = monday.add(Duration(days: index));
+      final visibleStart = DateTime(
+        day.year,
+        day.month,
+        day.day,
+        kDayStartHour,
+      );
+      final visibleEnd = DateTime(
+        day.year,
+        day.month,
+        day.day + 1,
+        kDayEndHour % 24,
+      );
+      final cuts = <DateTime>{visibleStart, visibleEnd};
+      for (final row in [...rawRules, ...branchWindows]) {
+        final start = local(row['startsAt'] ?? row['opensAt']);
+        final end = local(row['endsAt'] ?? row['closesAt']);
+        if (start != null &&
+            start.isAfter(visibleStart) &&
+            start.isBefore(visibleEnd)) {
+          cuts.add(start);
+        }
+        if (end != null &&
+            end.isAfter(visibleStart) &&
+            end.isBefore(visibleEnd)) {
+          cuts.add(end);
+        }
       }
-      for (var index = 0; index < 7; index++) {
-        final day = monday.add(Duration(days: index));
-        final visibleStart = DateTime(
-          day.year,
-          day.month,
-          day.day,
-          kDayStartHour,
+      final boundaries = cuts.toList()..sort();
+      bool covers(Map row, DateTime at, {bool branch = false}) {
+        final start = local(row[branch ? 'opensAt' : 'startsAt']);
+        final end = local(row[branch ? 'closesAt' : 'endsAt']);
+        return start != null &&
+            !at.isBefore(start) &&
+            (end == null || at.isBefore(end));
+      }
+
+      for (var i = 0; i < boundaries.length - 1; i++) {
+        final start = boundaries[i];
+        final end = boundaries[i + 1];
+        final at = start.add(
+          Duration(microseconds: end.difference(start).inMicroseconds ~/ 2),
         );
-        final visibleEnd = DateTime(
-          day.year,
-          day.month,
-          day.day + 1,
-          kDayEndHour % 24,
-        );
-        final overlapStart = startsAt.isAfter(visibleStart)
-            ? startsAt
-            : visibleStart;
-        final overlapEnd = endsAt.isBefore(visibleEnd) ? endsAt : visibleEnd;
-        if (!overlapEnd.isAfter(overlapStart)) continue;
-        result.add(
-          ScheduleBlockedInterval(
-            columnId: dateOnly(day),
-            startLocal: overlapStart,
-            endLocal: overlapEnd,
-            reason: raw['reason']?.toString(),
-          ),
-        );
+        final branchOpen =
+            reference['branchHoursConfigured'] == true &&
+            branchWindows.any((row) => covers(row, at, branch: true));
+        final teacherOpen =
+            positiveRules.isEmpty ||
+            positiveRules.any((row) => covers(row, at));
+        final busyRule = rawRules
+            .where((row) => row['available'] == false)
+            .where((row) => covers(row, at))
+            .firstOrNull;
+        final assigned = _teacherAssignedOnDate(reference, day);
+        if (!assigned || !branchOpen || !teacherOpen || busyRule != null) {
+          result.add(
+            ScheduleBlockedInterval(
+              columnId: dateOnly(day),
+              startLocal: start,
+              endLocal: end,
+              reason: !assigned
+                  ? 'Преподаватель не назначен в филиал'
+                  : !branchOpen
+                  ? 'Филиал закрыт'
+                  : busyRule?['reason']?.toString() ??
+                        'Не рабочее время преподавателя',
+            ),
+          );
+        }
       }
     }
     return result;
   }
+}
+
+class _TeacherAvailabilityNotice extends StatelessWidget {
+  const _TeacherAvailabilityNotice(this.message);
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    color: AppColor.warningSoft,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+    child: Text(message, style: const TextStyle(fontWeight: FontWeight.w700)),
+  );
 }

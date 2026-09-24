@@ -152,6 +152,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   bool _onlyConflicts = false;
   bool _fitDayToViewport = true;
   String? _filterTeacherId;
+  String? _roomTeacherFilterId;
+  String? _teacherScheduleId;
+  ScheduleView _roomScheduleView = ScheduleView.month;
   String? _filterRoomId;
   String? _filterClientType;
   String? _filterClientId;
@@ -348,6 +351,15 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       (value) => value.name == filters['dayMode'],
       orElse: () => _dayViewMode,
     );
+    if (_showScheduleTabs && _dayViewMode == DayViewMode.byTeacher) {
+      _teacherScheduleId = _filterTeacherId;
+      if (_currentView == ScheduleView.month) {
+        _currentView = ScheduleView.week;
+      }
+    } else if (_showScheduleTabs) {
+      _roomTeacherFilterId = _filterTeacherId;
+      _roomScheduleView = _currentView;
+    }
     final date =
         state?.date ?? DateTime.tryParse(filters['date']?.toString() ?? '');
     if (date != null) {
@@ -425,6 +437,30 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   bool get _hasScheduleSearch => _scheduleSearchQuery.isNotEmpty;
 
+  bool get _showScheduleTabs =>
+      widget.clientId == null && widget.fixedTeacherId == null;
+
+  void _switchScheduleMode(DayViewMode mode) {
+    if (_dayViewMode == mode) return;
+    _emitState(() {
+      _clearHighlight();
+      if (mode == DayViewMode.byTeacher) {
+        _roomScheduleView = _currentView;
+        _roomTeacherFilterId = _filterTeacherId;
+        _filterTeacherId = _teacherScheduleId;
+        if (_currentView == ScheduleView.month) {
+          _currentView = ScheduleView.week;
+        }
+      } else {
+        _teacherScheduleId = _filterTeacherId;
+        _filterTeacherId = _roomTeacherFilterId;
+        _currentView = _roomScheduleView;
+      }
+      _dayViewMode = mode;
+    });
+    _fetchAll();
+  }
+
   bool _matchesScheduleSearch(Map<String, dynamic> lesson, [String? query]) {
     final normalized = (query ?? _scheduleSearchQuery).trim().toLowerCase();
     if (normalized.isEmpty) return false;
@@ -500,6 +536,11 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           backgroundColor: Colors.transparent,
           body: Column(
             children: [
+              if (_showScheduleTabs && !firstLoad)
+                ScheduleWorkspaceModeTabs(
+                  mode: _dayViewMode,
+                  onModeChanged: _switchScheduleMode,
+                ),
               _buildScheduleToolbar(firstLoad: firstLoad),
               SizedBox(
                 height: 2,
@@ -512,7 +553,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                     : null,
               ),
               if (!firstLoad) ...[
-                if (!desktop && _currentView != ScheduleView.month)
+                if (!desktop &&
+                    !_showScheduleTabs &&
+                    _currentView != ScheduleView.month)
                   ScheduleDayModeToggle(
                     mode: _dayViewMode,
                     onModeChanged: (m) {

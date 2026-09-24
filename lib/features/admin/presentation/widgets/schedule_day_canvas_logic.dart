@@ -89,7 +89,17 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
 
   void _onColumnTap(ScheduleColumn column, double localY) {
     if (!widget.allowCreate) return;
-    widget.onCreateSlot(column.id, _timeForY(localY, date: column.date), 60);
+    final start = _timeForY(localY, date: column.date);
+    final end = start.add(const Duration(hours: 1));
+    if (widget.blockedIntervals.any(
+      (item) =>
+          item.columnId == column.id &&
+          start.isBefore(item.endLocal) &&
+          end.isAfter(item.startLocal),
+    )) {
+      return;
+    }
+    widget.onCreateSlot(column.id, start, 60);
   }
 
   Widget _buildColumn(ScheduleColumn column, double colWidth) {
@@ -137,6 +147,9 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
         .clamp(18.0, _gridHeight)
         .clamp(0.0, _gridHeight - top);
     final reason = interval.reason?.trim();
+    String hhmm(DateTime time) =>
+        '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}';
     return Positioned(
       key: ValueKey(
         'schedule-blocked-${interval.columnId}-'
@@ -156,21 +169,19 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
               : 'Недоступно',
           child: Container(
             decoration: BoxDecoration(
-              color: AppColor.danger.withValues(alpha: 0.10),
+              color: AppColor.text2.withValues(alpha: 0.17),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: AppColor.danger.withValues(alpha: 0.45),
-              ),
+              border: Border.all(color: AppColor.text2.withValues(alpha: 0.38)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
             child: Text(
               reason?.isNotEmpty == true
-                  ? 'Недоступно · $reason'
-                  : 'Недоступно',
+                  ? '${hhmm(interval.startLocal)}–${hhmm(interval.endLocal)}\n$reason'
+                  : '${hhmm(interval.startLocal)}–${hhmm(interval.endLocal)} · Недоступно',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: AppColor.danger,
+                color: AppColor.text2,
                 fontSize: 10.5,
                 fontWeight: FontWeight.w700,
               ),
