@@ -34,6 +34,10 @@
    `0d0c576061e04a920a550d478ab3f4b85fb9e3b4acfe91c5238280c0ecef4b97`,
    versionCode 228; AAB signature и встроенная история версии — PASS.
    APK install/launch на API35 emulator — PASS. Это smoke, не authenticated UAT.
+   Прямая `flutter build apk` на установленном Flutter 3.41.4 ошибочно добавила
+   dev-плагин `integration_test` в generated Java registrant. Удалена только
+   его запись из игнорируемого сгенерированного файла; APK/AAB собраны Gradle с
+   теми же Dart defines. Исходный код проекта не менялся.
 5. Полная проверка локальных пакетов и повторное скачивание всех четырёх
    публичных HTTPS-файлов по размеру/SHA-256 — PASS. Оба update-канала,
    публичная история и readiness — PASS. `dist/release228/artifact-manifest.json`,
