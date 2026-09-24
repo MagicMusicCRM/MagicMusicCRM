@@ -10,8 +10,32 @@ import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_cards.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_settings.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_timezone.dart';
 
 void main() {
+  test('busy interval times use the branch timezone and reject DST gaps', () {
+    expect(
+      scheduleLocalToUtc(
+        DateTime(2026, 9, 24),
+        '09:00',
+        'Europe/Moscow',
+      ).toIso8601String(),
+      '2026-09-24T06:00:00.000Z',
+    );
+    expect(
+      scheduleLocalToUtc(
+        DateTime(2026, 9, 24),
+        '09:00',
+        'Europe/Berlin',
+      ).toIso8601String(),
+      '2026-09-24T07:00:00.000Z',
+    );
+    expect(
+      () => scheduleLocalToUtc(DateTime(2026, 3, 29), '02:30', 'Europe/Berlin'),
+      throwsArgumentError,
+    );
+  });
+
   group('ScheduleReferenceController', () {
     test(
       'branch save keeps typed draft data and chains returned version',
@@ -262,6 +286,42 @@ void main() {
       },
     );
 
+    test(
+      'dated extra availability remains distinct from dated busy time',
+      () async {
+        final api = _ScheduleReferenceApi(
+          teacherAvailability: const [
+            {
+              'kind': 'interval',
+              'available': true,
+              'startsAt': '2026-09-24T10:00:00Z',
+              'endsAt': '2026-09-24T11:00:00Z',
+            },
+            {
+              'kind': 'interval',
+              'available': false,
+              'startsAt': '2026-09-24T12:00:00Z',
+              'endsAt': '2026-09-24T13:00:00Z',
+              'reason': 'Другая школа',
+            },
+          ],
+        );
+        final controller = _controller(api);
+        await controller.loadCatalogs();
+        expect(controller.state.teacherDraft!.availableIntervals, hasLength(1));
+        expect(controller.state.teacherDraft!.intervals, hasLength(1));
+        await controller.saveAvailability();
+        final rules =
+            api.lastPut(
+                  '/crm/schedule-reference/teachers/teacher-a/availability',
+                )['rules']
+                as List<dynamic>;
+        expect(rules.where((rule) => rule['available'] == true), hasLength(1));
+        expect(rules.where((rule) => rule['available'] == false), hasLength(1));
+        controller.dispose();
+      },
+    );
+
     testWidgets('weekly busy period can be added from the card and saved', (
       tester,
     ) async {
@@ -393,7 +453,113 @@ void main() {
         find.byKey(const ValueKey('weekly-unavailable-add')),
         findsNothing,
       );
+      expect(
+        find.byKey(const ValueKey('interval-unavailable-add')),
+        findsNothing,
+      );
       expect(find.byTooltip('Изменить еженедельную занятость'), findsNothing);
+      controller.dispose();
+    });
+
+    testWidgets('dated busy period is entered in one form and can be edited', (
+      tester,
+    ) async {
+      final api = _ScheduleReferenceApi();
+      final controller = _controller(api);
+      await controller.loadCatalogs();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AnimatedBuilder(
+                animation: controller,
+                builder: (context, _) => TeacherAvailabilityCard(
+                  controller: controller,
+                  onSave: () => controller.saveAvailability(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final add = find.byKey(const ValueKey('interval-unavailable-add'));
+      await tester.ensureVisible(add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.text('Занято на дату'), findsOneWidget);
+      expect(find.text('Время: Europe/Moscow'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Добавить').last,
+        findsOneWidget,
+      );
+      await tester.enterText(find.byType(TextFormField).last, 'Репетиция');
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Добавить').last,
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Добавить').last);
+      await tester.pumpAndSettle();
+      expect(controller.state.teacherDraft!.intervals, hasLength(1));
+
+      final edit = find.byTooltip('Изменить занятый период');
+      await tester.ensureVisible(edit);
+      await tester.tap(edit);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).last, 'Другая школа');
+      await tester.tap(find.widgetWithText(FilledButton, 'Сохранить').last);
+      await tester.pumpAndSettle();
+      expect(controller.state.teacherDraft!.intervals, hasLength(1));
+      expect(
+        controller.state.teacherDraft!.intervals.single['reason'],
+        'Другая школа',
+      );
+      final save = find.widgetWithText(FilledButton, 'Сохранить');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      final rules =
+          api.lastPut(
+                '/crm/schedule-reference/teachers/teacher-a/availability',
+              )['rules']
+              as List<dynamic>;
+      expect(rules.where((row) => row['kind'] == 'interval'), hasLength(1));
+      expect(rules.last['reason'], 'Другая школа');
+      controller.dispose();
+    });
+
+    testWidgets('dated busy dialog fits a narrow personnel card', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = _controller(_ScheduleReferenceApi());
+      await controller.loadCatalogs();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: TeacherAvailabilityCard(
+                controller: controller,
+                onSave: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      final add = find.byKey(const ValueKey('interval-unavailable-add'));
+      await tester.ensureVisible(add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.text('Занято на дату'), findsOneWidget);
+      expect(tester.takeException(), isNull);
       controller.dispose();
     });
 

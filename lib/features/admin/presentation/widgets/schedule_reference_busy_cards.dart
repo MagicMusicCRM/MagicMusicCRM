@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'schedule_reference_controller.dart';
-import 'schedule_reference_dialogs.dart';
+import 'schedule_reference_interval_busy_dialog.dart';
 import 'schedule_reference_models.dart';
 import 'schedule_reference_recurring_busy_dialog.dart';
+import 'schedule_reference_timezone.dart';
 
 class TeacherWeeklyBusySection extends StatelessWidget {
   const TeacherWeeklyBusySection({
@@ -131,7 +132,11 @@ class TeacherDateBusySection extends StatelessWidget {
     final rules =
         controller.state.teacherDraft?.intervals ??
         const <Map<String, dynamic>>[];
+    final extraAvailability =
+        controller.state.teacherDraft?.availableIntervals ??
+        const <Map<String, dynamic>>[];
     final canEdit = controller.canEdit && !controller.availabilityLocked;
+    final timezone = controller.state.branchDraft?.timezone ?? 'Europe/Moscow';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -145,6 +150,7 @@ class TeacherDateBusySection extends StatelessWidget {
             ),
             if (canEdit)
               TextButton.icon(
+                key: const ValueKey('interval-unavailable-add'),
                 onPressed: editable ? () => _add(context) : null,
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Добавить'),
@@ -152,30 +158,94 @@ class TeacherDateBusySection extends StatelessWidget {
           ],
         ),
         for (final rule in rules)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(_intervalLabel(rule)),
-            subtitle: rule['reason'] == null
-                ? null
-                : Text(rule['reason'].toString()),
-            trailing: canEdit
-                ? IconButton(
-                    tooltip: 'Удалить период',
-                    onPressed: editable
-                        ? () => controller.removeUnavailableInterval(rule)
-                        : null,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                  )
-                : null,
+          _DateBusyRow(
+            rule: rule,
+            timezone: timezone,
+            canEdit: canEdit,
+            editable: editable,
+            onEdit: () => _edit(context, rule),
+            onDelete: () => controller.removeUnavailableInterval(rule),
           ),
+        if (extraAvailability.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Дополнительная доступность по датам',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          for (final rule in extraAvailability)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(_intervalLabel(rule, timezone)),
+              subtitle: rule['reason'] == null
+                  ? null
+                  : Text(rule['reason'].toString()),
+            ),
+        ],
       ],
     );
   }
 
   Future<void> _add(BuildContext context) async {
-    final rule = await showUnavailableIntervalDialog(context);
+    final rule = await showUnavailableIntervalDialog(
+      context,
+      timezone: controller.state.branchDraft?.timezone ?? 'Europe/Moscow',
+    );
     if (rule != null) controller.addUnavailableInterval(rule);
   }
+
+  Future<void> _edit(BuildContext context, Map<String, dynamic> current) async {
+    final rule = await showUnavailableIntervalDialog(
+      context,
+      timezone:
+          current['timezone']?.toString() ??
+          controller.state.branchDraft?.timezone ??
+          'Europe/Moscow',
+      initialRule: current,
+    );
+    if (rule != null) controller.replaceUnavailableInterval(current, rule);
+  }
+}
+
+class _DateBusyRow extends StatelessWidget {
+  const _DateBusyRow({
+    required this.rule,
+    required this.timezone,
+    required this.canEdit,
+    required this.editable,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Map<String, dynamic> rule;
+  final String timezone;
+  final bool canEdit;
+  final bool editable;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    title: Text(_intervalLabel(rule, timezone)),
+    subtitle: rule['reason'] == null ? null : Text(rule['reason'].toString()),
+    onTap: editable ? onEdit : null,
+    trailing: canEdit
+        ? Wrap(
+            children: [
+              IconButton(
+                tooltip: 'Изменить занятый период',
+                onPressed: editable ? onEdit : null,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              IconButton(
+                tooltip: 'Удалить период',
+                onPressed: editable ? onDelete : null,
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+            ],
+          )
+        : null,
+  );
 }
 
 String _weeklyLabel(Map<String, dynamic> rule) {
@@ -193,11 +263,12 @@ String _weeklyDates(Map<String, dynamic> rule) {
       '${until == null ? 'без даты окончания' : 'до ${format.format(until)}'}';
 }
 
-String _intervalLabel(Map<String, dynamic> rule) {
-  final start = DateTime.tryParse(
-    rule['startsAt']?.toString() ?? '',
-  )?.toLocal();
-  final end = DateTime.tryParse(rule['endsAt']?.toString() ?? '')?.toLocal();
+String _intervalLabel(Map<String, dynamic> rule, String timezone) {
+  final zone = rule['timezone']?.toString() ?? timezone;
+  final startUtc = DateTime.tryParse(rule['startsAt']?.toString() ?? '');
+  final endUtc = DateTime.tryParse(rule['endsAt']?.toString() ?? '');
+  final start = startUtc == null ? null : scheduleUtcToLocal(startUtc, zone);
+  final end = endUtc == null ? null : scheduleUtcToLocal(endUtc, zone);
   if (start == null) return 'Период недоступности';
   final format = DateFormat('dd.MM.yyyy HH:mm');
   return end == null

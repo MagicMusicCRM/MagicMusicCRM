@@ -40,6 +40,7 @@ dependencies:
   firebase_messaging: ^15.2.0
   flutter_secure_storage: ^9.2.4
   intl: ^0.20.2
+  timezone: ^0.10.0
   dio: ^5.9.2
   http_parser: ^4.1.2
   path_provider: ^2.1.5

@@ -277,17 +277,22 @@ String _oneHourAfter(String value) {
 
 TeacherScheduleDraft withUnavailableInterval(
   TeacherScheduleDraft draft,
-  Map<String, dynamic> interval,
-) {
+  Map<String, dynamic> interval, {
+  Map<String, dynamic>? replacing,
+}) {
   final reason = interval['reason']?.toString().trim() ?? '';
   final startsAt = DateTime.tryParse(interval['startsAt']?.toString() ?? '');
   final endsAt = DateTime.tryParse(interval['endsAt']?.toString() ?? '');
-  if (reason.isEmpty || startsAt == null || endsAt == null) {
+  if (reason.isEmpty ||
+      startsAt == null ||
+      endsAt == null ||
+      !endsAt.isAfter(startsAt)) {
     throw ArgumentError('Interval requires UTC bounds and a reason.');
   }
   return draft.copyWith(
     intervals: [
-      for (final row in draft.intervals) {...row},
+      for (final row in draft.intervals)
+        if (!identical(row, replacing)) {...row},
       {
         ...interval,
         'kind': 'interval',
@@ -340,4 +345,5 @@ List<Map<String, dynamic>> teacherAvailabilityPayload(
   for (final row in draft.extraRecurring) cleanScheduleReferenceMap(row),
   for (final row in draft.unavailableRecurring) cleanScheduleReferenceMap(row),
   for (final row in draft.intervals) cleanScheduleReferenceMap(row),
+  for (final row in draft.availableIntervals) cleanScheduleReferenceMap(row),
 ];

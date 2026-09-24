@@ -379,6 +379,20 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
     _notify();
   }
 
+  void replaceUnavailableInterval(
+    Map<String, dynamic> oldInterval,
+    Map<String, dynamic> newInterval,
+  ) {
+    final draft = _teacherDraft;
+    if (!_canEditAvailability || draft == null) return;
+    _teacherDraft = withUnavailableInterval(
+      draft,
+      newInterval,
+      replacing: oldInterval,
+    );
+    _notify();
+  }
+
   void addUnavailableRecurringRule(Map<String, dynamic> rule) {
     final draft = _teacherDraft;
     if (!_canEditAvailability || draft == null) return;

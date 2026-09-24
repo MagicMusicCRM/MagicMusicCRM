@@ -84,6 +84,7 @@ class TeacherScheduleDraft {
     required this.extraRecurring,
     required this.unavailableRecurring,
     required this.intervals,
+    required this.availableIntervals,
   });
 
   factory TeacherScheduleDraft.fromJson(Map<String, dynamic> json) {
@@ -96,6 +97,7 @@ class TeacherScheduleDraft {
     final extraRecurring = <Map<String, dynamic>>[];
     final unavailableRecurring = <Map<String, dynamic>>[];
     final intervals = <Map<String, dynamic>>[];
+    final availableIntervals = <Map<String, dynamic>>[];
     for (final row in scheduleReferenceMaps(json['availability'])) {
       final weekday = row['weekday'];
       if (row['kind'] == 'recurring' && weekday is num) {
@@ -110,7 +112,11 @@ class TeacherScheduleDraft {
           recurring[day] = {...row};
         }
       } else if (row['kind'] == 'interval') {
-        intervals.add({...row});
+        if (row['available'] == false) {
+          intervals.add({...row});
+        } else {
+          availableIntervals.add({...row});
+        }
       }
     }
     return TeacherScheduleDraft(
@@ -120,6 +126,7 @@ class TeacherScheduleDraft {
       extraRecurring: extraRecurring,
       unavailableRecurring: unavailableRecurring,
       intervals: intervals,
+      availableIntervals: availableIntervals,
     );
   }
 
@@ -129,6 +136,7 @@ class TeacherScheduleDraft {
   final List<Map<String, dynamic>> extraRecurring;
   final List<Map<String, dynamic>> unavailableRecurring;
   final List<Map<String, dynamic>> intervals;
+  final List<Map<String, dynamic>> availableIntervals;
 
   TeacherScheduleDraft copyWith({
     int? version,
@@ -137,6 +145,7 @@ class TeacherScheduleDraft {
     List<Map<String, dynamic>>? extraRecurring,
     List<Map<String, dynamic>>? unavailableRecurring,
     List<Map<String, dynamic>>? intervals,
+    List<Map<String, dynamic>>? availableIntervals,
   }) => TeacherScheduleDraft(
     version: version ?? this.version,
     assignments: assignments ?? this.assignments,
@@ -144,6 +153,7 @@ class TeacherScheduleDraft {
     extraRecurring: extraRecurring ?? this.extraRecurring,
     unavailableRecurring: unavailableRecurring ?? this.unavailableRecurring,
     intervals: intervals ?? this.intervals,
+    availableIntervals: availableIntervals ?? this.availableIntervals,
   );
 }
 
