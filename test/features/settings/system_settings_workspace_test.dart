@@ -231,24 +231,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Графики преподавателей'));
     await tester.pumpAndSettle();
-    final addInterval = find.widgetWithText(TextButton, 'Добавить');
+    final addInterval = find.byKey(const ValueKey('interval-unavailable-add'));
     await tester.ensureVisible(addInterval);
     await tester.pumpAndSettle();
     await tester.tap(addInterval);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('${DateTime.now().day}').last);
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Причина недоступности *'), findsOneWidget);
+    expect(find.text('Занято на дату'), findsOneWidget);
+    expect(find.text('Причина или другое место *'), findsOneWidget);
     final addButton = find.widgetWithText(FilledButton, 'Добавить');
     expect(tester.widget<FilledButton>(addButton).onPressed, isNull);
     await tester.enterText(
-      find.widgetWithText(TextField, 'Причина недоступности *'),
+      find.widgetWithText(TextField, 'Причина или другое место *'),
       'UAT: преподаватель занят',
     );
     await tester.pump();
