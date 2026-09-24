@@ -184,6 +184,7 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
   bool _loadingSelected = false;
   String? _selectedError;
   int _detailRevision = 0;
+  int _selectionGeneration = 0;
 
   @override
   void initState() {
@@ -223,9 +224,11 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
 
   Future<void> _openLinkedCard(EntityLink link) async {
     final isTeacher = link.rawEntityType == 'personnel_teacher';
+    final generation = ++_selectionGeneration;
     setState(() {
       _section = isTeacher ? 'teachers' : 'staff';
       _selectedIsTeacher = isTeacher;
+      _selectedPerson = null;
       _loadingSelected = true;
       _selectedError = null;
     });
@@ -234,14 +237,14 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
       final person = isTeacher
           ? await crm.getTeacher(link.entityId)
           : await crm.getStaff(link.entityId);
-      if (!mounted) return;
+      if (!mounted || generation != _selectionGeneration) return;
       setState(() {
         _selectedPerson = person;
         _loadingSelected = false;
         _detailRevision++;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _selectionGeneration) return;
       setState(() {
         _loadingSelected = false;
         _selectedError = userErrorMessage(
@@ -252,14 +255,40 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
     }
   }
 
-  void _selectPerson(Map<String, dynamic> person, bool isTeacher) {
+  Future<void> _selectPerson(
+    Map<String, dynamic> person,
+    bool isTeacher,
+  ) async {
+    final id = person['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    final generation = ++_selectionGeneration;
     setState(() {
-      _selectedPerson = Map<String, dynamic>.from(person);
       _selectedIsTeacher = isTeacher;
+      _selectedPerson = null;
       _selectedError = null;
-      _loadingSelected = false;
-      _detailRevision++;
+      _loadingSelected = true;
     });
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      final fresh = isTeacher
+          ? await crm.getTeacher(id)
+          : await crm.getStaff(id);
+      if (!mounted || generation != _selectionGeneration) return;
+      setState(() {
+        _selectedPerson = fresh;
+        _loadingSelected = false;
+        _detailRevision++;
+      });
+    } catch (error) {
+      if (!mounted || generation != _selectionGeneration) return;
+      setState(() {
+        _loadingSelected = false;
+        _selectedError = userErrorMessage(
+          error,
+          fallback: 'Не удалось открыть карточку.',
+        );
+      });
+    }
   }
 
   Future<void> _refreshSelected() async {
@@ -306,7 +335,6 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
         )
       : _EmployeesList(
           searchQuery: _search.text,
-          currentRole: widget.snapshot.role,
           selectedId: !_selectedIsTeacher
               ? (_selectedPerson?['id']?.toString())
               : null,
@@ -414,6 +442,7 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
                     onSelectionChanged: (value) {
                       setState(() {
                         _section = value.first;
+                        _selectionGeneration++;
                         _selectedPerson = null;
                         _selectedError = null;
                       });
@@ -738,7 +767,6 @@ class _SystemSettingsWorkspaceState
       'access' => _UsersSettings(
         currentRole: widget.role,
         initialSearch: widget.initialUserSearch,
-        canCreatePeople: snapshot.allows('crm.client.write'),
       ),
       'system' => _DataSettings(
         canManageDeletion:
@@ -995,127 +1023,28 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
   }
 }
 
-class _UsersSettings extends StatefulWidget {
+class _UsersSettings extends StatelessWidget {
   const _UsersSettings({
     required this.currentRole,
     required this.initialSearch,
-    required this.canCreatePeople,
   });
 
   final String currentRole;
   final String? initialSearch;
-  final bool canCreatePeople;
-
-  @override
-  State<_UsersSettings> createState() => _UsersSettingsState();
-}
-
-class _UsersSettingsState extends State<_UsersSettings> {
-  final _search = TextEditingController();
-  String _section = 'access';
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  Future<void> _create() async {
-    bool? saved;
-    if (_section == 'staff') {
-      saved = await showCreateEmployeeSurface(context);
-    } else if (_section == 'teachers') {
-      saved = await showCreateTeacherSurface(context);
-    }
-    if (saved != true || !mounted) return;
-    final container = ProviderScope.containerOf(context);
-    final query = _search.text.trim();
-    if (_section == 'staff') {
-      container.invalidate(entitiesProvider('employees'));
-      container.invalidate(staffSearchProvider(query));
-    } else {
-      container.invalidate(entitiesProvider('teachers'));
-      container.invalidate(teacherSearchProvider(query));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final listSection = _section != 'access';
     return Column(
       children: [
-        _SettingsToolbar(
+        const _SettingsToolbar(
           title: 'Пользователи и доступы',
-          subtitle: switch (_section) {
-            'staff' => 'Сотрудники школы',
-            'teachers' => 'Преподаватели и специализации',
-            _ => 'Аккаунты, роли и персональные права',
-          },
-          action: listSection && widget.canCreatePeople
-              ? FilledButton.icon(
-                  onPressed: _create,
-                  icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: Text(
-                    _section == 'staff'
-                        ? 'Новый сотрудник'
-                        : 'Новый преподаватель',
-                  ),
-                )
-              : null,
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'access', label: Text('Доступы')),
-                      ButtonSegment(value: 'staff', label: Text('Сотрудники')),
-                      ButtonSegment(
-                        value: 'teachers',
-                        label: Text('Преподаватели'),
-                      ),
-                    ],
-                    selected: {_section},
-                    onSelectionChanged: (value) {
-                      setState(() => _section = value.first);
-                    },
-                  ),
-                ),
-              ),
-              if (listSection) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _search,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      prefixIcon: Icon(Icons.search_rounded),
-                      labelText: 'Поиск',
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+          subtitle: 'Аккаунты, роли и персональные права',
         ),
         Expanded(
-          child: switch (_section) {
-            'staff' => _EmployeesList(
-              searchQuery: _search.text,
-              currentRole: widget.currentRole,
-            ),
-            'teachers' => _TeachersList(searchQuery: _search.text),
-            _ => UserRolesWidget(
-              currentRole: widget.currentRole,
-              initialSearch: widget.initialSearch,
-            ),
-          },
+          child: UserRolesWidget(
+            currentRole: currentRole,
+            initialSearch: initialSearch,
+          ),
         ),
       ],
     );

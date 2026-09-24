@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 
 import '../../support/settings_test_api.dart';
@@ -22,10 +23,20 @@ Future<void> _pump(
       child: MaterialApp(
         theme: ThemeData(platform: TargetPlatform.windows),
         home: Scaffold(
-          body: SystemSettingsWorkspace(
-            role: api.role,
-            initialArea: initialArea,
-          ),
+          body: initialArea == 'users'
+              ? PersonnelWorkspace(
+                  snapshot: CapabilitySnapshot(
+                    accountId: 'test-account',
+                    role: api.role,
+                    accessVersion: 1,
+                    capabilities: api.capabilities.toSet(),
+                    scopes: const {},
+                  ),
+                )
+              : SystemSettingsWorkspace(
+                  role: api.role,
+                  initialArea: initialArea,
+                ),
         ),
       ),
     ),
@@ -443,6 +454,8 @@ void main() {
       await tester.tap(find.text('Смирнова Ольга'));
       await tester.pumpAndSettle();
 
+      await tester.tap(find.byKey(const Key('staff-personnel-section-access')));
+      await tester.pumpAndSettle();
       expect(find.text('Роль доступа'), findsOneWidget);
       expect(
         find.text('Определяет права пользователя в приложении'),
@@ -617,6 +630,8 @@ void main() {
     await tester.tap(find.text('Мария Петрова'));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('teacher-personnel-section-access')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('teacher-change-access-role')), findsOneWidget);
     expect(
       find.text('Определяет права пользователя в приложении'),
@@ -720,8 +735,7 @@ void main() {
     expect(find.text('Работает'), findsOneWidget);
     expect(find.textContaining('@migration.invalid'), findsNothing);
 
-    await tester.tap(find.widgetWithText(ListTile, 'Обучение'));
-    await tester.pumpAndSettle();
+    await _pump(tester, api, initialArea: 'learning');
     await tester.tap(find.text('Группы'));
     await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('Поиск группы'), findsOneWidget);
@@ -753,6 +767,8 @@ void main() {
     await tester.tap(find.text('Сотрудники').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Смирнова Ольга'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('staff-personnel-section-access')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Создать доступ'));
     await tester.pumpAndSettle();
@@ -824,6 +840,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Смирнова Ольга'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('staff-personnel-section-access')));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Данные для входа'));
     await tester.pumpAndSettle();
 
@@ -870,10 +888,16 @@ void main() {
       await tester.tap(find.text('Смирнова Ольга'));
       await tester.pumpAndSettle();
 
+      await tester.tap(find.byKey(const Key('staff-personnel-section-access')));
+      await tester.pumpAndSettle();
       expect(
         find.text('Доступ не создан. Карточку можно сохранить без него'),
         findsOneWidget,
       );
+      await tester.tap(
+        find.byKey(const Key('staff-personnel-section-employment')),
+      );
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Должность'),
         'Старший администратор',
@@ -921,10 +945,18 @@ void main() {
       await tester.tap(find.text('Мария Петрова'));
       await tester.pumpAndSettle();
 
+      await tester.tap(
+        find.byKey(const Key('teacher-personnel-section-access')),
+      );
+      await tester.pumpAndSettle();
       expect(
         find.text('Доступ не создан. Карточку можно сохранить без него'),
         findsOneWidget,
       );
+      await tester.tap(
+        find.byKey(const Key('teacher-personnel-section-overview')),
+      );
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextField, 'Имя Фамилия'),
         'Марина Петрова',
@@ -976,8 +1008,16 @@ void main() {
     await tester.tap(find.text('Мария Петрова'));
     await tester.pumpAndSettle();
 
+    await tester.tap(
+      find.byKey(const Key('teacher-personnel-section-employment')),
+    );
+    await tester.pumpAndSettle();
     expect(find.textContaining('Базовая ставка'), findsNothing);
     expect(find.widgetWithText(TextFormField, 'Оклад, ₽/мес'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('teacher-personnel-section-overview')),
+    );
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Имя Фамилия'),
       'Марина Петрова',

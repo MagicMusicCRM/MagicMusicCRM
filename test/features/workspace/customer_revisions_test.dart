@@ -6,13 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/workspace/people_search_action.dart';
+import 'package:magic_music_crm/core/workspace/entity_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/lesson_settlement_report_dialog.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_dialog.dart';
 
 class _Api extends MagicApiClient {
   _Api()
@@ -122,22 +123,34 @@ Widget _host(
       ),
     ),
   ],
-  child: MaterialApp(theme: AppTheme.production, home: Scaffold(body: child)),
+  child: MaterialApp(
+    theme: AppTheme.production,
+    home: Scaffold(body: child),
+  ),
 );
 
 void main() {
   testWidgets(
-    'desktop search opens the existing staff card and dismisses results',
+    'desktop search routes staff to the personnel card and dismisses results',
     (tester) async {
       final api = _Api();
+      EntityLink? opened;
       await tester.pumpWidget(
         _host(
           api,
-          const Align(
-            alignment: Alignment.topRight,
-            child: SizedBox(
-              width: 300,
-              child: PeopleSearchAction(inline: true),
+          EntityNavigationScope(
+            isDesktop: true,
+            open: (link, {titleHint}) {
+              opened = link;
+              return EntityNavigationOpenResult.opened;
+            },
+            preserveCurrentView: (_) {},
+            child: const Align(
+              alignment: Alignment.topRight,
+              child: SizedBox(
+                width: 300,
+                child: PeopleSearchAction(inline: true),
+              ),
             ),
           ),
         ),
@@ -147,7 +160,8 @@ void main() {
       await tester.pumpAndSettle(const Duration(milliseconds: 350));
       await tester.tap(find.text('Антон Администратор'));
       await tester.pumpAndSettle();
-      expect(find.byType(StaffDetailDialog), findsOneWidget);
+      expect(opened?.rawEntityType, 'staff');
+      expect(opened?.entityId, 'staff');
       expect(find.byKey(const ValueKey('people-search-results')), findsNothing);
       expect(tester.takeException(), isNull);
     },

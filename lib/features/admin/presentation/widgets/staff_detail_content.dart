@@ -1,11 +1,13 @@
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_model.dart';
 
 import 'personnel_embedded_card_frame.dart';
 import 'staff_detail_summary.dart';
+import 'staff_detail_access_section.dart';
 
 typedef StaffDetailLinkCallback = void Function(String value);
 
@@ -18,6 +20,7 @@ class StaffDetailContent extends StatelessWidget {
     required this.onProvision,
     required this.onLifecycle,
     required this.onRole,
+    required this.onAccessChanged,
     required this.onLink,
     required this.onSave,
     required this.onCancel,
@@ -31,6 +34,7 @@ class StaffDetailContent extends StatelessWidget {
   final VoidCallback onProvision;
   final VoidCallback onLifecycle;
   final VoidCallback onRole;
+  final VoidCallback onAccessChanged;
   final StaffDetailLinkCallback onLink;
   final VoidCallback onSave;
   final VoidCallback onCancel;
@@ -47,6 +51,7 @@ class StaffDetailContent extends StatelessWidget {
         onProvision: onProvision,
         onLifecycle: onLifecycle,
         onRole: onRole,
+        onAccessChanged: onAccessChanged,
         onLink: onLink,
         embedded: embedded,
       ),
@@ -68,6 +73,9 @@ class StaffDetailContent extends StatelessWidget {
         key: const Key('staff-detail-embedded'),
         title: 'Карточка сотрудника',
         icon: Icons.badge_outlined,
+        personName: '${controller.draft.firstName} ${controller.draft.lastName}'
+            .trim(),
+        statusLabel: controller.isArchived ? 'В архиве' : 'Активен',
         body: form,
         action: saveButton,
         saving: controller.saving,
@@ -100,6 +108,7 @@ class _StaffDetailForm extends StatelessWidget {
     required this.onProvision,
     required this.onLifecycle,
     required this.onRole,
+    required this.onAccessChanged,
     required this.onLink,
     required this.embedded,
   });
@@ -109,6 +118,7 @@ class _StaffDetailForm extends StatelessWidget {
   final VoidCallback onProvision;
   final VoidCallback onLifecycle;
   final VoidCallback onRole;
+  final VoidCallback onAccessChanged;
   final StaffDetailLinkCallback onLink;
   final bool embedded;
 
@@ -116,6 +126,7 @@ class _StaffDetailForm extends StatelessWidget {
   Widget build(BuildContext context) {
     final identity = _StaffDetailSection(
       title: 'Основные данные и доступ',
+      icon: Icons.person_outline_rounded,
       child: Column(
         children: [
           _IdentityFields(controller: controller, currentRole: currentRole),
@@ -129,6 +140,7 @@ class _StaffDetailForm extends StatelessWidget {
     );
     final employment = _StaffDetailSection(
       title: 'Работа и филиалы',
+      icon: Icons.work_outline_rounded,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -140,22 +152,24 @@ class _StaffDetailForm extends StatelessWidget {
     );
     final access = _StaffDetailSection(
       title: 'Доступ в приложение',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _AccessRoleField(
-            controller: controller,
-            currentRole: currentRole,
-            onRole: onRole,
-          ),
-          StaffAccessActions(
-            controller: controller,
-            currentRole: currentRole,
-            onProvision: onProvision,
-            onLifecycle: onLifecycle,
-            onLink: onLink,
-          ),
-        ],
+      icon: Icons.admin_panel_settings_outlined,
+      child: StaffAccessBody(
+        controller: controller,
+        currentRole: currentRole,
+        roleField: _AccessRoleField(
+          controller: controller,
+          currentRole: currentRole,
+          onRole: onRole,
+        ),
+        actions: StaffAccessActions(
+          controller: controller,
+          currentRole: currentRole,
+          onProvision: onProvision,
+          onLifecycle: onLifecycle,
+          onLink: onLink,
+        ),
+        onAccessChanged: onAccessChanged,
+        embedded: embedded,
       ),
     );
     if (embedded) {
@@ -174,6 +188,7 @@ class _StaffDetailForm extends StatelessWidget {
                 const SizedBox(height: 12),
                 _StaffDetailSection(
                   title: 'Основные данные',
+                  icon: Icons.person_outline_rounded,
                   child: _IdentityFields(
                     controller: controller,
                     currentRole: currentRole,
@@ -194,7 +209,10 @@ class _StaffDetailForm extends StatelessWidget {
             icon: Icons.admin_panel_settings_outlined,
             child: access,
           ),
-          buildStaffHistorySection(staff),
+          buildStaffHistorySection(
+            staff,
+            canViewActivity: canManageStaffCredentials(currentRole),
+          ),
         ],
       );
     }
@@ -236,27 +254,54 @@ class _StaffDetailForm extends StatelessWidget {
 }
 
 class _StaffDetailSection extends StatelessWidget {
-  const _StaffDetailSection({required this.title, required this.child});
+  const _StaffDetailSection({
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
 
   final String title;
+  final IconData icon;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: colors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: colors.outlineVariant.withValues(alpha: 0.75),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 12),
-          child,
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.xl,
+              vertical: AppSpace.sm,
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 19, color: AppColor.gold),
+                const SizedBox(width: AppSpace.sm),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(
+            height: 1,
+            color: colors.outlineVariant.withValues(alpha: 0.6),
+          ),
+          Padding(padding: const EdgeInsets.all(AppSpace.lg), child: child),
         ],
       ),
     );

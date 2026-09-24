@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 
 class PersonnelCardSection {
   const PersonnelCardSection({
@@ -52,145 +55,106 @@ class _PersonnelSectionedCardBodyState
         ? _selected!
         : sections.first.id;
     final colors = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final navigation = constraints.maxWidth >= 720
-            ? Container(
-                width: 190,
-                color: colors.surface,
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      color: AppColor.surfaceSoft,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 7,
-                      ),
-                      child: const Text(
-                        'КАРТОЧКА',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                        ),
+    final navigation = MagicDesktopScrollbar(
+      axis: Axis.horizontal,
+      builder: (context, controller) => SingleChildScrollView(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final section in sections) ...[
+              if (section != sections.first) const SizedBox(width: AppSpace.sm),
+              Material(
+                color: section.id == selected
+                    ? AppColor.goldSoft
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppRadius.chip),
+                child: InkWell(
+                  key: Key(
+                    '${widget.keyPrefix}-personnel-section-${section.id}',
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadius.chip),
+                  onTap: () => _select(section.id),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.md,
+                      vertical: AppSpace.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.chip),
+                      border: Border.all(
+                        color: section.id == selected
+                            ? AppColor.goldLine
+                            : colors.outlineVariant,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    for (final section in sections)
-                      InkWell(
-                        key: Key(
-                          '${widget.keyPrefix}-personnel-section-${section.id}',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          section.icon,
+                          size: 16,
+                          color: section.id == selected
+                              ? AppColor.gold
+                              : colors.onSurfaceVariant,
                         ),
-                        onTap: () => _select(section.id),
-                        child: Container(
-                          decoration: BoxDecoration(
+                        const SizedBox(width: 6),
+                        Text(
+                          section.label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: section.id == selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                             color: section.id == selected
-                                ? AppColor.surfaceSoft
-                                : null,
-                            border: section.id == selected
-                                ? const Border(
-                                    left: BorderSide(
-                                      color: AppColor.actionBlue,
-                                      width: 2,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 8,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                section.icon,
-                                size: 14,
-                                color: section.id == selected
-                                    ? AppColor.actionBlue
-                                    : AppColor.text3,
-                              ),
-                              const SizedBox(width: 7),
-                              Expanded(
-                                child: Text(
-                                  section.label,
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    color: AppColor.actionBlue,
-                                    fontWeight: section.id == selected
-                                        ? FontWeight.w700
-                                        : FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            ],
+                                ? AppColor.gold
+                                : colors.onSurfaceVariant,
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              )
-            : SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final section in sections)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: ChoiceChip(
-                          key: Key(
-                            '${widget.keyPrefix}-personnel-section-${section.id}',
-                          ),
-                          selected: section.id == selected,
-                          avatar: Icon(section.icon, size: 16),
-                          label: Text(section.label),
-                          onSelected: (_) => _select(section.id),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-        final content = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final section in sections)
-              if (!section.lazy ||
-                  section.id == selected ||
-                  _visited.contains(section.id))
-                Offstage(
-                  offstage: section.id != selected,
-                  child: TickerMode(
-                    enabled: section.id == selected,
-                    child: KeyedSubtree(
-                      key: ValueKey(
-                        '${widget.keyPrefix}-personnel-content-${section.id}',
-                      ),
-                      child: section.child,
+                      ],
                     ),
                   ),
                 ),
+              ),
+            ],
           ],
-        );
-        if (constraints.maxWidth < 720) {
-          return Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [navigation, const SizedBox(height: 12), content],
+        ),
+      ),
+    );
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final section in sections)
+          if (!section.lazy ||
+              section.id == selected ||
+              _visited.contains(section.id))
+            Offstage(
+              offstage: section.id != selected,
+              child: TickerMode(
+                enabled: section.id == selected,
+                child: KeyedSubtree(
+                  key: ValueKey(
+                    '${widget.keyPrefix}-personnel-content-${section.id}',
+                  ),
+                  child: section.child,
+                ),
+              ),
             ),
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            navigation,
-            VerticalDivider(width: 1, color: colors.outlineVariant),
-            Expanded(
-              child: Padding(padding: const EdgeInsets.all(10), child: content),
-            ),
-          ],
-        );
-      },
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.lg,
+            vertical: AppSpace.md,
+          ),
+          child: navigation,
+        ),
+        Divider(height: 1, color: colors.outlineVariant.withValues(alpha: 0.6)),
+        Padding(padding: const EdgeInsets.all(AppSpace.lg), child: content),
+      ],
     );
   }
 }
@@ -202,12 +166,18 @@ class PersonnelHistorySummary extends StatelessWidget {
     required this.lifecycleState,
     this.offboardedAt,
     this.offboardReason,
+    this.personId,
+    this.personType,
+    this.canViewActivity = false,
   });
 
   final Object? createdAt;
   final String lifecycleState;
   final Object? offboardedAt;
   final Object? offboardReason;
+  final String? personId;
+  final String? personType;
+  final bool canViewActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -216,44 +186,74 @@ class PersonnelHistorySummary extends StatelessWidget {
       offboardedAt?.toString() ?? '',
     )?.toLocal();
     final reason = offboardReason?.toString().trim() ?? '';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'История карточки',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.person_add_alt_1_outlined),
-              title: const Text('Карточка создана'),
-              subtitle: Text(_date(created)),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                lifecycleState == 'archived'
-                    ? Icons.archive_outlined
-                    : Icons.verified_user_outlined,
-              ),
-              title: Text(
-                lifecycleState == 'archived' ? 'В архиве' : 'Активна',
-              ),
-              subtitle: offboarded == null
-                  ? const Text('Текущий статус записи')
-                  : Text(
-                      '${_date(offboarded)}${reason.isEmpty ? '' : ' · $reason'}',
-                    ),
-            ),
-            const Text(
-              'Изменения ставок и расчётов сохраняются в финансовой истории и не переписывают прошлые занятия.',
-            ),
-          ],
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: colors.outlineVariant.withValues(alpha: 0.75),
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpace.xl,
+              vertical: AppSpace.sm,
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.history_rounded, size: 19, color: AppColor.gold),
+                SizedBox(width: AppSpace.sm),
+                Text(
+                  'История карточки',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+          Divider(
+            height: 1,
+            color: colors.outlineVariant.withValues(alpha: 0.6),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpace.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.person_add_alt_1_outlined),
+                  title: const Text('Карточка создана'),
+                  subtitle: Text(_date(created)),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    lifecycleState == 'archived'
+                        ? Icons.archive_outlined
+                        : Icons.verified_user_outlined,
+                  ),
+                  title: Text(
+                    lifecycleState == 'archived' ? 'В архиве' : 'Активна',
+                  ),
+                  subtitle: offboarded == null
+                      ? const Text('Текущий статус записи')
+                      : Text(
+                          '${_date(offboarded)}${reason.isEmpty ? '' : ' · $reason'}',
+                        ),
+                ),
+                if (canViewActivity && personId != null && personType != null)
+                  PersonnelActivityHistory(
+                    personId: personId!,
+                    personType: personType!,
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -266,6 +266,136 @@ class PersonnelHistorySummary extends StatelessWidget {
   }
 }
 
+class PersonnelActivityHistory extends ConsumerStatefulWidget {
+  const PersonnelActivityHistory({
+    super.key,
+    required this.personId,
+    required this.personType,
+  });
+
+  final String personId;
+  final String personType;
+
+  @override
+  ConsumerState<PersonnelActivityHistory> createState() =>
+      _PersonnelActivityHistoryState();
+}
+
+class _PersonnelActivityHistoryState
+    extends ConsumerState<PersonnelActivityHistory> {
+  late Future<Map<String, dynamic>> _history;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() {
+    _history = ref
+        .read(magicCrmServiceProvider)
+        .getPersonHistory(
+          personType: widget.personType,
+          personId: widget.personId,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
+    future: _history,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return ListTile(
+          title: const Text('Не удалось загрузить историю действий'),
+          trailing: TextButton(
+            onPressed: () => setState(_load),
+            child: const Text('Повторить'),
+          ),
+        );
+      }
+      if (!snapshot.hasData) return const LinearProgressIndicator();
+      final activity =
+          (snapshot.data!['activity'] as List?)?.whereType<Map>().toList() ??
+          const <Map>[];
+      final lifecycle =
+          (snapshot.data!['items'] as List?)?.whereType<Map>().toList() ??
+          const <Map>[];
+      if (activity.isEmpty && lifecycle.isEmpty) {
+        return const ListTile(title: Text('Записанных действий пока нет'));
+      }
+      final events = <({String title, String date, String reason})>[
+        for (final row in activity)
+          (
+            title: _activityLabel(row['action']?.toString() ?? ''),
+            date: row['createdAt']?.toString() ?? '',
+            reason: row['reasonText']?.toString() ?? '',
+          ),
+        for (final row in lifecycle)
+          (
+            title: row['operation'] == 'restore'
+                ? 'Карточка восстановлена'
+                : 'Карточка архивирована',
+            date: row['createdAt']?.toString() ?? '',
+            reason: row['reasonText']?.toString() ?? '',
+          ),
+      ]..sort((a, b) => b.date.compareTo(a.date));
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Divider(height: 24),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Действия',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              IconButton(
+                key: const Key('personnel-history-refresh'),
+                tooltip: 'Обновить историю',
+                onPressed: () => setState(_load),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+          for (final event in events.take(100))
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: const Icon(Icons.history_rounded, size: 20),
+              title: Text(event.title),
+              subtitle: Text(_eventDescription(event.date, event.reason)),
+            ),
+        ],
+      );
+    },
+  );
+
+  String _eventDescription(String rawDate, String reason) {
+    final date = DateTime.tryParse(rawDate)?.toLocal();
+    final formatted = date == null
+        ? 'Дата не указана'
+        : '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year} '
+              '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    return reason.isEmpty ? formatted : '$formatted · $reason';
+  }
+
+  String _activityLabel(String action) => switch (action) {
+    'crm.teacher_created' => 'Преподаватель добавлен',
+    'crm.staff_created' => 'Сотрудник добавлен',
+    'crm.teacher_updated' => 'Данные преподавателя изменены',
+    'crm.staff_updated' => 'Данные сотрудника изменены',
+    'crm.teacher_branches_replaced' => 'Назначения по филиалам изменены',
+    'crm.teacher_availability_replaced' => 'График и занятые периоды изменены',
+    'crm.teacher_rate_set' ||
+    'crm.teacher_rate_updated' => 'Ставка преподавателя изменена',
+    'access.user.role_assigned' => 'Роль доступа изменена',
+    'access.user.override_set' => 'Персональные права изменены',
+    _ => 'Действие в карточке',
+  };
+}
+
 class PersonnelEmbeddedCardFrame extends StatelessWidget {
   const PersonnelEmbeddedCardFrame({
     super.key,
@@ -274,6 +404,8 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
     required this.body,
     required this.action,
     required this.saving,
+    this.personName,
+    this.statusLabel,
     this.onClose,
   });
 
@@ -282,6 +414,8 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
   final Widget body;
   final Widget action;
   final bool saving;
+  final String? personName;
+  final String? statusLabel;
   final VoidCallback? onClose;
 
   @override
@@ -293,18 +427,69 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.xl,
+              AppSpace.lg,
+              AppSpace.md,
+              AppSpace.md,
+            ),
             child: Row(
               children: [
-                Icon(icon),
-                const SizedBox(width: 10),
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColor.goldSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.icon),
+                    border: Border.all(color: AppColor.goldLine),
+                  ),
+                  child: Icon(icon, size: 22, color: AppColor.gold),
+                ),
+                const SizedBox(width: AppSpace.md),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        personName?.trim().isNotEmpty == true
+                            ? personName!
+                            : title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: statusLabel == 'В архиве'
+                                  ? AppColor.text3
+                                  : AppColor.success,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '$title · ${statusLabel ?? 'Активен'}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
                 if (onClose != null)
@@ -316,16 +501,27 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
               ],
             ),
           ),
-          Divider(height: 1, color: colors.outlineVariant),
+          Divider(
+            height: 1,
+            color: colors.outlineVariant.withValues(alpha: 0.6),
+          ),
           Expanded(
             child: ColoredBox(
-              color: AppColor.bg,
+              color: colors.surface,
               child: SingleChildScrollView(child: body),
             ),
           ),
-          Divider(height: 1, color: colors.outlineVariant),
+          Divider(
+            height: 1,
+            color: colors.outlineVariant.withValues(alpha: 0.6),
+          ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.xl,
+              AppSpace.md,
+              AppSpace.xl,
+              AppSpace.lg,
+            ),
             child: Align(alignment: Alignment.centerRight, child: action),
           ),
         ],
@@ -340,28 +536,27 @@ class PersonnelMetricChip extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
-    required this.color,
     this.wide = false,
   });
 
   final IconData icon;
   final String label;
   final String value;
-  final Color color;
   final bool wide;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: wide ? 220 : 132,
+      width: wide ? 220 : 164,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withAlpha(24),
-        border: Border.all(color: color.withAlpha(54)),
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 17, color: color),
+          Icon(icon, size: 17, color: AppColor.gold),
           const SizedBox(width: 7),
           Expanded(
             child: Column(

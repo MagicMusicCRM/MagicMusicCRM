@@ -29,7 +29,11 @@ class TeacherDetailInitialData {
 
     return TeacherDetailInitialData(
       teacher: teacher,
-      name: directName.isEmpty ? profileName : directName,
+      name: directName.isNotEmpty
+          ? directName
+          : profileName.isNotEmpty
+          ? profileName
+          : teacher['name']?.toString().trim() ?? '',
       phone: teacher['phone']?.toString() ?? profile['phone']?.toString() ?? '',
       email: teacher['email']?.toString() ?? '',
       employment: TeacherEmploymentInitial(

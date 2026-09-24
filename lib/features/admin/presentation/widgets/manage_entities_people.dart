@@ -95,11 +95,11 @@ String _staffStatusLabel(String status) {
 class _TeachersList extends ConsumerWidget {
   final String searchQuery;
   final String? selectedId;
-  final ValueChanged<Map<String, dynamic>>? onSelected;
+  final ValueChanged<Map<String, dynamic>> onSelected;
   const _TeachersList({
     required this.searchQuery,
     this.selectedId,
-    this.onSelected,
+    required this.onSelected,
   });
 
   @override
@@ -165,20 +165,7 @@ class _TeachersList extends ConsumerWidget {
                     ? AppColor.goldSoft
                     : null,
                 child: ListTile(
-                  onTap: () async {
-                    if (onSelected != null) {
-                      onSelected!(item);
-                      return;
-                    }
-                    final updated = await TeacherDetailDialog.show(
-                      context,
-                      item,
-                    );
-                    if (updated == true) {
-                      ref.invalidate(entitiesProvider('teachers'));
-                      ref.invalidate(teacherSearchProvider(query));
-                    }
-                  },
+                  onTap: () => onSelected(item),
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.secondaryGold.withAlpha(30),
                     child: Text(

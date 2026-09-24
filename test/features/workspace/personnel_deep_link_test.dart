@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 
 import '../../support/modal_layout_evidence.dart';
@@ -47,9 +48,11 @@ class _PersonnelApi extends MagicApiClient {
     if (path == '/crm/teachers/teacher-a') {
       return <String, dynamic>{
             'id': 'teacher-a',
-            'name': 'Мария Соколова',
+            'firstName': 'Мария',
+            'lastName': 'Соколова',
             'phone': '+79991112233',
             'email': 'teacher@example.test',
+            'profileUserId': 'user-teacher-a',
             'app_role': 'teacher',
             'is_app_account': true,
             'lifecycle_state': 'active',
@@ -61,6 +64,26 @@ class _PersonnelApi extends MagicApiClient {
               {'id': 'branch-a', 'name': 'Центр'},
             ],
             'created_at': '2026-09-20T00:00:00.000Z',
+          }
+          as T;
+    }
+    if (path == '/crm/teachers/teacher-a/lifecycle-history') {
+      return <String, dynamic>{
+            'items': [
+              {
+                'id': 'lifecycle-a',
+                'operation': 'offboard',
+                'reasonText': 'Завершение работы',
+                'createdAt': '2026-09-22T10:00:00Z',
+              },
+            ],
+            'activity': [
+              {
+                'id': 'audit-a',
+                'action': 'crm.teacher_availability_replaced',
+                'createdAt': '2026-09-23T10:00:00Z',
+              },
+            ],
           }
           as T;
     }
@@ -146,7 +169,7 @@ void main() {
             capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
           ],
           child: MaterialApp(
-            theme: ThemeData(fontFamily: 'Inter'),
+            theme: AppTheme.production,
             home: Scaffold(
               body: PersonnelWorkspace(
                 snapshot: snapshot,
@@ -168,11 +191,15 @@ void main() {
     await captureModalLayout(tester, 'windows-staff-card-overview');
 
     expect(api.requests, contains('/crm/staff/staff-a'));
-    expect(find.text('Карточка сотрудника'), findsOneWidget);
+    expect(find.textContaining('Карточка сотрудника ·'), findsOneWidget);
     expect(find.text('Анна'), findsWidgets);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byKey(const Key('personnel-detail-pane')), findsOneWidget);
     expect(find.byKey(const Key('staff-detail-embedded')), findsOneWidget);
+    expect(
+      find.byKey(const Key('staff-detail-save')).hitTestable(),
+      findsOneWidget,
+    );
     for (final section in const [
       'overview',
       'employment',
@@ -184,6 +211,16 @@ void main() {
         findsOneWidget,
       );
     }
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(430, 932);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('staff-detail-embedded')), findsOneWidget);
+    expect(
+      find.byKey(const Key('staff-detail-save')).hitTestable(),
+      findsOneWidget,
+    );
+    await captureModalLayout(tester, 'mobile-staff-card-overview');
     expect(tester.takeException(), isNull);
   });
 
@@ -216,7 +253,7 @@ void main() {
             capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
           ],
           child: MaterialApp(
-            theme: ThemeData(fontFamily: 'Inter'),
+            theme: AppTheme.production,
             home: Scaffold(
               body: PersonnelWorkspace(
                 snapshot: snapshot,
@@ -238,10 +275,14 @@ void main() {
     await captureModalLayout(tester, 'windows-teacher-card-overview');
 
     expect(api.requests, contains('/crm/teachers/teacher-a'));
-    expect(find.text('Карточка преподавателя'), findsOneWidget);
+    expect(find.textContaining('Карточка преподавателя ·'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byKey(const Key('personnel-detail-pane')), findsOneWidget);
     expect(find.byKey(const Key('teacher-detail-embedded')), findsOneWidget);
+    expect(
+      find.byKey(const Key('teacher-detail-save')).hitTestable(),
+      findsOneWidget,
+    );
     for (final section in const [
       'overview',
       'schedule',
@@ -255,7 +296,7 @@ void main() {
       );
     }
     expect(find.byKey(const Key('teacher-open-schedule')), findsOneWidget);
-    expect(find.byKey(const Key('teacher-open-availability')), findsOneWidget);
+    expect(find.byKey(const Key('teacher-open-availability')), findsNothing);
 
     await tester.tap(
       find.byKey(const Key('teacher-personnel-section-schedule')),
@@ -266,6 +307,10 @@ void main() {
     expect(api.requests, contains('/crm/teachers'));
     expect(api.requests, contains('/crm/schedule-reference'));
     expect(find.text('Доступность преподавателя'), findsOneWidget);
+    expect(
+      find.byKey(const Key('teacher-schedule-fixed-person')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('teacher-availability-add-1')),
       findsOneWidget,
@@ -289,6 +334,30 @@ void main() {
       findsOneWidget,
     );
     await captureModalLayout(tester, 'windows-teacher-card-rate-guard');
+    await tester.tap(find.byKey(const Key('teacher-personnel-section-access')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('teacher-personal-access')), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('teacher-personnel-section-history')),
+    );
+    await tester.pumpAndSettle();
+    expect(api.requests, contains('/crm/teachers/teacher-a/lifecycle-history'));
+    expect(find.text('График и занятые периоды изменены'), findsOneWidget);
+    expect(find.text('Карточка архивирована'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(430, 932);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('teacher-personnel-section-overview')),
+    );
+    await tester.pumpAndSettle();
+    await captureModalLayout(tester, 'mobile-teacher-card-overview');
+    expect(find.byKey(const Key('teacher-detail-embedded')), findsOneWidget);
+    expect(
+      find.byKey(const Key('teacher-detail-save')).hitTestable(),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 }

@@ -769,6 +769,16 @@ extension MagicCrmCore on MagicCrmService {
     );
   }
 
+  Future<Map<String, dynamic>> getPersonHistory({
+    required String personType,
+    required String personId,
+  }) {
+    final path = personType == 'teacher' ? 'teachers' : 'staff';
+    return _api.get<Map<String, dynamic>>(
+      '/crm/$path/$personId/lifecycle-history',
+    );
+  }
+
   Future<Map<String, dynamic>> changePersonLifecycle({
     required String personType,
     required String personId,

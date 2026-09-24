@@ -161,14 +161,12 @@ class _GroupsList extends ConsumerWidget {
 // ─────────────────────────────────────────────────
 class _EmployeesList extends ConsumerWidget {
   final String searchQuery;
-  final String currentRole;
   final String? selectedId;
-  final ValueChanged<Map<String, dynamic>>? onSelected;
+  final ValueChanged<Map<String, dynamic>> onSelected;
   const _EmployeesList({
     required this.searchQuery,
-    required this.currentRole,
     this.selectedId,
-    this.onSelected,
+    required this.onSelected,
   });
 
   @override
@@ -327,21 +325,7 @@ class _EmployeesList extends ConsumerWidget {
                     Icons.chevron_right_rounded,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                  onTap: () async {
-                    if (onSelected != null) {
-                      onSelected!(e);
-                      return;
-                    }
-                    final updated = await StaffDetailDialog.show(
-                      context,
-                      e,
-                      currentRole: currentRole,
-                    );
-                    if (updated == true) {
-                      ref.invalidate(entitiesProvider('employees'));
-                      ref.invalidate(staffSearchProvider(query));
-                    }
-                  },
+                  onTap: () => onSelected(e),
                 ),
               );
             },

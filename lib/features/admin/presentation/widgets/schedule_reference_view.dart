@@ -128,6 +128,20 @@ class ScheduleReferenceView extends StatelessWidget {
         },
       );
     }
+    if (controller.lockedTeacherId != null) {
+      final teacher = controller.state.teachers
+          .where(
+            (row) => scheduleReferenceId(row) == controller.lockedTeacherId,
+          )
+          .firstOrNull;
+      return InputDecorator(
+        key: const Key('teacher-schedule-fixed-person'),
+        decoration: const InputDecoration(labelText: 'Преподаватель'),
+        child: Text(
+          teacher == null ? 'Преподаватель карточки' : _teacherName(teacher),
+        ),
+      );
+    }
     return SearchablePickerField(
       key: ValueKey('settings-teacher-${controller.state.teacherId}'),
       label: 'Преподаватель',

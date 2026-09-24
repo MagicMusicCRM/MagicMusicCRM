@@ -98,6 +98,33 @@ void main() {
     });
 
     test(
+      'personnel card cannot switch its teacher even through the controller',
+      () async {
+        final api = _ScheduleReferenceApi();
+        final controller = ScheduleReferenceController(
+          crm: MagicCrmService(api),
+          section: ScheduleReferenceSection.teacherSchedule,
+          canEdit: true,
+          initialTeacherId: 'teacher-a',
+          lockedTeacherId: 'teacher-a',
+        );
+
+        await controller.loadCatalogs();
+        await controller.selectTeacher('teacher-b');
+
+        expect(controller.state.teacherId, 'teacher-a');
+        await controller.saveAvailability();
+        expect(
+          api.lastPut(
+            '/crm/schedule-reference/teachers/teacher-a/availability',
+          ),
+          isNotNull,
+        );
+        controller.dispose();
+      },
+    );
+
+    test(
       'multiple recurring windows stay editable and preserve every rule',
       () async {
         final api = _ScheduleReferenceApi(

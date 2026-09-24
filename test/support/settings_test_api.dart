@@ -113,6 +113,14 @@ class SettingsTestApi extends MagicApiClient {
     if (managedCredentials.containsKey(path)) {
       return managedCredentials[path]! as T;
     }
+    if (path.startsWith('/crm/staff/')) {
+      final id = path.split('/').last;
+      return staff.firstWhere((row) => row['id'] == id) as T;
+    }
+    if (path.startsWith('/crm/teachers/')) {
+      final id = path.split('/').last;
+      return teachers.firstWhere((row) => row['id'] == id) as T;
+    }
     if (path == '/crm/groups') return <String, dynamic>{'items': groups} as T;
     if (path == '/crm/rooms') {
       return <String, dynamic>{

@@ -550,7 +550,8 @@ class EntityRouteRegistry {
     ),
     EntityLinkType.user: EntityRouteRegistration(
       isAllowed: (link, snapshot) => link.rawEntityType == 'staff'
-          ? snapshot.allows('crm.client.read.basic')
+          ? const {'admin', 'manager', 'director', 'system_admin'}.contains(snapshot.role) &&
+              snapshot.allows('crm.client.read.basic')
           : snapshot.allows('system.settings.manage'),
       buildLocation: (link, snapshot) => _staffRoute(
         link,
@@ -624,7 +625,8 @@ class EntityRouteRegistry {
     ),
     EntityLinkType.teacher: EntityRouteRegistration(
       isAllowed: (link, snapshot) => link.rawEntityType == 'personnel_teacher'
-          ? snapshot.allows('crm.client.read.basic')
+          ? const {'admin', 'manager', 'director', 'system_admin'}.contains(snapshot.role) &&
+              snapshot.allows('crm.client.read.basic')
           : _hasAny(snapshot, const {
               'schedule.lesson.read.assigned',
               'schedule.lesson.write',

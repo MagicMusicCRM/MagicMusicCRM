@@ -223,6 +223,26 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     _showMessage('Роль доступа обновлена');
   }
 
+  Future<void> _refreshAccess() async {
+    try {
+      final updated = await ref
+          .read(magicCrmServiceProvider)
+          .getTeacher(_teacherId);
+      if (mounted) {
+        setState(() {
+          _teacher = updated;
+          _emailController.text = updated['email']?.toString() ?? '';
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        _showMessage(
+          userErrorMessage(error, fallback: 'Не удалось обновить доступ.'),
+        );
+      }
+    }
+  }
+
   Future<void> _openSchedule() => openEntityLink(
     context,
     ref,
@@ -231,25 +251,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       entityId: _teacherId,
       presentation: EntityPresentationReference(
         primary: _nameController.text.trim(),
-      ),
-    ),
-    target: EntityOpenTarget.newTab,
-  );
-
-  Future<void> _openAvailability() => openEntityLink(
-    context,
-    ref,
-    EntityLink.typed(
-      entityType: EntityLinkType.report,
-      entityId: '__section__',
-      variant: 'configuration',
-      optionalFocus: EntityLinkFocus(
-        focus: 'learning',
-        filter: {'teacherId': _teacherId},
-      ),
-      presentation: EntityPresentationReference(
-        primary: 'График преподавателя',
-        context: _nameController.text.trim(),
       ),
     ),
     target: EntityOpenTarget.newTab,
@@ -275,10 +276,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
         snapshot != null &&
         (snapshot.allows('schedule.lesson.read.assigned') ||
             snapshot.allows('schedule.lesson.write'));
-    final canOpenAvailability =
-        snapshot != null &&
-        (snapshot.allows('config.crm.read') ||
-            snapshot.allows('system.settings.manage'));
     final canEditAvailability =
         snapshot != null &&
         (snapshot.allows('config.crm.edit') ||
@@ -296,11 +293,10 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       canManageCredentials: canManageCredentials,
       canManageTeacherRates: canManageTeacherRates,
       canOpenSchedule: canOpenSchedule,
-      canOpenAvailability: canOpenAvailability,
       canEditAvailability: canEditAvailability,
       saving: _saving,
       onOpenSchedule: () => unawaited(_openSchedule()),
-      onOpenAvailability: () => unawaited(_openAvailability()),
+      onAccessChanged: () => unawaited(_refreshAccess()),
       onProvisionAccess: _provisionAccess,
       onManageLifecycle: _manageLifecycle,
       onChangeAccessRole: _changeAccessRole,
@@ -325,6 +321,10 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
         key: const Key('teacher-detail-embedded'),
         title: 'Карточка преподавателя',
         icon: Icons.school_outlined,
+        personName: _nameController.text.trim(),
+        statusLabel: _teacher['lifecycle_state'] == 'archived'
+            ? 'В архиве'
+            : 'Активен',
         body: content,
         action: saveButton,
         saving: _saving,

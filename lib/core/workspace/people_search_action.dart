@@ -8,8 +8,6 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_dialog.dart';
 
 class PeopleSearchAction extends ConsumerWidget {
   const PeopleSearchAction({this.inline = false, super.key});
@@ -51,27 +49,17 @@ class PeopleSearchAction extends ConsumerWidget {
     final access = ref.read(capabilitySnapshotProvider).asData?.value;
     if (access == null || !access.allows('crm.client.read.basic')) return;
     try {
-      if (person.type == 'teacher') {
-        final fresh = await ref
-            .read(magicCrmServiceProvider)
-            .getTeacher(person.id);
-        if (context.mounted) await TeacherDetailDialog.show(context, fresh);
-      } else if (person.type == 'staff') {
-        await StaffDetailDialog.show(
-          context,
-          person.row,
-          currentRole: access.role,
-        );
-      } else {
-        await openEntityLink(
-          context,
-          ref,
-          EntityLink.fromJson({
-            'entityType': person.type,
-            'entityId': person.id,
-          }),
-        );
-      }
+      await openEntityLink(
+        context,
+        ref,
+        EntityLink.fromJson({
+          'entityType': person.type == 'teacher'
+              ? 'personnel_teacher'
+              : person.type,
+          'entityId': person.id,
+          'presentation': {'primary': person.name},
+        }),
+      );
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

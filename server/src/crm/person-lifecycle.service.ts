@@ -72,6 +72,13 @@ interface HistoryRow extends QueryResultRow {
   created_at: Date | string;
 }
 
+interface PersonAuditRow extends QueryResultRow {
+  id: string;
+  action: string;
+  reason_text: string | null;
+  created_at: Date | string;
+}
+
 @Injectable()
 export class PersonLifecycleService {
   constructor(
@@ -116,6 +123,15 @@ export class PersonLifecycleService {
        limit 100`,
       [personType, personId],
     );
+    const activity = await this.database.query<PersonAuditRow>(
+      `select id, action, reason_text, created_at
+       from app.audit_events
+       where (entity_type = $1 and entity_id = $2)
+          or (entity_type = 'access:user' and entity_id = $3)
+       order by created_at desc, id desc
+       limit 100`,
+      [personType, personId, row.user_id],
+    );
     return {
       items: result.rows.map((item) => ({
         id: item.id,
@@ -127,6 +143,12 @@ export class PersonLifecycleService {
         actorUserId: item.actor_user_id,
         requestId: item.request_id,
         snapshot: item.snapshot,
+        createdAt: item.created_at,
+      })),
+      activity: activity.rows.map((item) => ({
+        id: item.id,
+        action: item.action,
+        reasonText: item.reason_text,
         createdAt: item.created_at,
       })),
     };

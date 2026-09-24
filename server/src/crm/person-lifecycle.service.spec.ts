@@ -74,6 +74,22 @@ describe("PersonLifecycleService", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it("returns bounded personnel actions with access changes after checking the target", async () => {
+    const { service, query } = createService([
+      [row()],
+      [{ id: "lifecycle-a", operation: "offboard", from_state: "active", to_state: "archived", version: 2, reason_text: "Сотрудник уволен", actor_user_id: "director-a", request_id: "request-a", snapshot: {}, created_at: "2026-09-22T10:00:00Z" }],
+      [{ id: "audit-a", action: "access.user.override_set", reason_text: "access.review", created_at: "2026-09-23T10:00:00Z" }],
+    ]);
+
+    await expect(service.history(director, "teacher", "teacher-a"))
+      .resolves.toMatchObject({
+        items: [expect.objectContaining({ operation: "offboard" })],
+        activity: [expect.objectContaining({ action: "access.user.override_set" })],
+      });
+    expect(query.mock.calls[2][1]).toEqual(["teacher", "teacher-a", "teacher-user-a"]);
+    expect(String(query.mock.calls[2][0])).toContain("limit 100");
+  });
+
   it("refuses offboarding while assigned work remains", async () => {
     const { service, integrity } = createService([[row({ future_lessons: 1 })]]);
     await expect(

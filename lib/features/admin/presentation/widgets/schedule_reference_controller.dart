@@ -12,6 +12,7 @@ class ScheduleReferenceController extends ChangeNotifier {
     required this.canEdit,
     String? initialBranchId,
     String? initialTeacherId,
+    this.lockedTeacherId,
     DateTime Function()? clock,
   }) : _crm = crm,
        _branchId = initialBranchId,
@@ -22,6 +23,7 @@ class ScheduleReferenceController extends ChangeNotifier {
   final DateTime Function() _clock;
   final ScheduleReferenceSection section;
   final bool canEdit;
+  final String? lockedTeacherId;
 
   List<Map<String, dynamic>> _branches = const [];
   List<Map<String, dynamic>> _teachers = const [];
@@ -70,7 +72,9 @@ class ScheduleReferenceController extends ChangeNotifier {
       _branches = result.first;
       _teachers = result.length > 1 ? result[1] : const [];
       _branchId = validScheduleReferenceSelection(_branchId, _branches);
-      _teacherId = validScheduleReferenceSelection(_teacherId, _teachers);
+      _teacherId =
+          lockedTeacherId ??
+          validScheduleReferenceSelection(_teacherId, _teachers);
       if (canLoadReference) {
         await _loadReference();
       } else {
@@ -92,7 +96,8 @@ class ScheduleReferenceController extends ChangeNotifier {
   }
 
   Future<void> selectTeacher(String teacherId) async {
-    if (teacherId == _teacherId ||
+    if (lockedTeacherId != null ||
+        teacherId == _teacherId ||
         !containsScheduleReferenceId(_teachers, teacherId)) {
       return;
     }

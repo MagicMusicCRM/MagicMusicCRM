@@ -144,6 +144,15 @@ class StaffDetailController extends ChangeNotifier {
     _notify();
   }
 
+  Future<void> refreshAccess() async {
+    final id = _staffId();
+    final updated = await _crm.getStaff(id);
+    if (_disposed || _staffId() != id) return;
+    _staff = Map<String, dynamic>.from(updated);
+    draft.email = _staff['email']?.toString() ?? '';
+    _notify();
+  }
+
   void _notify() {
     if (!_disposed) notifyListeners();
   }

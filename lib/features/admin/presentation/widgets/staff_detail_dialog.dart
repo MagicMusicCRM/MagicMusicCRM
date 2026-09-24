@@ -121,6 +121,21 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     ).showSnackBar(const SnackBar(content: Text('Роль доступа обновлена')));
   }
 
+  Future<void> _refreshAccess() async {
+    try {
+      await _controller.refreshAccess();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userErrorMessage(error, fallback: 'Не удалось обновить доступ.'),
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _controller.saving) return;
     try {
@@ -164,6 +179,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
       onProvision: _provisionAccess,
       onLifecycle: _manageLifecycle,
       onRole: _changeAccessRole,
+      onAccessChanged: () => unawaited(_refreshAccess()),
       onLink: _openUserLinking,
       onSave: _save,
       onCancel: () => Navigator.pop(context),

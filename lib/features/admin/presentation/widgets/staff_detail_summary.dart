@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_model.dart';
 
@@ -32,7 +31,6 @@ class StaffSummary extends StatelessWidget {
           icon: Icons.badge_outlined,
           label: 'Роль в системе',
           value: staffRoleLabel(controller.draft.role),
-          color: AppTheme.primaryGold,
         ),
         PersonnelMetricChip(
           icon: isAppAccount
@@ -40,9 +38,6 @@ class StaffSummary extends StatelessWidget {
               : Icons.person_off_rounded,
           label: 'Аккаунт',
           value: isAppAccount ? staffRoleLabel(controller.appRole) : 'Нет',
-          color: isAppAccount
-              ? AppTheme.success
-              : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
         if (canManageCredentials)
           PersonnelMetricChip(
@@ -51,16 +46,12 @@ class StaffSummary extends StatelessWidget {
                 : Icons.no_encryption_gmailerrorred_rounded,
             label: 'Пароль',
             value: passwordConfigured ? 'Настроен' : 'Не задан',
-            color: passwordConfigured
-                ? AppTheme.success
-                : Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         if (branches.isNotEmpty)
           PersonnelMetricChip(
             icon: Icons.location_on_outlined,
             label: 'Филиалы',
             value: branches,
-            color: AppTheme.secondaryGold,
             wide: true,
           ),
       ],
@@ -137,16 +128,23 @@ class StaffAccessActions extends StatelessWidget {
   }
 }
 
-PersonnelCardSection buildStaffHistorySection(Map<String, dynamic> staff) {
+PersonnelCardSection buildStaffHistorySection(
+  Map<String, dynamic> staff, {
+  required bool canViewActivity,
+}) {
   return PersonnelCardSection(
     id: 'history',
     label: 'История',
     icon: Icons.history_rounded,
+    lazy: true,
     child: PersonnelHistorySummary(
       createdAt: staff['created_at'] ?? staff['createdAt'],
       lifecycleState: staff['lifecycle_state']?.toString() ?? 'active',
       offboardedAt: staff['offboarded_at'] ?? staff['offboardedAt'],
       offboardReason: staff['offboard_reason'] ?? staff['offboardReason'],
+      personId: staff['id']?.toString(),
+      personType: 'staff',
+      canViewActivity: canViewActivity,
     ),
   );
 }

@@ -17,12 +17,14 @@ class ScheduleReferenceSettings extends ConsumerStatefulWidget {
     required this.section,
     this.initialBranchId,
     this.initialTeacherId,
+    this.lockedTeacherId,
   });
 
   final bool canEdit;
   final ScheduleReferenceSection section;
   final String? initialBranchId;
   final String? initialTeacherId;
+  final String? lockedTeacherId;
 
   @override
   ConsumerState<ScheduleReferenceSettings> createState() =>
@@ -46,7 +48,8 @@ class _ScheduleReferenceSettingsState
     if (oldWidget.canEdit == widget.canEdit &&
         oldWidget.section == widget.section &&
         oldWidget.initialBranchId == widget.initialBranchId &&
-        oldWidget.initialTeacherId == widget.initialTeacherId) {
+        oldWidget.initialTeacherId == widget.initialTeacherId &&
+        oldWidget.lockedTeacherId == widget.lockedTeacherId) {
       return;
     }
     _controller.dispose();
@@ -61,6 +64,7 @@ class _ScheduleReferenceSettingsState
         canEdit: widget.canEdit,
         initialBranchId: widget.initialBranchId,
         initialTeacherId: widget.initialTeacherId,
+        lockedTeacherId: widget.lockedTeacherId,
       );
 
   @override

@@ -87,6 +87,7 @@ class ContextTransitionRegistry {
       source: ContextSourceType.schedule,
       target: ContextTargetType.teacher,
       entityType: EntityLinkType.teacher,
+      variant: 'personnel_teacher',
     ),
     ContextTransitionDefinition(
       source: ContextSourceType.schedule,
@@ -205,6 +206,7 @@ class ContextTransitionRegistry {
       source: ContextSourceType.lessonDetails,
       target: ContextTargetType.teacher,
       entityType: EntityLinkType.teacher,
+      variant: 'personnel_teacher',
     ),
     ContextTransitionDefinition(
       source: ContextSourceType.lessonDetails,
