@@ -17,7 +17,9 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
       _selectedDate.month,
       _selectedDate.day,
     ).subtract(Duration(days: _selectedDate.weekday - 1));
-    final firstDay = singleDay ? _selectedDate : monday;
+    final firstDay = singleDay
+        ? DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day)
+        : monday;
     final weekEnd = firstDay.add(Duration(days: singleDay ? 1 : 7));
     final cs = Theme.of(context).colorScheme;
     final columns = <ScheduleColumn>[];

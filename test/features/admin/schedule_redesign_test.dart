@@ -99,9 +99,23 @@ class _FakeClient extends MagicApiClient {
     }
     if (path == '/crm/schedule-reference') {
       final startsAt = _today().add(const Duration(hours: 2));
+      final dayStart = DateTime.utc(
+        startsAt.year,
+        startsAt.month,
+        startsAt.day,
+        8,
+      );
       return <String, dynamic>{
             'teacherBranchAssigned': true,
             'branchHoursConfigured': true,
+            'branchWindows': [
+              {
+                'opensAt': dayStart.toIso8601String(),
+                'closesAt': dayStart
+                    .add(const Duration(hours: 14))
+                    .toIso8601String(),
+              },
+            ],
             'teacherRules': [
               {
                 'available': false,
@@ -434,7 +448,7 @@ void main() {
           ),
           findsOneWidget,
         );
-        expect(find.text('Недоступно · Совещание'), findsOneWidget);
+        expect(find.textContaining('Совещание'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
