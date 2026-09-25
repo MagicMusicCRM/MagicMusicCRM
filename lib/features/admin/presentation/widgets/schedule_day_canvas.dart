@@ -300,7 +300,7 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
           _hourHeight =
               desktop && widget.fitToViewport && availableHeight.isFinite
               ? (availableHeight / (kDayViewportEndHour - kDayStartHour)).clamp(
-                  MediaQuery.textScalerOf(context).scale(22).clamp(24.0, 120.0),
+                  MediaQuery.textScalerOf(context).scale(18).clamp(24.0, 120.0),
                   120.0,
                 )
               : kHourHeight;

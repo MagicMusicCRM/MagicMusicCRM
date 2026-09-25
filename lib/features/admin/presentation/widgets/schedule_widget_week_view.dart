@@ -27,7 +27,8 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
       columns.add(
         ScheduleColumn(
           id: dateOnly(date),
-          name: '${weekDays[i]}\n${date.day} ${monthNamesGenitive[date.month]}',
+          name:
+              '${weekDays[date.weekday - 1]}\n${date.day} ${monthNamesGenitive[date.month]}',
           color: isToday ? AppColor.gold : cs.onSurfaceVariant,
           date: date,
           hasConflict: _scheduleConflicts.any((conflict) {

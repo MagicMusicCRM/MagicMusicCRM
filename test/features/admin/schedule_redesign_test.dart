@@ -8,7 +8,6 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_teacher_timeline.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 /// KVA-195 redesign coverage: Месяц/Неделя/День navigation, the day-grid canvas,
@@ -287,10 +286,8 @@ void main() {
             expectLesson('schedule-lesson-lesson-1');
           }
           await tester.tap(
-            find.byKey(const ValueKey('schedule-day-mode-switcher')),
+            find.byKey(const ValueKey('schedule-workspace-tab-byTeacher')),
           );
-          await tester.pumpAndSettle();
-          await tester.tap(find.text('По преподавателям').last);
           await tester.pumpAndSettle();
           expectLesson('schedule-lesson-lesson-1');
         },
@@ -382,9 +379,7 @@ void main() {
       expect(find.textContaining('Занято:'), findsNothing);
     });
 
-    testWidgets('teacher mode uses horizontal time bands and teacher rows', (
-      tester,
-    ) async {
+    testWidgets('teacher day uses one vertical time column', (tester) async {
       tester.view.physicalSize = const Size(1400, 1000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -394,17 +389,21 @@ void main() {
       await tester.tap(find.text('День'));
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(const ValueKey('schedule-day-mode-switcher')),
+        find.byKey(const ValueKey('schedule-workspace-tab-byTeacher')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('По преподавателям').last);
-      await tester.pumpAndSettle();
 
-      expect(find.byType(ScheduleTeacherTimeline), findsOneWidget);
-      expect(find.text('Преподаватель'), findsOneWidget);
-      expect(find.text('08:00-10:00'), findsOneWidget);
-      expect(find.text('Анна Сусарина'), findsOneWidget);
-      expect(find.text('1 занятие · 2 ч'), findsOneWidget);
+      final canvas = tester.widget<ScheduleDayCanvas>(
+        find.byKey(const ValueKey('schedule-teacher-day-view')),
+      );
+      expect(canvas.columns, hasLength(1));
+      const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      expect(
+        canvas.columns.single.name,
+        startsWith(weekdays[DateTime.now().weekday - 1]),
+      );
+      expect(find.text('Время'), findsOneWidget);
+      expect(find.text('Анна Сусарина'), findsWidgets);
       expect(find.text('Ольга Ученик'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -421,10 +420,8 @@ void main() {
         await tester.tap(find.text('Неделя'));
         await tester.pumpAndSettle();
         await tester.tap(
-          find.byKey(const ValueKey('schedule-day-mode-switcher')),
+          find.byKey(const ValueKey('schedule-workspace-tab-byTeacher')),
         );
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('По преподавателям').last);
         await tester.pumpAndSettle();
 
         expect(
@@ -455,10 +452,8 @@ void main() {
       await tester.tap(find.text('День'));
       await tester.pumpAndSettle();
       await tester.tap(
-        find.byKey(const ValueKey('schedule-day-mode-switcher')),
+        find.byKey(const ValueKey('schedule-workspace-tab-byTeacher')),
       );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('По преподавателям').last);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('schedule-lesson-lesson-1')));
       await tester.pumpAndSettle();
