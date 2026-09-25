@@ -1,4 +1,25 @@
-# MagicMusicCRM — актуальная передача 226
+# MagicMusicCRM — актуальная передача 229
+
+## Production 1.5.49+229 — выпущен 25.09.2026 (Europe/Moscow)
+
+По прямой команде владельца опубликован клиентский выпуск расписания по
+аудиториям и преподавателям. День преподавателя показывает вертикальную шкалу
+времени; занятые периоды выделены серым. Source/tag:
+`685f5df529f3bb811849e3fd4c60ba93c173cf87` / `v1.5.49`.
+
+Windows Setup/ZIP и подписанные APK/AAB опубликованы и сверены по SHA-256.
+Оба production update-канала и история показывают build 229. Публичный ZIP
+скачан и проверен по хешу. Flutter 1879 PASS, 4 skip; backend 4164 PASS;
+production-like UI/HTTP/restore 24 PASS. API image прежний
+`sha256:a1312c700e0538f412ec97d7dae9e55378535f654ae54419516efc9c4cc33665`,
+схема `0161_restore_notification_preferences`, readiness `ok`, outbox `0/0`,
+reconciliation `issues=[]`. Pre/post encrypted backups скопированы вне сервера
+и восстановлены в изоляции на текущем и резервном образах. Rollback обоих
+манифестов на build 228 подготовлен. Подробности:
+[release 229 audit](../audits/release-229-production.md).
+
+Ручная визуальная приёмка на реальных ролях и данных не выполнялась; выпуск
+сам по себе не подтверждает полное соответствие всему ТЗ.
 
 ## Production 1.5.46+226 — выпущен 23.09.2026 (Europe/Moscow)
 
