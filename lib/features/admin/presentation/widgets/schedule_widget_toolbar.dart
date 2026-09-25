@@ -219,8 +219,9 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
     if (view == ScheduleView.month && !widget.allowMonth) return;
     if (view == ScheduleView.month &&
         _showScheduleTabs &&
-        _dayViewMode == DayViewMode.byTeacher)
+        _dayViewMode == DayViewMode.byTeacher) {
       return;
+    }
     if (_currentView == view) return;
     _emitState(() {
       _clearHighlight();
