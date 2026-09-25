@@ -837,6 +837,52 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     }
   });
 
+  it("rejects a recurring plan outside configured teacher hours before and during commit", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const weekday = isoWeekday(addDays(fixture.today, 1));
+    const title = `Outside teacher hours ${randomUUID()}`;
+    try {
+      await pool.query(
+        `update app.teacher_availability_rules
+         set local_start = '12:00', local_end = '13:00'
+         where teacher_id = $1 and weekday = $2`,
+        [fixture.teacherId, weekday],
+      );
+      const draft = {
+        kind: "individual" as const,
+        title,
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [row(fixture, weekday, "10:00")],
+      };
+      const preview = await plans.previewConstraints(actor, draft);
+      expect(preview.valid).toBe(false);
+      expect(preview.rows[0]?.failures).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            violations: expect.arrayContaining([
+              expect.objectContaining({ code: "TEACHER_UNAVAILABLE" }),
+            ]),
+          }),
+        ]),
+      );
+      await expect(plans.create(actor, draft, {
+        idempotencyKey: randomUUID(),
+        requestId: randomUUID(),
+      })).rejects.toMatchObject({ status: 422 });
+      const persisted = await pool.query<{ count: string }>(
+        "select count(*)::text as count from app.schedule_plans where title = $1",
+        [title],
+      );
+      expect(persisted.rows[0]?.count).toBe("0");
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
   it("resolves sparse operational recurring rows once and persists that prepared revision", async () => {
     const fixture = await createFixture(pool);
     const originalResolve = settlement.resolvePlannedPlan.bind(settlement);

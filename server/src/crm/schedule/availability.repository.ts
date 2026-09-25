@@ -307,6 +307,9 @@ export class AvailabilityRepository {
         })),
       },
       teacherBranchAssigned: assignment.rows[0]?.assigned ?? false,
+      teacherPositiveAvailabilityConfigured: rawAvailability.rows.some(
+        (row) => row.available,
+      ),
       branchHoursConfigured:
         branch.weekly.length > 0 || branch.exceptions.length > 0,
       branchWindows: branchWindows.rows.map((row) => ({

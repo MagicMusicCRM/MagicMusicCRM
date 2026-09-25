@@ -55,6 +55,7 @@ export interface ConstraintValidationResult {
 
 export interface ResolvedConstraintReference {
   teacherBranchAssigned: boolean;
+  teacherPositiveAvailabilityConfigured?: boolean;
   branchHoursConfigured?: boolean;
   branchWindows: Array<{
     opensAt: string | Date;

@@ -109,6 +109,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   Future<LessonEditorLoadPatch?>? _referenceLoad;
   LessonEditorValidation _valid = const LessonEditorValidation.valid();
   LessonScheduleAnalysis? _conflicts;
+  Timer? _scheduleCheckTimer;
+  int _scheduleCheckVersion = 0;
   bool get _canManageTeacherCompensation {
     final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
     return snapshot != null && crmCanManageTeacherRates(snapshot);
@@ -126,6 +128,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   void dispose() {
+    _scheduleCheckTimer?.cancel();
     _data.invalidateClientSelection();
     _scroll.dispose();
     super.dispose();
@@ -162,8 +165,11 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
         );
       }
       _refs = references;
+      _conflicts = null;
+      _scheduleState = (false, null);
       if (loaded) _loadState = (false, _loadState.$2);
     });
+    _queueScheduleCheck();
   }
 
   void _update(LessonEditorDraft value, {bool scheduleChanged = false}) {
@@ -173,7 +179,23 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       _dirty = true;
       if (!scheduleChanged) return;
       _conflicts = null;
-      _scheduleState = (_scheduleState.$1, null);
+      _scheduleState = (false, null);
+    });
+    if (scheduleChanged) _queueScheduleCheck();
+  }
+
+  void _queueScheduleCheck() {
+    _scheduleCheckTimer?.cancel();
+    final version = ++_scheduleCheckVersion;
+    try {
+      _schedule.requestFor(session: _session, draft: _draft);
+    } on StateError {
+      return;
+    }
+    _scheduleCheckTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && version == _scheduleCheckVersion) {
+        unawaited(analyzeSchedule());
+      }
     });
   }
 
@@ -280,9 +302,13 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> analyzeSchedule() async {
+    _scheduleCheckTimer?.cancel();
+    final version = ++_scheduleCheckVersion;
+    final session = _session;
+    final draft = _draft;
     setState(() => _scheduleState = (true, null));
-    final result = await _schedule.inspect(_session, _draft);
-    if (!mounted) return;
+    final result = await _schedule.inspect(session, draft);
+    if (!mounted || version != _scheduleCheckVersion) return;
     setState(() {
       _conflicts = result.analysis;
       _scheduleState = (false, lessonScheduleErrorMessage(result.error));

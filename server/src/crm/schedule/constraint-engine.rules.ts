@@ -96,8 +96,10 @@ export function evaluateReferenceConstraints(
       !rule.available && halfOpenIntervalsOverlap(rule.interval, interval),
   );
   const available = parsedRules.filter((rule) => rule.available);
+  const positiveAvailabilityConfigured =
+    reference.teacherPositiveAvailabilityConfigured ?? available.length > 0;
   const hasPositiveCoverage =
-    available.length === 0 ||
+    !positiveAvailabilityConfigured ||
     available.some((rule) => intervalCovers(rule.interval, interval));
   if (unavailable.length > 0 || !hasPositiveCoverage) {
     violations.push(

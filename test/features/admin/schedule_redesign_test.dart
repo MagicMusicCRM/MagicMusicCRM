@@ -27,11 +27,13 @@ class _FakeClient extends MagicApiClient {
     this.reviewRequired = false,
     this.reservationState,
     this.subscriptionId,
+    this.positiveAvailabilityOutsideVisibleWeek = false,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool reviewRequired;
   final String? reservationState;
   final String? subscriptionId;
+  final bool positiveAvailabilityOutsideVisibleWeek;
   final previews = <Map<String, dynamic>>[];
 
   @override
@@ -107,6 +109,8 @@ class _FakeClient extends MagicApiClient {
       );
       return <String, dynamic>{
             'teacherBranchAssigned': true,
+            'teacherPositiveAvailabilityConfigured':
+                positiveAvailabilityOutsideVisibleWeek,
             'branchHoursConfigured': true,
             'branchWindows': [
               {
@@ -450,6 +454,35 @@ void main() {
         );
         expect(find.textContaining('Совещание'), findsOneWidget);
         expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'teacher week blocks hours when working rules are outside the week',
+      (tester) async {
+        tester.view.physicalSize = const Size(1500, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final api = _FakeClient(positiveAvailabilityOutsideVisibleWeek: true);
+
+        await tester.pumpWidget(_host(const ScheduleWidget(), client: api));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Неделя'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('schedule-workspace-tab-byTeacher')),
+        );
+        await tester.pumpAndSettle();
+
+        final canvas = tester.widget<ScheduleDayCanvas>(
+          find.byKey(const ValueKey('schedule-teacher-week-view')),
+        );
+        expect(
+          canvas.blockedIntervals.any(
+            (interval) => interval.reason == 'Не рабочее время преподавателя',
+          ),
+          isTrue,
+        );
       },
     );
 

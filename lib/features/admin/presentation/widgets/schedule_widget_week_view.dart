@@ -202,6 +202,9 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
     final positiveRules = rawRules
         .where((row) => row['available'] == true)
         .toList();
+    final positiveAvailabilityConfigured =
+        reference['teacherPositiveAvailabilityConfigured'] == true ||
+        positiveRules.isNotEmpty;
     for (var index = 0; index < 7; index++) {
       final day = monday.add(Duration(days: index));
       final visibleStart = DateTime(
@@ -250,7 +253,7 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
             reference['branchHoursConfigured'] == true &&
             branchWindows.any((row) => covers(row, at, branch: true));
         final teacherOpen =
-            positiveRules.isEmpty ||
+            !positiveAvailabilityConfigured ||
             positiveRules.any((row) => covers(row, at));
         final busyRule = rawRules
             .where((row) => row['available'] == false)

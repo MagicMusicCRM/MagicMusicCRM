@@ -225,6 +225,7 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
       );
       expect(outsideHours.violations).toEqual([
         expect.objectContaining({ code: "OUTSIDE_BRANCH_HOURS" }),
+        expect.objectContaining({ code: "TEACHER_UNAVAILABLE" }),
       ]);
 
       const breakRule = await client.query<{ id: string }>(
@@ -343,6 +344,58 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
           }),
         ]),
       );
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
+  it("rejects a lesson outside a configured teacher working window", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const fixture = await createFixture(client);
+      await client.query(
+        `update app.teacher_availability_rules
+         set local_start = '12:00', local_end = '13:00'
+         where teacher_id = $1 and available`,
+        [fixture.teacherId],
+      );
+      await client.query(
+        `insert into app.branch_hours
+           (branch_id, weekday, open_local, close_local)
+         values ($1, 2, '09:00', '18:00')`,
+        [fixture.branchId],
+      );
+      const draft = {
+        clientRef: { type: "student" as const, id: fixture.studentId },
+        teacherId: fixture.teacherId,
+        branchId: fixture.branchId,
+        roomId: fixture.roomId,
+      };
+
+      for (const [startAt, endAt] of [
+        ["2026-07-27T08:00:00.000Z", "2026-07-27T09:00:00.000Z"],
+        ["2026-07-27T10:00:00.000Z", "2026-07-27T11:00:00.000Z"],
+        ["2026-07-28T08:00:00.000Z", "2026-07-28T09:00:00.000Z"],
+      ]) {
+        const result = await engine.validate({ ...draft, startAt, endAt }, client);
+        expect(result.valid).toBe(false);
+        expect(result.violations).toContainEqual(
+          expect.objectContaining({ code: "TEACHER_UNAVAILABLE" }),
+        );
+      }
+
+      await expect(
+        engine.validate(
+          {
+            ...draft,
+            startAt: "2026-07-27T09:00:00.000Z",
+            endAt: "2026-07-27T10:00:00.000Z",
+          },
+          client,
+        ),
+      ).resolves.toEqual({ valid: true, violations: [] });
     } finally {
       await client.query("rollback");
       client.release();

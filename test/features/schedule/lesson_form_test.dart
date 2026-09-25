@@ -1249,11 +1249,12 @@ void main() {
       expect(teacherPreview, contains('Стандартная ставка'));
       expect(teacherPreview, contains('1 250 ₽/ч'));
 
+      final previewsBeforeSave = client.constraintPreviews.length;
       await _tapCreate(tester);
       await tester.pumpAndSettle();
 
-      expect(client.constraintPreviews, hasLength(1));
-      expect(client.constraintPreviews.single, {
+      expect(client.constraintPreviews, hasLength(previewsBeforeSave + 1));
+      expect(client.constraintPreviews.last, {
         'clientRef': {'type': 'lead', 'id': _leadId},
         'teacherId': _teacherId,
         'branchId': _branchId,
@@ -1770,6 +1771,20 @@ void main() {
     expect(client.lessonPosts, isEmpty);
   });
 
+  testWidgets('недоступность преподавателя видна до сохранения занятия', (
+    tester,
+  ) async {
+    final client = _FakeApiClient(preview: _busyPreview());
+    await _pumpDialog(tester, client);
+    await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(client.constraintPreviews, isNotEmpty);
+    expect(find.text('Преподаватель недоступен'), findsOneWidget);
+    expect(client.lessonPosts, isEmpty);
+  });
+
   testWidgets('ошибка preview не блокирует authoritative create', (
     tester,
   ) async {
@@ -1781,10 +1796,11 @@ void main() {
     await _pumpDialog(tester, client, dialogResult: dialogResult);
     await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
 
+    final previewsBeforeSave = client.constraintPreviews.length;
     await _tapCreate(tester);
     await tester.pumpAndSettle();
 
-    expect(client.constraintPreviews, hasLength(1));
+    expect(client.constraintPreviews, hasLength(previewsBeforeSave + 1));
     expect(client.lessonPosts, hasLength(1));
     expect(dialogResult.value, isTrue);
     expect(find.text('Новое занятие'), findsNothing);
@@ -1805,6 +1821,7 @@ void main() {
       final client = _FakeApiClient(preview: preview);
       await _pumpDialog(tester, client);
       await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
+      final previewsBeforeManualCheck = client.constraintPreviews.length;
 
       final run = find.byKey(const ValueKey('lesson-run-schedule-analyzer'));
       await tester.ensureVisible(run);
@@ -1817,7 +1834,10 @@ void main() {
       await tester.tap(suggestion);
       await tester.pumpAndSettle();
 
-      expect(client.constraintPreviews, hasLength(2));
+      expect(
+        client.constraintPreviews,
+        hasLength(previewsBeforeManualCheck + 2),
+      );
       expect(client.constraintPreviews.last['roomId'], _replacementRoomId);
     },
   );

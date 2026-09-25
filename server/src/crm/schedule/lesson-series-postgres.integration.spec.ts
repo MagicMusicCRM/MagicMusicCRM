@@ -429,6 +429,10 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
         `update app.branch_hours set weekday = $2 where branch_id = $1`,
         [fixture.branchId, futureRange.weekday],
       );
+      await pool.query(
+        `update app.teacher_availability_rules set weekday = $2 where teacher_id = $1`,
+        [fixture.teacherId, futureRange.weekday],
+      );
       const created = await commands.create(actor, {
         clientRef: { type: "student", id: fixture.studentId },
         teacherId: fixture.teacherId,
