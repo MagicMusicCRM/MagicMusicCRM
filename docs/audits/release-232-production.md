@@ -43,7 +43,7 @@ Rollback API: `magicmusiccrm-server:1.5.51-231-candidate`, ID `sha256:17e9e0e7a1
 
 Клиентский source/tag: `8653d650b76e28531d7df261edbb7c52fea76397` / `v1.5.52`. Серверный source: `0d859b4eea335cfdfaa9f561502cd5d591360f57`; `git diff 0d859b4ee 8653d650b -- server` пуст. [GitHub Release](https://github.com/MagicMusicCRM/MagicMusicCRM/releases/tag/v1.5.52) содержит четыре артефакта с совпадающими digest/размерами; [проверка GitHub](release-232-evidence/github-release.json).
 
-Post backup: `magicmusiccrm-staging-20260930T192438Z.tgz.enc`, SHA-256 `271b3755559d4652430491426fce0511c4b89b5f74fd7b93ac0402e5d6090afd`. Скопирован вне сервера в ту же папку release-232, хеш совпал. Восстановление на candidate и rollback 231 **PASS**, schema 0161. [Журнал публикации и восстановления](release-232-evidence/production-publish-post.log).
+Post backup: `magicmusiccrm-staging-20260930T192438Z.tgz.enc`, SHA-256 `271b3755559d4652430491426fce0511c4b89b5f74fd7b93ac0402e5d6090afd`. Скопирован вне сервера в ту же папку release-232, хеш совпал. Восстановление на candidate и rollback 231 **PASS**, schema 0161. [Журнал публикации и восстановления](release-232-evidence/production-publish-post.txt).
 
 Первая Android-сборка с `--no-pub` остановилась из-за оставшегося после native E2E `IntegrationTestPlugin` в generated registrant. Штатные `flutter build apk --release --target=lib/main.dart` и `flutter build appbundle --release --target=lib/main.dart` пересоздали служебные файлы и прошли. Зависимости и исходник приложения не менялись.
 

@@ -1,0 +1,12 @@
+MagicMusicCRM-1.5.52-232-Setup.exe: OK
+MagicMusicCRM-1.5.52-232-windows-x64.zip: OK
+MagicMusicCRM-1.5.52-232.aab: OK
+MagicMusicCRM-1.5.52-232.apk: OK
+latest.json: OK
+latest-v2.json: OK
+release-history.json: OK
+PROMOTE_MANIFESTS|PASS|build=232|channels=2|artifacts=4
+sha256:111d8d047415179462e8da5176e3fab01c9378c957aad4f54013b5837cab6e36|healthy|0
+POST_RECONCILIATION|PASS|issues=[]
+271b3755559d4652430491426fce0511c4b89b5f74fd7b93ac0402e5d6090afd  /opt/magicmusiccrm/backups/encrypted/magicmusiccrm-staging-20260930T192438Z.tgz.enc
+VERIFY_RELEASE_BACKUP_COMPATIBILITY|PASS|backup=magicmusiccrm-staging-20260930T192438Z.tgz.enc|candidate=magicmusiccrm-server:1.5.52-232-candidate|rollback=magicmusiccrm-server:1.5.51-231-candidate|migration=0161_restore_notification_preferences
