@@ -534,56 +534,68 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final desktop = constraints.maxWidth >= 720;
+        final controls = <Widget>[
+          if (_showScheduleTabs && !firstLoad)
+            ScheduleWorkspaceModeTabs(
+              mode: _dayViewMode,
+              onModeChanged: _switchScheduleMode,
+            ),
+          _buildScheduleToolbar(firstLoad: firstLoad),
+          SizedBox(
+            height: 2,
+            child: refreshing
+                ? const LinearProgressIndicator(
+                    minHeight: 2,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation(AppColor.gold),
+                  )
+                : null,
+          ),
+          if (!firstLoad) ...[
+            if (!desktop &&
+                !_showScheduleTabs &&
+                _currentView != ScheduleView.month)
+              ScheduleDayModeToggle(
+                mode: _dayViewMode,
+                onModeChanged: (m) {
+                  if (_dayViewMode == m) return;
+                  _emitState(() => _dayViewMode = m);
+                  _fetchAll();
+                },
+              ),
+          ],
+          if (!firstLoad && _filterClientId != null) _buildClientFilterBanner(),
+          if (!firstLoad && widget.clientId != null)
+            _buildClientContextBanner(),
+          if (!firstLoad && _hasScheduleSearch) _buildScheduleSearchBanner(),
+          if (!desktop &&
+              !firstLoad &&
+              widget.canWrite &&
+              _currentView != ScheduleView.month) ...[
+            ScheduleDayLegend(week: _currentView == ScheduleView.week),
+          ],
+          if (!desktop && !firstLoad && _currentView == ScheduleView.day) ...[
+            _buildAvailabilitySummary(),
+          ],
+        ];
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Column(
             children: [
-              if (_showScheduleTabs && !firstLoad)
-                ScheduleWorkspaceModeTabs(
-                  mode: _dayViewMode,
-                  onModeChanged: _switchScheduleMode,
-                ),
-              _buildScheduleToolbar(firstLoad: firstLoad),
-              SizedBox(
-                height: 2,
-                child: refreshing
-                    ? const LinearProgressIndicator(
-                        minHeight: 2,
-                        backgroundColor: Colors.transparent,
-                        valueColor: AlwaysStoppedAnimation(AppColor.gold),
-                      )
-                    : null,
-              ),
-              if (!firstLoad) ...[
-                if (!desktop &&
-                    !_showScheduleTabs &&
-                    _currentView != ScheduleView.month)
-                  ScheduleDayModeToggle(
-                    mode: _dayViewMode,
-                    onModeChanged: (m) {
-                      if (_dayViewMode == m) return;
-                      _emitState(() => _dayViewMode = m);
-                      _fetchAll();
-                    },
+              if (desktop)
+                ...controls
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: constraints.maxHeight * 0.45,
                   ),
-              ],
-              if (!firstLoad && _filterClientId != null)
-                _buildClientFilterBanner(),
-              if (!firstLoad && widget.clientId != null)
-                _buildClientContextBanner(),
-              if (!firstLoad && _hasScheduleSearch)
-                _buildScheduleSearchBanner(),
-              if (!desktop &&
-                  !firstLoad &&
-                  widget.canWrite &&
-                  _currentView != ScheduleView.month) ...[
-                ScheduleDayLegend(week: _currentView == ScheduleView.week),
-              ],
-              if (!desktop &&
-                  !firstLoad &&
-                  _currentView == ScheduleView.day) ...[
-                _buildAvailabilitySummary(),
-              ],
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: controls,
+                    ),
+                  ),
+                ),
               Expanded(child: _buildScheduleContent()),
             ],
           ),
