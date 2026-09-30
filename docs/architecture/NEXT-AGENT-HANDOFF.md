@@ -1,4 +1,28 @@
-# MagicMusicCRM — актуальная передача 230
+# MagicMusicCRM — актуальная передача 231
+
+## Production 1.5.51+231 — выпущен 30.09.2026 (Europe/Moscow)
+
+По прямой команде владельца опубликован итог ST с исправлениями RC-01…05,
+порядком checkbox ручной оплаты, удалением повторяющихся подсказок и
+доступной сеткой Android с поиском. Client/tag:
+`a453155ea89ef366ff1bc3f2cec27941897a7549` / `v1.5.51`.
+Server source: `b001956361b9b8c237af6b119bc06dbb23d71400`.
+API image `sha256:17e9e0e7a192278c7ee87fc0f231479062ec93eb9187a3259f41969b7fab9a39`,
+PostgreSQL 16.4, schema 0161, healthy/restart 0, outbox 0/0, reconciliation issues=[].
+Оба update-канала, история и GitHub Release опубликованы. Публичные ZIP/APK
+скачаны и совпали по SHA-256; четыре GitHub asset digest также совпали.
+
+Pre/post encrypted backups скопированы вне сервера и восстановлены на exact
+candidate/recovery images — PASS. Совместимый recovery:
+`magicmusiccrm-server:230-recovery-231-8a966d97d05d`; vanilla 230 не подходит
+для rollback клиента 231. Release directory:
+`/opt/magicmusiccrm/releases/1.5.51-231-a453155e`.
+Финансовую/учебную/audit-историю не откатывать.
+Подробности и проверяемые границы: [production audit](../audits/release-231-production.md),
+[кандидат](../audits/release-231-candidate.md), [матрица](../audits/release-231-requirements.md).
+Ручная приёмка с реальными ролями заказчика не выполнена; выпуск не означает
+подтверждения всех сценариев на всех платформах.
+
 
 ## Production 1.5.50+230 — выпущен 25.09.2026 (Europe/Moscow)
 
