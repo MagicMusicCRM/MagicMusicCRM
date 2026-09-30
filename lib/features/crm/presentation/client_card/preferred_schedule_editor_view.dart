@@ -14,6 +14,10 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required this.branches,
     required this.subscriptionOptions,
     required this.teachers,
+    this.selectedTeacherLabel,
+    this.teacherOptionsLoading = false,
+    this.teacherOptionsError,
+    this.onTeacherOptionsRetry,
     required this.rooms,
     required this.decisionCatalog,
     required this.titleController,
@@ -37,6 +41,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required this.onSubscriptionChanged,
     required this.onSettlementTypeChanged,
     required this.onCompensationRuleChanged,
+    required this.onPlannedSettlementReasonChanged,
     required this.onTeacherMinutesChanged,
     required this.onClientMinutesChanged,
     required this.onApplyRecommendation,
@@ -54,6 +59,10 @@ class PreferredScheduleEditorView extends StatelessWidget {
   final List<Map<String, dynamic>> branches;
   final List<Map<String, dynamic>> subscriptionOptions;
   final List<Map<String, dynamic>> teachers;
+  final String? selectedTeacherLabel;
+  final bool teacherOptionsLoading;
+  final String? teacherOptionsError;
+  final VoidCallback? onTeacherOptionsRetry;
   final List<Map<String, dynamic>> rooms;
   final LessonDecisionCatalog? decisionCatalog;
   final TextEditingController titleController;
@@ -77,6 +86,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
   final ValueChanged<String?> onSubscriptionChanged;
   final ValueChanged<String?> onSettlementTypeChanged;
   final ValueChanged<String?> onCompensationRuleChanged;
+  final ValueChanged<String> onPlannedSettlementReasonChanged;
   final ValueChanged<String> onTeacherMinutesChanged;
   final void Function(String clientId, String value) onClientMinutesChanged;
   final VoidCallback onApplyRecommendation;
@@ -99,11 +109,15 @@ class PreferredScheduleEditorView extends StatelessWidget {
       _ResourceFields(
         state: state,
         teachers: teachers,
+        selectedTeacherLabel: selectedTeacherLabel,
+        teacherOptionsLoading: teacherOptionsLoading,
+        teacherOptionsError: teacherOptionsError,
+        onTeacherOptionsRetry: onTeacherOptionsRetry,
         rooms: rooms,
         onTeacherChanged: onTeacherChanged,
         onRoomChanged: onRoomChanged,
       ),
-      if (planMode) ...[
+      if (planMode || requireFinancialDecision) ...[
         const SizedBox(height: AppSpace.md),
         _DecisionFields(
           state: state,
@@ -112,6 +126,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
           participantLabels: participantLabels,
           onSettlementChanged: onSettlementTypeChanged,
           onCompensationChanged: onCompensationRuleChanged,
+          onPlannedSettlementReasonChanged: onPlannedSettlementReasonChanged,
           onTeacherMinutesChanged: onTeacherMinutesChanged,
           onClientMinutesChanged: onClientMinutesChanged,
           onApplyRecommendation: onApplyRecommendation,
@@ -165,10 +180,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     menuMaxHeight: 256,
     key: const ValueKey('preferred-schedule-branch'),
     initialValue: state.branchId.isEmpty ? null : state.branchId,
-    decoration: const InputDecoration(
-      labelText: 'Филиал *',
-      helperText: 'Постоянная серия всегда привязана к филиалу',
-    ),
+    decoration: const InputDecoration(labelText: 'Филиал *'),
     items: [
       for (final branch in branches)
         DropdownMenuItem(
@@ -356,6 +368,10 @@ class _ResourceFields extends StatelessWidget {
   const _ResourceFields({
     required this.state,
     required this.teachers,
+    required this.selectedTeacherLabel,
+    required this.teacherOptionsLoading,
+    required this.teacherOptionsError,
+    required this.onTeacherOptionsRetry,
     required this.rooms,
     required this.onTeacherChanged,
     required this.onRoomChanged,
@@ -363,6 +379,10 @@ class _ResourceFields extends StatelessWidget {
 
   final PreferredScheduleEditorState state;
   final List<Map<String, dynamic>> teachers;
+  final String? selectedTeacherLabel;
+  final bool teacherOptionsLoading;
+  final String? teacherOptionsError;
+  final VoidCallback? onTeacherOptionsRetry;
   final List<Map<String, dynamic>> rooms;
   final ValueChanged<String?> onTeacherChanged;
   final ValueChanged<String?> onRoomChanged;
@@ -373,11 +393,14 @@ class _ResourceFields extends StatelessWidget {
       SearchablePickerField(
         key: const ValueKey('preferred-schedule-teacher'),
         label: 'Педагог *',
-        placeholder: teachers.isEmpty
-            ? 'Нет назначенных в этот филиал педагогов'
+        placeholder: teacherOptionsLoading
+            ? 'Проверяем доступность…'
+            : teachers.isEmpty
+            ? 'Нет свободных педагогов'
             : 'Выберите педагога',
         enabled: teachers.isNotEmpty,
         selectedId: state.teacherId,
+        selectedLabel: selectedTeacherLabel,
         items: [
           for (final teacher in teachers)
             SearchableSelectItem(
@@ -389,6 +412,21 @@ class _ResourceFields extends StatelessWidget {
         ],
         onSelected: (item) => onTeacherChanged(item?.id),
       ),
+      if (teacherOptionsError != null) ...[
+        Text(teacherOptionsError!),
+        TextButton(
+          onPressed: onTeacherOptionsRetry,
+          child: const Text('Повторить проверку'),
+        ),
+      ] else if (teacherOptionsLoading)
+        const Text('Проверяем доступность педагогов…')
+      else if (state.teacherId != null &&
+          !teachers.any(
+            (teacher) => teacher['id']?.toString() == state.teacherId,
+          ))
+        const Text('Выбранный педагог недоступен на указанное время.')
+      else if (state.roomId == null)
+        const Text('Сначала выберите аудиторию.'),
       const SizedBox(height: AppSpace.md),
       SearchablePickerField(
         key: const ValueKey('preferred-schedule-room'),
@@ -418,6 +456,7 @@ class _DecisionFields extends StatelessWidget {
     required this.participantLabels,
     required this.onSettlementChanged,
     required this.onCompensationChanged,
+    required this.onPlannedSettlementReasonChanged,
     required this.onTeacherMinutesChanged,
     required this.onClientMinutesChanged,
     required this.onApplyRecommendation,
@@ -429,6 +468,7 @@ class _DecisionFields extends StatelessWidget {
   final Map<String, String> participantLabels;
   final ValueChanged<String?> onSettlementChanged;
   final ValueChanged<String?> onCompensationChanged;
+  final ValueChanged<String> onPlannedSettlementReasonChanged;
   final ValueChanged<String> onTeacherMinutesChanged;
   final void Function(String clientId, String value) onClientMinutesChanged;
   final VoidCallback onApplyRecommendation;
@@ -460,7 +500,6 @@ class _DecisionFields extends StatelessWidget {
             _dropdown(
               key: const ValueKey('schedule-plan-settlement-type'),
               label: 'Тип списания *',
-              helperText: 'Применится после окончания занятия',
               value: state.settlementTypeKey,
               items: _itemsWithStoredValue(
                 catalog?.settlementTypes ?? const [],
@@ -469,48 +508,16 @@ class _DecisionFields extends StatelessWidget {
               onChanged: onSettlementChanged,
             ),
             if (canManageTeacherCompensation)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  CheckboxListTile(
-                    key: const ValueKey(
-                      'schedule-plan-compensation-edit-toggle',
-                    ),
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    value: state.compensationTouched,
-                    onChanged: (enabled) {
-                      if (enabled == true) {
-                        onCompensationChanged(
-                          state.teacherCompensationRuleKey ??
-                              catalog?.compensationRules.firstOrNull?.key,
-                        );
-                      } else {
-                        onApplyRecommendation();
-                      }
-                    },
-                    title: const Text('Изменить оплату преподавателю вручную'),
-                    subtitle: Text(
-                      state.compensationTouched
-                          ? 'Исключение будет сохранено для постоянного расписания.'
-                          : 'Действует рекомендуемое правило; изменение заблокировано.',
-                    ),
-                  ),
-                  _dropdown(
-                    key: const ValueKey('schedule-plan-compensation-rule'),
-                    label: 'Оплата преподавателю *',
-                    helperText: state.compensationTouched
-                        ? 'Задано вручную'
-                        : 'Включите чекбокс выше, чтобы изменить правило',
-                    value: state.teacherCompensationRuleKey,
-                    items: _itemsWithStoredValue(
-                      catalog?.compensationRules ?? const [],
-                      state.teacherCompensationRuleKey,
-                    ),
-                    onChanged: onCompensationChanged,
-                    enabled: state.compensationTouched,
-                  ),
-                ],
+              _dropdown(
+                key: const ValueKey('schedule-plan-compensation-rule'),
+                label: 'Оплата преподавателю *',
+                value: state.teacherCompensationRuleKey,
+                items: _itemsWithStoredValue(
+                  catalog?.compensationRules ?? const [],
+                  state.teacherCompensationRuleKey,
+                ),
+                onChanged: onCompensationChanged,
+                enabled: state.compensationTouched,
               ),
             if (canManageTeacherCompensation &&
                 state.compensationTouched &&
@@ -524,8 +531,37 @@ class _DecisionFields extends StatelessWidget {
               ),
           ],
         ),
+        if (canManageTeacherCompensation) ...[
+          const SizedBox(height: AppSpace.sm),
+          CheckboxListTile(
+            key: const ValueKey('schedule-plan-compensation-edit-toggle'),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: state.compensationTouched,
+            onChanged: (enabled) {
+              if (enabled == true) {
+                onCompensationChanged(
+                  state.teacherCompensationRuleKey ??
+                      catalog?.compensationRules.firstOrNull?.key,
+                );
+              } else {
+                onApplyRecommendation();
+              }
+            },
+            title: const Text('Изменить оплату преподавателю вручную'),
+          ),
+        ],
         if (state.compensationTouched && canManageTeacherCompensation) ...[
           const SizedBox(height: AppSpace.sm),
+          TextFormField(
+            key: const ValueKey('schedule-plan-compensation-reason'),
+            initialValue: state.plannedSettlementReason,
+            maxLength: 500,
+            decoration: const InputDecoration(
+              labelText: 'Причина ручной оплаты *',
+            ),
+            onChanged: onPlannedSettlementReasonChanged,
+          ),
           TextButton.icon(
             key: const ValueKey('schedule-plan-apply-recommendation'),
             onPressed: onApplyRecommendation,
@@ -566,7 +602,6 @@ class _DecisionFields extends StatelessWidget {
   Widget _dropdown({
     required Key key,
     required String label,
-    required String helperText,
     required String? value,
     required List<LessonDecisionCatalogItem> items,
     required ValueChanged<String?> onChanged,
@@ -576,7 +611,7 @@ class _DecisionFields extends StatelessWidget {
     isExpanded: true,
     key: key,
     initialValue: value,
-    decoration: InputDecoration(labelText: label, helperText: helperText),
+    decoration: InputDecoration(labelText: label),
     items: [
       for (final item in items)
         DropdownMenuItem(

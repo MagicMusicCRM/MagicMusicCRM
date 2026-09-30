@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_details.dart';
@@ -30,6 +31,7 @@ class SharedTasksPanel extends ConsumerStatefulWidget {
     this.scrollController,
     this.canWrite,
     this.defaultToMineToday = false,
+    this.now,
     this.canViewResults,
     this.onOpenResultEntity,
   });
@@ -42,6 +44,7 @@ class SharedTasksPanel extends ConsumerStatefulWidget {
   final ScrollController? scrollController;
   final bool? canWrite;
   final bool defaultToMineToday;
+  final DateTime Function()? now;
   final bool? canViewResults;
   final ValueChanged<EntityLink>? onOpenResultEntity;
 
@@ -55,6 +58,8 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
   StreamController<void>? _realtimeRefreshes;
   ProviderSubscription<AsyncValue<CrmChangedEvent>>? _realtimeSubscription;
   ProviderSubscription<CrmSectionFocus?>? _sectionFocusSubscription;
+  Timer? _todayRolloverTimer;
+  DateTime? _followedToday;
   bool _focusConsumed = false;
   bool _showResults = false;
 
@@ -67,6 +72,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
         ? StreamController<void>.broadcast()
         : null;
     final now = DateTime.now();
+    _followedToday = _moscowToday();
     final sectionFocus = ref.read(crmSectionFocusProvider);
     final focusedOverdue =
         (sectionFocus?.section == 'tasks' &&
@@ -80,7 +86,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
         linkedEntityType: widget.linkedEntity?.rawEntityType,
         linkedEntityId: widget.linkedEntity?.entityId,
         scope: widget.defaultToMineToday ? 'mine' : 'all',
-        day: widget.defaultToMineToday ? sharedTasksMoscowToday() : null,
+        day: widget.defaultToMineToday ? _followedToday : null,
         calendarMonth: DateTime(now.year, now.month),
         state: focusedOverdue ? 'overdue' : 'open',
       ),
@@ -113,6 +119,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
       },
     );
     Future<void>.microtask(_load);
+    _scheduleTodayRollover();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(crmSectionFocusProvider.notifier).consume('tasks');
@@ -132,6 +139,10 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
     );
     final defaultsChanged =
         oldWidget.defaultToMineToday != widget.defaultToMineToday;
+    if (defaultsChanged || oldWidget.now != widget.now) {
+      _followedToday = _moscowToday();
+      _scheduleTodayRollover();
+    }
     final oldRouteState = _routeTaskState(oldWidget.initialLink);
     final nextRouteState = _routeTaskState(widget.initialLink);
     final routeStateChanged = oldRouteState != nextRouteState;
@@ -154,7 +165,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
               ? (widget.defaultToMineToday ? 'mine' : 'all')
               : query.scope,
           day: defaultsChanged
-              ? (widget.defaultToMineToday ? sharedTasksMoscowToday() : null)
+              ? (widget.defaultToMineToday ? _followedToday : null)
               : query.day,
           state: routeStateChanged ? nextRouteState : query.state,
         ),
@@ -164,6 +175,7 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
 
   @override
   void dispose() {
+    _todayRolloverTimer?.cancel();
     _sectionFocusSubscription?.close();
     _realtimeSubscription?.close();
     _controller
@@ -175,6 +187,40 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
   }
 
   String? get _focusedTaskId => _focusedTaskIdFor(widget.initialLink);
+
+  DateTime _moscowToday() {
+    final now =
+        (widget.now ?? ref.read<DateTime Function()>(crmDayClockProvider))()
+            .toUtc()
+            .add(const Duration(hours: 3));
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  void _scheduleTodayRollover() {
+    _todayRolloverTimer?.cancel();
+    if (!widget.defaultToMineToday) return;
+    final now =
+        (widget.now ?? ref.read<DateTime Function()>(crmDayClockProvider))()
+            .toUtc()
+            .add(const Duration(hours: 3));
+    final nextDay = DateTime.utc(now.year, now.month, now.day + 1);
+    _todayRolloverTimer = Timer(
+      nextDay.difference(now) + const Duration(milliseconds: 1),
+      () {
+        if (!mounted) return;
+        final previous = _followedToday;
+        final today = _moscowToday();
+        _followedToday = today;
+        final query = _controller.state.query;
+        if (today != previous &&
+            query.scope == 'mine' &&
+            query.day == previous) {
+          unawaited(_controller.setQuery(query.copyWith(day: today)));
+        }
+        _scheduleTodayRollover();
+      },
+    );
+  }
 
   String _routeTaskState(EntityLink? link) =>
       link?.optionalFocus?.filter['due'] == 'overdue' ? 'overdue' : 'open';
@@ -225,7 +271,11 @@ class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
   Future<void> _close(Map<String, dynamic> task) async {
     final closed = await showSharedTaskCloseDialog(
       context,
-      onSubmit: (input) => _controller.close(task, input),
+      onSubmit: (input) async {
+        final result = await _controller.close(task, input);
+        if (result.succeeded && mounted) ref.invalidate(sectionUnseenProvider);
+        return result;
+      },
     );
     if (closed == true && mounted) {
       ScaffoldMessenger.of(

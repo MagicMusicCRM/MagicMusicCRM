@@ -336,9 +336,6 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
                         });
                       },
                 title: const Text('Разрешить изменение базовой ставки'),
-                subtitle: const Text(
-                  'Включите только после проверки новой ставки и даты начала.',
-                ),
               ),
               const SizedBox(height: 8),
             ],

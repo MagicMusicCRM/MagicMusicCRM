@@ -22,6 +22,7 @@ bool isInboundLeadNotificationForUser(
     event.entity == 'notification' &&
     event.action == 'created' &&
     event.notificationType == 'new_lead' &&
+    event.id != null &&
     role != null &&
     _leadNotificationRoles.contains(role) &&
     userId != null &&

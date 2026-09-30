@@ -46,6 +46,7 @@ extension MagicCrmSchedule on MagicCrmService {
     required String scheduledAt,
     required int durationMinutes,
     String? excludeLessonId,
+    bool includeSuggestions = true,
   }) async {
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/lessons/constraints/preview',
@@ -57,6 +58,7 @@ extension MagicCrmSchedule on MagicCrmService {
         'scheduledAt': scheduledAt,
         'durationMinutes': durationMinutes,
         'excludeLessonId': ?excludeLessonId,
+        if (!includeSuggestions) 'includeSuggestions': false,
       },
     );
     return LessonScheduleAnalysis.fromJson(response);

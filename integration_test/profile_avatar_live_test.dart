@@ -45,7 +45,7 @@ void main() {
   for (final role
       in Platform.environment['AVATAR_AUDIT_ROLE'] != null
           ? [Platform.environment['AVATAR_AUDIT_ROLE']!]
-          : ['admin', 'manager', 'director', 'teacher', 'client'])
+          : ['admin', 'manager', 'director', 'teacher', 'client']) {
     testWidgets('$role profile avatar lifecycle', (tester) async {
       final h = LiveAuditHarness(tester, role, 'profile-avatar');
       await h.initialize(size: const Size(1440, 1100));
@@ -231,4 +231,5 @@ void main() {
       }
       await h.finish();
     }, timeout: const Timeout(Duration(minutes: 8)));
+  }
 }

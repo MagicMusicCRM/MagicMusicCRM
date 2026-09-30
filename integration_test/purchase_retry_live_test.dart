@@ -15,7 +15,7 @@ import 'live_audit_harness.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => initializeDateFormatting('ru'));
-  for (final role in ['admin', 'manager', 'director'])
+  for (final role in ['admin', 'manager', 'director']) {
     testWidgets(
       '$role related payer and purchase lost response retry',
       (tester) async {
@@ -76,11 +76,12 @@ void main() {
         h.api.rawDio.interceptors.add(
           InterceptorsWrapper(
             onRequest: (o, handler) {
-              if (o.method == 'POST' && o.uri.path.endsWith(purchasePath))
+              if (o.method == 'POST' && o.uri.path.endsWith(purchasePath)) {
                 attempts.add({
                   'key': o.headers['Idempotency-Key'],
                   'body': Map<String, dynamic>.from(o.data as Map),
                 });
+              }
               handler.next(o);
             },
             onResponse: (r, handler) {
@@ -273,4 +274,5 @@ void main() {
       },
       timeout: const Timeout(Duration(minutes: 5)),
     );
+  }
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,9 +13,27 @@ import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
 import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
+import 'package:web_socket/web_socket.dart' as ws;
 
 void main() {
   group('MagicRealtimeService', () {
+    test(
+      'WebSocket close ignores a peer close but preserves other errors',
+      () async {
+        final closed = _FakeWebSocket(ws.WebSocketConnectionClosed());
+        final safe = SafeCloseWebSocket(closed);
+        await safe.close();
+        await safe.close();
+        expect(closed.closeCalls, 1);
+
+        final broken = _FakeWebSocket(StateError('close failed'));
+        await expectLater(
+          SafeCloseWebSocket(broken).close(),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
     test('derives realtime origin from API base URL', () {
       expect(
         realtimeOriginFromApiBaseUrl('https://api.phantom-net.ru/api'),
@@ -49,6 +68,7 @@ void main() {
       expect(fakeFactory.origin, 'https://api.phantom-net.ru');
       expect(fakeFactory.options['path'], '/realtime');
       expect(fakeFactory.options['autoConnect'], false);
+      expect(fakeFactory.options['webSocketConnector'], isNotNull);
       // Auth is a callback so every (re)connect handshake re-reads a fresh
       // token (the socket outlives the 15-minute access TTL — a baked-in
       // token made any reconnect after sleep loop with an expired JWT).
@@ -155,6 +175,7 @@ void main() {
         await auth.signOut();
         expect(transportA.disposed, isTrue);
         expect(transportA.disconnected, isTrue);
+        expect(transportA.explicitDisconnects, 0);
 
         api.nextLogin = MagicApiTokens(
           accessToken: _jwt('user-b'),
@@ -424,6 +445,30 @@ void main() {
   });
 }
 
+class _FakeWebSocket implements ws.WebSocket {
+  _FakeWebSocket(this.closeError);
+  final Object closeError;
+  int closeCalls = 0;
+
+  @override
+  Future<void> close([int? code, String? reason]) async {
+    closeCalls++;
+    throw closeError;
+  }
+
+  @override
+  Stream<ws.WebSocketEvent> get events => const Stream.empty();
+
+  @override
+  String get protocol => '';
+
+  @override
+  void sendBytes(Uint8List bytes) {}
+
+  @override
+  void sendText(String text) {}
+}
+
 MagicApiClient _client(MagicTokenStore tokenStore) {
   return MagicApiClient(
     baseUrl: 'https://api.phantom-net.ru/api',
@@ -455,6 +500,7 @@ class _FakeTransport implements MagicRealtimeTransport {
   bool connected = false;
   bool disconnected = false;
   bool disposed = false;
+  int explicitDisconnects = 0;
 
   @override
   void connect() {
@@ -463,11 +509,13 @@ class _FakeTransport implements MagicRealtimeTransport {
 
   @override
   void disconnect() {
+    explicitDisconnects++;
     disconnected = true;
   }
 
   @override
   void dispose() {
+    disconnected = true;
     disposed = true;
   }
 

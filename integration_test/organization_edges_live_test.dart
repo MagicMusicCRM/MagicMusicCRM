@@ -46,7 +46,7 @@ void main() {
       }
 
       for (final type in ['teacher', 'staff']) {
-        final id = h.fixture[type + 'Id'] as String;
+        final id = h.fixture['${type}Id'] as String;
         Map<String, dynamic>? preview;
         Future<void> open() async {
           await workspace();
@@ -54,7 +54,7 @@ void main() {
             find.text(type == 'teacher' ? 'Преподаватели' : 'Сотрудники'),
           );
           await h.quiet();
-          await h.tap(find.text(h.fixture[type + 'Name'] as String).last);
+          await h.tap(find.text(h.fixture['${type}Name'] as String).last);
           await h.quiet();
           await h.tap(
             find.text(
@@ -189,8 +189,9 @@ void main() {
         h.api.rawDio.interceptors.add(
           InterceptorsWrapper(
             onRequest: (o, next) {
-              if (o.uri.path.endsWith('/lessons/constraints/preview'))
+              if (o.uri.path.endsWith('/lessons/constraints/preview')) {
                 h.facts.add({'step': h.currentStep, 'payload': o.data});
+              }
               next.next(o);
             },
           ),

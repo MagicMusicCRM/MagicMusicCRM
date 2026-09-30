@@ -15,7 +15,7 @@ export class LessonConstraintPreviewService {
     this.policy.assertCanWriteCrm(actor);
     const startAt = new Date(dto.scheduledAt);
     const endAt = new Date(startAt.getTime() + dto.durationMinutes * 60_000);
-    return this.constraints.analyze({
+    const draft = {
       clientRef: dto.clientRef,
       teacherId: dto.teacherId,
       branchId: dto.branchId,
@@ -23,6 +23,9 @@ export class LessonConstraintPreviewService {
       startAt,
       endAt,
       excludeLessonId: dto.excludeLessonId,
-    });
+    };
+    return dto.includeSuggestions === false
+      ? this.constraints.validate(draft)
+      : this.constraints.analyze(draft);
   }
 }

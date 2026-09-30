@@ -7,6 +7,7 @@ String _label(Widget? widget) {
     return widget.data ?? widget.textSpan?.toPlainText() ?? '';
   }
   if (widget is RichText) return widget.text.toPlainText();
+  if (widget is Flexible) return _label(widget.child);
   if (widget is Flex) {
     return widget.children.map(_label).where((v) => v.isNotEmpty).join(' ');
   }

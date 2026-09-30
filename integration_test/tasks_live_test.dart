@@ -1,28 +1,67 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_token_store_contract.dart';
+import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
-import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_results_panel.dart';
 import 'live_audit_harness.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => initializeDateFormatting('ru'));
-  for (final role in ['manager', 'director', 'admin']) {
+  const embeddedFixture = String.fromEnvironment('HTTP_JOURNEY_FIXTURE');
+  final fixtureText = embeddedFixture.isNotEmpty
+      ? embeddedFixture
+      : Platform.environment['HTTP_JOURNEY_FIXTURE'] ?? '{}';
+  final restartOnly = (jsonDecode(fixtureText) as Map)['x08Restart'] == true;
+  for (final role
+      in restartOnly ? ['admin'] : ['manager', 'admin', 'director']) {
     testWidgets(
       '$role task commands through workspace menu',
       (tester) async {
         final h = LiveAuditHarness(tester, role, 'tasks');
-        await h.initialize(size: const Size(1440, 1100));
+        await h.initialize(
+          size: const Size(1440, 1100),
+          liveCrmRealtime: role == 'admin',
+        );
         final crm = h.scope.read(magicCrmServiceProvider);
+        if (restartOnly) {
+          await h.check(
+            'TASKS-X08-PROCESS-RESTART',
+            'Новый процесс открывает сохранённые 15 задач через меню',
+            () async {
+              await h.mount(const StaffWorkspaceScreen());
+              await h.tap(find.text('Задачи'));
+              await h.waitFor(
+                () => find.text('15').evaluate().isNotEmpty,
+                'Persisted task badge after process restart',
+              );
+              await h.waitFor(
+                () => find.text('TASK-X08-TODAY-6').evaluate().isNotEmpty,
+                'Persisted task card after process restart',
+              );
+              expect(find.text('TASK-X08-TODAY-6'), findsOneWidget);
+              final persisted = await crm.listSharedTasks(
+                q: 'TASK-X08-TODAY-6',
+                state: 'open',
+              );
+              expect((persisted['items'] as List).length, 1);
+            },
+          );
+          await h.finish();
+          return;
+        }
         Future<Map<String, dynamic>> read(
           String title, {
           String state = 'open',
@@ -43,6 +82,19 @@ void main() {
             'Task editor opened',
           );
           await h.quiet();
+        }
+
+        Future<void> showTask(String title) async {
+          await tester.enterText(
+            find.byKey(const Key('shared-task-search')),
+            title,
+          );
+          await h.tap(find.byTooltip('Найти задачи'));
+          await h.quiet();
+          expect(
+            find.descendant(of: find.byType(Card), matching: find.text(title)),
+            findsOneWidget,
+          );
         }
 
         Future<void> create(String title) async {
@@ -148,6 +200,354 @@ void main() {
               'TASKS-ADMIN-READ',
             );
           }
+          await h.check(
+            'TASKS-ADMIN-EMPTY',
+            'Пустой список не предлагает admin создавать задачу',
+            () async {
+              await tester.enterText(
+                find.byKey(const Key('shared-task-search')),
+                'TASK-X08-NO-MATCH',
+              );
+              await h.tap(find.byTooltip('Найти задачи'));
+              await h.quiet();
+              expect(
+                find.text('Назначенных вам задач по выбранному фильтру нет.'),
+                findsOneWidget,
+              );
+              expect(find.text('Новая задача'), findsNothing);
+              expect(
+                h.requests.where(
+                  (r) =>
+                      r['method'] == 'POST' &&
+                      r['path'] == '/api/crm/shared-tasks',
+                ),
+                isEmpty,
+              );
+            },
+          );
+          final director = (h.fixture['accounts'] as List)
+              .cast<Map<String, dynamic>>()
+              .singleWhere((account) => account['role'] == 'director');
+          final directorApi = MagicApiClient(
+            baseUrl: h.fixture['baseUrl'],
+            tokenStore: MemoryMagicTokenStore(),
+          );
+          addTearDown(() => directorApi.rawDio.close(force: true));
+          final login = await directorApi.post<Map<String, dynamic>>(
+            '/auth/login',
+            authenticated: false,
+            data: {
+              'email': director['email'],
+              'password': h.fixture['password'],
+            },
+          );
+          await directorApi.saveTokens(
+            MagicApiTokens.fromJson(
+              Map<String, dynamic>.from(login['session'] as Map),
+            ),
+          );
+          final moscow = DateTime.now().toUtc().add(const Duration(hours: 3));
+          String dueAt(int offset, int minute) => DateTime.utc(
+            moscow.year,
+            moscow.month,
+            moscow.day + offset,
+            9,
+            minute,
+          ).toIso8601String();
+          final todayTasks = <Map<String, dynamic>>[];
+          await h.check(
+            'TASKS-X08-SEED',
+            'Создать 20 сегодня, 2 завтра и 2 вчера через director API',
+            () async {
+              await h.waitFor(
+                () => h.crmSocketConnects > 0,
+                'CRM socket connected before external task creation',
+              );
+              for (final (offset, count, label) in [
+                (0, 20, 'TODAY'),
+                (1, 2, 'FUTURE'),
+                (-1, 2, 'YESTERDAY'),
+              ]) {
+                for (var index = 1; index <= count; index++) {
+                  final task = await directorApi.post<Map<String, dynamic>>(
+                    '/crm/shared-tasks',
+                    data: {
+                      'title': 'TASK-X08-$label-$index',
+                      'allDay': true,
+                      'startAt': dueAt(offset, index),
+                      'audiences': [
+                        {'type': 'branch', 'targetId': h.fixture['branchId']},
+                      ],
+                    },
+                  );
+                  if (offset == 0) todayTasks.add(task);
+                }
+              }
+              await tester.pumpWidget(const SizedBox.shrink());
+              await h.mount(const StaffWorkspaceScreen());
+              await h.tap(find.text('Задачи').last);
+              await h.waitFor(
+                () => h.crmSocketConnects > 0,
+                'CRM socket connected before task closing',
+              );
+              await h.waitFor(
+                () => find.text('20').evaluate().isNotEmpty,
+                'Navigation badge counts exactly 20 assigned tasks today',
+              );
+              expect(find.text('TASK-X08-TODAY-1'), findsOneWidget);
+              h.facts.add({
+                'step': h.currentStep,
+                'taskIds': todayTasks.map((task) => task['id']).toList(),
+                'badge': 20,
+                'socketConnects': h.crmSocketConnects,
+              });
+            },
+          );
+          await h.check(
+            'TASKS-X08-CLOSE',
+            'UI закрывает 5 задач с разными результатами: 20 → 15',
+            () async {
+              final outcomes = [
+                ('other', 'Другое', 'Уточнён результат X08'),
+                ('completed', 'Выполнено', ''),
+                ('not_completed', 'Не выполнено', ''),
+                ('follow_up', 'Нужен следующий контакт', ''),
+                ('completed', 'Выполнено', 'Комментарий X08'),
+              ];
+              for (var index = 0; index < outcomes.length; index++) {
+                final task = todayTasks[index];
+                final id = task['id'].toString();
+                int closeCalls() => h.requests
+                    .where(
+                      (request) =>
+                          request['method'] == 'POST' &&
+                          request['path'] == '/api/crm/shared-tasks/$id/close',
+                    )
+                    .length;
+                await h.tap(find.byKey(Key('close-shared-task-$id')));
+                final submit = find.byKey(
+                  const Key('shared-task-close-submit'),
+                );
+                if (index == 0) {
+                  final before = closeCalls();
+                  await h.tap(submit);
+                  expect(
+                    find.text('Выберите результат выполнения задачи.'),
+                    findsOneWidget,
+                  );
+                  expect(closeCalls(), before);
+                }
+                await h.tap(find.byKey(const Key('shared-task-result-select')));
+                await h.tap(find.text(outcomes[index].$2).last);
+                if (index == 0) {
+                  final before = closeCalls();
+                  await h.tap(submit);
+                  expect(
+                    find.text('Для результата «Другое» добавьте пояснение.'),
+                    findsOneWidget,
+                  );
+                  expect(closeCalls(), before);
+                }
+                if (outcomes[index].$3.isNotEmpty) {
+                  await tester.enterText(
+                    find.byKey(const Key('shared-task-result-comment')),
+                    outcomes[index].$3,
+                  );
+                }
+                await h.tap(submit);
+                await h.waitFor(
+                  () => submit.evaluate().isEmpty,
+                  'Close dialog dismissed',
+                );
+                await h.waitFor(
+                  () => find
+                      .byKey(Key('close-shared-task-$id'))
+                      .evaluate()
+                      .isEmpty,
+                  'Task $id leaves open list',
+                );
+                final closed = await read(
+                  task['title'].toString(),
+                  state: 'closed',
+                );
+                final result = closed['closure']['result'];
+                expect(result['code'], outcomes[index].$1);
+                expect(result['comment'] ?? '', outcomes[index].$3);
+                await h.waitFor(
+                  () => find.text('${19 - index}').evaluate().isNotEmpty,
+                  'Navigation badge decremented after close',
+                );
+              }
+              h.facts.add({'step': h.currentStep, 'badge': 15});
+            },
+          );
+          await h.check(
+            'TASKS-X08-CONFLICT',
+            '409 сохраняет результат и комментарий в открытой форме',
+            () async {
+              final task = todayTasks[5];
+              final id = task['id'].toString();
+              await h.tap(find.byKey(Key('close-shared-task-$id')));
+              await h.tap(find.byKey(const Key('shared-task-result-select')));
+              await h.tap(find.text('Другое').last);
+              await tester.enterText(
+                find.byKey(const Key('shared-task-result-comment')),
+                'Черновик X08 после конфликта',
+              );
+              await directorApi.patch<Map<String, dynamic>>(
+                '/crm/shared-tasks/$id',
+                data: {
+                  'expectedVersion': task['version'],
+                  'title': task['title'],
+                  'body': 'Параллельная правка X08',
+                  'allDay': true,
+                  'startAt': task['startAt'],
+                  'priority': task['priority'],
+                  'audiences': [
+                    {'type': 'branch', 'targetId': h.fixture['branchId']},
+                  ],
+                },
+              );
+              await h.tap(find.byKey(const Key('shared-task-close-submit')));
+              await h.waitFor(
+                () => find
+                    .byKey(const Key('shared-task-close-error'))
+                    .evaluate()
+                    .isNotEmpty,
+                'Server conflict shown inside close dialog',
+              );
+              expect(
+                tester
+                    .widget<TextFormField>(
+                      find.byKey(const Key('shared-task-result-comment')),
+                    )
+                    .controller!
+                    .text,
+                'Черновик X08 после конфликта',
+              );
+              expect((await read(task['title'].toString()))['state'], 'open');
+              await h.tap(find.widgetWithText(TextButton, 'Отмена'));
+              h.facts.add({
+                'step': h.currentStep,
+                'taskId': id,
+                'draftKept': true,
+              });
+            },
+            expectedHttpErrors: [
+              (
+                method: 'POST',
+                path: '/api/crm/shared-tasks/${todayTasks[5]['id']}/close',
+                status: 409,
+                maxCount: 1,
+              ),
+            ],
+          );
+          await h.check(
+            'TASKS-X08-REOPEN',
+            'Просмотр и повторное открытие оставляют счётчик 15',
+            () async {
+              await tester.pumpWidget(const SizedBox.shrink());
+              await h.mount(const StaffWorkspaceScreen());
+              await h.tap(find.text('Задачи').last);
+              expect(find.text('15'), findsOneWidget);
+              final unseen = await h.scope.read(sectionUnseenProvider.future);
+              expect(unseen['tasks'], 15);
+            },
+          );
+          await h.check(
+            'TASKS-X08-RECONNECT',
+            'После пропущенного события reconnect восстанавливает счётчик',
+            () async {
+              h.crmSocketTransport!.disconnect();
+              final extra = await directorApi.post<Map<String, dynamic>>(
+                '/crm/shared-tasks',
+                data: {
+                  'title': 'AUDIT-X08-RECOVERY',
+                  'allDay': true,
+                  'startAt': dueAt(0, 30),
+                  'audiences': [
+                    {'type': 'branch', 'targetId': h.fixture['branchId']},
+                  ],
+                },
+              );
+              await Future<void>.delayed(const Duration(seconds: 3));
+              expect(find.text('15'), findsOneWidget);
+              h.crmSocketTransport!.connect();
+              await h.waitFor(
+                () => h.crmSocketConnects > 1,
+                'CRM socket reconnected',
+              );
+              await h.waitFor(
+                () => find.text('16').evaluate().isNotEmpty,
+                'Missed task appears in navigation badge after reconnect',
+              );
+              await directorApi.post<Map<String, dynamic>>(
+                '/crm/shared-tasks/${extra['id']}/close',
+                data: {
+                  'expectedVersion': extra['version'],
+                  'resultCode': 'completed',
+                  'resultLabel': 'Выполнено',
+                },
+              );
+              await h.waitFor(
+                () => find.text('15').evaluate().isNotEmpty,
+                'Remote close updates navigation badge through CRM stream',
+              );
+              h.facts.add({
+                'step': h.currentStep,
+                'socketConnects': h.crmSocketConnects,
+                'badge': 15,
+              });
+            },
+          );
+          await h.check(
+            'TASKS-X08-MIDNIGHT',
+            'Открытый экран переходит на новый московский день без remount',
+            () async {
+              var clock = DateTime.utc(
+                moscow.year,
+                moscow.month,
+                moscow.day,
+                20,
+                59,
+                50,
+              );
+              await h.mount(
+                Scaffold(
+                  body: SharedTasksPanel(
+                    defaultToMineToday: true,
+                    now: () => clock,
+                  ),
+                ),
+              );
+              await h.quiet();
+              expect(find.text('TASK-X08-TODAY-6'), findsOneWidget);
+              expect(find.text('TASK-X08-FUTURE-1'), findsNothing);
+
+              clock = DateTime.utc(
+                moscow.year,
+                moscow.month,
+                moscow.day,
+                21,
+                0,
+                1,
+              );
+              await tester.pump(const Duration(seconds: 11));
+              await h.quiet();
+              expect(find.text('TASK-X08-TODAY-6'), findsNothing);
+              expect(find.text('TASK-X08-FUTURE-1'), findsOneWidget);
+              final day = DateTime.utc(
+                moscow.year,
+                moscow.month,
+                moscow.day + 1,
+              );
+              h.facts.add({
+                'step': h.currentStep,
+                'nextMoscowDay': day.toIso8601String(),
+                'futureTaskCount': 2,
+              });
+            },
+          );
           await h.finish();
           return;
         }
@@ -197,6 +597,7 @@ void main() {
           'Изменить название задачи → серверное чтение',
           () async {
             final before = await read(title);
+            await showTask(title);
             final card = find
                 .ancestor(of: find.text(title), matching: find.byType(Card))
                 .first;
@@ -215,6 +616,17 @@ void main() {
               changed,
             );
             await tester.pump();
+            await h.quiet();
+            await h.waitFor(
+              () =>
+                  tester
+                      .widget<FilledButton>(
+                        find.widgetWithText(FilledButton, 'Сохранить'),
+                      )
+                      .onPressed !=
+                  null,
+              'Task editor is ready after audience preview',
+            );
             await h.tap(find.widgetWithText(FilledButton, 'Сохранить'));
             await h.waitFor(
               () =>
@@ -235,6 +647,7 @@ void main() {
           'TASKS-REOPEN',
           'Повторно открыть редактор и отменить без изменения',
           () async {
+            await showTask(changed);
             final card = find
                 .ancestor(of: find.text(changed), matching: find.byType(Card))
                 .first;
@@ -263,8 +676,72 @@ void main() {
         await h.check(
           'TASKS-CLOSE',
           'Закрыть задачу → API и история',
-          () => close(changed),
+          () async {
+            await showTask(changed);
+            await close(changed);
+          },
         );
+        if (role == 'director') {
+          await h.check(
+            'TASKS-X08-JOURNAL',
+            'Director открывает журнал и видит комментарий, автора и время',
+            () async {
+              await h.tap(find.byKey(const Key('shared-task-open-results')));
+              await h.waitFor(
+                () => find.byType(SharedTaskResultsPanel).evaluate().isNotEmpty,
+                'Results panel opened',
+              );
+              await tester.enterText(
+                find.byKey(const Key('shared-task-results-search')),
+                'TASK-X08-TODAY-1',
+              );
+              await h.tap(find.byTooltip('Найти'));
+              await h.waitFor(
+                () => find.text('Уточнён результат X08').evaluate().isNotEmpty,
+                'Persisted comment visible in journal',
+              );
+              expect(find.text('Другое'), findsWidgets);
+              expect(find.text('Закрыл'), findsWidgets);
+              expect(find.text('Закрыта'), findsWidgets);
+              await h.tap(find.byKey(const Key('shared-task-results-result')));
+              await h.tap(find.widgetWithText(MenuItemButton, 'Другое'));
+              await h.quiet();
+              expect(find.text('Уточнён результат X08'), findsOneWidget);
+              await h.tap(
+                find.byKey(const Key('shared-task-results-period-week')),
+              );
+              await h.quiet();
+              expect(find.text('Уточнён результат X08'), findsOneWidget);
+              await h.tap(find.byKey(const Key('shared-task-results-back')));
+              await h.tap(find.byKey(const Key('shared-task-open-results')));
+              await h.waitFor(
+                () => find.byType(SharedTaskResultsPanel).evaluate().isNotEmpty,
+                'Results panel reopened',
+              );
+              await tester.enterText(
+                find.byKey(const Key('shared-task-results-search')),
+                'TASK-X08-LEGACY',
+              );
+              await h.tap(find.byTooltip('Найти'));
+              await h.waitFor(
+                () => find
+                    .text('Историческое закрытие: результат не зафиксирован')
+                    .evaluate()
+                    .isNotEmpty,
+                'Legacy closure appears without manufactured result',
+              );
+              await h.tap(find.byKey(const Key('shared-task-results-result')));
+              await h.tap(
+                find.widgetWithText(MenuItemButton, 'Без результата (история)'),
+              );
+              await h.quiet();
+              expect(
+                find.text('Историческое закрытие: результат не зафиксирован'),
+                findsOneWidget,
+              );
+            },
+          );
+        }
         if (role == 'manager') {
           await h.check(
             'TASKS-FOR-ADMIN',
@@ -540,4 +1017,33 @@ void main() {
       timeout: const Timeout(Duration(minutes: 5)),
     );
   }
+  testWidgets(
+    'manager reads persisted task results in a new session',
+    (tester) async {
+      final h = LiveAuditHarness(tester, 'manager', 'tasks-manager-results');
+      await h.initialize(size: const Size(1440, 1100));
+      await h.check(
+        'TASKS-X08-MANAGER-JOURNAL',
+        'Manager открывает журнал после закрытия задач admin',
+        () async {
+          await h.mount(const StaffWorkspaceScreen());
+          await h.tap(find.text('Задачи').last);
+          await h.tap(find.byKey(const Key('shared-task-open-results')));
+          await tester.enterText(
+            find.byKey(const Key('shared-task-results-search')),
+            'TASK-X08-TODAY-1',
+          );
+          await h.tap(find.byTooltip('Найти'));
+          await h.waitFor(
+            () => find.text('Уточнён результат X08').evaluate().isNotEmpty,
+            'Manager sees persisted result comment',
+          );
+          expect(find.text('Закрыл'), findsWidgets);
+          expect(find.text('Закрыта'), findsWidgets);
+        },
+      );
+      await h.finish();
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
 }

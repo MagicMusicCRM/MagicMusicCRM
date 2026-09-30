@@ -14,7 +14,6 @@ extension _ClientCardAssignmentEditors on _ClientCardState {
         selectedId: _clientBranchId,
         placeholder: 'Выберите филиал',
         hintText: 'Введите название филиала',
-        showSearchHint: !compact,
         isNullable: false,
         items: _branches
             .map(
@@ -40,7 +39,6 @@ extension _ClientCardAssignmentEditors on _ClientCardState {
         selectedId: current,
         placeholder: 'Выберите источник',
         hintText: 'Введите название источника',
-        showSearchHint: !compact,
         isNullable: false,
         items: _sources
             .where(

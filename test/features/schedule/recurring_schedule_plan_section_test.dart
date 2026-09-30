@@ -859,7 +859,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final preview = api.postRequests.singleWhere(
+      final preview = api.postRequests.lastWhere(
         (request) => request.path == '/crm/schedule-plans/constraints/preview',
       );
       final create = api.idempotentRequests.singleWhere(
@@ -975,7 +975,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
     await tester.pumpAndSettle();
-    final createPreview = api.postRequests.singleWhere(
+    final createPreview = api.postRequests.lastWhere(
       (request) => request.path == '/crm/schedule-plans/constraints/preview',
     );
     final create = api.idempotentRequests.singleWhere(
@@ -1022,7 +1022,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
     await tester.pumpAndSettle();
-    final updatePreview = api.postRequests.singleWhere(
+    final updatePreview = api.postRequests.lastWhere(
       (request) =>
           request.path == '/crm/schedule-plans/plan-active/constraints/preview',
     );
@@ -1071,7 +1071,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final preview = api.postRequests.singleWhere(
+      final preview = api.postRequests.lastWhere(
         (request) => request.path == '/crm/schedule-plans/constraints/preview',
       );
       final create = api.idempotentRequests.singleWhere(
@@ -1132,7 +1132,7 @@ void main() {
       {'studentId': 'student-1', 'subscriptionId': 'subscription-1'},
     ]);
     expect((update.data['rows'] as List).single['seriesId'], 'series-group');
-    final preview = api.postRequests.singleWhere(
+    final preview = api.postRequests.lastWhere(
       (request) =>
           request.path == '/crm/schedule-plans/plan-group/constraints/preview',
     );
@@ -1216,6 +1216,10 @@ void main() {
           },
         ],
       );
+      final lateConflict = List<Map<String, dynamic>>.of(
+        api.schedulePlanConstraintPreviews,
+      );
+      api.schedulePlanConstraintPreviews.clear();
       await _pump(
         tester,
         api,
@@ -1236,6 +1240,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('preferred-schedule-save')));
       await tester.pumpAndSettle();
+      api.schedulePlanConstraintPreviews.addAll(lateConflict);
       await tester.tap(
         find.byKey(const Key('schedule-plan-preview-and-create')),
       );
@@ -1325,6 +1330,10 @@ void main() {
           },
         ],
       );
+      final latePreviews = List<Map<String, dynamic>>.of(
+        api.schedulePlanConstraintPreviews,
+      );
+      api.schedulePlanConstraintPreviews.clear();
       await _pump(tester, api);
 
       await tester.ensureVisible(
@@ -1339,6 +1348,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('preferred-schedule-save')));
       await tester.pumpAndSettle();
+      api.schedulePlanConstraintPreviews.addAll(latePreviews);
       await tester.tap(
         find.byKey(const Key('schedule-plan-preview-and-create')),
       );
@@ -1375,7 +1385,19 @@ void main() {
               request.path ==
               '/crm/schedule-plans/plan-active/constraints/preview',
         ),
-        hasLength(2),
+        hasLength(greaterThanOrEqualTo(2)),
+      );
+      expect(
+        (api.postRequests
+                    .lastWhere(
+                      (request) =>
+                          request.path ==
+                          '/crm/schedule-plans/plan-active/constraints/preview',
+                    )
+                    .data['rows']
+                as List)
+            .single['beginTime'],
+        '16:00',
       );
       final update = api.idempotentRequests.singleWhere(
         (request) => request.path == '/crm/schedule-plans/plan-active',

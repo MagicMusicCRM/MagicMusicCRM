@@ -23,6 +23,7 @@ class RecurringSchedulePlanSection extends ConsumerStatefulWidget {
     this.studentId,
     this.groupId,
     this.subjectName,
+    this.refreshSource,
     required this.fallbackLessons,
     required this.branches,
     required this.defaultBranchId,
@@ -37,6 +38,7 @@ class RecurringSchedulePlanSection extends ConsumerStatefulWidget {
   final String? studentId;
   final String? groupId;
   final String? subjectName;
+  final Object? refreshSource;
   final List<Map<String, dynamic>> fallbackLessons;
   final List<Map<String, dynamic>> branches;
   final String? defaultBranchId;
@@ -89,6 +91,8 @@ class _RecurringSchedulePlanSectionState
         oldWidget.groupId != widget.groupId) {
       _controller.dispose();
       _createController();
+    } else if (!identical(oldWidget.refreshSource, widget.refreshSource)) {
+      _controller.load();
     }
   }
 

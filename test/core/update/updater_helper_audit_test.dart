@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive.dart';
@@ -22,13 +21,14 @@ void main() {
         final temp = Directory('${fixture.path}/temp');
         await temp.create();
         // The product helper may mirror/delete only these disposable fixture trees.
-        for (final dir in [install, payload, temp])
+        for (final dir in [install, payload, temp]) {
           expect(
             dir.resolveSymbolicLinksSync().toLowerCase().startsWith(
               '${base.resolveSymbolicLinksSync().toLowerCase()}${Platform.pathSeparator}',
             ),
             true,
           );
+        }
         const name = 'audit_update_fixture.exe';
         Future<File> compile(Directory dir, String kind) async {
           final source = File('${dir.path}/fixture.cs');
@@ -78,8 +78,9 @@ class Fixture { [STAThread] static void Main() {
           'data/flutter_assets/AssetManifest.bin',
           'new-marker.txt',
           if (mode != 'missing-payload') 'data/app.so',
-        ])
+        ]) {
           add(file, utf8.encode('synthetic $mode'));
+        }
         final zip = ZipEncoder().encode(archive);
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         var downloads = 0;
@@ -161,8 +162,9 @@ class Fixture { [STAThread] static void Main() {
             final deadline = DateTime.now().add(const Duration(seconds: 65));
             final terminal = mode == 'healthy' ? 'completed' : 'failed';
             while (DateTime.now().isBefore(deadline) &&
-                !logs().any((r) => r['stage'] == terminal))
+                !logs().any((r) => r['stage'] == terminal)) {
               await Future<void>.delayed(const Duration(milliseconds: 200));
+            }
             evidence['logs'] = logs();
             expect(logs().any((r) => r['stage'] == terminal), true);
             if (mode == 'healthy') {

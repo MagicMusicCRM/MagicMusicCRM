@@ -9,8 +9,10 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store_contract.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/services/alert_sound_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
+import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
@@ -33,11 +35,22 @@ class LiveAuditHarness {
   String currentStep = 'setup';
   late Map<String, dynamic> access;
   bool completed = false;
+  bool liveCrmRealtime = false;
+  MagicRealtimeTransport? crmSocketTransport;
+  int crmSocketConnects = 0;
+  int crmSocketEvents = 0;
+  int duplicatedCrmEvents = 0;
+  bool duplicateNextCrmEvent = false;
 
   Future<void> initialize({
     Size? size = const Size(1280, 900),
     AccountWorkspaceStore? workspaceStore,
+    String? accountRole,
+    bool liveCrmRealtime = false,
+    AlertSoundService? alertSoundService,
+    DateTime Function()? dayClock,
   }) async {
+    this.liveCrmRealtime = liveCrmRealtime;
     const embeddedFixture = String.fromEnvironment('HTTP_JOURNEY_FIXTURE');
     final raw =
         Platform.environment['HTTP_JOURNEY_FIXTURE'] ??
@@ -80,7 +93,7 @@ class LiveAuditHarness {
     );
     final account = (fixture['accounts'] as List)
         .cast<Map<String, dynamic>>()
-        .singleWhere((account) => account['role'] == role);
+        .singleWhere((account) => account['role'] == (accountRole ?? role));
     final login = await api.post<Map<String, dynamic>>(
       '/auth/login',
       authenticated: false,
@@ -91,20 +104,38 @@ class LiveAuditHarness {
         Map<String, dynamic>.from(login['session'] as Map),
       ),
     );
-    final realtime = MagicRealtimeService(api: api, apiBaseUrl: uri.toString());
+    final realtime = liveCrmRealtime
+        ? MagicRealtimeService(
+            api: api,
+            apiBaseUrl: uri.toString(),
+            transportFactory: (origin, options) {
+              final transport = SocketIoMagicRealtimeTransport(origin, {
+                ...options,
+                'forceNew': true,
+              });
+              transport.on('connect', (_) => crmSocketConnects++);
+              final audited = _AuditCrmTransport(transport, this);
+              crmSocketTransport = audited;
+              return audited;
+            },
+          )
+        : MagicRealtimeService(api: api, apiBaseUrl: uri.toString());
     addTearDown(realtime.resetSession);
     scope = ProviderContainer(
       overrides: [
+        if (dayClock != null) crmDayClockProvider.overrideWithValue(dayClock),
         magicApiClientProvider.overrideWithValue(api),
         magicRealtimeServiceProvider.overrideWithValue(realtime),
+        if (alertSoundService != null)
+          alertSoundServiceProvider.overrideWithValue(alertSoundService),
         accountWorkspaceStoreProvider.overrideWithValue(
           workspaceStore ??
               AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
         ),
-        // Push delivery is a separate audit boundary; all loads use real HTTP.
-        crmRealtimeProvider.overrideWith(
-          (ref) => const Stream<CrmChangedEvent>.empty(),
-        ),
+        if (!liveCrmRealtime)
+          crmRealtimeProvider.overrideWith(
+            (ref) => const Stream<CrmChangedEvent>.empty(),
+          ),
       ],
     );
     addTearDown(scope.dispose);
@@ -185,6 +216,7 @@ class LiveAuditHarness {
     List<({String method, String path, int status, int maxCount})>
         expectedHttpErrors =
         const [],
+    List<String> expectedErrorStates = const [],
   }) async {
     currentStep = id;
     final start = requests.length;
@@ -205,9 +237,8 @@ class LiveAuditHarness {
           .toList();
       expect(
         errorStates,
-        isEmpty,
-        reason:
-            'An error screen is not a working destination even when HTTP returned 200',
+        expectedErrorStates,
+        reason: 'Only explicitly expected error screens are accepted',
       );
       final failedHttp = requests
           .skip(start)
@@ -289,8 +320,9 @@ class LiveAuditHarness {
         'steps': steps,
         'requests': requests,
         'facts': facts,
-        'scope':
-            'Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.',
+        'scope': liveCrmRealtime
+            ? 'Authenticated product runtime; in-memory token/workspace storage; local HTTP and CRM WebSocket; local Debug build.'
+            : 'Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.',
       }),
     );
   }
@@ -319,5 +351,50 @@ class LiveAuditHarness {
       reason:
           'See per-step evidence; independent sections were still checked after failures',
     );
+  }
+}
+
+class _AuditCrmTransport implements MagicRealtimeTransport {
+  _AuditCrmTransport(this.delegate, this.harness);
+  final MagicRealtimeTransport delegate;
+  final LiveAuditHarness harness;
+  final _wrapped = <void Function(Object?), void Function(Object?)>{};
+
+  @override
+  void connect() => delegate.connect();
+  @override
+  void disconnect() => delegate.disconnect();
+  @override
+  void dispose() => delegate.dispose();
+  @override
+  void emit(String event, Object? payload) => delegate.emit(event, payload);
+  @override
+  void on(String event, void Function(Object?) handler) {
+    if (event != 'crm.changed') {
+      delegate.on(event, handler);
+      return;
+    }
+    void audited(Object? payload) {
+      harness.crmSocketEvents++;
+      handler(payload);
+      if (harness.duplicateNextCrmEvent) {
+        harness.duplicateNextCrmEvent = false;
+        harness.duplicatedCrmEvents++;
+        handler(payload);
+      }
+    }
+
+    _wrapped[handler] = audited;
+    delegate.on(event, audited);
+  }
+
+  @override
+  void off(String event, [void Function(Object?)? handler]) {
+    if (handler == null) {
+      _wrapped.clear();
+      delegate.off(event);
+      return;
+    }
+    delegate.off(event, _wrapped.remove(handler) ?? handler);
   }
 }

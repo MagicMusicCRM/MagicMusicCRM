@@ -303,7 +303,7 @@ void _bindWorkspaceProviders(
     final event = next.value;
     if (event != null &&
         isMounted() &&
-        !event.isFallbackPoll &&
+        (!event.isFallbackPoll || event.entity == 'task') &&
         sectionForEntity(event.entity) != null) {
       ref.invalidate(sectionUnseenProvider);
     }

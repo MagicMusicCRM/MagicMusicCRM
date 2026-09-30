@@ -627,7 +627,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('teacher-change-access-role')), findsOneWidget);
     expect(
-      find.text('Определяет права пользователя в приложении'),
+      find.text('Роль доступа'),
       findsOneWidget,
     );
   });

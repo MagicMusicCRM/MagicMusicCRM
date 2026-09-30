@@ -41,6 +41,9 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
   let notifications: NotificationsService;
   let manual: LeadsService;
   let sourceId: string;
+  let branchId: string;
+  let profileId: string;
+  let staffId: string;
   let actor: ActorContext;
   const ingestionIds: string[] = [];
   const leadIds: string[] = [];
@@ -88,6 +91,26 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
     );
     userIds.push(user.rows[0]!.id);
     actor = { userId: user.rows[0]!.id, role: "manager" };
+    branchId = (await database.query<{ id: string }>(
+      "insert into app.branches (name, timezone_name) values ($1, 'Europe/Moscow') returning id",
+      [`Inbound integration ${randomUUID()}`],
+    )).rows[0]!.id;
+    profileId = (await database.query<{ id: string }>(
+      "insert into app.profiles (user_id, first_name, last_name) values ($1, 'Inbound', 'Manager') returning id",
+      [actor.userId],
+    )).rows[0]!.id;
+    staffId = (await database.query<{ id: string }>(
+      "insert into app.staff_members (profile_id, role) values ($1, 'manager') returning id",
+      [profileId],
+    )).rows[0]!.id;
+    await database.query(
+      "insert into app.staff_branch_assignments (staff_member_id, branch_id) values ($1, $2)",
+      [staffId, branchId],
+    );
+    await database.query(
+      "insert into app.user_crm_links (user_id, entity_type, entity_id, link_source, confirmed_at) values ($1, 'staff', $2, 'import', now())",
+      [actor.userId, staffId],
+    );
     const policy = new CrmPolicy();
     const pipeline = {
       getEffective: jest.fn().mockResolvedValue({ stages: [] }),
@@ -189,6 +212,11 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
     await database.query("delete from app.lead_sources where id = $1", [
       sourceId,
     ]);
+    await database.query("delete from app.user_crm_links where entity_type = 'staff' and entity_id = $1", [staffId]);
+    await database.query("delete from app.staff_branch_assignments where staff_member_id = $1", [staffId]);
+    await database.query("delete from app.staff_members where id = $1", [staffId]);
+    await database.query("delete from app.profiles where id = $1", [profileId]);
+    await database.query("delete from app.branches where id = $1", [branchId]);
     if (userIds.length > 0) {
       await database.query(
         "delete from app.users where id = any($1::uuid[])",
@@ -227,6 +255,7 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
       lastName: "Лид",
       phone: "8 (999) 000-00-02",
       sourceId,
+      branchId,
       email: "INBOUND@example.com",
       discipline: "Вокал",
       comment: "Нужен пробный урок",

@@ -3,10 +3,16 @@ part of 'client_card.dart';
 extension _ClientCardDesktopDashboard on _ClientCardState {
   Widget _buildDesktopIdentitySidebar(
     ColorScheme cs, {
+    required bool canReadClientFinance,
     required bool canReadSchedule,
     required bool canWriteSchedule,
   }) {
     final snapshot = widget.capabilitySnapshot;
+    final nextLesson = _readController.student?.nextLesson;
+    final nextDate = DateTime.tryParse(
+      nextLesson?.scheduledAt ?? '',
+    )?.toLocal();
+    final balance = _commerceStudent?.lessonBalance;
     return SizedBox(
       width: 272,
       child: Theme(
@@ -51,6 +57,22 @@ extension _ClientCardDesktopDashboard on _ClientCardState {
                 Icons.confirmation_number_outlined,
                 'Продать абонемент',
                 _converting ? null : _showIssueSubscriptionSheet,
+              ),
+            if (canReadSchedule && nextLesson != null && nextDate != null)
+              _desktopAction(
+                'client-next-lesson',
+                Icons.event_outlined,
+                'Ближайшее: ${DateFormat('dd.MM HH:mm').format(nextDate)}',
+                () => _openClientTrayLesson(nextLesson.raw),
+              ),
+            if (canReadClientFinance && balance != null)
+              TextButton(
+                onPressed: () => _selectSection('subscriptions'),
+                style: TextButton.styleFrom(alignment: Alignment.centerLeft),
+                child: Text(
+                  'Оплачено: ${balance.paid} · Доступно: ${balance.available}',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
             const SizedBox(height: 14),
             const _ClientSidebarHeading('Контакты'),

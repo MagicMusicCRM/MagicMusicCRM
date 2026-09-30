@@ -124,6 +124,7 @@ extension _ClientCardStudent on _ClientCardState {
           ],
           if (canReadSchedule) ...[
             RecurringSchedulePlanSection(
+              refreshSource: _readController.student?.lessons,
               studentId: _studentId,
               fallbackLessons: _lessons.map((lesson) => lesson.raw).toList(),
               branches: _branches,

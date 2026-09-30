@@ -4,6 +4,8 @@ param(
   [string]$DatabaseName = "magiccrm_v7_prodlike_image",
   [int]$HealthyPort = 3108,
   [int]$DegradedPort = 3109,
+  [int]$PostgresPort = 54329,
+  [string]$ContainerPrefix = "magiccrm-v7-image-gate",
   [Parameter(Mandatory)][string]$ExpectedRevision,
   [string]$ExpectedMigrationId = "0137_lesson_resource_bookings"
 )
@@ -17,16 +19,22 @@ if ($DatabaseName -notmatch '^magiccrm_v7_prodlike_[a-z0-9_]+$') {
 if ($ImageTag -notmatch '^magicmusiccrm-server:[a-zA-Z0-9_.+-]+$') {
   throw "The image gate only accepts a local magicmusiccrm-server:* image."
 }
+if ($PostgresPort -lt 1 -or $PostgresPort -gt 65535) {
+  throw "PostgreSQL port must be between 1 and 65535."
+}
+if ($ContainerPrefix -notmatch '^magiccrm-v7-image-gate(?:-[a-z0-9-]+)?$') {
+  throw "The image gate only accepts a dedicated magiccrm-v7-image-gate* container prefix."
+}
 
 $postgresBin = Join-Path $env:LOCALAPPDATA "MagicMusicCRMToolchain/postgresql-17/bin"
 $psql = Join-Path $postgresBin "psql.exe"
 $createDb = Join-Path $postgresBin "createdb.exe"
 $dropDb = Join-Path $postgresBin "dropdb.exe"
-$adminUrl = "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/postgres"
+$adminUrl = "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:$PostgresPort/postgres"
 $degradedDatabaseName = "${DatabaseName}_degraded"
-$healthyContainer = "magiccrm-v7-image-gate"
-$degradedContainer = "magiccrm-v7-image-gate-degraded"
-$invalidContainer = "magiccrm-v7-image-gate-invalid"
+$healthyContainer = $ContainerPrefix
+$degradedContainer = "${ContainerPrefix}-degraded"
+$invalidContainer = "${ContainerPrefix}-invalid"
 
 foreach ($tool in @($psql, $createDb, $dropDb)) {
   if (-not (Test-Path -LiteralPath $tool)) {
@@ -37,7 +45,7 @@ foreach ($tool in @($psql, $createDb, $dropDb)) {
 function Remove-GateContainer {
   param([Parameter(Mandatory)][string]$Name)
 
-  if ($Name -notmatch '^magiccrm-v7-image-gate(?:-(?:degraded|invalid))?$') {
+  if ($Name -notin @($healthyContainer, $degradedContainer, $invalidContainer)) {
     throw "Refusing to remove a non-gate container: $Name"
   }
   $exists = ((@(
@@ -83,7 +91,7 @@ function New-GateDatabase {
 function New-DatabaseUrl {
   param([Parameter(Mandatory)][string]$Name)
 
-  return "postgresql://magiccrm_owner:magiccrm_owner@host.docker.internal:54329/$Name"
+  return "postgresql://magiccrm_owner:magiccrm_owner@host.docker.internal:$PostgresPort/$Name"
 }
 
 function New-EnvironmentArguments {
@@ -222,7 +230,7 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "Containerized degraded-fixture migration failed."
   }
-  & $psql "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/$degradedDatabaseName" `
+  & $psql "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:$PostgresPort/$degradedDatabaseName" `
     -v ON_ERROR_STOP=1 -c "delete from app_schema_migrations" | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "Unable to create the degraded readiness fixture."

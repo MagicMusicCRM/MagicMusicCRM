@@ -175,6 +175,7 @@ void main() {
     expect(controller.validate(title: 'План'), isFalse);
     expect(controller.state.validationError, 'Выберите оплату преподавателю.');
     controller.selectTeacherCompensationRule('hourly');
+    controller.setPlannedSettlementReason('Проверка ручной оплаты');
     controller.setOpenEnded(false);
     controller.setValidUntil(DateTime(2026, 8, 26));
     expect(controller.validate(title: 'План'), isFalse);
@@ -368,6 +369,7 @@ void main() {
         decisionCatalogs: _durationCatalogs,
       )..initialize(now: DateTime(2026, 8, 27));
 
+      controller.setPlannedSettlementReason('Проверка ручной оплаты');
       controller.selectDurationMinutes(30);
 
       expect(controller.state.teacherCreditedDurationInput, '45');

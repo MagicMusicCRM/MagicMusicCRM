@@ -286,6 +286,13 @@ extension MagicCrmCore on MagicCrmService {
       'student': _legacyStudent(student),
       'groups': _mapList(response['groups'], _legacyGroup),
       'lessons': _mapList(response['lessons'], _legacyLesson),
+      'next_lesson': (response['indicators'] as Map?)?['nextLesson'] is Map
+          ? _legacyLesson(
+              Map<String, dynamic>.from(
+                (response['indicators'] as Map)['nextLesson'] as Map,
+              ),
+            )
+          : null,
       'payments': _mapList(response['payments'], _legacyPayment),
       'tasks': _mapList(response['tasks'], _legacyTask),
       'comments': _mapList(response['comments'], _legacyComment),

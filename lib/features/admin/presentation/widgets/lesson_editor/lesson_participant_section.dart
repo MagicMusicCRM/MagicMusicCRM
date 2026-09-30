@@ -9,11 +9,19 @@ class LessonParticipantSectionModel {
     required this.session,
     required this.draft,
     required this.references,
+    this.availableTeacherIds,
+    this.availabilityLoading = false,
+    this.availabilityError,
+    this.onAvailabilityRetry,
   });
 
   final LessonEditorSession session;
   final LessonEditorDraft draft;
   final LessonEditorReferenceState references;
+  final Set<String>? availableTeacherIds;
+  final bool availabilityLoading;
+  final String? availabilityError;
+  final VoidCallback? onAvailabilityRetry;
 
   bool get isGroupEdit => session.isGroupEdit;
 
@@ -22,7 +30,9 @@ class LessonParticipantSectionModel {
   List<LessonEditorReferenceItem> get eligibleTeachers => [
     for (final teacher in references.teachers)
       if (teacher.status == 'active' &&
-          teacher.assignedBranchIds.contains(draft.branchId))
+          teacher.assignedBranchIds.contains(draft.branchId) &&
+          (availableTeacherIds == null ||
+              availableTeacherIds!.contains(teacher.id)))
         teacher,
   ];
 
@@ -215,7 +225,11 @@ class _TeacherFields extends StatelessWidget {
         SearchablePickerField(
           key: const ValueKey('lesson-teacher-field'),
           label: 'Преподаватель *',
-          placeholder: 'Выберите преподавателя',
+          placeholder: model.availabilityLoading
+              ? 'Проверяем доступность…'
+              : teachers.isEmpty && model.availableTeacherIds != null
+              ? 'Нет свободных преподавателей'
+              : 'Выберите преподавателя',
           hintText: 'Введите имя или ФИО преподавателя',
           selectedId: draft.teacherId,
           selectedLabel: _labelById(model.references.teachers, draft.teacherId),
@@ -231,27 +245,33 @@ class _TeacherFields extends StatelessWidget {
           enabled: teachers.isNotEmpty,
           onSelected: (item) => onChanged(item?.id),
         ),
-        if (draft.branchId != null && teachers.isEmpty)
+        if (model.availabilityError != null) ...[
+          Text(model.availabilityError!),
+          TextButton(
+            onPressed: model.onAvailabilityRetry,
+            child: const Text('Повторить проверку'),
+          ),
+        ] else if (model.availabilityLoading)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text('Проверяем доступность преподавателей…'),
+          )
+        else if (draft.client == null)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text('Сначала выберите клиента.'),
+          )
+        else if (draft.branchId != null && teachers.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'В выбранный филиал не назначен ни один активный преподаватель.',
+              'На выбранное время нет свободных преподавателей.',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.error,
                 fontSize: 12,
               ),
             ),
           ),
-        if (draft.branchId != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            key: const ValueKey('lesson-replacement-availability-hint'),
-            'Занятость проверим перед сохранением.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
       ],
     );
   }

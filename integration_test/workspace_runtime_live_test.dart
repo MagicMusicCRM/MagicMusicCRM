@@ -60,15 +60,16 @@ void main() {
     WorkspaceController controller() => WorkspaceNavigationScope.maybeOf(
       tester.element(find.byType(ClientCard).first),
     )!.controller;
-    Finder name() => find.widgetWithText(TextFormField, 'Имя').first;
     Finder close(String tab) =>
         find.byKey(ValueKey('workspace-tab-close-$tab'));
-    String visibleName() => tester
-        .widget<EditableText>(
-          find.descendant(of: name(), matching: find.byType(EditableText)),
-        )
-        .controller
-        .text;
+    String visibleName() =>
+        tester.widget<Text>(find.byKey(const Key('client-header-name'))).data!;
+    Future<void> editName(String value) async {
+      await h.tap(find.byKey(const Key('client-edit-name')));
+      await tester.enterText(find.byKey(const Key('client-name-first')), value);
+      await h.tap(find.byKey(const Key('client-name-apply')));
+      await h.quiet();
+    }
     Future<String> readName(int n) async {
       final data = await h.api.get<Map<String, dynamic>>(
         '/crm/students/${students[n]}',
@@ -166,13 +167,12 @@ void main() {
         'Закрытие несохранённой карточки: Остаться сохраняет черновик',
         () async {
           failSave = true;
-          await tester.enterText(name(), 'AUDIT-WORKSPACE-DISCARD');
-          await h.quiet();
+          await editName('AUDIT-WORKSPACE-DISCARD');
           expect(controller().state.activeTab.hasDirtyForms, true);
           await h.tap(close(firstTab));
           await h.tap(find.text('Остаться'));
           expect(controller().state.activeTabId, firstTab);
-          expect(visibleName(), 'AUDIT-WORKSPACE-DISCARD');
+          expect(visibleName(), contains('AUDIT-WORKSPACE-DISCARD'));
           expect(await readName(0), original);
         },
         expectedHttpErrors: expectedErrors,
@@ -200,8 +200,7 @@ void main() {
           savedTab = controller().open(link(0), explicitNew: true);
           await h.quiet();
           failSave = true;
-          await tester.enterText(name(), 'AUDIT-WORKSPACE-SAVED');
-          await h.quiet();
+          await editName('AUDIT-WORKSPACE-SAVED');
           await h.tap(close(savedTab!));
           failSave = false;
           await h.tap(find.text('Сохранить'));
@@ -221,8 +220,7 @@ void main() {
           controller().open(link(0), explicitNew: true);
           await h.quiet();
           failSave = true;
-          await tester.enterText(name(), 'AUDIT-WORKSPACE-RESTORED');
-          await h.quiet();
+          await editName('AUDIT-WORKSPACE-RESTORED');
           await h.waitFor(
             () =>
                 storeFile.existsSync() &&
@@ -246,7 +244,7 @@ void main() {
         'После настоящего перезапуска черновик автоматически сохраняется через HTTP',
         () async {
           await h.waitFor(
-            () => visibleName() == 'AUDIT-WORKSPACE-RESTORED',
+            () => visibleName().contains('AUDIT-WORKSPACE-RESTORED'),
             'Draft visible',
           );
           await h.quiet();

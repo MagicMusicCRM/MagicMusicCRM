@@ -96,7 +96,7 @@ extension _ClientCardLoaders on _ClientCardState {
           !_edited &&
           requestEditRevision == _draft.revision;
       _emitState(() {
-        if (applyIdentity) _leadCard = card;
+        _leadCard = card;
         if (applyIdentity && card['lead'] is Map<String, dynamic>) {
           _leadData = {..._leadData, ...(card['lead'] as Map<String, dynamic>)};
           _leadData['custom_data'] = {

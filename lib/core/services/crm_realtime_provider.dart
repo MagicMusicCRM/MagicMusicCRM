@@ -10,18 +10,18 @@ class CrmChangedEvent {
   final String action; // created | updated | deleted
   final String? id;
   final String? branchId;
+  final String? notificationType;
 
   /// Recipient-scoped user ids (e.g. a task's assignee) for targeted UI hints.
   final List<String> affectedUserIds;
-  final String? notificationType;
 
   const CrmChangedEvent({
     required this.entity,
     required this.action,
     this.id,
     this.branchId,
-    this.affectedUserIds = const [],
     this.notificationType,
+    this.affectedUserIds = const [],
   });
 
   factory CrmChangedEvent.fromMap(Map<String, dynamic> map) => CrmChangedEvent(
@@ -69,6 +69,9 @@ final crmRealtimeProvider = StreamProvider<CrmChangedEvent>((ref) {
     try {
       final conn = await service.connect();
       connection = conn;
+      conn.onConnect(
+        () => emit(const CrmChangedEvent(entity: 'task', action: 'poll')),
+      );
       conn.onCrmChanged((payload) {
         lastSocketEventAt = DateTime.now();
         emit(CrmChangedEvent.fromMap(payload));

@@ -141,7 +141,7 @@ void main() {
           expect(ids.length, expected.length);
         },
       );
-      if (role != 'teacher')
+      if (role != 'teacher') {
         await h.check(
           'SEARCH-LOADED',
           'После загрузки страниц тот же ученик находится',
@@ -153,6 +153,7 @@ void main() {
             );
           },
         );
+      }
       h.facts.add({'pages': pages, 'expectedIds': expected.toList()});
       await h.finish();
     });

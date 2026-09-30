@@ -63,13 +63,15 @@ export class RealtimeBus {
   }
 
   /**
-   * Broadcast a CRM invalidation hint to every staff socket in the shared CRM
-   * room. The payload carries no PII — clients refetch through the authorized
-   * REST API. Never throws (realtime is best-effort, must not break a write).
+   * Broadcast CRM invalidation hints to staff, but send addressed notification
+   * hints only to recipient rooms. Clients refetch through the authorized REST
+   * API. Never throws (realtime is best-effort, must not break a write).
    */
   emitCrmChanged(payload: CrmChangedPayload): void {
     try {
-      this.server?.to(RealtimeBus.crmRoom).emit('crm.changed', payload);
+      if (payload.entity !== 'notification' || !payload.affectedUserIds?.length) {
+        this.server?.to(RealtimeBus.crmRoom).emit('crm.changed', payload);
+      }
       // Recipient-scoped fan-out: lets non-staff (e.g. a client receiving a new
       // in-app notification) get the same invalidation hint in their user room.
       const userIds = payload.affectedUserIds ?? [];

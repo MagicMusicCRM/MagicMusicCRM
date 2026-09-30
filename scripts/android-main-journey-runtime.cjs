@@ -18,7 +18,7 @@ function validatePersistedMove(data, fixture, evidence) {
   assert.equal(active.length, 1);
   const row = active[0];
   assert.equal(row.roomId, fixture.rooms[1]);
-  assert.equal(new Date(row.scheduledAt).toISOString(), evidence.scheduledAt);
+  assert.equal(new Date(row.scheduledAt).toISOString(), new Date(evidence.scheduledAt).toISOString());
   assert.equal(row.durationMinutes, 45);
   assert.notEqual(row.id, fixture.lessonId, 'Move must create its lifecycle successor');
   assert.equal(row.settlementTypeKey, 'trial_lesson');
@@ -39,13 +39,15 @@ async function runMainJourney({ root, output, fixture, runAdb, port }) {
     MAGIC_PROFILE: `android-main-${fixture.lessonId}` }));
   fs.writeFileSync(credentials, JSON.stringify(fixture));
   const log = fs.openSync(path.join(output, 'android-main-build.log'), 'w');
+  const buildMode = process.env.HTTP_JOURNEY_ANDROID_RELEASE === '1' ? 'release' : 'debug';
   try {
     const child = spawn('cmd.exe', ['/d', '/s', '/c',
-      `C:\\Flutter\\bin\\flutter.bat build apk --debug --target-platform android-x64 --target=lib/main.dart --no-pub --dart-define-from-file=${relative}`],
+      `C:\\Flutter\\bin\\flutter.bat build apk --${buildMode} --target-platform android-x64 --target=lib/main.dart --dart-define-from-file=${relative}`],
     { cwd: root, windowsHide: true, stdio: ['ignore', log, log], env: process.env });
     const [code] = await once(child, 'exit');
     assert.equal(code, 0, 'Main Android build failed');
-    runAdb('install', '-r', path.join(root, 'build/app/outputs/flutter-apk/app-debug.apk'));
+    runAdb('install', '-r', path.join(root, `build/app/outputs/flutter-apk/app-${buildMode}.apk`));
+    fs.writeFileSync(path.join(output, 'android-main-build-mode.json'), JSON.stringify({buildMode, entrypoint:'lib/main.dart', backend:'isolated loopback'}));
     runAdb('shell', 'am', 'force-stop', 'magic.crm');
     runAdb('reverse', `tcp:${port}`, `tcp:${port}`);
     runAdb('logcat', '-c');
@@ -65,8 +67,11 @@ async function runMainJourney({ root, output, fixture, runAdb, port }) {
       body: JSON.stringify({ email: account.email, password: fixture.password }) });
     assert.equal(login.status, 200);
     const accessToken = (await login.json()).session.accessToken;
+    const movedAt = new Date(evidence.scheduledAt);
+    assert(!Number.isNaN(movedAt.getTime()), 'Move evidence needs a valid schedule time');
+    const dayStart = new Date(Date.UTC(movedAt.getUTCFullYear(), movedAt.getUTCMonth(), movedAt.getUTCDate()));
     const query = new URLSearchParams({ branchId: fixture.branchId, studentId: fixture.studentId,
-      from: '2027-01-12T00:00:00Z', to: '2027-01-13T00:00:00Z', limit: '100' });
+      from: dayStart.toISOString(), to: new Date(dayStart.getTime() + 86400000).toISOString(), limit: '100' });
     const response = await fetch(`${fixture.baseUrl}/crm/lessons?${query}`, {
       headers: { authorization: `Bearer ${accessToken}` } });
     assert.equal(response.status, 200);

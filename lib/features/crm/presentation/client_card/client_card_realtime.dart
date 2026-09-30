@@ -87,7 +87,7 @@ extension _ClientCardRealtime on _ClientCardState {
     final regions = _realtimeRefreshRegions
         .where(
           (region) =>
-              !_edited ||
+              (!_edited && !_internalNotePending) ||
               region == _CardRefreshRegion.comments ||
               region == _CardRefreshRegion.homework,
         )
@@ -129,7 +129,7 @@ extension _ClientCardRealtime on _ClientCardState {
       _realtimeRefreshInFlight = false;
       // Events received during the request require one trailing refresh: the
       // active read may have started before those mutations committed.
-      if (!_edited) _queueRealtimeRefresh();
+      if (!_edited && !_internalNotePending) _queueRealtimeRefresh();
     }
   }
 }

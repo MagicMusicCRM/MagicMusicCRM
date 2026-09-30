@@ -85,6 +85,15 @@ app.*.map.json
 /_archive/
 /installer_output/
 /outputs/stage9-release-*/
+/outputs/application-audit-2026-09-05/
+/outputs/application-audit-2026-09-23/
+/outputs/crm-function-map-2026-09-10/
+/outputs/revisions-2026-09-17/ui-evidence/
+/outputs/client-card-continuous-2026-09-22/
+/outputs/client-density-2026-09-22/
+/outputs/calendar-*.png
+/outputs/calendar-*.txt
+/server/tsconfig.build.tsbuildinfo
 /dist/release211/
 /ast_nodes*.json
 /bugreport-*.zip

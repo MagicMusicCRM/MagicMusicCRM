@@ -210,6 +210,7 @@ class SubscriptionIssueInstallmentSection extends StatelessWidget {
     required this.draft,
     required this.fieldsEnabled,
     required this.installments,
+    required this.finalPriceMinor,
     required this.setInstallmentCount,
     required this.onChanged,
   });
@@ -217,6 +218,7 @@ class SubscriptionIssueInstallmentSection extends StatelessWidget {
   final SubscriptionIssueDraft draft;
   final bool fieldsEnabled;
   final List<SubscriptionInstallmentInput> installments;
+  final BigInt finalPriceMinor;
   final ValueChanged<int> setInstallmentCount;
   final VoidCallback onChanged;
 
@@ -248,6 +250,14 @@ class SubscriptionIssueInstallmentSection extends StatelessWidget {
             const SizedBox(height: AppSpace.sm),
             SubscriptionIssueInstallmentPreview(
               installments: installments,
+              initialPaymentMinor:
+                  finalPriceMinor -
+                  installments.fold<BigInt>(
+                    BigInt.zero,
+                    (sum, installment) => sum + installment.amountMinor,
+                  ),
+              initialPaymentAt: draft.paymentOccurredAt,
+              finalPriceMinor: finalPriceMinor,
               currencyCode: draft.currencyCode,
             ),
           ],

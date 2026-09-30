@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsDateString,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsUUID,
@@ -31,4 +32,8 @@ export class LessonConstraintPreviewDto {
   @IsOptional()
   @IsUUID()
   excludeLessonId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  includeSuggestions?: boolean;
 }

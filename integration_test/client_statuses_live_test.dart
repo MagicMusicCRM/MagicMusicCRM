@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -36,6 +37,11 @@ void main() {
         Future<Map<String, dynamic>> row() async => Map<String, dynamic>.from(
           (await crm.getLeadCard(id))['lead'] as Map,
         );
+        Finder picker() => find.byWidgetPredicate(
+          (w) =>
+              w is AppDropdownButton<String> &&
+              w.decoration?.labelText == 'Статус',
+        );
         Future<void> open() async {
           await h.mount(
             Scaffold(
@@ -49,18 +55,12 @@ void main() {
             ),
           );
           await h.waitFor(
-            () =>
-                find.widgetWithText(TextFormField, 'Имя').evaluate().isNotEmpty,
-            'Lead editor loaded',
+            () => picker().evaluate().isNotEmpty,
+            'Lead status loaded',
           );
           await h.quiet();
         }
 
-        Finder picker() => find.byWidgetPredicate(
-          (w) =>
-              w is DropdownButtonFormField<String> &&
-              w.decoration.labelText == 'Статус',
-        );
         Future<void> choose(String label) async {
           await h.tap(picker());
           await h.tap(find.text(label).last);
@@ -74,12 +74,7 @@ void main() {
           () async {
             await open();
             final items = tester
-                .widget<DropdownButton<String>>(
-                  find.descendant(
-                    of: picker(),
-                    matching: find.byType(DropdownButton<String>),
-                  ),
-                )
+                .widget<AppDropdownButton<String>>(picker())
                 .items!;
             expect(items, hasLength(3));
             h.facts.add({
@@ -101,7 +96,22 @@ void main() {
             h.facts.add({'step': h.currentStep, 'id': id, 'row': result});
             expect(contactedStatus, h.fixture['contactStatusId']);
             await open();
-            expect(find.text('Связались'), findsWidgets);
+            expect(
+              tester.widget<AppDropdownButton<String>>(picker()).value,
+              contactedStatus,
+            );
+            expect(
+              tester
+                  .widget<TextField>(
+                    find.descendant(
+                      of: picker(),
+                      matching: find.byType(TextField),
+                    ),
+                  )
+                  .controller
+                  ?.text,
+              'Связались',
+            );
           },
         );
         await h.check(
@@ -139,7 +149,22 @@ void main() {
             final after = await row();
             h.facts.add({'step': h.currentStep, 'id': id, 'after': after});
             expect(after['status_id'], contactedStatus);
-            expect(find.text('Связались'), findsWidgets);
+            expect(
+              tester.widget<AppDropdownButton<String>>(picker()).value,
+              contactedStatus,
+            );
+            expect(
+              tester
+                  .widget<TextField>(
+                    find.descendant(
+                      of: picker(),
+                      matching: find.byType(TextField),
+                    ),
+                  )
+                  .controller
+                  ?.text,
+              'Связались',
+            );
           },
         );
         await h.finish();

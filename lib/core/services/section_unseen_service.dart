@@ -8,6 +8,8 @@
 // ✔ Решение заказчика: считает и хранит СЕРВЕР — счётчик переживает перезапуск
 // и одинаков на телефоне и на компьютере.
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/magic_api_providers.dart';
@@ -50,8 +52,12 @@ class SectionUnseenService {
 
   Future<Map<String, int>> unseen() async {
     final api = _ref.read(magicApiClientProvider);
-    final response = await api.get<Map<String, dynamic>>('/crm/sections/unseen');
-    return response.map((key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0));
+    final response = await api.get<Map<String, dynamic>>(
+      '/crm/sections/unseen',
+    );
+    return response.map(
+      (key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0),
+    );
   }
 
   Future<void> markSeen(String section) async {
@@ -63,8 +69,14 @@ class SectionUnseenService {
   }
 }
 
-final sectionUnseenServiceProvider =
-    Provider<SectionUnseenService>(SectionUnseenService.new);
+final sectionUnseenServiceProvider = Provider<SectionUnseenService>(
+  SectionUnseenService.new,
+);
+
+/// Shared clock for the task day and navigation counters.
+final crmDayClockProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+);
 
 /// Счётчики непросмотренного: {раздел → сколько}.
 ///
@@ -73,5 +85,15 @@ final sectionUnseenServiceProvider =
 /// инвалидирует этот провайдер. Тянуть событие сюда нельзя — провайдер
 /// используется и там, где realtime не поднят (тесты, клиентский портал).
 final sectionUnseenProvider = FutureProvider<Map<String, int>>((ref) async {
+  final now = ref
+      .watch(crmDayClockProvider)()
+      .toUtc()
+      .add(const Duration(hours: 3));
+  final nextDay = DateTime.utc(now.year, now.month, now.day + 1);
+  final rollover = Timer(
+    nextDay.difference(now) + const Duration(milliseconds: 1),
+    ref.invalidateSelf,
+  );
+  ref.onDispose(rollover.cancel);
   return ref.read(sectionUnseenServiceProvider).unseen();
 });

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
@@ -29,6 +31,7 @@ class PreferredScheduleEditor extends StatefulWidget {
     this.canManageTeacherCompensation = false,
     this.initialClientDecisions = const [],
     this.participantLabels = const {},
+    this.teacherAvailable,
     super.key,
   });
 
@@ -50,6 +53,7 @@ class PreferredScheduleEditor extends StatefulWidget {
   final bool canManageTeacherCompensation;
   final List<Map<String, dynamic>> initialClientDecisions;
   final Map<String, String> participantLabels;
+  final Future<bool> Function(PreferredScheduleDraft draft)? teacherAvailable;
 
   @override
   State<PreferredScheduleEditor> createState() =>
@@ -61,6 +65,13 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
   late final DirtyFormExitController _exitController;
   late final TextEditingController _notesController;
   late final TextEditingController _titleController;
+  Set<String> _availableTeacherIds = {};
+  bool _teacherOptionsLoading = false;
+  String? _teacherOptionsError;
+  String? _teacherOptionsKey;
+  int _teacherOptionsGeneration = 0;
+  Timer? _teacherOptionsTimer;
+  Future<void>? _teacherOptionsPending;
 
   PreferredScheduleDraft get _draft => _controller.buildDraft(
     title: _titleController.text,
@@ -96,10 +107,12 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     );
     _titleController = TextEditingController(text: widget.initialTitle ?? '');
     _exitController = DirtyFormExitController(onSave: _validate);
+    unawaited(_refreshTeacherOptions());
   }
 
   @override
   void dispose() {
+    _teacherOptionsTimer?.cancel();
     _controller
       ..removeListener(_refresh)
       ..dispose();
@@ -116,6 +129,107 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
   void _changed(VoidCallback change) {
     change();
     _exitController.markDirty();
+    _teacherOptionsTimer?.cancel();
+    _teacherOptionsTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) unawaited(_refreshTeacherOptions());
+    });
+  }
+
+  Future<void> _refreshTeacherOptions({bool force = false}) async {
+    final check = widget.teacherAvailable;
+    if (check == null) return;
+    final draft = _draft;
+    final candidates = _controller.teachersForBranch;
+    final roomId = draft.roomId.isNotEmpty
+        ? draft.roomId
+        : (_controller.roomsForBranch.firstOrNull?['id']?.toString() ?? '');
+    final rangeMissesDay =
+        !draft.openEnded &&
+        draft.weekdays.any(
+          (day) => draft.validFrom
+              .add(Duration(days: (day - draft.validFrom.weekday + 7) % 7))
+              .isAfter(draft.validUntil),
+        );
+    if (roomId.isEmpty ||
+        draft.weekdays.isEmpty ||
+        rangeMissesDay ||
+        (draft.teacherCompensationSource == 'manual' &&
+            draft.plannedSettlementReason.isEmpty)) {
+      ++_teacherOptionsGeneration;
+      setState(() {
+        _availableTeacherIds = {};
+        _teacherOptionsLoading = false;
+        _teacherOptionsError = null;
+        _teacherOptionsKey = null;
+      });
+      return;
+    }
+    final key = [
+      draft.branchId,
+      roomId,
+      (draft.weekdays.toList()..sort()).join(','),
+      draft.beginTime,
+      draft.durationMinutes,
+      draft.lessonsPerDay,
+      draft.validFrom.toIso8601String(),
+      draft.openEnded ? '' : draft.validUntil.toIso8601String(),
+      draft.subscriptionId,
+      draft.settlementTypeKey,
+      draft.teacherCompensationRuleKey,
+      draft.teacherCreditedDurationMinutes,
+      draft.clientDecisions.toString(),
+      candidates.map((teacher) => teacher['id']).join(','),
+    ].join('|');
+    if (!force &&
+        _teacherOptionsKey == key &&
+        (_teacherOptionsLoading || _teacherOptionsError == null)) {
+      return;
+    }
+    final generation = ++_teacherOptionsGeneration;
+    setState(() {
+      _teacherOptionsKey = key;
+      _availableTeacherIds = {};
+      _teacherOptionsLoading = true;
+      _teacherOptionsError = null;
+    });
+    final previous = _teacherOptionsPending;
+    final completion = Completer<void>();
+    _teacherOptionsPending = completion.future;
+    try {
+      await previous;
+      if (!mounted || generation != _teacherOptionsGeneration) return;
+      final available = <String>{};
+      // ponytail: four concurrent plan previews cap DB work; batch if branches regularly exceed 100 teachers.
+      for (var index = 0; index < candidates.length; index += 4) {
+        final chunk = candidates.skip(index).take(4).toList();
+        final results = await Future.wait([
+          for (final teacher in chunk)
+            check(
+              draft.copyWith(
+                teacherId: teacher['id'].toString(),
+                roomId: roomId,
+              ),
+            ),
+        ]);
+        if (!mounted || generation != _teacherOptionsGeneration) return;
+        for (var i = 0; i < chunk.length; i++) {
+          if (results[i]) available.add(chunk[i]['id'].toString());
+        }
+      }
+      if (!mounted || generation != _teacherOptionsGeneration) return;
+      setState(() {
+        _availableTeacherIds = available;
+        _teacherOptionsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _teacherOptionsGeneration) return;
+      setState(() {
+        _teacherOptionsError = 'Не удалось проверить доступность педагогов.';
+        _teacherOptionsLoading = false;
+      });
+    } finally {
+      completion.complete();
+    }
   }
 
   void _textChanged() => _changed(_controller.clearValidationError);
@@ -180,7 +294,29 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       state: _controller.state,
       branches: widget.branches,
       subscriptionOptions: widget.subscriptionOptions,
-      teachers: _controller.teachersForBranch,
+      teachers: widget.teacherAvailable == null
+          ? _controller.teachersForBranch
+          : _controller.teachersForBranch
+                .where(
+                  (teacher) =>
+                      _availableTeacherIds.contains(teacher['id']?.toString()),
+                )
+                .toList(),
+      selectedTeacherLabel: _controller.teachersForBranch
+          .where(
+            (teacher) =>
+                teacher['id']?.toString() == _controller.state.teacherId,
+          )
+          .map(
+            (teacher) =>
+                '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
+                    .trim(),
+          )
+          .firstOrNull,
+      teacherOptionsLoading: _teacherOptionsLoading,
+      teacherOptionsError: _teacherOptionsError,
+      onTeacherOptionsRetry: () =>
+          unawaited(_refreshTeacherOptions(force: true)),
       rooms: _controller.roomsForBranch,
       decisionCatalog: _controller.decisionCatalog,
       titleController: _titleController,
@@ -212,6 +348,8 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
           _changed(() => _controller.selectSettlementType(value)),
       onCompensationRuleChanged: (value) =>
           _changed(() => _controller.selectTeacherCompensationRule(value)),
+      onPlannedSettlementReasonChanged: (value) =>
+          _changed(() => _controller.setPlannedSettlementReason(value)),
       onTeacherMinutesChanged: (value) =>
           _changed(() => _controller.setTeacherCreditedDurationInput(value)),
       onClientMinutesChanged: (clientId, value) => _changed(

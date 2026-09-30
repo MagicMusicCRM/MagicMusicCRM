@@ -127,6 +127,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   Map<String, String> _roomNames = {};
   Map<String, dynamic>? _teacherWeekReference;
   bool _teacherWeekReferenceLoading = false;
+  Object? _teacherWeekReferenceError;
+  String? _teacherWeekReferenceKey;
   int _teacherWeekReferenceGeneration = 0;
   // Per-branch UTC offset (minutes) so lesson times render in the branch's
   // local zone. Defaults to 180 (Moscow / UTC+3). Russia has no DST, so a fixed

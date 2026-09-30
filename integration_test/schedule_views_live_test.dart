@@ -148,6 +148,15 @@ void main() {
         );
         await h.tap(find.byTooltip('Предыдущий месяц'));
         expect(tester.widget<Text>(key('schedule-date-label')).data, before);
+        expect(
+          find.byWidgetPredicate(
+            (widget) => widget.key is ValueKey<String> &&
+                (widget.key! as ValueKey<String>).value.startsWith('schedule-month-lesson-'),
+          ),
+          findsWidgets,
+        );
+      });
+      await h.check('DAY-RETURN', 'Вернуться к дневному виду', () async {
         await view('День', 'day');
       });
       await h.check(

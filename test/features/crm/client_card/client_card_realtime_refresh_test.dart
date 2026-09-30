@@ -158,7 +158,13 @@ void main() {
       visible.value = true;
       await tester.pumpAndSettle();
       expect(api.getCalls.map((c) => c.path).toList(), [
+        '/crm/students/student-1/card',
         '/crm/students/student-1/commerce',
+        '/crm/clients/student/student-1/internal-note',
+        '/crm/clients/student/student-1/operational-history',
+        '/crm/client-pipelines',
+        '/crm/students/student-1/lesson-timeline',
+        '/crm/schedule-plans',
       ]);
     },
   );

@@ -109,6 +109,10 @@ class PreferredScheduleEditorController extends ChangeNotifier {
       teacherCompensationSource:
           seriesDecision['teacherCompensationSource']?.toString() ??
           initialDraft?.teacherCompensationSource,
+      plannedSettlementReason:
+          series?['planned_settlement_reason']?.toString() ??
+          initialDraft?.plannedSettlementReason ??
+          '',
       compensationTouched:
           (seriesDecision['teacherCompensationSource']?.toString() ??
               initialDraft?.teacherCompensationSource) ==
@@ -308,6 +312,8 @@ class PreferredScheduleEditorController extends ChangeNotifier {
       _update(_state.copyWith(lessonsPerDay: value));
   void selectTeacher(String? value) =>
       _update(_state.copyWith(teacherId: value));
+  void setPlannedSettlementReason(String value) =>
+      _update(_state.copyWith(plannedSettlementReason: value));
   void selectRoom(String? value) => _update(_state.copyWith(roomId: value));
   void selectSubscription(String? value) =>
       _update(_state.copyWith(subscriptionId: value));
@@ -494,6 +500,11 @@ class PreferredScheduleEditorController extends ChangeNotifier {
             _state.teacherCompensationRuleKey!.isEmpty)) {
       return 'Выберите оплату преподавателю.';
     }
+    if (canManageTeacherCompensation &&
+        _state.compensationTouched &&
+        _state.plannedSettlementReason.trim().isEmpty) {
+      return 'Укажите причину ручной оплаты преподавателя.';
+    }
     final settlement = _settlement(_state.settlementTypeKey);
     if (canManageTeacherCompensation &&
         (settlement?.teacherDurationMode == 'manual' ||
@@ -555,6 +566,7 @@ class PreferredScheduleEditorController extends ChangeNotifier {
       _state.teacherCreditedDurationInput ?? '',
     ),
     teacherCompensationSource: _state.teacherCompensationSource,
+    plannedSettlementReason: _state.plannedSettlementReason.trim(),
     clientDecisions: lessonClientDecisionsPayload(_state.clientDecisions),
     openEnded: _state.openEnded,
   );

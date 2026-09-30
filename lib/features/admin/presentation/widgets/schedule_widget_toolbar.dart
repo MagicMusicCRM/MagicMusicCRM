@@ -11,7 +11,10 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
         child: ScheduleSkeleton(rows: 7, columns: 6),
       );
     }
-    if (_loadError != null && !_hasLoadedOnce) {
+    if (_loadError != null &&
+        (!_hasLoadedOnce ||
+            (_currentView == ScheduleView.week &&
+                _dayViewMode == DayViewMode.byTeacher))) {
       return _ScheduleError(error: _loadError, onRetry: _fetchAll);
     }
     return switch (_currentView) {

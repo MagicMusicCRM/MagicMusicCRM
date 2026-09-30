@@ -50,6 +50,10 @@ class LessonEditorViewModel {
     this.loadErrorMessage,
     this.scheduleAnalysisError,
     this.canSave = true,
+    this.availableTeacherIds,
+    this.teacherOptionsLoading = false,
+    this.teacherOptionsError,
+    this.onTeacherOptionsRetry,
   });
 
   factory LessonEditorViewModel.fromState(
@@ -59,6 +63,10 @@ class LessonEditorViewModel {
     bool canManageTeacherCompensation, {
     bool canSelectTrialCompensation = false,
     bool canSave = true,
+    Set<String>? availableTeacherIds,
+    bool teacherOptionsLoading = false,
+    String? teacherOptionsError,
+    VoidCallback? onTeacherOptionsRetry,
   }) => LessonEditorViewModel(
     session: editor.$1,
     draft: editor.$2,
@@ -67,6 +75,10 @@ class LessonEditorViewModel {
     isLoading: progress.$2,
     isSaving: progress.$3,
     canSave: canSave,
+    availableTeacherIds: availableTeacherIds,
+    teacherOptionsLoading: teacherOptionsLoading,
+    teacherOptionsError: teacherOptionsError,
+    onTeacherOptionsRetry: onTeacherOptionsRetry,
     isAnalyzing: progress.$4,
     validationMessage: feedback.$1,
     canManageTeacherCompensation: canManageTeacherCompensation,
@@ -88,6 +100,10 @@ class LessonEditorViewModel {
   final String? scheduleAnalysisError;
   final bool canManageTeacherCompensation;
   final bool canSelectTrialCompensation;
+  final Set<String>? availableTeacherIds;
+  final bool teacherOptionsLoading;
+  final String? teacherOptionsError;
+  final VoidCallback? onTeacherOptionsRetry;
 }
 
 class LessonEditorView extends StatelessWidget {
@@ -131,6 +147,10 @@ class LessonEditorView extends StatelessWidget {
     LessonDecisionFormLifecycle? funding,
     List<LessonDecisionParticipant> knownPayers = const [],
     bool canSave = true,
+    Set<String>? availableTeacherIds,
+    bool teacherOptionsLoading = false,
+    String? teacherOptionsError,
+    VoidCallback? onTeacherOptionsRetry,
     Key? key,
   }) => LessonEditorView(
     model: LessonEditorViewModel.fromState(
@@ -140,6 +160,10 @@ class LessonEditorView extends StatelessWidget {
       canManageTeacherCompensation,
       canSelectTrialCompensation: canSelectTrialCompensation,
       canSave: canSave,
+      availableTeacherIds: availableTeacherIds,
+      teacherOptionsLoading: teacherOptionsLoading,
+      teacherOptionsError: teacherOptionsError,
+      onTeacherOptionsRetry: onTeacherOptionsRetry,
     ),
     actions: actions,
     formKey: formKey,
@@ -286,6 +310,10 @@ class LessonEditorView extends StatelessWidget {
             session: model.session,
             draft: model.draft,
             references: model.references,
+            availableTeacherIds: model.availableTeacherIds,
+            availabilityLoading: model.teacherOptionsLoading,
+            availabilityError: model.teacherOptionsError,
+            onAvailabilityRetry: model.onTeacherOptionsRetry,
           ),
           onSearchClients: actions.searchClients,
           onClientChanged: actions.selectClient,

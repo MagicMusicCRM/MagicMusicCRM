@@ -288,7 +288,10 @@ export class StudentLessonTimelineRepository {
            participant_snapshot.subscription_id
          ) as subscription_id
        ) target_funding on true
-       where lesson.archived_at is null and (lesson.scheduled_at, lesson.id) ${comparison}
+       where lesson.archived_at is null
+         and lesson.successor_id is null
+         and lesson.lifecycle_state not in ('cancelled', 'rescheduled')
+         and (lesson.scheduled_at, lesson.id) ${comparison}
          ($4::timestamptz, $5::uuid)
          and ($7::timestamptz is null or lesson.scheduled_at >= $7::timestamptz)
          and ($8::timestamptz is null or lesson.scheduled_at < $8::timestamptz)

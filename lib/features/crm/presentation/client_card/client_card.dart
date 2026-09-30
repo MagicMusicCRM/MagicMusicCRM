@@ -241,6 +241,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   set _internalNotePending(bool value) {
     _internalNoteIsPending = value;
     _syncWorkspaceFormDirty();
+    if (!value) _queueRealtimeRefresh();
   }
 
   ClientInternalNoteFlush? _flushInternalNote;
@@ -525,7 +526,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _statuses = widget.allStatuses ?? const [];
     if (widget.allStatuses == null) _fetchStatuses();
     _fetchMetadata();
-    _fetchCard();
+    _loadLeadAndRelatedData();
+  }
+
+  Future<void> _loadLeadAndRelatedData() async {
+    await _fetchCard();
+    if (!mounted || _leadCard == null) return;
     _fetchDuplicateCandidates();
     _fetchFamily();
     _fetchClientAccess();
@@ -535,7 +541,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final wasVisible = _realtimeVisible;
     _realtimeVisible = TickerMode.valuesOf(context).enabled;
+    if (_realtimeVisible && !wasVisible) {
+      _scheduleRealtimeRefresh(
+        const CrmChangedEvent(entity: 'lesson', action: 'resume'),
+      );
+    }
     if (_realtimeVisible) _queueRealtimeRefresh();
     _scheduleWorkspaceFormRegistration();
   }
@@ -797,12 +809,22 @@ class _ClientCardState extends ConsumerState<ClientCard>
     ref.listen(crmRealtimeProvider, (previous, next) {
       final event = next.value;
       if (event == null) return;
-      // Skip the 30s fallback poll (10 entities) — it was refetching the whole
-      // card every 30s, flashing spinners and jittering fields. Real socket
-      // events still refresh.
-      if (event.isFallbackPoll) return;
+      // One lesson poll per tick restores this card without ten refresh bursts.
+      if (event.isFallbackPoll && event.entity != 'lesson') return;
       _scheduleRealtimeRefresh(event);
     });
+
+    if (_mode == ClientMode.leadOnly && _leadCard == null) {
+      if (_loadingCard) return const MagicPageState.loading();
+      return MagicPageState(
+        kind: MagicPageStateKind.error,
+        title: 'Карточка лида недоступна',
+        message:
+            _readController.leadError ?? 'Не удалось загрузить данные лида.',
+        actionLabel: 'Повторить',
+        onAction: () => _loadLeadAndRelatedData(),
+      );
+    }
 
     final cs = Theme.of(context).colorScheme;
     final releaseGateRole = ref
@@ -830,9 +852,24 @@ class _ClientCardState extends ConsumerState<ClientCard>
       routed: widget.routed,
       edited: _edited || _internalNotePending,
       dirty: _dirty,
-      header: _isStudent
-          ? _buildStudentHeader(cs, curStatus)
-          : _buildHeader(cs, curStatus),
+      header: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _isStudent
+              ? _buildStudentHeader(cs, curStatus)
+              : _buildHeader(cs, curStatus),
+          if (_mode.hasLeadHalf && _readController.leadError != null)
+            MaterialBanner(
+              content: const Text('Не удалось обновить карточку. Данные могут быть устаревшими.'),
+              actions: [
+                TextButton(
+                  onPressed: () => _fetchCard(preserveVisibleContent: true),
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
+        ],
+      ),
       blacklistBanner: _isBlacklisted ? _buildBlacklistBanner(cs) : null,
       desktopWorkspaceBuilder: (_) => _buildDesktopWorkspaceCanvas(
         cs,

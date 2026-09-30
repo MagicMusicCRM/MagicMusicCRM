@@ -153,17 +153,11 @@ Widget _paymentsView(
   final movements = commerce?.movements ?? const <CommerceMovement>[];
   final technicalHistory =
       commerce?.technicalHistory ?? const <CommerceTechnicalFinanceEvent>[];
-  final installments =
+  final schedules =
       commerce?.subscriptions
-          .expand(
-            (subscription) => subscription.installments.map(
-              (item) => (subscription: subscription, installment: item),
-            ),
-          )
+          .where((subscription) => subscription.installments.isNotEmpty)
           .toList(growable: false) ??
-      const <
-        ({CommerceSubscription subscription, CommerceInstallment installment})
-      >[];
+      const <CommerceSubscription>[];
   final balanceMinor = account?.balanceMinor ?? BigInt.zero;
   final paymentAvailable =
       highlightedPaymentId == null ||
@@ -250,7 +244,7 @@ Widget _paymentsView(
               ),
               _PaymentMetric(
                 width: width,
-                label: 'Оплачено с учётом возвратов',
+                label: 'На личный счёт с учётом возвратов',
                 value: formatPaymentMinor(
                   (account?.actualPaymentsMinor ?? BigInt.zero) +
                       (account?.adjustmentsMinor ?? BigInt.zero),
@@ -375,20 +369,36 @@ Widget _paymentsView(
       _PaymentExpansion(
         key: const Key('payment-installments-expansion'),
         title: 'Рассрочки и обязательства',
-        count: installments.length,
+        count: schedules.fold<int>(
+          0,
+          (count, subscription) =>
+              count +
+              subscription.installments.length +
+              (_initialInstallmentPaymentMinor(subscription) > BigInt.zero
+                  ? 1
+                  : 0),
+        ),
         children: [
-          if (installments.isEmpty)
+          if (schedules.isEmpty)
             const _PaymentEmpty(
               icon: Icons.event_available_outlined,
               text: 'Активных графиков рассрочки нет',
             )
           else
-            ...installments.map(
-              (entry) => _InstallmentRow(
-                subscription: entry.subscription,
-                installment: entry.installment,
-              ),
-            ),
+            for (final subscription in schedules) ...[
+              if (_initialInstallmentPaymentMinor(subscription) > BigInt.zero)
+                _InitialInstallmentPaymentRow(subscription: subscription),
+              for (final installment in subscription.installments)
+                _InstallmentRow(
+                  subscription: subscription,
+                  installment: installment,
+                  numberOffset:
+                      _initialInstallmentPaymentMinor(subscription) >
+                          BigInt.zero
+                      ? 1
+                      : 0,
+                ),
+            ],
         ],
       ),
       if (technicalHistory.isNotEmpty) ...[
@@ -808,14 +818,54 @@ class _PaymentStatusBadge extends StatelessWidget {
   }
 }
 
+BigInt _initialInstallmentPaymentMinor(CommerceSubscription subscription) =>
+    subscription.terms.finalPriceMinor -
+    subscription.installments.fold<BigInt>(
+      BigInt.zero,
+      (sum, installment) => sum + installment.amountMinor,
+    );
+
+class _InitialInstallmentPaymentRow extends StatelessWidget {
+  const _InitialInstallmentPaymentRow({required this.subscription});
+
+  final CommerceSubscription subscription;
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = _initialInstallmentPaymentMinor(subscription);
+    final paid = subscription.financial.actualPaidMinor >= amount;
+    return ListTile(
+      key: Key('payment-installment-initial-${subscription.id}'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+      leading: Icon(
+        paid ? Icons.check_circle_rounded : Icons.schedule_rounded,
+        color: paid ? AppTheme.success : AppColor.actionBlue,
+      ),
+      title: Text('${subscription.terms.displayName} · платёж 1'),
+      subtitle: Text(
+        'Первоначальный взнос · ${paid ? 'Оплачен' : 'Ожидает оплаты'}',
+      ),
+      trailing: Text(
+        formatPaymentMinor(
+          amount,
+          currencyCode: subscription.terms.currencyCode,
+        ),
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
 class _InstallmentRow extends StatelessWidget {
   const _InstallmentRow({
     required this.subscription,
     required this.installment,
+    required this.numberOffset,
   });
 
   final CommerceSubscription subscription;
   final CommerceInstallment installment;
+  final int numberOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -832,11 +882,15 @@ class _InstallmentRow extends StatelessWidget {
         color: paid ? AppTheme.success : AppColor.actionBlue,
       ),
       title: Text(
-        '${subscription.terms.displayName} · платёж ${installment.installmentNumber}',
+        '${subscription.terms.displayName} · платёж ${installment.installmentNumber + numberOffset}',
       ),
       subtitle: Text(
         '$datePrefix: ${DateFormat('dd.MM.yyyy').format(installment.dueAt.toLocal())} · '
-        '${paid ? 'Оплачен' : 'Ожидает оплаты'}',
+        '${paid
+            ? 'Оплачен'
+            : installment.dueKind == 'forecast'
+            ? 'Будущий платёж'
+            : 'Ожидает оплаты'}',
       ),
       trailing: Text(
         formatPaymentMinor(

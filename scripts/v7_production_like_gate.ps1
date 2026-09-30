@@ -2,6 +2,7 @@
 param(
   [string]$DatabaseName = "magiccrm_v7_prodlike_gate",
   [int]$Port = 3107,
+  [int]$PostgresPort = 54329,
   [string]$ExpectedMigrationId,
   [switch]$ServerOnly
 )
@@ -11,6 +12,9 @@ Set-StrictMode -Version Latest
 
 if ($DatabaseName -notmatch '^magiccrm_v7_prodlike_[a-z0-9_]+$') {
   throw "The production-like gate only accepts a dedicated magiccrm_v7_prodlike_* database."
+}
+if ($PostgresPort -lt 1 -or $PostgresPort -gt 65535) {
+  throw "PostgreSQL port must be between 1 and 65535."
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -23,8 +27,8 @@ $postgresBin = Join-Path $env:LOCALAPPDATA "MagicMusicCRMToolchain/postgresql-17
 $psql = Join-Path $postgresBin "psql.exe"
 $createDb = Join-Path $postgresBin "createdb.exe"
 $dropDb = Join-Path $postgresBin "dropdb.exe"
-$adminUrl = "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/postgres"
-$databaseUrl = "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/$DatabaseName"
+$adminUrl = "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:$PostgresPort/postgres"
+$databaseUrl = "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:$PostgresPort/$DatabaseName"
 
 foreach ($tool in @($psql, $createDb, $dropDb)) {
   if (-not (Test-Path -LiteralPath $tool)) {

@@ -199,10 +199,9 @@ void main() {
             (method: 'GET', path: '/api$endpoint', status: 403, maxCount: 1),
           ],
         );
-        // Expected denied-UI behavior is recorded as a finding for this audit.
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
-        h.save();
+        await h.finish();
       },
       timeout: const Timeout(Duration(minutes: 4)),
     );

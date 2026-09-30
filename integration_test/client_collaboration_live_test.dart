@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_token_store_contract.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -376,4 +377,99 @@ void main() {
       timeout: const Timeout(Duration(minutes: 10)),
     );
   }
+  testWidgets('recovery: real CRM socket loss restores the student card on resume', (tester) async {
+    final h = LiveAuditHarness(tester, 'admin', 'collaboration-recovery');
+    await h.initialize(size: const Size(1440, 1100), liveCrmRealtime: true);
+    final crm = h.scope.read(magicCrmServiceProvider);
+    final access = await h.scope.read(capabilitySnapshotProvider.future);
+    final studentId = (h.fixture['students'] as List)[1] as String;
+    final student = await crm.getStudent(studentId);
+    final active = ValueNotifier(true);
+    addTearDown(active.dispose);
+    final bApi = MagicApiClient(
+      baseUrl: h.fixture['baseUrl'] as String,
+      tokenStore: MemoryMagicTokenStore(),
+    );
+    addTearDown(() => bApi.rawDio.close(force: true));
+    final manager = (h.fixture['accounts'] as List).cast<Map<String, dynamic>>()
+        .singleWhere((account) => account['role'] == 'manager');
+    final login = await bApi.post<Map<String, dynamic>>('/auth/login',
+        authenticated: false,
+        data: {'email': manager['email'], 'password': h.fixture['password']});
+    await bApi.saveTokens(MagicApiTokens.fromJson(
+      Map<String, dynamic>.from(login['session'] as Map),
+    ));
+    final b = MagicCrmService(bApi);
+    String? createdId;
+    await h.check('OPEN', 'Карточка A читает текущую ученическую ленту через настоящий socket', () async {
+      await h.mount(Scaffold(body: ValueListenableBuilder<bool>(
+        valueListenable: active,
+        builder: (context, visible, child) => TickerMode(
+          enabled: visible,
+          child: ClientCard(
+            key: const ValueKey('recovery-card'),
+            lead: student,
+            entityType: 'student',
+            routed: true,
+            capabilitySnapshot: access,
+          ),
+        ),
+      )));
+      await h.waitFor(() => h.crmSocketConnects > 0, 'Real CRM socket connected');
+      await h.waitFor(() => find.byKey(const Key('client-internal-note-input')).evaluate().isNotEmpty, 'Student card loaded');
+      await h.quiet();
+    });
+    await h.check('MISSED-LESSON', 'B сохраняет урок, пока socket и вкладка A неактивны', () async {
+      h.crmSocketTransport!.disconnect();
+      active.value = false;
+      await tester.pump();
+      final local = DateTime.now().add(const Duration(days: 1));
+      final scheduled = DateTime(local.year, local.month, local.day, 11).toUtc();
+      final teacher = (h.fixture['teachers'] as List).first as String;
+      final room = (h.fixture['rooms'] as List).first as String;
+      createdId = (await b.createLessonRaw({
+        'clientRef': {'type': 'student', 'id': studentId},
+        'teacherId': teacher,
+        'roomId': room,
+        'branchId': h.fixture['branchId'],
+        'scheduledAt': scheduled.toIso8601String(),
+        'durationMinutes': 60,
+        'isTrial': false,
+        'completionType': 'standard.success',
+        'clientChargeType': 'personal_account',
+        'clientChargeValue': 1000,
+        'teacherCompensationType': 'hourly',
+        'teacherCompensationValue': 700,
+        'financialDecision': {
+          'settlementTypeKey': 'lesson',
+          'teacherCompensationRuleKey': 'standard',
+          'clientDecisions': [{'clientId': studentId, 'payerStudentId': studentId,
+            'chargeType': 'personal_account', 'basePriceMinor': '100000'}],
+        },
+      }))['id'] as String;
+      expect(find.byKey(Key('student-timeline-$createdId')), findsNothing);
+    });
+    await h.check('RESUME', 'После reconnect карточка A читает актуальный урок', () async {
+      h.crmSocketTransport!.connect();
+      await h.waitFor(() => h.crmSocketConnects > 1, 'Real CRM socket reconnected');
+      const draft = 'Черновик после восстановления связи';
+      await tester.enterText(find.byKey(const Key('client-internal-note-input')), draft);
+      await tester.pump();
+      final before = h.requests.length;
+      final refreshWatch = Stopwatch()..start();
+      active.value = true;
+      await tester.pump();
+      await h.waitFor(() => find.byKey(Key('student-timeline-$createdId')).evaluate().isNotEmpty,
+          'Missed lesson visible after tab resume');
+      refreshWatch.stop();
+      expect(tester.widget<TextField>(find.byKey(const Key('client-internal-note-input')))
+          .controller!.text, draft);
+      await h.quiet();
+      h.facts.add({'step': h.currentStep, 'lessonId': createdId,
+        'refreshRequests': h.requests.length - before,
+        'refreshElapsedMs': refreshWatch.elapsedMilliseconds,
+        'socketConnects': h.crmSocketConnects, 'draftPreserved': true});
+    });
+    await h.finish();
+  }, timeout: const Timeout(Duration(minutes: 6)));
 }

@@ -55,7 +55,7 @@ class SearchablePickerField extends StatefulWidget {
     this.onSearch,
     this.isNullable = true,
     this.enabled = true,
-    this.showSearchHint = true,
+    this.showSearchHint = false,
   });
 
   @override

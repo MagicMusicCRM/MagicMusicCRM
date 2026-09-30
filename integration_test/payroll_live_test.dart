@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_view.dart';
@@ -124,7 +125,7 @@ void main() {
         Future<void> fill() async {
           final field = find.descendant(
             of: find.byType(TeacherRateSelector),
-            matching: find.byType(DropdownButtonFormField<String>),
+            matching: find.byType(AppDropdownButtonFormField<String>),
           );
           await h.tap(field);
           await h.tap(find.text('750 ₽').last);

@@ -134,9 +134,6 @@ class TeacherDetailContent extends StatelessWidget {
             ExpansionTile(
               key: const Key('teacher-personal-access'),
               title: const Text('Персональные права'),
-              subtitle: const Text(
-                'Права и исключения для этого преподавателя',
-              ),
               children: [
                 SizedBox(
                   height: 560,
@@ -437,10 +434,7 @@ class _AccessRoleField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InputDecorator(
-      decoration: const InputDecoration(
-        labelText: 'Роль доступа',
-        helperText: 'Определяет права пользователя в приложении',
-      ),
+      decoration: const InputDecoration(labelText: 'Роль доступа'),
       child: Row(
         children: [
           Expanded(child: Text(teacherDetailRoleLabel(role))),

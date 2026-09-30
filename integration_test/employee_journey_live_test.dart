@@ -416,8 +416,24 @@ void main() {
       }
 
       final scheduled = DateTime.parse(fixture['scheduledAt'] as String);
+      final completedAt = scheduled.subtract(const Duration(days: 3));
+      final availability = await crm.analyzeLessonSchedule(
+        clientType: 'student',
+        clientId: id,
+        teacherId: fixture['teacherId'] as String,
+        branchId: fixture['branchId'] as String,
+        roomId: fixture['roomId'] as String,
+        scheduledAt: completedAt.toIso8601String(),
+        durationMinutes: 60,
+        includeSuggestions: false,
+      );
+      expect(
+        availability.violations.map((violation) => violation.code),
+        isEmpty,
+        reason: 'Release fixture teacher must be available for the completed lesson',
+      );
       final completedLesson = await createLesson(
-        scheduled.subtract(const Duration(days: 3)),
+        completedAt,
       );
       await evidence('lesson-booked');
       // Completion follows the product rule: the durable worker settles due lessons.
@@ -446,7 +462,22 @@ void main() {
       await decision(cancelledLesson, LessonDecisionOperation.cancel);
       expect((await lesson(cancelledLesson))['status'], 'cancelled');
       await balance(id, 350000);
-      await visibleLesson(id, cancelledLesson, 'Отменено');
+      final history = await crm.getClientOperationalHistory(
+        clientType: 'student',
+        clientId: id,
+        limit: 20,
+      );
+      final cancellation = history.items.singleWhere(
+        (event) => event.actionKey == 'crm.lesson_cancelled',
+      );
+      await card(id, section: 'history_tasks');
+      if (find.byKey(ValueKey(cancellation.id)).evaluate().isEmpty) {
+        await tap(find.byKey(const Key('client-operational-history-more')));
+      }
+      await waitFor(
+        () => find.byKey(ValueKey(cancellation.id)).evaluate().isNotEmpty,
+        'Cancelled lesson remains in the linked history',
+      );
       await evidence('lesson-cancelled');
 
       await card(id);

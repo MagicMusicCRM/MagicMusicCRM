@@ -8,6 +8,7 @@ import { NotificationsService } from './notifications.service';
 import { RealtimeBus } from '../realtime/realtime-bus';
 import { validateSync } from 'class-validator';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
+import { branchIdExpr, managerBranchScopeSql } from '../crm/branch-scope';
 
 describe('NotificationsService', () => {
   const admin = { userId: 'admin-a', role: 'admin' as const };
@@ -56,10 +57,17 @@ describe('NotificationsService', () => {
         where event_type = $1 and enabled
       `,
     users: `
-        select id, role::text as role, email
-        from app.users
-        where role::text = any($1::text[]) and deleted_at is null
-        order by created_at desc
+        select recipient.id, recipient.role::text as role, recipient.email
+        from app.users recipient
+        join app.leads lead on lead.id = $2::uuid and lead.deleted_at is null
+        where recipient.role::text = any($1::text[])
+          and recipient.deleted_at is null
+          and ${managerBranchScopeSql({
+            roleExpression: 'recipient.role',
+            userIdExpression: 'recipient.id',
+            branchExpression: branchIdExpr('lead')
+          })}
+        order by recipient.created_at desc
         limit 10000
       `,
     lead: `
@@ -805,9 +813,10 @@ describe('NotificationsService', () => {
       ]);
     });
 
-    it('stops after the ordered recipient lookup when no staff users exist', async () => {
+    it('stops after the scoped recipient lookup when no staff users exist', async () => {
       const { service, ledger } = createInboundHarness([
         [{ role: 'manager', channels: ['push'] }],
+        [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }],
         []
       ]);
 
@@ -821,16 +830,20 @@ describe('NotificationsService', () => {
         },
         {
           event: 'database.query',
+          sql: inboundSql.lead,
+          params: [ingestionId]
+        },
+        {
+          event: 'database.query',
           sql: inboundSql.users,
-          params: [['manager']]
+          params: [['manager'], 'lead-a']
         }
       ]);
     });
 
-    it('reports the exact not-found error after preferences and recipients', async () => {
+    it('reports the exact not-found error before looking up recipients', async () => {
       const { service, ledger } = createInboundHarness([
         [{ role: 'manager', channels: ['in_app'] }],
-        [{ id: 'manager-a', role: 'manager', email: 'manager@example.com' }],
         []
       ]);
 
@@ -854,11 +867,6 @@ describe('NotificationsService', () => {
         },
         {
           event: 'database.query',
-          sql: inboundSql.users,
-          params: [['manager']]
-        },
-        {
-          event: 'database.query',
           sql: inboundSql.lead,
           params: [ingestionId]
         }
@@ -872,12 +880,12 @@ describe('NotificationsService', () => {
           { role: 'admin', channels: ['in_app'] },
           { role: 'teacher', channels: [] }
         ],
+        [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }],
         [
           { id: 'manager-a', role: 'manager', email: 'Manager@Example.COM' },
           { id: 'admin-a', role: 'admin', email: 'admin@example.com' },
           { id: 'manager-b', role: 'manager', email: '' }
-        ],
-        [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }]
+        ]
       ]);
       const title = 'Новая заявка';
       const body = 'Лид Входящий — источник: Веб-сайт';
@@ -892,13 +900,13 @@ describe('NotificationsService', () => {
         },
         {
           event: 'database.query',
-          sql: inboundSql.users,
-          params: [['manager', 'admin']]
+          sql: inboundSql.lead,
+          params: [ingestionId]
         },
         {
           event: 'database.query',
-          sql: inboundSql.lead,
-          params: [ingestionId]
+          sql: inboundSql.users,
+          params: [['manager', 'admin'], 'lead-a']
         },
         { event: 'transaction.begin' },
         {
@@ -971,8 +979,8 @@ describe('NotificationsService', () => {
       const { service, ledger } = createInboundHarness(
         [
           [{ role: 'manager', channels: ['push', 'email'] }],
-          [{ id: 'manager-a', role: 'manager', email: 'Manager@Example.COM' }],
-          [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }]
+          [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }],
+          [{ id: 'manager-a', role: 'manager', email: 'Manager@Example.COM' }]
         ],
         {
           clientQueryResults: [
@@ -995,13 +1003,13 @@ describe('NotificationsService', () => {
         },
         {
           event: 'database.query',
-          sql: inboundSql.users,
-          params: [['manager']]
+          sql: inboundSql.lead,
+          params: [ingestionId]
         },
         {
           event: 'database.query',
-          sql: inboundSql.lead,
-          params: [ingestionId]
+          sql: inboundSql.users,
+          params: [['manager'], 'lead-a']
         },
         { event: 'transaction.begin' },
         {
@@ -1059,8 +1067,8 @@ describe('NotificationsService', () => {
       const { service, ledger, transactionError } = createInboundHarness(
         [
           [{ role: 'manager', channels: ['push', 'email'] }],
-          [{ id: 'manager-a', role: 'manager', email: 'manager@example.com' }],
-          [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }]
+          [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }],
+          [{ id: 'manager-a', role: 'manager', email: 'manager@example.com' }]
         ],
         { failedClientQuery: 2 }
       );
@@ -1077,13 +1085,13 @@ describe('NotificationsService', () => {
         },
         {
           event: 'database.query',
-          sql: inboundSql.users,
-          params: [['manager']]
+          sql: inboundSql.lead,
+          params: [ingestionId]
         },
         {
           event: 'database.query',
-          sql: inboundSql.lead,
-          params: [ingestionId]
+          sql: inboundSql.users,
+          params: [['manager'], 'lead-a']
         },
         { event: 'transaction.begin' },
         {

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.5.50+230
+version: 1.5.51+231
 
 environment:
   sdk: ^3.11.1
@@ -59,6 +59,7 @@ dependencies:
   flutter_local_notifications: ^20.1.0
   local_notifier: ^0.1.6
   socket_io_client: ^3.1.5
+  web_socket: ^1.0.1
   sentry_flutter: ^8.14.2
   uuid: 4.5.3
 dependency_overrides:
@@ -70,6 +71,8 @@ dev_dependencies:
     sdk: flutter
   integration_test:
     sdk: flutter
+  path_provider_platform_interface: ^2.1.2
+  url_launcher_platform_interface: ^2.3.2
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -141,6 +144,6 @@ msix_config:
   publisher_display_name: "Magic Music"
   identity_name: "com.magicmusic.crm"
   publisher: "CN=MagicMusic, O=MagicMusic, L=Moscow, C=RU"
-  msix_version: 1.5.50.230
+  msix_version: 1.5.51.231
   logo_path: assets/icon.png
   install_certificate: true

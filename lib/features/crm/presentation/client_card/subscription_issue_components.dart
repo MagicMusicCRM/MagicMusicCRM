@@ -376,10 +376,16 @@ class SubscriptionIssueInstallmentPreview extends StatelessWidget {
   const SubscriptionIssueInstallmentPreview({
     super.key,
     required this.installments,
+    required this.initialPaymentMinor,
+    required this.initialPaymentAt,
+    required this.finalPriceMinor,
     required this.currencyCode,
   });
 
   final List<SubscriptionInstallmentInput> installments;
+  final BigInt initialPaymentMinor;
+  final DateTime initialPaymentAt;
+  final BigInt finalPriceMinor;
   final String currencyCode;
 
   @override
@@ -394,16 +400,43 @@ class SubscriptionIssueInstallmentPreview extends StatelessWidget {
       ),
       child: Column(
         children: [
+          if (initialPaymentMinor > BigInt.zero)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.xs),
+              child: Row(
+                key: const Key('subscription-installment-initial'),
+                children: [
+                  Expanded(
+                    child: Text(
+                      '1. Первый платёж · ${DateFormat('dd.MM.yyyy').format(initialPaymentAt.toLocal())} · сейчас',
+                      style: const TextStyle(
+                        color: AppColor.text2,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    formatSubscriptionMinor(initialPaymentMinor, currencyCode),
+                    style: const TextStyle(
+                      color: AppColor.text,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           for (var index = 0; index < installments.length; index++)
             Padding(
               padding: EdgeInsets.only(
                 bottom: index == installments.length - 1 ? 0 : AppSpace.xs,
               ),
               child: Row(
+                key: Key('subscription-installment-future-$index'),
                 children: [
                   Expanded(
                     child: Text(
-                      '${index + 1}. ${DateFormat('dd.MM.yyyy').format(installments[index].dueAt.toLocal())}',
+                      '${index + (initialPaymentMinor > BigInt.zero ? 2 : 1)}. Прогноз: ${DateFormat('dd.MM.yyyy').format(installments[index].dueAt.toLocal())} · срок после расходования оплаты',
                       style: const TextStyle(
                         color: AppColor.text2,
                         fontSize: 12,
@@ -424,59 +457,27 @@ class SubscriptionIssueInstallmentPreview extends StatelessWidget {
                 ],
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class SubscriptionIssueRetryNotice extends StatelessWidget {
-  const SubscriptionIssueRetryNotice({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpace.md),
-      decoration: BoxDecoration(
-        color: AppColor.goldSoft,
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        border: Border.all(color: AppColor.goldLine),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.lock_clock_outlined, size: 18, color: AppColor.gold),
-          SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: Text(
-              'Условия зафиксированы. Повтор отправит ту же операцию и не '
-              'создаст второй абонемент или платёж.',
-              style: TextStyle(color: AppColor.text2, fontSize: 12),
-            ),
+          const Divider(height: AppSpace.md),
+          Row(
+            key: const Key('subscription-installment-total'),
+            children: [
+              const Expanded(
+                child: Text(
+                  'Итого по графику',
+                  style: TextStyle(color: AppColor.text2, fontSize: 12),
+                ),
+              ),
+              Text(
+                formatSubscriptionMinor(finalPriceMinor, currencyCode),
+                style: const TextStyle(
+                  color: AppColor.text,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class SubscriptionIssueInlineError extends StatelessWidget {
-  const SubscriptionIssueInlineError({super.key, required this.error});
-  final String error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      key: const Key('subscription-issue-error'),
-      padding: const EdgeInsets.all(AppSpace.md),
-      decoration: BoxDecoration(
-        color: AppColor.dangerSoft,
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        border: Border.all(color: AppColor.danger.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        error,
-        style: const TextStyle(color: AppColor.menuDanger, fontSize: 12),
       ),
     );
   }

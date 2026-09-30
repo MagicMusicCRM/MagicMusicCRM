@@ -358,7 +358,7 @@ class ScheduleMonthView extends StatelessWidget {
         decoration: BoxDecoration(
           color: LessonSettlementCorner.backgroundFor(settlementKey),
           borderRadius: BorderRadius.circular(4),
-          border: Border(left: BorderSide(color: color, width: 2)),
+          border: Border.all(color: color),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {

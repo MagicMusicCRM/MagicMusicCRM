@@ -97,3 +97,55 @@ class SubscriptionIssueFormFeedback extends StatelessWidget {
     return 'Оплатить';
   }
 }
+
+class SubscriptionIssueRetryNotice extends StatelessWidget {
+  const SubscriptionIssueRetryNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppColor.goldSoft,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: AppColor.goldLine),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lock_clock_outlined, size: 18, color: AppColor.gold),
+          SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Text(
+              'Условия зафиксированы. Повтор отправит ту же операцию и не '
+              'создаст второй абонемент или платёж.',
+              style: TextStyle(color: AppColor.text2, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SubscriptionIssueInlineError extends StatelessWidget {
+  const SubscriptionIssueInlineError({super.key, required this.error});
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('subscription-issue-error'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppColor.dangerSoft,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: AppColor.danger.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        error,
+        style: const TextStyle(color: AppColor.menuDanger, fontSize: 12),
+      ),
+    );
+  }
+}

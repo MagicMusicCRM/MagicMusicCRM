@@ -458,7 +458,9 @@ class _FakeApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     if (path == '/crm/lessons/constraints/preview') {
-      constraintPreviews.add(Map<String, dynamic>.from(data as Map));
+      final draft = Map<String, dynamic>.from(data as Map);
+      if (draft['includeSuggestions'] == false) return _freePreview() as T;
+      constraintPreviews.add(draft);
       if (previewError case final error?) throw error;
       return (preview ?? _freePreview()) as T;
     }
@@ -2222,10 +2224,8 @@ void main() {
         find.byKey(const ValueKey('lesson-room-field')),
       );
       expect(roomField.items.map((item) => item.label), ['Зал 1', 'Зал 2']);
-      expect(
-        find.byKey(const ValueKey('lesson-replacement-availability-hint')),
-        findsOneWidget,
-      );
+      expect(teacherField.enabled, isTrue);
+      expect(find.text('Проверяем доступность преподавателей…'), findsNothing);
 
       await _chooseSearchable(
         tester,

@@ -13,7 +13,7 @@ import 'live_audit_harness.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => initializeDateFormatting('ru'));
-  for (final role in ['admin', 'manager', 'director'])
+  for (final role in ['admin', 'manager', 'director']) {
     testWidgets('$role existing student link and delivered invitation', (
       tester,
     ) async {
@@ -198,4 +198,5 @@ void main() {
       h.facts.add({'leadId': lid, 'studentId': sid, 'email': email});
       await h.finish();
     });
+  }
 }

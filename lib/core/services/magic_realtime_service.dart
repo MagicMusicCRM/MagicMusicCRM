@@ -1,10 +1,44 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'package:web_socket/web_socket.dart' as ws;
+
+/// Socket.IO does not await WebSocket.close; a peer that closes first makes
+/// web_socket throw from that detached Future. Keep other close errors visible.
+class SafeCloseWebSocket implements ws.WebSocket {
+  SafeCloseWebSocket(this._delegate);
+
+  final ws.WebSocket _delegate;
+  bool _closing = false;
+
+  @override
+  Future<void> close([int? code, String? reason]) async {
+    if (_closing) return;
+    _closing = true;
+    try {
+      await _delegate.close(code, reason);
+    } on ws.WebSocketConnectionClosed {
+      // The peer already closed the connection.
+    }
+  }
+
+  @override
+  Stream<ws.WebSocketEvent> get events => _delegate.events;
+
+  @override
+  String get protocol => _delegate.protocol;
+
+  @override
+  void sendBytes(Uint8List bytes) => _delegate.sendBytes(bytes);
+
+  @override
+  void sendText(String text) => _delegate.sendText(text);
+}
 
 typedef MagicRealtimeHandler = void Function(Map<String, dynamic> payload);
 typedef MagicRealtimeTransportFactory =
@@ -112,6 +146,16 @@ class MagicRealtimeService {
         .setTransports(['websocket'])
         .setPath('/realtime')
         .setAuth({'token': accessToken})
+        .setWebSocketConnector((uri, {protocols, headers}) async {
+          if (headers != null && headers.isNotEmpty) {
+            throw UnsupportedError(
+              'Realtime WebSocket headers are not configured.',
+            );
+          }
+          return SafeCloseWebSocket(
+            await ws.WebSocket.connect(uri, protocols: protocols),
+          );
+        })
         .disableAutoConnect()
         .build();
     // Auth as a CALLBACK, not a baked-in map: socket_io_client invokes it on
@@ -196,7 +240,6 @@ class _SharedRealtimeSocket {
     for (final event in _magicRealtimeEvents) {
       transport.off(event);
     }
-    transport.disconnect();
     transport.dispose();
     onFullyReleased?.call(this);
   }

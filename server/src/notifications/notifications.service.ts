@@ -19,6 +19,7 @@ import { UpdateNotificationPreferenceDto } from './dto/update-notification-prefe
 import { NotificationChannel } from './notifications.types';
 import { RealtimeBus } from '../realtime/realtime-bus';
 import { audienceForLesson } from '../crm/audience';
+import { branchIdExpr, managerBranchScopeSql } from '../crm/branch-scope';
 
 interface NotificationRow {
   id: string;
@@ -407,8 +408,6 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     const roleChannels = await this.loadRoleChannels('new_lead');
     const roles = [...roleChannels.keys()];
     if (roles.length === 0) return;
-    const recipients = await this.loadInboundLeadRecipients(roles, roleChannels);
-    if (recipients.length === 0) return;
     const lead = await this.database.query<{
       id: string;
       name: string;
@@ -427,6 +426,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     );
     const row = lead.rows[0];
     if (!row) throw new NotFoundException('Входящая заявка не найдена.');
+    const recipients = await this.loadInboundLeadRecipients(row.id, roles, roleChannels);
+    if (recipients.length === 0) return;
     const title = 'Новая заявка';
     const body = `${row.name} — источник: ${row.source}`;
     const data = {
@@ -471,6 +472,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async loadInboundLeadRecipients(
+    leadId: string,
     roles: string[],
     roleChannels: Map<string, NotificationChannel[]>
   ): Promise<InboundLeadRecipient[]> {
@@ -480,13 +482,20 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       email: string;
     }>(
       `
-        select id, role::text as role, email
-        from app.users
-        where role::text = any($1::text[]) and deleted_at is null
-        order by created_at desc
+        select recipient.id, recipient.role::text as role, recipient.email
+        from app.users recipient
+        join app.leads lead on lead.id = $2::uuid and lead.deleted_at is null
+        where recipient.role::text = any($1::text[])
+          and recipient.deleted_at is null
+          and ${managerBranchScopeSql({
+            roleExpression: 'recipient.role',
+            userIdExpression: 'recipient.id',
+            branchExpression: branchIdExpr('lead')
+          })}
+        order by recipient.created_at desc
         limit 10000
       `,
-      [roles]
+      [roles, leadId]
     );
     return users.rows
       .map((user) => ({ ...user, channels: roleChannels.get(user.role) ?? [] }))

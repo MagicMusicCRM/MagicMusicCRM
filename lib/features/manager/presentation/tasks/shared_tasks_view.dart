@@ -228,10 +228,14 @@ class _SharedTasksViewState extends State<SharedTasksView> {
     } else if (state.items.isEmpty) {
       content = widget.compactEmpty
           ? const Center(child: Text('Нет задач по выбранному фильтру'))
-          : const MagicPageState(
+          : MagicPageState(
               kind: MagicPageStateKind.empty,
               title: 'Нет задач',
-              message: 'Создайте задачу, чтобы она появилась в этом списке.',
+              message: widget.canCreate
+                  ? 'Создайте задачу или измените фильтр.'
+                  : contentQuery.scope == 'mine'
+                  ? 'Назначенных вам задач по выбранному фильтру нет.'
+                  : 'Задач по выбранному фильтру нет.',
             );
     } else {
       content = RefreshIndicator(

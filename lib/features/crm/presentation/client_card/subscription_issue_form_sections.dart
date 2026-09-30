@@ -100,6 +100,7 @@ class SubscriptionIssueFormSections extends StatelessWidget {
           draft: draft,
           fieldsEnabled: fieldsEnabled,
           installments: controller.pricing.installments,
+          finalPriceMinor: controller.pricing.finalPriceMinor,
           setInstallmentCount: controller.setInstallmentCount,
           onChanged: onChanged,
         ),

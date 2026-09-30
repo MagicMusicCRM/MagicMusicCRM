@@ -88,7 +88,6 @@ class CreateLessonDialog extends ConsumerStatefulWidget
       focusDateTime: focusDateTime,
     ),
   );
-
   createState() => _LessonEditorDialogState();
 }
 
@@ -109,9 +108,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   Future<LessonEditorLoadPatch?>? _referenceLoad;
   LessonEditorValidation _valid = const LessonEditorValidation.valid();
   LessonScheduleAnalysis? _conflicts;
-  Timer? _scheduleCheckTimer;
   int _scheduleCheckVersion = 0;
-  bool get _canManageTeacherCompensation {
+  bool get _canEditTeacherPay {
     final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
     return snapshot != null && crmCanManageTeacherRates(snapshot);
   }
@@ -128,7 +126,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   void dispose() {
-    _scheduleCheckTimer?.cancel();
+    _schedule.dispose();
     _data.invalidateClientSelection();
     _scroll.dispose();
     super.dispose();
@@ -170,6 +168,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       if (loaded) _loadState = (false, _loadState.$2);
     });
     _queueScheduleCheck();
+    unawaited(_refreshTeacherOptions());
   }
 
   void _update(LessonEditorDraft value, {bool scheduleChanged = false}) {
@@ -181,22 +180,30 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       _conflicts = null;
       _scheduleState = (false, null);
     });
-    if (scheduleChanged) _queueScheduleCheck();
+    if (scheduleChanged) {
+      _queueScheduleCheck();
+      unawaited(_refreshTeacherOptions());
+    }
   }
 
   void _queueScheduleCheck() {
-    _scheduleCheckTimer?.cancel();
-    final version = ++_scheduleCheckVersion;
-    try {
-      _schedule.requestFor(session: _session, draft: _draft);
-    } on StateError {
-      return;
-    }
-    _scheduleCheckTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted && version == _scheduleCheckVersion) {
-        unawaited(analyzeSchedule());
-      }
+    ++_scheduleCheckVersion;
+    _schedule.queuePreview(_session, _draft, () {
+      if (mounted) unawaited(analyzeSchedule());
     });
+  }
+
+  Future<void> _refreshTeacherOptions({bool force = false}) async {
+    final updated = await _schedule.refreshTeacherOptions(
+      session: _session,
+      draft: _draft,
+      references: _refs,
+      force: force,
+      onChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
+    if (mounted && updated != null) _update(updated, scheduleChanged: true);
   }
 
   Widget build(BuildContext context) => LessonEditorDismissGuard(
@@ -208,7 +215,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       (_valid.message, _loadState.$2, _scheduleState.$2),
       actions: this,
       formKey: _formKey,
-      canManageTeacherCompensation: _canManageTeacherCompensation,
+      canManageTeacherCompensation: _canEditTeacherPay,
       canSelectTrialCompensation:
           ref.watch(capabilitySnapshotProvider).asData?.value.role == 'admin',
       pageMode: widget.pageMode,
@@ -219,21 +226,21 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       scrollController: _scroll,
       onRetry: _refreshReferences,
       canSave: _referenceLoad == null,
-      funding: _data.fundingFor(
-        _session,
-        _draft,
-        _canManageTeacherCompensation,
-      ),
+      availableTeacherIds: _schedule.availableTeacherIds,
+      teacherOptionsLoading: _schedule.teacherOptionsLoading,
+      teacherOptionsError: _schedule.teacherOptionsError,
+      onTeacherOptionsRetry: () =>
+          unawaited(_refreshTeacherOptions(force: true)),
+      funding: _data.fundingFor(_session, _draft, _canEditTeacherPay),
       knownPayers: _data.knownPayers,
       financialPreview: _flow.financialPreview,
     ),
   );
-
   bool get _showCompletedMoveWarning =>
       completedMoveWarning(_session, _draft, widget.focusDateTime, _policy);
-
   searchClients(String q) => _data.searchClients(q);
   void selectClient(LessonClientRef? value) {
+    _schedule.invalidateTeacherOptions();
     _update(
       _draft.copyWith(
         clientDecisions: [],
@@ -286,9 +293,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> _patch(Future<LessonEditorLoadPatch?> load, String text) async {
-    setState(() {
-      _referenceLoad = load;
-    });
+    _referenceLoad = load;
+    setState(() {});
     try {
       final patch = await load;
       if (mounted && patch != null) _acceptPatch(patch);
@@ -302,12 +308,9 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> analyzeSchedule() async {
-    _scheduleCheckTimer?.cancel();
     final version = ++_scheduleCheckVersion;
-    final session = _session;
-    final draft = _draft;
     setState(() => _scheduleState = (true, null));
-    final result = await _schedule.inspect(session, draft);
+    final result = await _schedule.inspect(_session, _draft);
     if (!mounted || version != _scheduleCheckVersion) return;
     setState(() {
       _conflicts = result.analysis;
@@ -328,7 +331,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
         _draft,
         _refs,
         () => _schedule.requestFor(session: _session, draft: _draft),
-        canManageTeacherCompensation: _canManageTeacherCompensation,
+        canManageTeacherCompensation: _canEditTeacherPay,
         reloadSession: (actionableLessonId) => _data.reloadAfterConflict(
           widget,
           _session,
@@ -342,7 +345,10 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
         outcome,
         onInvalid: (validation) => setState(() => _valid = validation),
         onViolations: (analysis) => setState(() => _conflicts = analysis),
-        onSessionReloaded: (session) => _session = session,
+        onSessionReloaded: (session) {
+          _draft = _data.rebase(_session, _draft, session);
+          _session = session;
+        },
         onOpenConstraint: _focusConstraint,
       );
     } finally {

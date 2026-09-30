@@ -162,10 +162,7 @@ class LessonFinancialSection extends StatelessWidget {
             minLines: 2,
             maxLines: 3,
             maxLength: 500,
-            decoration: const InputDecoration(
-              labelText: 'Причина изменения *',
-              helperText: 'Сохранится в истории занятия',
-            ),
+            decoration: const InputDecoration(labelText: 'Причина изменения *'),
             onChanged: (value) => actions.edit(
               LessonTextEdit(LessonTextTarget.settlementReason, value),
             ),
@@ -325,10 +322,7 @@ class _CompletionControl extends StatelessWidget {
         const SizedBox(height: 12),
         const InputDecorator(
           key: ValueKey('lesson-completion-type-field'),
-          decoration: InputDecoration(
-            labelText: 'Завершение',
-            helperText: 'Занятие завершается автоматически после окончания',
-          ),
+          decoration: InputDecoration(labelText: 'Завершение'),
           child: Text('Автозавершение'),
         ),
       ],
@@ -355,10 +349,7 @@ class _DecisionFields extends StatelessWidget {
       isExpanded: true,
       key: const ValueKey('lesson-settlement-type-field'),
       initialValue: draft.settlementTypeKey,
-      decoration: const InputDecoration(
-        labelText: 'Тип списания *',
-        helperText: 'Изменение сохраняется после проверки расчёта',
-      ),
+      decoration: const InputDecoration(labelText: 'Тип списания *'),
       items: [
         for (final item in catalog?.settlementTypes ?? const [])
           DropdownMenuItem(
@@ -380,9 +371,39 @@ class _DecisionFields extends StatelessWidget {
       return settlement;
     }
     final compensationEditing = draft.compensationTouched;
-    final compensation = Column(
+    final compensation = AppDropdownButtonFormField<String>(
+      menuMaxHeight: 256,
+      isExpanded: true,
+      key: const ValueKey('lesson-compensation-rule-field'),
+      initialValue: draft.compensationRuleKey,
+      decoration: const InputDecoration(
+        labelText: 'Правило оплаты преподавателю *',
+      ),
+      items: [
+        for (final item in catalog?.compensationRules ?? const [])
+          DropdownMenuItem(
+            value: item.key,
+            child: Text(
+              item.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: model.isSaving || !compensationEditing
+          ? null
+          : (value) => actions.edit(
+              LessonReferenceEdit(
+                LessonReferenceTarget.compensationRule,
+                value,
+              ),
+            ),
+    );
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _ResponsivePair(first: settlement, second: compensation),
+        const SizedBox(height: 8),
         CheckboxListTile(
           key: const ValueKey('lesson-compensation-edit-toggle'),
           contentPadding: EdgeInsets.zero,
@@ -399,49 +420,9 @@ class _DecisionFields extends StatelessWidget {
                       : const LessonRestoreRecommendationEdit(),
                 ),
           title: const Text('Изменить оплату преподавателю вручную'),
-          subtitle: Text(
-            compensationEditing
-                ? 'Ручное исключение будет сохранено в расчёте занятия.'
-                : 'Сейчас действует рекомендуемое правило; поле защищено от случайного изменения.',
-          ),
-        ),
-        AppDropdownButtonFormField<String>(
-          menuMaxHeight: 256,
-          isExpanded: true,
-          key: const ValueKey('lesson-compensation-rule-field'),
-          initialValue: draft.compensationRuleKey,
-          decoration: InputDecoration(
-            labelText: 'Правило оплаты преподавателю *',
-            helperText:
-                canSelectTrialRule && !model.canManageTeacherCompensation
-                ? 'Ручной выбор сохранится для этого занятия'
-                : compensationEditing
-                ? 'Задано вручную для этого занятия'
-                : 'Включите чекбокс выше, чтобы изменить правило',
-          ),
-          items: [
-            for (final item in catalog?.compensationRules ?? const [])
-              DropdownMenuItem(
-                value: item.key,
-                child: Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: model.isSaving || !compensationEditing
-              ? null
-              : (value) => actions.edit(
-                  LessonReferenceEdit(
-                    LessonReferenceTarget.compensationRule,
-                    value,
-                  ),
-                ),
         ),
       ],
     );
-    return _ResponsivePair(first: settlement, second: compensation);
   }
 }
 
@@ -481,7 +462,6 @@ class _CompensationOverride extends StatelessWidget {
             ],
             decoration: InputDecoration(
               labelText: _compensationInputLabel(selectedRule?.mode),
-              helperText: 'Действует только для этого занятия',
             ),
             onChanged: (value) => actions.edit(
               LessonTextEdit(LessonTextTarget.compensationValue, value),
@@ -506,7 +486,6 @@ class _CompensationOverride extends StatelessWidget {
               maxLength: 500,
               decoration: const InputDecoration(
                 labelText: 'Причина индивидуального значения *',
-                helperText: 'Причина сохранится в истории расчёта',
               ),
               onChanged: (value) => actions.edit(
                 LessonTextEdit(LessonTextTarget.settlementReason, value),

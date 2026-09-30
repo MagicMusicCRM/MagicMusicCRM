@@ -93,6 +93,8 @@ class SchedulePlanMutationFlow {
         canManageTeacherCompensation: canManageTeacherCompensation,
         initialClientDecisions: _initialClientDecisions(participantDraft),
         participantLabels: _decisionParticipantLabels,
+        teacherAvailable: (candidate) =>
+            _checkCreateTeacher(candidate, participantDraft),
       ),
     );
     if (draft == null || !context.mounted) {
@@ -112,6 +114,10 @@ class SchedulePlanMutationFlow {
           seed,
           adding: adding,
           references: references,
+          teacherAvailable: (candidate) => _checkCreateTeacher(
+            candidate.copyWith(subscriptionId: draft.subscriptionId),
+            participantDraft,
+          ),
         ),
         participantLabels: _participantLabels,
         onValidate: (rows) => service.previewSchedulePlanConstraints(
@@ -191,6 +197,7 @@ class SchedulePlanMutationFlow {
             ? initialClientDecisionsForPlan(plan)
             : const [],
         participantLabels: _decisionParticipantLabels,
+        teacherAvailable: (candidate) => _checkUpdatedTeacher(plan, candidate),
       ),
     );
     if (draft == null || !context.mounted) {
@@ -227,6 +234,8 @@ class SchedulePlanMutationFlow {
           seed,
           adding: adding,
           references: references,
+          teacherAvailable: (candidate) =>
+              _checkUpdatedTeacher(plan, candidate),
         ),
         participantLabels: _participantLabels,
         submitLabel: 'Проверить и сохранить',
@@ -321,6 +330,11 @@ class SchedulePlanMutationFlow {
           seed,
           adding: adding,
           references: references,
+          teacherAvailable: (candidate) => _checkUpdatedTeacher(
+            plan,
+            candidate,
+            participants: draft.participants,
+          ),
         ),
         participantLabels: _participantLabels,
         submitLabel: 'Проверить и сохранить',
@@ -378,6 +392,7 @@ class SchedulePlanMutationFlow {
     PreferredScheduleDraft seed, {
     required bool adding,
     required _SchedulePlanReferences references,
+    required Future<bool> Function(PreferredScheduleDraft) teacherAvailable,
   }) => showMagicSheet<PreferredScheduleDraft>(
     context,
     title: adding ? 'Добавить набор дней' : 'Изменить набор дней',
@@ -394,8 +409,91 @@ class SchedulePlanMutationFlow {
       decisionCatalogs: references.decisionCatalogs,
       canManageTeacherCompensation: canManageTeacherCompensation,
       participantLabels: _decisionParticipantLabels,
+      teacherAvailable: teacherAvailable,
     ),
   );
+
+  Future<bool> _checkCreateTeacher(
+    PreferredScheduleDraft draft,
+    GroupScheduleParticipantsDraft? participants,
+  ) async {
+    final preview = await service.previewSchedulePlanConstraints(
+      title: draft.title?.isNotEmpty == true
+          ? draft.title!
+          : 'Проверка графика',
+      kind: _groupMode ? 'group' : 'individual',
+      studentId: studentId,
+      groupId: groupId,
+      subscriptionId: draft.subscriptionId,
+      participants: participants?.participants ?? const [],
+      activeFrom: _apiDate(draft.validFrom),
+      activeUntil: draft.openEnded ? null : _apiDate(draft.validUntil),
+      rows: _draftRows(draft),
+    );
+    return _teacherFitsPreview(preview);
+  }
+
+  Future<bool> _checkUpdatedTeacher(
+    SchedulePlan plan,
+    PreferredScheduleDraft draft, {
+    List<Map<String, dynamic>>? participants,
+  }) async {
+    final rows = plan.currentRows
+        .where((row) => row.id != draft.seriesId)
+        .map(
+          (row) => _draftFromPlanRow(
+            row,
+            validFrom: draft.validFrom,
+            validUntil: draft.validUntil,
+            title: plan.title,
+            subscriptionId: plan.subscriptionId,
+            openEnded: draft.openEnded,
+          ),
+        )
+        .toList();
+    final candidateStart = rows.expand(_draftRows).length;
+    rows.add(draft);
+    final preview = await service.previewSchedulePlanUpdateConstraints(
+      plan.id,
+      expectedVersion: plan.version,
+      effectiveFrom: _apiDate(draft.validFrom),
+      title: plan.title,
+      subscriptionId: plan.isGroup ? null : plan.subscriptionId,
+      participants: participants,
+      activeUntil: draft.openEnded ? null : _apiDate(draft.validUntil),
+      rows: [for (final row in rows) ..._draftRows(row)],
+    );
+    return _teacherFitsPreview(preview, candidateStart: candidateStart);
+  }
+
+  bool _teacherFitsPreview(
+    Map<String, dynamic> preview, {
+    int candidateStart = 0,
+  }) {
+    const blocked = {
+      'INVALID_INTERVAL',
+      'OUTSIDE_BRANCH_HOURS',
+      'TEACHER_UNAVAILABLE',
+      'TEACHER_BRANCH_MISMATCH',
+      'TEACHER_OVERLAP',
+    };
+    for (final row in preview['rows'] as List? ?? const []) {
+      if (row is! Map) continue;
+      if ((row['index'] as num?)?.toInt() case final index?
+          when index < candidateStart) {
+        continue;
+      }
+      for (final failure in row['failures'] as List? ?? const []) {
+        if (failure is! Map) continue;
+        for (final violation in failure['violations'] as List? ?? const []) {
+          if (violation is Map && blocked.contains(violation['code'])) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
 
   String _draftSummary(
     PreferredScheduleDraft row,
@@ -517,6 +615,9 @@ class SchedulePlanMutationFlow {
           ),
           'durationMinutes': draft.durationMinutes,
           if (draft.notes.isNotEmpty) 'notes': draft.notes,
+          if (draft.teacherCompensationSource == 'manual' &&
+              draft.plannedSettlementReason.isNotEmpty)
+            'plannedSettlementReason': draft.plannedSettlementReason,
           'financialDecision': {
             'settlementTypeKey': draft.settlementTypeKey,
             if (canManageTeacherCompensation)

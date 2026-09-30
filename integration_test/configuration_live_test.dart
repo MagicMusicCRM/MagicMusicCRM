@@ -35,14 +35,11 @@ void main() {
 
       Future<void> revealField(String label) async {
         final target = find.text(label);
-        if (target.evaluate().isEmpty) {
-          await tester.scrollUntilVisible(
-            target,
-            300,
-            scrollable: find.byType(Scrollable).at(1),
-          );
-          await tester.pump();
+        for (var attempt = 0; target.evaluate().isEmpty && attempt < 20; attempt++) {
+          await tester.dragFrom(const Offset(420, 1000), const Offset(0, -500));
+          await tester.pump(const Duration(milliseconds: 200));
         }
+        expect(target, findsWidgets);
       }
 
       Future<void> fill(String label, String value) async {

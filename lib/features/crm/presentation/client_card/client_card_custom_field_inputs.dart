@@ -22,7 +22,7 @@ extension _ClientCardCustomFieldInputs on _ClientCardState {
           selectedId: selectedId,
           placeholder: 'Выберите значение',
           hintText: field.hint ?? 'Введите значение для поиска',
-          showSearchHint: !compact || field.hint != null,
+          showSearchHint: field.hint != null,
           items: [
             for (final option in field.options)
               SearchableSelectItem(id: option, label: option),

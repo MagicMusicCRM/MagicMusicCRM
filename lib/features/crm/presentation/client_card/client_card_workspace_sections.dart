@@ -61,6 +61,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
             key: const Key('client-desktop-contact-sidebar'),
             child: _buildDesktopIdentitySidebar(
               cs,
+              canReadClientFinance: canReadClientFinance,
               canReadSchedule: canReadSchedule,
               canWriteSchedule: canWriteSchedule,
             ),
@@ -671,7 +672,9 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
                   hintColor:
                       _subscriptionOverpayment(subscription)?.isDebt == true
                       ? AppTheme.danger
-                      : AppTheme.success,
+                      : _subscriptionOverpayment(subscription)?.isDebt == false
+                      ? AppTheme.success
+                      : AppColor.text2,
                   highlighted:
                       subscription.id ==
                       widget.initialViewState?.filters['subscriptionId']

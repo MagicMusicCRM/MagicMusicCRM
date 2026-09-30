@@ -16,7 +16,12 @@ class ClientCardStudentSnapshot {
     required this.funnel,
     required this.funnelError,
     required Map<String, dynamic> card,
-  }) : lessons = List.unmodifiable(_rows(card['lessons']).map(Lesson.fromMap)),
+  }) : nextLesson = card['next_lesson'] is Map
+           ? Lesson.fromMap(
+               Map<String, dynamic>.from(card['next_lesson'] as Map),
+             )
+           : null,
+       lessons = List.unmodifiable(_rows(card['lessons']).map(Lesson.fromMap)),
        groups = List.unmodifiable(_rows(card['groups'])),
        indicators = Map.unmodifiable({
          for (final key in const [
@@ -32,6 +37,7 @@ class ClientCardStudentSnapshot {
   final StudentFunnelConfiguration? funnel;
   final String? funnelError;
   final List<Lesson> lessons;
+  final Lesson? nextLesson;
   final List<Map<String, dynamic>> groups;
   final Map<String, int> indicators;
 
@@ -43,6 +49,7 @@ class ClientCardStudentSnapshot {
       funnel = source.funnel,
       funnelError = source.funnelError,
       lessons = source.lessons,
+      nextLesson = source.nextLesson,
       groups = source.groups,
       indicators = source.indicators;
 }
@@ -141,12 +148,10 @@ class ClientCardDataController extends ChangeNotifier {
       return _student;
     } catch (error) {
       if (_disposed || generation != _studentGeneration) return null;
-      if (!preserveContent || _student == null) {
-        studentError = userErrorMessage(
-          error,
-          fallback: 'Не удалось загрузить карточку ученика.',
-        );
-      }
+      studentError = userErrorMessage(
+        error,
+        fallback: 'Не удалось загрузить карточку ученика.',
+      );
       studentLoading = false;
       _notify();
       return null;

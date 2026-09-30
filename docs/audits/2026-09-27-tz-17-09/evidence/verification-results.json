@@ -1,0 +1,1078 @@
+[
+  {
+    "id": "V-01",
+    "runId": "c321b83bca5c4b96b73aa481972d598a",
+    "command": "node scripts/http-journey-check.cjs --audit-customer-revisions",
+    "finishedAt": "2026-09-27T18:57:54.602Z",
+    "revision": "69b4c14d65788703fef2bde3e44ee2c1e0f086df",
+    "sourceSha256": "7d2f6811f7885a1f4f113376905860fb6dd15391910619608fac577c1011c652",
+    "passed": 0,
+    "failed": 1,
+    "requestCount": 0,
+    "serverErrorCount": 0,
+    "requestCountersScope": "Built-in HTTP journeys only; native Flutter and client audit helper requests are additional.",
+    "scope": "Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.",
+    "checks": [
+      {
+        "name": "Journey setup or execution",
+        "status": "FAIL"
+      }
+    ],
+    "native": []
+  },
+  {
+    "id": "V-02",
+    "runId": "fc80eaec034f4169a7a24a6e43283fa3",
+    "command": "node scripts/http-journey-check.cjs --audit-customer-revisions",
+    "finishedAt": "2026-09-27T19:00:11.399Z",
+    "revision": "69b4c14d65788703fef2bde3e44ee2c1e0f086df",
+    "sourceSha256": "7d2f6811f7885a1f4f113376905860fb6dd15391910619608fac577c1011c652",
+    "passed": 22,
+    "failed": 1,
+    "requestCount": 44,
+    "serverErrorCount": 0,
+    "requestCountersScope": "Built-in HTTP journeys only; native Flutter and client audit helper requests are additional.",
+    "scope": "Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.",
+    "checks": [
+      {
+        "name": "HTTP authentication and current capabilities",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null displayName without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject blank displayName without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null label without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject blank label without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null names on a system source without changing it",
+        "status": "PASS"
+      },
+      {
+        "name": "Malformed IDs return HTTP 400",
+        "status": "PASS"
+      },
+      {
+        "name": "Create individual lesson and safely replay creation",
+        "status": "PASS"
+      },
+      {
+        "name": "Update and clear lesson notes with safe replay and unchanged financial data",
+        "status": "PASS"
+      },
+      {
+        "name": "Concurrent saves reject the stale version without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Null completion type returns validation error instead of 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Conflicting individual lesson is rejected without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Create full September–December schedule and replay",
+        "status": "PASS"
+      },
+      {
+        "name": "12 reservations and standard teacher pay on every created lesson",
+        "status": "PASS"
+      },
+      {
+        "name": "Lesson tray shows the whole explicit range",
+        "status": "PASS"
+      },
+      {
+        "name": "Change teacher and room with pure preview and idempotent save",
+        "status": "PASS"
+      },
+      {
+        "name": "Edit an uncovered lesson without consuming a subscription unit",
+        "status": "PASS"
+      },
+      {
+        "name": "Change payer to personal account with discount and surcharge",
+        "status": "PASS"
+      },
+      {
+        "name": "Switch to another payer subscription and return to original reservation",
+        "status": "PASS"
+      },
+      {
+        "name": "Stale lesson version returns HTTP 409",
+        "status": "PASS"
+      },
+      {
+        "name": "Missing financial decision returns validation error instead of 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Planned edits never create actual client charges or teacher accruals",
+        "status": "PASS"
+      },
+      {
+        "name": "Trial defaults, administrator pay override, six-room day move and filters",
+        "status": "FAIL"
+      }
+    ],
+    "native": [
+      {
+        "artifact": "customer-revisions-admin.json",
+        "role": "admin",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "DEFAULT",
+            "description": "Пробный: клиент бесплатно, преподавателю ноль",
+            "status": "PASS",
+            "screenshot": "customer-revisions-admin-DEFAULT.png",
+            "requestStart": 2,
+            "requestEnd": 10
+          },
+          {
+            "id": "MANUAL",
+            "description": "Администратор выбирает обычную оплату преподавателю",
+            "status": "PASS",
+            "screenshot": "customer-revisions-admin-MANUAL.png",
+            "requestStart": 10,
+            "requestEnd": 20
+          },
+          {
+            "id": "DRAG",
+            "description": "Перенос на другую аудиторию и час через реальную сетку",
+            "status": "PASS",
+            "screenshot": "customer-revisions-admin-DRAG.png",
+            "requestStart": 20,
+            "requestEnd": 57
+          },
+          {
+            "id": "FILTER",
+            "description": "Отдельное окно отбирает пробные занятия",
+            "status": "PASS",
+            "screenshot": "customer-revisions-admin-FILTER.png",
+            "requestStart": 57,
+            "requestEnd": 59
+          },
+          {
+            "id": "SEARCH-Teacher0",
+            "description": "Поиск и открытие действующей карточки Teacher0",
+            "status": "PASS",
+            "screenshot": "customer-revisions-admin-SEARCH-Teacher0.png",
+            "requestStart": 59,
+            "requestEnd": 67
+          },
+          {
+            "id": "SEARCH-Audit-admin",
+            "description": "Поиск и открытие действующей карточки Audit-admin",
+            "status": "PASS",
+            "screenshot": "customer-revisions-admin-SEARCH-Audit-admin.png",
+            "requestStart": 67,
+            "requestEnd": 71
+          }
+        ]
+      },
+      {
+        "artifact": "lead-trial-admin.json",
+        "role": "admin",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "OPEN",
+            "description": "Открыть запись на пробное из карточки лида",
+            "status": "PASS",
+            "screenshot": "lead-trial-admin-OPEN.png",
+            "requestStart": 5,
+            "requestEnd": 30
+          },
+          {
+            "id": "CREATE",
+            "description": "Сохранить пробное и перечитать в карточке и календаре",
+            "status": "FAIL",
+            "screenshot": "lead-trial-admin-CREATE.png",
+            "requestStart": 30,
+            "requestEnd": 32
+          },
+          {
+            "id": "EDIT",
+            "description": "Перенести пробное из строки карточки",
+            "status": "BLOCKED"
+          },
+          {
+            "id": "CANCEL",
+            "description": "Отменить пробное из строки карточки",
+            "status": "BLOCKED"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "V-04",
+    "runId": "d2ae1efef907428c8a3268c90048e5b7",
+    "command": "node scripts/http-journey-check.cjs --audit-partial-purchase",
+    "finishedAt": "2026-09-27T19:03:51.463Z",
+    "revision": "69b4c14d65788703fef2bde3e44ee2c1e0f086df",
+    "sourceSha256": "7d2f6811f7885a1f4f113376905860fb6dd15391910619608fac577c1011c652",
+    "passed": 23,
+    "failed": 0,
+    "requestCount": 44,
+    "serverErrorCount": 0,
+    "requestCountersScope": "Built-in HTTP journeys only; native Flutter and client audit helper requests are additional.",
+    "scope": "Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.",
+    "checks": [
+      {
+        "name": "HTTP authentication and current capabilities",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null displayName without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject blank displayName without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null label without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject blank label without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null names on a system source without changing it",
+        "status": "PASS"
+      },
+      {
+        "name": "Malformed IDs return HTTP 400",
+        "status": "PASS"
+      },
+      {
+        "name": "Create individual lesson and safely replay creation",
+        "status": "PASS"
+      },
+      {
+        "name": "Update and clear lesson notes with safe replay and unchanged financial data",
+        "status": "PASS"
+      },
+      {
+        "name": "Concurrent saves reject the stale version without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Null completion type returns validation error instead of 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Conflicting individual lesson is rejected without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Create full September–December schedule and replay",
+        "status": "PASS"
+      },
+      {
+        "name": "12 reservations and standard teacher pay on every created lesson",
+        "status": "PASS"
+      },
+      {
+        "name": "Lesson tray shows the whole explicit range",
+        "status": "PASS"
+      },
+      {
+        "name": "Change teacher and room with pure preview and idempotent save",
+        "status": "PASS"
+      },
+      {
+        "name": "Edit an uncovered lesson without consuming a subscription unit",
+        "status": "PASS"
+      },
+      {
+        "name": "Change payer to personal account with discount and surcharge",
+        "status": "PASS"
+      },
+      {
+        "name": "Switch to another payer subscription and return to original reservation",
+        "status": "PASS"
+      },
+      {
+        "name": "Stale lesson version returns HTTP 409",
+        "status": "PASS"
+      },
+      {
+        "name": "Missing financial decision returns validation error instead of 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Planned edits never create actual client charges or teacher accruals",
+        "status": "PASS"
+      },
+      {
+        "name": "Subscription sale, cancellation, payment and lead conversion through actual form",
+        "status": "PASS"
+      }
+    ],
+    "native": [
+      {
+        "artifact": "partial-purchase-admin.json",
+        "role": "admin",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "lead-OPEN",
+            "description": "Карточка → Абонементы → форма продажи",
+            "status": "PASS",
+            "screenshot": "partial-purchase-admin-lead-OPEN.png",
+            "requestStart": 5,
+            "requestEnd": 27
+          },
+          {
+            "id": "lead-CANCEL",
+            "description": "Отмена продажи сохраняет отсутствие абонемента и не конвертирует лида",
+            "status": "PASS",
+            "screenshot": "partial-purchase-admin-lead-CANCEL.png",
+            "requestStart": 27,
+            "requestEnd": 28
+          },
+          {
+            "id": "lead-PURCHASE",
+            "description": "Частичная оплата 2000 ₽, скидка 10%, доплата 500 ₽, срок и рассрочка сохраняются",
+            "status": "PASS",
+            "screenshot": "partial-purchase-admin-lead-PURCHASE.png",
+            "requestStart": 28,
+            "requestEnd": 66
+          },
+          {
+            "id": "lead-REOPEN",
+            "description": "Повторно открыть карточку: абонемент и оплата сохранены",
+            "status": "PASS",
+            "screenshot": "partial-purchase-admin-lead-REOPEN.png",
+            "requestStart": 66,
+            "requestEnd": 93
+          },
+          {
+            "id": "student-OPEN",
+            "description": "Карточка → Абонементы → форма продажи",
+            "status": "PASS",
+            "screenshot": "partial-purchase-admin-student-OPEN.png",
+            "requestStart": 95,
+            "requestEnd": 118
+          },
+          {
+            "id": "student-CANCEL",
+            "description": "Отмена продажи сохраняет отсутствие абонемента и не конвертирует лида",
+            "status": "PASS",
+            "screenshot": "partial-purchase-admin-student-CANCEL.png",
+            "requestStart": 118,
+            "requestEnd": 119
+          },
+          {
+            "id": "student-PURCHASE",
+            "description": "Частичная оплата 2000 ₽, скидка 10%, доплата 500 ₽, срок и рассрочка сохраняются",
+            "status": "PASS",
+            "screenshot": "partial-purchase-admin-student-PURCHASE.png",
+            "requestStart": 119,
+            "requestEnd": 147
+          },
+          {
+            "id": "student-REOPEN",
+            "description": "Повторно открыть карточку: абонемент и оплата сохранены",
+            "status": "PASS",
+            "screenshot": "partial-purchase-admin-student-REOPEN.png",
+            "requestStart": 147,
+            "requestEnd": 168
+          }
+        ]
+      },
+      {
+        "artifact": "partial-purchase-director.json",
+        "role": "director",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "lead-OPEN",
+            "description": "Карточка → Абонементы → форма продажи",
+            "status": "PASS",
+            "screenshot": "partial-purchase-director-lead-OPEN.png",
+            "requestStart": 5,
+            "requestEnd": 27
+          },
+          {
+            "id": "lead-CANCEL",
+            "description": "Отмена продажи сохраняет отсутствие абонемента и не конвертирует лида",
+            "status": "PASS",
+            "screenshot": "partial-purchase-director-lead-CANCEL.png",
+            "requestStart": 27,
+            "requestEnd": 28
+          },
+          {
+            "id": "lead-PURCHASE",
+            "description": "Частичная оплата 2000 ₽, скидка 10%, доплата 500 ₽, срок и рассрочка сохраняются",
+            "status": "PASS",
+            "screenshot": "partial-purchase-director-lead-PURCHASE.png",
+            "requestStart": 28,
+            "requestEnd": 66
+          },
+          {
+            "id": "lead-REOPEN",
+            "description": "Повторно открыть карточку: абонемент и оплата сохранены",
+            "status": "PASS",
+            "screenshot": "partial-purchase-director-lead-REOPEN.png",
+            "requestStart": 66,
+            "requestEnd": 93
+          },
+          {
+            "id": "student-OPEN",
+            "description": "Карточка → Абонементы → форма продажи",
+            "status": "PASS",
+            "screenshot": "partial-purchase-director-student-OPEN.png",
+            "requestStart": 95,
+            "requestEnd": 118
+          },
+          {
+            "id": "student-CANCEL",
+            "description": "Отмена продажи сохраняет отсутствие абонемента и не конвертирует лида",
+            "status": "PASS",
+            "screenshot": "partial-purchase-director-student-CANCEL.png",
+            "requestStart": 118,
+            "requestEnd": 119
+          },
+          {
+            "id": "student-PURCHASE",
+            "description": "Частичная оплата 2000 ₽, скидка 10%, доплата 500 ₽, срок и рассрочка сохраняются",
+            "status": "PASS",
+            "screenshot": "partial-purchase-director-student-PURCHASE.png",
+            "requestStart": 119,
+            "requestEnd": 147
+          },
+          {
+            "id": "student-REOPEN",
+            "description": "Повторно открыть карточку: абонемент и оплата сохранены",
+            "status": "PASS",
+            "screenshot": "partial-purchase-director-student-REOPEN.png",
+            "requestStart": 147,
+            "requestEnd": 168
+          }
+        ]
+      },
+      {
+        "artifact": "partial-purchase-manager.json",
+        "role": "manager",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "lead-OPEN",
+            "description": "Карточка → Абонементы → форма продажи",
+            "status": "PASS",
+            "screenshot": "partial-purchase-manager-lead-OPEN.png",
+            "requestStart": 5,
+            "requestEnd": 27
+          },
+          {
+            "id": "lead-CANCEL",
+            "description": "Отмена продажи сохраняет отсутствие абонемента и не конвертирует лида",
+            "status": "PASS",
+            "screenshot": "partial-purchase-manager-lead-CANCEL.png",
+            "requestStart": 27,
+            "requestEnd": 28
+          },
+          {
+            "id": "lead-PURCHASE",
+            "description": "Частичная оплата 2000 ₽, скидка 10%, доплата 500 ₽, срок и рассрочка сохраняются",
+            "status": "PASS",
+            "screenshot": "partial-purchase-manager-lead-PURCHASE.png",
+            "requestStart": 28,
+            "requestEnd": 66
+          },
+          {
+            "id": "lead-REOPEN",
+            "description": "Повторно открыть карточку: абонемент и оплата сохранены",
+            "status": "PASS",
+            "screenshot": "partial-purchase-manager-lead-REOPEN.png",
+            "requestStart": 66,
+            "requestEnd": 93
+          },
+          {
+            "id": "student-OPEN",
+            "description": "Карточка → Абонементы → форма продажи",
+            "status": "PASS",
+            "screenshot": "partial-purchase-manager-student-OPEN.png",
+            "requestStart": 95,
+            "requestEnd": 118
+          },
+          {
+            "id": "student-CANCEL",
+            "description": "Отмена продажи сохраняет отсутствие абонемента и не конвертирует лида",
+            "status": "PASS",
+            "screenshot": "partial-purchase-manager-student-CANCEL.png",
+            "requestStart": 118,
+            "requestEnd": 119
+          },
+          {
+            "id": "student-PURCHASE",
+            "description": "Частичная оплата 2000 ₽, скидка 10%, доплата 500 ₽, срок и рассрочка сохраняются",
+            "status": "PASS",
+            "screenshot": "partial-purchase-manager-student-PURCHASE.png",
+            "requestStart": 119,
+            "requestEnd": 147
+          },
+          {
+            "id": "student-REOPEN",
+            "description": "Повторно открыть карточку: абонемент и оплата сохранены",
+            "status": "PASS",
+            "screenshot": "partial-purchase-manager-student-REOPEN.png",
+            "requestStart": 147,
+            "requestEnd": 168
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "V-05",
+    "runId": "a6d343c3e9784603be55e45b69a3fc89",
+    "command": "node scripts/http-journey-check.cjs --audit-teacher-availability",
+    "finishedAt": "2026-09-27T19:06:02.324Z",
+    "revision": "69b4c14d65788703fef2bde3e44ee2c1e0f086df",
+    "sourceSha256": "7d2f6811f7885a1f4f113376905860fb6dd15391910619608fac577c1011c652",
+    "passed": 23,
+    "failed": 0,
+    "requestCount": 44,
+    "serverErrorCount": 0,
+    "requestCountersScope": "Built-in HTTP journeys only; native Flutter and client audit helper requests are additional.",
+    "scope": "Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.",
+    "checks": [
+      {
+        "name": "HTTP authentication and current capabilities",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null displayName without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject blank displayName without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null label without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject blank label without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null names on a system source without changing it",
+        "status": "PASS"
+      },
+      {
+        "name": "Malformed IDs return HTTP 400",
+        "status": "PASS"
+      },
+      {
+        "name": "Create individual lesson and safely replay creation",
+        "status": "PASS"
+      },
+      {
+        "name": "Update and clear lesson notes with safe replay and unchanged financial data",
+        "status": "PASS"
+      },
+      {
+        "name": "Concurrent saves reject the stale version without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Null completion type returns validation error instead of 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Conflicting individual lesson is rejected without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Create full September–December schedule and replay",
+        "status": "PASS"
+      },
+      {
+        "name": "12 reservations and standard teacher pay on every created lesson",
+        "status": "PASS"
+      },
+      {
+        "name": "Lesson tray shows the whole explicit range",
+        "status": "PASS"
+      },
+      {
+        "name": "Change teacher and room with pure preview and idempotent save",
+        "status": "PASS"
+      },
+      {
+        "name": "Edit an uncovered lesson without consuming a subscription unit",
+        "status": "PASS"
+      },
+      {
+        "name": "Change payer to personal account with discount and surcharge",
+        "status": "PASS"
+      },
+      {
+        "name": "Switch to another payer subscription and return to original reservation",
+        "status": "PASS"
+      },
+      {
+        "name": "Stale lesson version returns HTTP 409",
+        "status": "PASS"
+      },
+      {
+        "name": "Missing financial decision returns validation error instead of 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Planned edits never create actual client charges or teacher accruals",
+        "status": "PASS"
+      },
+      {
+        "name": "Teacher branch assignments and availability save independently with version protection",
+        "status": "PASS"
+      }
+    ],
+    "native": [
+      {
+        "artifact": "teacher-availability-director.json",
+        "role": "director",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "OPEN",
+            "description": "График выбранного преподавателя загружен с назначением и семью днями",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-OPEN.png",
+            "requestStart": 2,
+            "requestEnd": 8
+          },
+          {
+            "id": "ASSIGN-EMPTY",
+            "description": "Редактор не отправляет пустой список назначений",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-ASSIGN-EMPTY.png",
+            "requestStart": 8,
+            "requestEnd": 14
+          },
+          {
+            "id": "ASSIGN-ADD",
+            "description": "Добавить второй филиал и проверить после повторного открытия",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-ASSIGN-ADD.png",
+            "requestStart": 14,
+            "requestEnd": 21
+          },
+          {
+            "id": "ASSIGN-REMOVE",
+            "description": "Убрать второе назначение, сохранив исходный филиал",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-ASSIGN-REMOVE.png",
+            "requestStart": 21,
+            "requestEnd": 23
+          },
+          {
+            "id": "AVAILABILITY-SAVE",
+            "description": "Изменить рабочий день после сохранения назначений без конфликта собственной версии",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-AVAILABILITY-SAVE.png",
+            "requestStart": 23,
+            "requestEnd": 30
+          },
+          {
+            "id": "INTERVAL-CANCEL",
+            "description": "Отмена выбора даты не создаёт период недоступности",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-INTERVAL-CANCEL.png",
+            "requestStart": 30,
+            "requestEnd": 31
+          },
+          {
+            "id": "INTERVAL-SAVE",
+            "description": "Добавить период недоступности 09–18 с обязательной причиной и сохранить",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-INTERVAL-SAVE.png",
+            "requestStart": 31,
+            "requestEnd": 38
+          },
+          {
+            "id": "INTERVAL-REMOVE",
+            "description": "Удалить период недоступности и перечитать",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-INTERVAL-REMOVE.png",
+            "requestStart": 38,
+            "requestEnd": 40
+          },
+          {
+            "id": "OTHER-TEACHER",
+            "description": "Смена преподавателя не переносит изменения в чужой график",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-OTHER-TEACHER.png",
+            "requestStart": 40,
+            "requestEnd": 43
+          },
+          {
+            "id": "STALE",
+            "description": "Старая версия доступности не перезаписывает конкурентное сохранение",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-STALE.png",
+            "requestStart": 43,
+            "requestEnd": 47
+          },
+          {
+            "id": "REOPEN-SERVER",
+            "description": "Повторное открытие показывает серверные дни и время",
+            "status": "PASS",
+            "screenshot": "teacher-availability-director-REOPEN-SERVER.png",
+            "requestStart": 47,
+            "requestEnd": 52
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "V-06",
+    "runId": "28ca3ff0c6f04c2e93c18eccf0a9ae8b",
+    "command": "node scripts/http-journey-check.cjs --audit-tasks",
+    "finishedAt": "2026-09-27T19:08:25.956Z",
+    "revision": "69b4c14d65788703fef2bde3e44ee2c1e0f086df",
+    "sourceSha256": "7d2f6811f7885a1f4f113376905860fb6dd15391910619608fac577c1011c652",
+    "passed": 23,
+    "failed": 0,
+    "requestCount": 43,
+    "serverErrorCount": 0,
+    "requestCountersScope": "Built-in HTTP journeys only; native Flutter and client audit helper requests are additional.",
+    "scope": "Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.",
+    "checks": [
+      {
+        "name": "HTTP authentication and current capabilities",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null displayName without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject blank displayName without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null label without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject blank label without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Reject null names on a system source without changing it",
+        "status": "PASS"
+      },
+      {
+        "name": "Malformed IDs return HTTP 400",
+        "status": "PASS"
+      },
+      {
+        "name": "Create individual lesson and safely replay creation",
+        "status": "PASS"
+      },
+      {
+        "name": "Update and clear lesson notes with safe replay and unchanged financial data",
+        "status": "PASS"
+      },
+      {
+        "name": "Concurrent saves reject the stale version without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Null completion type returns validation error instead of 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Conflicting individual lesson is rejected without HTTP 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Create full September–December schedule and replay",
+        "status": "PASS"
+      },
+      {
+        "name": "12 reservations and standard teacher pay on every created lesson",
+        "status": "PASS"
+      },
+      {
+        "name": "Lesson tray shows the whole explicit range",
+        "status": "PASS"
+      },
+      {
+        "name": "Change teacher and room with pure preview and idempotent save",
+        "status": "PASS"
+      },
+      {
+        "name": "Edit an uncovered lesson without consuming a subscription unit",
+        "status": "PASS"
+      },
+      {
+        "name": "Change payer to personal account with discount and surcharge",
+        "status": "PASS"
+      },
+      {
+        "name": "Switch to another payer subscription and return to original reservation",
+        "status": "PASS"
+      },
+      {
+        "name": "Stale lesson version returns HTTP 409",
+        "status": "PASS"
+      },
+      {
+        "name": "Missing financial decision returns validation error instead of 500",
+        "status": "PASS"
+      },
+      {
+        "name": "Planned edits never create actual client charges or teacher accruals",
+        "status": "PASS"
+      },
+      {
+        "name": "Task UI: creation, edit, cancellation, close and staff access",
+        "status": "PASS"
+      }
+    ],
+    "native": [
+      {
+        "artifact": "tasks-admin.json",
+        "role": "admin",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "TASKS-MENU",
+            "description": "Меню → Задачи с настоящими правами",
+            "status": "PASS",
+            "screenshot": "tasks-admin-TASKS-MENU.png",
+            "requestStart": 2,
+            "requestEnd": 13
+          },
+          {
+            "id": "TASKS-ADMIN-ACCESS",
+            "description": "Администратор не может создать или изменить задачу",
+            "status": "PASS",
+            "screenshot": "tasks-admin-TASKS-ADMIN-ACCESS.png",
+            "requestStart": 13,
+            "requestEnd": 14
+          },
+          {
+            "id": "TASKS-ADMIN-READ",
+            "description": "Администратор видит назначенную задачу после снятия фильтра Сегодня",
+            "status": "PASS",
+            "screenshot": "tasks-admin-TASKS-ADMIN-READ.png",
+            "requestStart": 14,
+            "requestEnd": 15
+          },
+          {
+            "id": "TASKS-ADMIN-CLOSE",
+            "description": "Администратор закрывает назначенную задачу → API и история",
+            "status": "PASS",
+            "screenshot": "tasks-admin-TASKS-ADMIN-CLOSE.png",
+            "requestStart": 15,
+            "requestEnd": 21
+          }
+        ]
+      },
+      {
+        "artifact": "tasks-director.json",
+        "role": "director",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "TASKS-MENU",
+            "description": "Меню → Задачи с настоящими правами",
+            "status": "PASS",
+            "screenshot": "tasks-director-TASKS-MENU.png",
+            "requestStart": 2,
+            "requestEnd": 13
+          },
+          {
+            "id": "TASKS-EDITOR",
+            "description": "Кнопка Новая задача загружает редактор и получателей",
+            "status": "PASS",
+            "screenshot": "tasks-director-TASKS-EDITOR.png",
+            "requestStart": 13,
+            "requestEnd": 18
+          },
+          {
+            "id": "TASKS-EMPTY",
+            "description": "Пустое название блокирует создание",
+            "status": "PASS",
+            "screenshot": "tasks-director-TASKS-EMPTY.png",
+            "requestStart": 18,
+            "requestEnd": 18
+          },
+          {
+            "id": "TASKS-CREATE",
+            "description": "Заполнить и создать задачу → серверное чтение",
+            "status": "PASS",
+            "screenshot": "tasks-director-TASKS-CREATE.png",
+            "requestStart": 18,
+            "requestEnd": 21
+          },
+          {
+            "id": "TASKS-EDIT",
+            "description": "Изменить название задачи → серверное чтение",
+            "status": "PASS",
+            "screenshot": "tasks-director-TASKS-EDIT.png",
+            "requestStart": 21,
+            "requestEnd": 30
+          },
+          {
+            "id": "TASKS-REOPEN",
+            "description": "Повторно открыть редактор и отменить без изменения",
+            "status": "PASS",
+            "screenshot": "tasks-director-TASKS-REOPEN.png",
+            "requestStart": 30,
+            "requestEnd": 37
+          },
+          {
+            "id": "TASKS-CLOSE",
+            "description": "Закрыть задачу → API и история",
+            "status": "PASS",
+            "screenshot": "tasks-director-TASKS-CLOSE.png",
+            "requestStart": 37,
+            "requestEnd": 43
+          }
+        ]
+      },
+      {
+        "artifact": "tasks-manager.json",
+        "role": "manager",
+        "scope": "Authenticated product runtime; in-memory token/workspace storage; local HTTP and messenger WebSocket; CRM invalidation stream disabled; local Debug build.",
+        "completed": true,
+        "steps": [
+          {
+            "id": "TASKS-MENU",
+            "description": "Меню → Задачи с настоящими правами",
+            "status": "PASS",
+            "screenshot": "tasks-manager-TASKS-MENU.png",
+            "requestStart": 2,
+            "requestEnd": 13
+          },
+          {
+            "id": "TASKS-EDITOR",
+            "description": "Кнопка Новая задача загружает редактор и получателей",
+            "status": "PASS",
+            "screenshot": "tasks-manager-TASKS-EDITOR.png",
+            "requestStart": 13,
+            "requestEnd": 18
+          },
+          {
+            "id": "TASKS-EMPTY",
+            "description": "Пустое название блокирует создание",
+            "status": "PASS",
+            "screenshot": "tasks-manager-TASKS-EMPTY.png",
+            "requestStart": 18,
+            "requestEnd": 18
+          },
+          {
+            "id": "TASKS-CREATE",
+            "description": "Заполнить и создать задачу → серверное чтение",
+            "status": "PASS",
+            "screenshot": "tasks-manager-TASKS-CREATE.png",
+            "requestStart": 18,
+            "requestEnd": 21
+          },
+          {
+            "id": "TASKS-EDIT",
+            "description": "Изменить название задачи → серверное чтение",
+            "status": "PASS",
+            "screenshot": "tasks-manager-TASKS-EDIT.png",
+            "requestStart": 21,
+            "requestEnd": 30
+          },
+          {
+            "id": "TASKS-REOPEN",
+            "description": "Повторно открыть редактор и отменить без изменения",
+            "status": "PASS",
+            "screenshot": "tasks-manager-TASKS-REOPEN.png",
+            "requestStart": 30,
+            "requestEnd": 37
+          },
+          {
+            "id": "TASKS-CLOSE",
+            "description": "Закрыть задачу → API и история",
+            "status": "PASS",
+            "screenshot": "tasks-manager-TASKS-CLOSE.png",
+            "requestStart": 37,
+            "requestEnd": 43
+          },
+          {
+            "id": "TASKS-FOR-ADMIN",
+            "description": "Создать общую задачу для последующей проверки администратора",
+            "status": "PASS",
+            "screenshot": "tasks-manager-TASKS-FOR-ADMIN.png",
+            "requestStart": 43,
+            "requestEnd": 51
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "V-03",
+    "summary": {
+      "runId": "806ed1af966e6d18",
+      "mode": "isolated-selection",
+      "expectedSuites": 4,
+      "sourceSha256": "472a63d01471ec77ba750d527984e9fe3f416876ce87af1f05d6772dd8d1f866",
+      "passed": true,
+      "tests": 34,
+      "passedTests": 34,
+      "skippedTests": 0,
+      "largestSuites": [
+        {
+          "path": "src/crm/commerce/subscription-issue-postgres.integration.spec.ts",
+          "cases": 22,
+          "elapsedMs": 10951
+        },
+        {
+          "path": "src/crm/tasks/shared-task-postgres.integration.spec.ts",
+          "cases": 10,
+          "elapsedMs": 1316
+        },
+        {
+          "path": "src/crm/schedule/constraint-engine-postgres.integration.spec.ts",
+          "cases": 1,
+          "elapsedMs": 878
+        },
+        {
+          "path": "src/crm/clients/inbound-lead-postgres.integration.spec.ts",
+          "cases": 1,
+          "elapsedMs": 1337
+        }
+      ],
+      "problems": [],
+      "cleanup": "complete"
+    }
+  }
+]

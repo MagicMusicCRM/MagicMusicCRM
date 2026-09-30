@@ -21,6 +21,27 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
         ? DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day)
         : monday;
     final weekEnd = firstDay.add(Duration(days: singleDay ? 1 : 7));
+    if (teacherMode) {
+      if (selectedTeacherId == null) {
+        return const MagicPageState(
+          kind: MagicPageStateKind.empty,
+          title: 'Выберите преподавателя',
+        );
+      }
+      final key = '$_selectedBranchId:$selectedTeacherId:${dateOnly(monday)}';
+      if (_teacherWeekReferenceKey != key || _teacherWeekReferenceLoading) {
+        return const MagicPageState.loading();
+      }
+      if (_teacherWeekReferenceError != null || _teacherWeekReference == null) {
+        return MagicPageState(
+          kind: MagicPageStateKind.error,
+          title: 'Не удалось загрузить доступность преподавателя',
+          message: 'Проверьте подключение и повторите загрузку.',
+          actionLabel: 'Повторить',
+          onAction: _fetchTeacherWeekReference,
+        );
+      }
+    }
     final cs = Theme.of(context).colorScheme;
     final columns = <ScheduleColumn>[];
     for (var i = 0; i < (singleDay ? 1 : 7); i++) {

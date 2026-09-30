@@ -36,7 +36,7 @@ async function runAndroidJourney({ root, output, raw }) {
   const log = fs.openSync(path.join(output, 'customer-revisions-android.log'), 'w');
   try {
     const child = spawn('cmd.exe', ['/d', '/s', '/c',
-      `C:\\Flutter\\bin\\flutter.bat build apk --debug --target-platform android-x64 --target=integration_test/customer_revisions_live_test.dart --no-pub --dart-define-from-file=${relativeDefines}`],
+      `C:\\Flutter\\bin\\flutter.bat build apk --debug --target-platform android-x64 --target=integration_test/customer_revisions_live_test.dart --dart-define-from-file=${relativeDefines}`],
     { cwd: root, windowsHide: true, stdio: ['ignore', log, log], env: process.env });
     const [code] = await once(child, 'exit');
     assert.equal(code, 0, 'Android build failed; inspect customer-revisions-android.log');

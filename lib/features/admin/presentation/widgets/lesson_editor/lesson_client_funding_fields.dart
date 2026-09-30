@@ -533,6 +533,7 @@ class _ParticipantFundingFieldsState extends State<_ParticipantFundingFields> {
         SearchablePickerField(
           key: _key('subscription'),
           label: 'Абонемент *',
+          showSearchHint: _loading,
           hintText: _loading
               ? 'Загружаем абонементы плательщика…'
               : 'Абонемент выбранного плательщика',

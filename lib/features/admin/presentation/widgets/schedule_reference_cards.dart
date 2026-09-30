@@ -162,11 +162,6 @@ class TeacherAvailabilityCard extends StatelessWidget {
             )
           : null,
       children: [
-        const Text(
-          'Занятые периоды в других местах можно задать на одну дату или '
-          'повторять каждую неделю. Рабочие часы редактируются ниже.',
-        ),
-        const SizedBox(height: 12),
         TeacherWeeklyBusySection(controller: controller, editable: canMutate),
         const Divider(height: 28),
         TeacherDateBusySection(controller: controller, editable: canMutate),

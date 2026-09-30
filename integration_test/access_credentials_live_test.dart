@@ -50,8 +50,8 @@ void main(){
     final start=h.requests.length;await h.tap(find.widgetWithText(FilledButton,'Сохранить').last);await h.quiet();expect(find.text('Измените почту или укажите новый пароль'),findsOneWidget);expect(h.requests.skip(start).where((r)=>r['method']=='POST'),isEmpty);
    });
    await h.check('$type-CHANGE','Изменить почту и пароль, закрыть и прочитать новое состояние',()async{
-    await fill('Почта для входа *','updated-$email');await fill('Новый пароль',password+'2');await fill('Повторите новый пароль',password+'2');await h.tap(find.widgetWithText(FilledButton,'Сохранить').last);await h.quiet();await open(type);await h.tap(find.text('Данные для входа'));await h.quiet();
-    expect(tester.widget<TextField>(field('Почта для входа *')).controller!.text,'updated-$email');expect(tester.widget<TextField>(field('Актуальный пароль')).controller!.text,password+'2');final r=await credentials(type);expect(r['email'],'updated-$email');expect(r['password'],password+'2');await h.tap(find.widgetWithText(TextButton,'Отмена').last);
+    await fill('Почта для входа *','updated-$email');await fill('Новый пароль','${password}2');await fill('Повторите новый пароль','${password}2');await h.tap(find.widgetWithText(FilledButton,'Сохранить').last);await h.quiet();await open(type);await h.tap(find.text('Данные для входа'));await h.quiet();
+    expect(tester.widget<TextField>(field('Почта для входа *')).controller!.text,'updated-$email');expect(tester.widget<TextField>(field('Актуальный пароль')).controller!.text,'${password}2');final r=await credentials(type);expect(r['email'],'updated-$email');expect(r['password'],'${password}2');await h.tap(find.widgetWithText(TextButton,'Отмена').last);
    });
   }
   if(role=='director'){

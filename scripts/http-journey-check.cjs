@@ -13,7 +13,8 @@ const root = path.resolve(__dirname, '..');
 const server = path.join(root, 'server');
 function sourceFingerprint() {
   const names = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard',
-    'lib', 'server/src', 'server/db', 'integration_test', 'scripts',
+    'lib', 'server/src', 'server/db', 'integration_test', 'test', 'scripts',
+    'android', 'windows', 'windows_installer.iss', 'analysis_options.yaml', 'assets/release_history.json',
     'pubspec.yaml', 'pubspec.lock', 'server/package.json', 'server/package-lock.json'], { cwd: root })
     .toString().split('\0').filter(Boolean).sort();
   const hash = createHash('sha256');
@@ -45,6 +46,16 @@ let created = false;
 let requestCount = 0;
 let serverErrorCount = 0;
 let imageRuntime;
+const integratedCandidateMode = process.argv.includes('--audit-integrated-candidate');
+const notificationSourceMode = integratedCandidateMode || process.argv.includes('--audit-notification-source');
+const installmentCycleMode = integratedCandidateMode || process.argv.includes('--audit-installment-cycle');
+let integratedLeadId;
+let integratedStudentId;
+const taskMidnightMode = process.argv.includes('--audit-task-midnight');
+const teacherCompensationMode = process.argv.includes('--audit-teacher-compensation');
+const lessonVisualMode = process.argv.includes('--audit-lesson-visuals');
+let taskClock;
+const leadWebhookSecret = notificationSourceMode ? randomBytes(32).toString('hex') : null;
 
 async function stopApi() {
   if (imageRuntime) {
@@ -144,7 +155,7 @@ async function seed() {
       values ($1,$1,'legacy',12,0,'active') returning id`, [studentId])).rows[0].id);
   }
   const clientAuditAccounts = [{ role: 'director', email: employeeEmail }];
-  if (process.argv.some(arg => ['--client-persistence', '--client-persistence-api', '--client-autosave', '--audit-navigation', '--audit-card-fields', '--audit-archive', '--audit-tasks', '--audit-tasks-advanced', '--audit-plan-lifecycle', '--audit-finance-advanced', '--audit-payroll', '--audit-replacement', '--audit-subscription-coverage', '--audit-plan-rows', '--audit-homework-files', '--audit-account-purchase', '--audit-profile-avatar', '--audit-reports-deep', '--audit-schedule-views', '--audit-schedule-context', '--audit-workspace-runtime', '--audit-boards', '--audit-board-workflows', '--audit-attachment-runtime', '--audit-lesson-guard', '--audit-lesson-funding', '--audit-group-plan', '--audit-purchase-retry', '--audit-deep-link', '--audit-overview-runtime', '--audit-access-runtime', '--audit-finance-access', '--audit-task-navigation', '--audit-plan-timeline', '--audit-client-extended', '--audit-auth-runtime', '--audit-access-credentials', '--audit-plan-create', '--audit-messenger-inbox', '--audit-students-pagination', '--audit-messenger-structure', '--audit-update-center', '--audit-context', '--audit-notes', '--audit-collaboration', '--audit-family-boundaries', '--audit-account-link', '--audit-client-link-invite', '--audit-client-portal', '--audit-dynamic-fields', '--audit-statuses', '--audit-purchase', '--audit-partial-purchase', '--audit-subscription-cancel', '--audit-teacher-card', '--audit-profile', '--audit-profile-date', '--audit-auth-methods', '--audit-auth-email', '--audit-account-deletion', '--audit-package-catalog', '--audit-reference-catalog', '--audit-branch-discipline', '--audit-branch-rooms', '--audit-org-lifecycle', '--audit-manager-org', '--audit-branch-hours', '--audit-teacher-availability', '--audit-groups', '--audit-group-lifecycle', '--audit-staff-forms', '--audit-teacher-forms', '--audit-person-lifecycle', '--audit-organization-edges', '--audit-teacher-offboard', '--audit-notification-preferences', '--audit-messenger-text', '--audit-voice-runtime', '--audit-group-boundaries', '--audit-deletion-queue', '--audit-expenses', '--audit-notifications-inbox', '--audit-messenger-extras', '--audit-phone-review', '--audit-lead-merge', '--audit-client-payments', '--audit-access-editor', '--audit-configuration', '--audit-report-exports', '--audit-report-async', '--audit-data-quality-boundaries', '--audit-auth-delivery', '--audit-messenger-lifecycle', '--audit-responsible', '--audit-comment-rules', '--audit-task-delivery', '--audit-payroll-export', '--audit-customer-revisions'].includes(arg))) {
+  if (notificationSourceMode || installmentCycleMode || taskMidnightMode || teacherCompensationMode || lessonVisualMode || process.argv.some(arg => ['--client-persistence', '--client-persistence-api', '--client-autosave', '--audit-navigation', '--audit-card-fields', '--audit-archive', '--audit-tasks', '--audit-tasks-advanced', '--audit-plan-lifecycle', '--audit-finance-advanced', '--audit-payroll', '--audit-replacement', '--audit-subscription-coverage', '--audit-plan-rows', '--audit-homework-files', '--audit-account-purchase', '--audit-profile-avatar', '--audit-reports-deep', '--audit-schedule-views', '--audit-schedule-context', '--audit-workspace-runtime', '--audit-boards', '--audit-board-workflows', '--audit-attachment-runtime', '--audit-lesson-guard', '--audit-lesson-funding', '--audit-group-plan', '--audit-purchase-retry', '--audit-deep-link', '--audit-overview-runtime', '--audit-access-runtime', '--audit-finance-access', '--audit-task-navigation', '--audit-plan-timeline', '--audit-x03', '--audit-client-extended', '--audit-auth-runtime', '--audit-access-credentials', '--audit-plan-create', '--audit-messenger-inbox', '--audit-students-pagination', '--audit-messenger-structure', '--audit-update-center', '--audit-context', '--audit-notes', '--audit-collaboration', '--audit-collaboration-recovery', '--audit-family-boundaries', '--audit-account-link', '--audit-client-link-invite', '--audit-client-portal', '--audit-dynamic-fields', '--audit-statuses', '--audit-purchase', '--audit-partial-purchase', '--audit-subscription-cancel', '--audit-teacher-card', '--audit-profile', '--audit-profile-date', '--audit-auth-methods', '--audit-auth-email', '--audit-account-deletion', '--audit-package-catalog', '--audit-reference-catalog', '--audit-branch-discipline', '--audit-branch-rooms', '--audit-org-lifecycle', '--audit-manager-org', '--audit-branch-hours', '--audit-teacher-availability', '--audit-groups', '--audit-group-lifecycle', '--audit-staff-forms', '--audit-teacher-forms', '--audit-person-lifecycle', '--audit-organization-edges', '--audit-teacher-offboard', '--audit-notification-preferences', '--audit-messenger-text', '--audit-voice-runtime', '--audit-group-boundaries', '--audit-deletion-queue', '--audit-expenses', '--audit-notifications-inbox', '--audit-messenger-extras', '--audit-phone-review', '--audit-lead-merge', '--audit-client-payments', '--audit-access-editor', '--audit-configuration', '--audit-report-exports', '--audit-report-async', '--audit-data-quality-boundaries', '--audit-auth-delivery', '--audit-messenger-lifecycle', '--audit-responsible', '--audit-comment-rules', '--audit-task-delivery', '--audit-payroll-export', '--audit-customer-revisions'].includes(arg))) {
     for (const role of ['admin', 'manager', 'teacher', 'client']) {
       const loginEmail = `${role}-${runId}@example.test`;
       let account;
@@ -170,13 +181,35 @@ async function seed() {
       clientAuditAccounts.push({ role, email: loginEmail });
     }
   }
+  let foreignBranch;
+  if (notificationSourceMode || process.argv.includes('--audit-customer-revisions') || process.argv.includes('--audit-tasks')) {
+    foreignBranch = (await pool.query(
+      `insert into app.branches (name,timezone_name) values ('Foreign HTTP test','Europe/Moscow') returning id`,
+    )).rows[0].id;
+    const loginEmail = `foreign-manager-${runId}@example.test`;
+    const account = await person('manager', 'Audit-foreign-manager', true, loginEmail);
+    const staff = (await pool.query(
+      `insert into app.staff_members (profile_id,role) values ($1,'manager') returning id`,
+      [account.profile],
+    )).rows[0].id;
+    await pool.query(
+      `insert into app.staff_branch_assignments (staff_member_id,branch_id) values ($1,$2)`,
+      [staff, foreignBranch],
+    );
+    await pool.query(
+      `insert into app.user_crm_links (user_id,entity_type,entity_id,link_source,confirmed_at)
+       values ($1,'staff',$2,'import',now())`,
+      [account.user, staff],
+    );
+    clientAuditAccounts.push({ role: 'foreign-manager', email: loginEmail });
+  }
   let linkAccount;
   if (process.argv.includes('--audit-account-link')) {
     const row = (await pool.query('select p.user_id from app.students s join app.profiles p on p.id=s.profile_id where s.id=$1', [students[0]])).rows[0];
     linkAccount = { userId: row.user_id, phone: '+79999999998' };
     await pool.query('update app.profiles set phone=$2 where user_id=$1', [linkAccount.userId, linkAccount.phone]);
   }
-  return { email, employeeEmail, password, branch, rooms, teachers, students, subscriptions, clientAuditAccounts, linkAccount };
+  return { email, employeeEmail, password, branch, foreignBranch, rooms, teachers, students, subscriptions, clientAuditAccounts, linkAccount };
 }
 
 async function startApi(fixture, completionWorker = false) {
@@ -202,16 +235,19 @@ async function startApi(fixture, completionWorker = false) {
     TS_NODE_PROJECT: path.join(server, 'tsconfig.json'),
     V4_ACCESS_MODE: 'v4', V4_ACCESS_KILL_SWITCH: 'false',
     V4_SCHEDULE_MODE: 'v4', V4_SCHEDULE_KILL_SWITCH: 'false', V4_PARITY_UNEXPLAINED_DIFFS: '0',
-    PLATFORM_OUTBOX_WORKER_ENABLED: 'false', LESSON_COMPLETION_WORKER_ENABLED: String(completionWorker),
+    PLATFORM_OUTBOX_WORKER_ENABLED: String(notificationSourceMode || process.argv.includes('--audit-tasks') || process.argv.includes('--audit-collaboration') || process.argv.includes('--audit-collaboration-recovery') || process.argv.includes('--audit-x03')), LESSON_COMPLETION_WORKER_ENABLED: String(completionWorker),
     LESSON_COMPLETION_WORKER_POLL_MS: '1000',
-    INSTALLMENT_DUE_WORKER_ENABLED: 'false', LESSON_REMINDERS_ENABLED: 'false',
-    TASK_REMINDERS_ENABLED: String(process.argv.includes('--audit-task-delivery')), SCHEDULE_SERIES_AUTOEXTEND: 'false',
+    INSTALLMENT_DUE_WORKER_ENABLED: String(installmentCycleMode),
+    INSTALLMENT_DUE_WORKER_POLL_MS: '1000', LESSON_REMINDERS_ENABLED: 'false',
+    TASK_REMINDERS_ENABLED: String(process.argv.includes('--audit-task-delivery') || notificationSourceMode), SCHEDULE_SERIES_AUTOEXTEND: 'false',
     FILE_STORAGE_ROOT: path.join(working, 'storage'),
   });
   if (process.argv.includes('--audit-auth-delivery') || process.argv.includes('--audit-client-link-invite')) {
     if (!smtp) smtp = await require('./local-smtp-capture.cjs').startLocalSmtpCapture();
     Object.assign(env, { SMTP_FALLBACK_HOST: '127.0.0.1', SMTP_FALLBACK_PORT: String(smtp.port), SMTP_FALLBACK_SECURE: 'false', SMTP_FALLBACK_FROM_EMAIL: 'audit@example.com' });
   }
+  if (leadWebhookSecret) env.LEAD_WEBHOOK_SECRET = leadWebhookSecret;
+  if (taskClock) env.HTTP_JOURNEY_CLOCK_FILE = taskClock.clockFile;
   fs.mkdirSync(env.FILE_STORAGE_ROOT, { recursive: true });
   const log = fs.openSync(path.join(output, 'api.log'), 'w');
   if (process.env.HTTP_JOURNEY_IMAGE) {
@@ -220,7 +256,9 @@ async function startApi(fixture, completionWorker = false) {
     });
     api = imageRuntime.child;
   } else {
-    api = spawn(process.execPath, ['-r', dependency.resolve('ts-node/register/transpile-only'),
+    api = spawn(process.execPath, [
+      ...(taskClock ? ['-r', path.join(__dirname, 'task-midnight-clock.cjs')] : []),
+      '-r', dependency.resolve('ts-node/register/transpile-only'),
       path.join(server, 'src/main.ts')], { cwd: working, env, windowsHide: true, stdio: ['ignore', log, log] });
   }
   fs.closeSync(log);
@@ -469,11 +507,11 @@ async function runDeviceTest(testFile, logName, extraEnv = {}) {
       root, output, raw: extraEnv.HTTP_JOURNEY_FIXTURE,
     });
   }
-  assert(['customer_revisions_live_test.dart', 'lesson_live_http_device_test.dart', 'lesson_settlement_device_test.dart', 'employee_journey_live_test.dart', 'client_persistence_live_test.dart', 'role_navigation_live_test.dart', 'client_fields_live_test.dart', 'client_archive_live_test.dart', 'tasks_live_test.dart', 'tasks_advanced_live_test.dart', 'schedule_plan_lifecycle_live_test.dart', 'finance_advanced_live_test.dart', 'payroll_live_test.dart', 'subscription_coverage_live_test.dart', 'subscription_replacement_live_test.dart', 'plan_rows_live_test.dart', 'homework_files_live_test.dart', 'account_purchase_live_test.dart', 'profile_avatar_live_test.dart', 'reports_deep_live_test.dart', 'schedule_context_live_test.dart', 'schedule_views_live_test.dart', 'workspace_runtime_live_test.dart', 'task_navigation_live_test.dart', 'finance_access_live_test.dart', 'access_runtime_live_test.dart', 'overview_runtime_live_test.dart', 'deep_link_live_test.dart', 'purchase_retry_live_test.dart', 'group_plan_live_test.dart', 'lesson_funding_live_test.dart', 'lesson_guard_live_test.dart', 'attachment_runtime_live_test.dart', 'board_workflows_live_test.dart', 'boards_live_test.dart', 'plan_timeline_live_test.dart', 'client_extended_live_test.dart', 'auth_runtime_live_test.dart', 'access_credentials_live_test.dart', 'plan_create_live_test.dart', 'messenger_inbox_live_test.dart', 'students_pagination_live_test.dart', 'messenger_structure_live_test.dart', 'update_center_live_test.dart', 'client_context_live_test.dart', 'client_collaboration_live_test.dart', 'client_link_invite_live_test.dart', 'client_account_link_live_test.dart', 'client_portal_live_test.dart', 'client_dynamic_fields_live_test.dart', 'client_statuses_live_test.dart', 'client_purchase_live_test.dart', 'partial_purchase_live_test.dart', 'teacher_card_live_test.dart', 'profile_fields_live_test.dart', 'profile_date_roundtrip_live_test.dart', 'auth_methods_live_test.dart', 'auth_email_routed_live_test.dart', 'account_deletion_live_test.dart', 'package_catalog_live_test.dart', 'reference_catalog_live_test.dart', 'branch_discipline_live_test.dart', 'branch_rooms_live_test.dart', 'organization_lifecycle_live_test.dart', 'manager_organization_live_test.dart', 'branch_hours_live_test.dart', 'teacher_availability_live_test.dart', 'group_membership_live_test.dart', 'group_lifecycle_live_test.dart', 'staff_forms_live_test.dart', 'teacher_forms_live_test.dart', 'organization_edges_live_test.dart', 'person_lifecycle_live_test.dart', 'teacher_offboard_live_test.dart', 'notification_preferences_live_test.dart', 'voice_runtime_live_test.dart', 'messenger_text_live_test.dart', 'deletion_queue_live_test.dart', 'expenses_live_test.dart', 'notifications_inbox_live_test.dart', 'messenger_extras_live_test.dart', 'phone_review_live_test.dart', 'lead_merge_live_test.dart', 'client_payment_live_test.dart', 'access_editor_live_test.dart', 'configuration_live_test.dart', 'report_async_live_test.dart', 'report_exports_live_test.dart'].includes(testFile));
+  assert(['lesson_visuals_live_test.dart', 'teacher_compensation_live_test.dart', 'task_midnight_live_test.dart', 'notification_source_live_test.dart', 'notification_task_close_live_test.dart'].includes(testFile) || ['customer_revisions_live_test.dart', 'lesson_live_http_device_test.dart', 'lesson_settlement_device_test.dart', 'employee_journey_live_test.dart', 'client_persistence_live_test.dart', 'role_navigation_live_test.dart', 'client_fields_live_test.dart', 'client_archive_live_test.dart', 'tasks_live_test.dart', 'tasks_advanced_live_test.dart', 'schedule_plan_lifecycle_live_test.dart', 'finance_advanced_live_test.dart', 'payroll_live_test.dart', 'subscription_coverage_live_test.dart', 'subscription_replacement_live_test.dart', 'plan_rows_live_test.dart', 'homework_files_live_test.dart', 'account_purchase_live_test.dart', 'profile_avatar_live_test.dart', 'reports_deep_live_test.dart', 'schedule_context_live_test.dart', 'schedule_views_live_test.dart', 'workspace_runtime_live_test.dart', 'task_navigation_live_test.dart', 'finance_access_live_test.dart', 'access_runtime_live_test.dart', 'overview_runtime_live_test.dart', 'deep_link_live_test.dart', 'purchase_retry_live_test.dart', 'group_plan_live_test.dart', 'lesson_funding_live_test.dart', 'lesson_guard_live_test.dart', 'attachment_runtime_live_test.dart', 'board_workflows_live_test.dart', 'boards_live_test.dart', 'plan_timeline_live_test.dart', 'x03_live_test.dart', 'client_extended_live_test.dart', 'auth_runtime_live_test.dart', 'access_credentials_live_test.dart', 'plan_create_live_test.dart', 'messenger_inbox_live_test.dart', 'students_pagination_live_test.dart', 'messenger_structure_live_test.dart', 'update_center_live_test.dart', 'client_context_live_test.dart', 'client_collaboration_live_test.dart', 'client_link_invite_live_test.dart', 'client_account_link_live_test.dart', 'client_portal_live_test.dart', 'client_dynamic_fields_live_test.dart', 'client_statuses_live_test.dart', 'client_purchase_live_test.dart', 'partial_purchase_live_test.dart', 'teacher_card_live_test.dart', 'profile_fields_live_test.dart', 'profile_date_roundtrip_live_test.dart', 'auth_methods_live_test.dart', 'auth_email_routed_live_test.dart', 'account_deletion_live_test.dart', 'package_catalog_live_test.dart', 'reference_catalog_live_test.dart', 'branch_discipline_live_test.dart', 'branch_rooms_live_test.dart', 'organization_lifecycle_live_test.dart', 'manager_organization_live_test.dart', 'branch_hours_live_test.dart', 'teacher_availability_live_test.dart', 'group_membership_live_test.dart', 'group_lifecycle_live_test.dart', 'staff_forms_live_test.dart', 'teacher_forms_live_test.dart', 'organization_edges_live_test.dart', 'person_lifecycle_live_test.dart', 'teacher_offboard_live_test.dart', 'notification_preferences_live_test.dart', 'voice_runtime_live_test.dart', 'messenger_text_live_test.dart', 'deletion_queue_live_test.dart', 'expenses_live_test.dart', 'notifications_inbox_live_test.dart', 'messenger_extras_live_test.dart', 'phone_review_live_test.dart', 'lead_merge_live_test.dart', 'client_payment_live_test.dart', 'access_editor_live_test.dart', 'configuration_live_test.dart', 'report_async_live_test.dart', 'report_exports_live_test.dart'].includes(testFile));
   const log = fs.openSync(path.join(output, logName), 'w');
   // Fixed command text; fixture values travel in the child environment, never argv.
   const flutter = spawn('cmd.exe', ['/d', '/s', '/c',
-    `C:\\Flutter\\bin\\flutter.bat test integration_test/${testFile} -d windows --no-pub --reporter expanded`], {
+    `C:\\Flutter\\bin\\flutter.bat test integration_test/${testFile} -d windows --no-pub --reporter expanded${process.argv.includes('--audit-collaboration-recovery') ? ' --plain-name recovery' : ''}`], {
     cwd: root, windowsHide: true, stdio: ['ignore', log, log],
     env: { ...process.env, EVIDENCE_SCREENSHOT_DIR: output, ...extraEnv },
   });
@@ -484,11 +522,18 @@ async function runDeviceTest(testFile, logName, extraEnv = {}) {
 
 async function main() {
   for (const argument of process.argv.slice(2)) {
-    assert(['--windows', '--restore', '--release-journeys', '--client-persistence', '--client-persistence-api', '--client-autosave', '--audit-navigation', '--audit-card-fields', '--audit-archive', '--audit-tasks', '--audit-tasks-advanced', '--audit-plan-lifecycle', '--audit-finance-advanced', '--audit-payroll', '--audit-replacement', '--audit-subscription-coverage', '--audit-plan-rows', '--audit-homework-files', '--audit-account-purchase', '--audit-profile-avatar', '--audit-reports-deep', '--audit-schedule-views', '--audit-schedule-context', '--audit-workspace-runtime', '--audit-boards', '--audit-board-workflows', '--audit-attachment-runtime', '--audit-lesson-guard', '--audit-lesson-funding', '--audit-group-plan', '--audit-purchase-retry', '--audit-deep-link', '--audit-overview-runtime', '--audit-access-runtime', '--audit-finance-access', '--audit-task-navigation', '--audit-plan-timeline', '--audit-client-extended', '--audit-auth-runtime', '--audit-access-credentials', '--audit-plan-create', '--audit-messenger-inbox', '--audit-students-pagination', '--audit-messenger-structure', '--audit-update-center', '--audit-context', '--audit-notes', '--audit-collaboration', '--audit-family-boundaries', '--audit-account-link', '--audit-client-link-invite', '--audit-client-portal', '--audit-dynamic-fields', '--audit-statuses', '--audit-purchase', '--audit-partial-purchase', '--audit-subscription-cancel', '--audit-teacher-card', '--audit-profile', '--audit-profile-date', '--audit-auth-methods', '--audit-auth-email', '--audit-account-deletion', '--audit-package-catalog', '--audit-reference-catalog', '--audit-branch-discipline', '--audit-branch-rooms', '--audit-org-lifecycle', '--audit-manager-org', '--audit-branch-hours', '--audit-teacher-availability', '--audit-groups', '--audit-group-lifecycle', '--audit-staff-forms', '--audit-teacher-forms', '--audit-person-lifecycle', '--audit-organization-edges', '--audit-teacher-offboard', '--audit-notification-preferences', '--audit-messenger-text', '--audit-voice-runtime', '--audit-group-boundaries', '--audit-deletion-queue', '--audit-expenses', '--audit-notifications-inbox', '--audit-messenger-extras', '--audit-phone-review', '--audit-lead-merge', '--audit-client-payments', '--audit-access-editor', '--audit-configuration', '--audit-report-exports', '--audit-report-async', '--audit-data-quality-boundaries', '--audit-auth-delivery', '--audit-messenger-lifecycle', '--audit-responsible', '--audit-comment-rules', '--audit-task-delivery', '--audit-payroll-export', '--audit-customer-revisions'].includes(argument), `Unknown gate option: ${argument}`);
+    if (argument === '--audit-integrated-candidate' || argument === '--audit-lesson-visuals') continue;
+    if (argument === '--audit-notification-source' || argument === '--audit-installment-cycle' || argument === '--audit-task-midnight' || argument === '--audit-teacher-compensation') continue;
+    assert(['--windows', '--restore', '--release-journeys', '--client-persistence', '--client-persistence-api', '--client-autosave', '--audit-navigation', '--audit-card-fields', '--audit-archive', '--audit-tasks', '--audit-tasks-advanced', '--audit-plan-lifecycle', '--audit-finance-advanced', '--audit-payroll', '--audit-replacement', '--audit-subscription-coverage', '--audit-plan-rows', '--audit-homework-files', '--audit-account-purchase', '--audit-profile-avatar', '--audit-reports-deep', '--audit-schedule-views', '--audit-schedule-context', '--audit-workspace-runtime', '--audit-boards', '--audit-board-workflows', '--audit-attachment-runtime', '--audit-lesson-guard', '--audit-lesson-funding', '--audit-group-plan', '--audit-purchase-retry', '--audit-deep-link', '--audit-overview-runtime', '--audit-access-runtime', '--audit-finance-access', '--audit-task-navigation', '--audit-plan-timeline', '--audit-x03', '--audit-client-extended', '--audit-auth-runtime', '--audit-access-credentials', '--audit-plan-create', '--audit-messenger-inbox', '--audit-students-pagination', '--audit-messenger-structure', '--audit-update-center', '--audit-context', '--audit-notes', '--audit-collaboration', '--audit-collaboration-recovery', '--audit-family-boundaries', '--audit-account-link', '--audit-client-link-invite', '--audit-client-portal', '--audit-dynamic-fields', '--audit-statuses', '--audit-purchase', '--audit-partial-purchase', '--audit-subscription-cancel', '--audit-teacher-card', '--audit-profile', '--audit-profile-date', '--audit-auth-methods', '--audit-auth-email', '--audit-account-deletion', '--audit-package-catalog', '--audit-reference-catalog', '--audit-branch-discipline', '--audit-branch-rooms', '--audit-org-lifecycle', '--audit-manager-org', '--audit-branch-hours', '--audit-teacher-availability', '--audit-groups', '--audit-group-lifecycle', '--audit-staff-forms', '--audit-teacher-forms', '--audit-person-lifecycle', '--audit-organization-edges', '--audit-teacher-offboard', '--audit-notification-preferences', '--audit-messenger-text', '--audit-voice-runtime', '--audit-group-boundaries', '--audit-deletion-queue', '--audit-expenses', '--audit-notifications-inbox', '--audit-messenger-extras', '--audit-phone-review', '--audit-lead-merge', '--audit-client-payments', '--audit-access-editor', '--audit-configuration', '--audit-report-exports', '--audit-report-async', '--audit-data-quality-boundaries', '--audit-auth-delivery', '--audit-messenger-lifecycle', '--audit-responsible', '--audit-comment-rules', '--audit-task-delivery', '--audit-payroll-export', '--audit-customer-revisions'].includes(argument), `Unknown gate option: ${argument}`);
   }
-  const clientAuditModes = ['--client-persistence', '--client-persistence-api', '--client-autosave', '--audit-navigation', '--audit-card-fields', '--audit-archive', '--audit-tasks', '--audit-tasks-advanced', '--audit-plan-lifecycle', '--audit-finance-advanced', '--audit-payroll', '--audit-replacement', '--audit-subscription-coverage', '--audit-plan-rows', '--audit-homework-files', '--audit-account-purchase', '--audit-profile-avatar', '--audit-reports-deep', '--audit-schedule-views', '--audit-schedule-context', '--audit-workspace-runtime', '--audit-boards', '--audit-board-workflows', '--audit-attachment-runtime', '--audit-lesson-guard', '--audit-lesson-funding', '--audit-group-plan', '--audit-purchase-retry', '--audit-deep-link', '--audit-overview-runtime', '--audit-access-runtime', '--audit-finance-access', '--audit-task-navigation', '--audit-plan-timeline', '--audit-client-extended', '--audit-auth-runtime', '--audit-access-credentials', '--audit-plan-create', '--audit-messenger-inbox', '--audit-students-pagination', '--audit-messenger-structure', '--audit-update-center', '--audit-context', '--audit-notes', '--audit-collaboration', '--audit-family-boundaries', '--audit-account-link', '--audit-client-link-invite', '--audit-client-portal', '--audit-dynamic-fields', '--audit-statuses', '--audit-purchase', '--audit-partial-purchase', '--audit-subscription-cancel', '--audit-teacher-card', '--audit-profile', '--audit-profile-date', '--audit-auth-methods', '--audit-auth-email', '--audit-account-deletion', '--audit-package-catalog', '--audit-reference-catalog', '--audit-branch-discipline', '--audit-branch-rooms', '--audit-org-lifecycle', '--audit-manager-org', '--audit-branch-hours', '--audit-teacher-availability', '--audit-groups', '--audit-group-lifecycle', '--audit-staff-forms', '--audit-teacher-forms', '--audit-person-lifecycle', '--audit-organization-edges', '--audit-teacher-offboard', '--audit-notification-preferences', '--audit-messenger-text', '--audit-voice-runtime', '--audit-group-boundaries', '--audit-deletion-queue', '--audit-expenses', '--audit-notifications-inbox', '--audit-messenger-extras', '--audit-phone-review', '--audit-lead-merge', '--audit-client-payments', '--audit-access-editor', '--audit-configuration', '--audit-report-exports', '--audit-report-async', '--audit-data-quality-boundaries', '--audit-auth-delivery', '--audit-messenger-lifecycle', '--audit-responsible', '--audit-comment-rules', '--audit-task-delivery', '--audit-payroll-export', '--audit-customer-revisions']
+  const clientAuditModes = ['--client-persistence', '--client-persistence-api', '--client-autosave', '--audit-navigation', '--audit-card-fields', '--audit-archive', '--audit-tasks', '--audit-tasks-advanced', '--audit-plan-lifecycle', '--audit-finance-advanced', '--audit-payroll', '--audit-replacement', '--audit-subscription-coverage', '--audit-plan-rows', '--audit-homework-files', '--audit-account-purchase', '--audit-profile-avatar', '--audit-reports-deep', '--audit-schedule-views', '--audit-schedule-context', '--audit-workspace-runtime', '--audit-boards', '--audit-board-workflows', '--audit-attachment-runtime', '--audit-lesson-guard', '--audit-lesson-funding', '--audit-group-plan', '--audit-purchase-retry', '--audit-deep-link', '--audit-overview-runtime', '--audit-access-runtime', '--audit-finance-access', '--audit-task-navigation', '--audit-plan-timeline', '--audit-x03', '--audit-client-extended', '--audit-auth-runtime', '--audit-access-credentials', '--audit-plan-create', '--audit-messenger-inbox', '--audit-students-pagination', '--audit-messenger-structure', '--audit-update-center', '--audit-context', '--audit-notes', '--audit-collaboration', '--audit-collaboration-recovery', '--audit-family-boundaries', '--audit-account-link', '--audit-client-link-invite', '--audit-client-portal', '--audit-dynamic-fields', '--audit-statuses', '--audit-purchase', '--audit-partial-purchase', '--audit-subscription-cancel', '--audit-teacher-card', '--audit-profile', '--audit-profile-date', '--audit-auth-methods', '--audit-auth-email', '--audit-account-deletion', '--audit-package-catalog', '--audit-reference-catalog', '--audit-branch-discipline', '--audit-branch-rooms', '--audit-org-lifecycle', '--audit-manager-org', '--audit-branch-hours', '--audit-teacher-availability', '--audit-groups', '--audit-group-lifecycle', '--audit-staff-forms', '--audit-teacher-forms', '--audit-person-lifecycle', '--audit-organization-edges', '--audit-teacher-offboard', '--audit-notification-preferences', '--audit-messenger-text', '--audit-voice-runtime', '--audit-group-boundaries', '--audit-deletion-queue', '--audit-expenses', '--audit-notifications-inbox', '--audit-messenger-extras', '--audit-phone-review', '--audit-lead-merge', '--audit-client-payments', '--audit-access-editor', '--audit-configuration', '--audit-report-exports', '--audit-report-async', '--audit-data-quality-boundaries', '--audit-auth-delivery', '--audit-messenger-lifecycle', '--audit-responsible', '--audit-comment-rules', '--audit-task-delivery', '--audit-payroll-export', '--audit-customer-revisions']
     .filter(argument => process.argv.includes(argument));
-  assert(clientAuditModes.length <= 1, 'Run client audit modes separately so each has its own database and evidence.');
+  if (notificationSourceMode) clientAuditModes.push('--audit-notification-source');
+  if (installmentCycleMode) clientAuditModes.push('--audit-installment-cycle');
+  if (taskMidnightMode) clientAuditModes.push('--audit-task-midnight');
+  if (teacherCompensationMode) clientAuditModes.push('--audit-teacher-compensation');
+  if (lessonVisualMode) clientAuditModes.push('--audit-lesson-visuals');
+  assert(clientAuditModes.length <= (integratedCandidateMode ? 2 : 1), 'Run client audit modes separately unless using the explicit integrated candidate journey.');
   if (clientAuditModes.some(argument => !['--client-persistence-api', '--audit-family-boundaries', '--audit-group-boundaries', '--audit-data-quality-boundaries', '--audit-auth-delivery', '--audit-messenger-lifecycle', '--audit-responsible', '--audit-comment-rules', '--audit-task-delivery', '--audit-payroll-export'].includes(argument))) {
     assert.equal(process.platform, 'win32', 'Native client audit requires Windows');
   }
@@ -504,8 +549,45 @@ async function main() {
   pool = new Pool({ connectionString: databaseUrl.toString() });
   await new MigrationRunner(pool, path.join(server, 'db/migrations')).up();
   const fixture = await seed();
+  if (taskMidnightMode) taskClock = await require('./task-midnight-clock.cjs').prepareClock({pool, databaseName, output});
   await startApi(fixture);
   await journeys(fixture);
+  if (lessonVisualMode) {
+    await require('./lesson-visual-verification.cjs').runLessonVisualAudit({pool, fixture, request,
+      restartWithCompletion: async () => {
+        await stopApi();
+        await startApi(fixture, true);
+        token = (await request('POST', '/auth/login', {email: fixture.email, password: fixture.password}, 200, {auth:false})).session.accessToken;
+        return baseUrl;
+      }, runDeviceTest, output, check});
+  }
+  if (teacherCompensationMode) {
+    await check('Every teacher pay rule survives native save/reopen, error and version conflict', () =>
+      runDeviceTest('teacher_compensation_live_test.dart', 'teacher-compensation-windows.log', {
+        HTTP_JOURNEY_FIXTURE: JSON.stringify({baseUrl, password: fixture.password, accounts: fixture.clientAuditAccounts,
+          branchId: fixture.branch, teacherId: fixture.teachers[0], roomId: fixture.rooms[0], studentId: fixture.students[0]}),
+      }));
+    const evidence = JSON.parse(fs.readFileSync(path.join(output, 'teacher-compensation-director.json'), 'utf8'));
+    const lessonId = evidence.facts.find(fact => fact.matrixLessonId)?.matrixLessonId;
+    await check('Pay-rule edits preserve the lesson and concurrent note', async () => {
+      assert(lessonId, 'Native matrix did not record its lesson');
+      const lesson = await request('GET', `/crm/lessons?lessonId=${lessonId}&limit=1`);
+      fs.writeFileSync(path.join(output, 'teacher-compensation-persisted.json'), JSON.stringify(lesson, null, 2));
+      assert.equal(lesson.items[0].notes, 'Concurrent note');
+    });
+  }
+  if (taskMidnightMode) {
+    await check('Moscow day rolls over in native workspace, SQL badge and API task counters', () =>
+      require('./task-midnight-clock.cjs').runClockJourney({pool, clock: taskClock, runDeviceTest,
+        input: {baseUrl, password: fixture.password, accounts: fixture.clientAuditAccounts, branchId: fixture.branch}}));
+    const tasks = (await pool.query("select id,title,state,start_at,end_at,all_day from app.shared_tasks where title like 'MIDNIGHT-%' order by title")).rows;
+    fs.writeFileSync(path.join(output, 'task-midnight-db.json'), JSON.stringify(tasks, null, 2));
+    await check('Clock fixture preserves all five tasks without changing their dates', async () => {
+      assert.equal(tasks.length, 5);
+      assert(tasks.every(task => task.state === 'open'));
+      assert.equal(tasks.filter(task => !task.all_day).length, 1);
+    });
+  }
   if (process.argv.includes('--audit-client-portal')) {
     const clientUserId = (await pool.query('select p.user_id from app.students s join app.profiles p on p.id=s.profile_id where s.id=$1', [fixture.students[0]])).rows[0].user_id;
     await request('POST', `/crm/clients/student/${fixture.students[1]}/link-user`, { userId: clientUserId }, 201);
@@ -555,17 +637,22 @@ async function main() {
     const { runFamilyBoundaryAudit } = require('./family-boundary-verification.cjs');
     await runFamilyBoundaryAudit({ pool, fixture, baseUrl, output, check });
   }
-  if (process.argv.includes('--audit-collaboration')) {
-    await check('Card family and comments: actual UI commands with persisted readback', () =>
+  if (process.argv.includes('--audit-collaboration') || process.argv.includes('--audit-collaboration-recovery')) {
+    await check(process.argv.includes('--audit-collaboration-recovery')
+      ? 'Real CRM socket loss and student card recovery through native UI'
+      : 'Card family and comments: actual UI commands with persisted readback', () =>
       runDeviceTest('client_collaboration_live_test.dart', 'collaboration-windows.log', {
         HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password,
-          branchId: fixture.branch, accounts: fixture.clientAuditAccounts }),
+          branchId: fixture.branch, students: fixture.students, teachers: fixture.teachers,
+          rooms: fixture.rooms, accounts: fixture.clientAuditAccounts }),
       }));
-    const snapshots = {};
-    for (const table of ['families', 'family_members', 'entity_comments', 'lead_comments']) {
-      snapshots[table] = (await pool.query(`select to_jsonb(row) as value from app.${table} row order by id`)).rows.map(row => row.value);
+    if (process.argv.includes('--audit-collaboration')) {
+      const snapshots = {};
+      for (const table of ['families', 'family_members', 'entity_comments', 'lead_comments']) {
+        snapshots[table] = (await pool.query(`select to_jsonb(row) as value from app.${table} row order by id`)).rows.map(row => row.value);
+      }
+      fs.writeFileSync(path.join(output, 'collaboration-db.json'), JSON.stringify(snapshots, null, 2));
     }
-    fs.writeFileSync(path.join(output, 'collaboration-db.json'), JSON.stringify(snapshots, null, 2));
   }
   if (process.argv.includes('--audit-context') || process.argv.includes('--audit-notes')) {
     const notesOnly = process.argv.includes('--audit-notes');
@@ -586,14 +673,74 @@ async function main() {
     fs.writeFileSync(path.join(output, `${evidencePrefix}-db.json`), JSON.stringify({ notes, contacts }, null, 2));
   }
   if (process.argv.includes('--audit-tasks')) {
+    const legacy = await request('POST', '/crm/shared-tasks', {
+      title: 'TASK-X08-LEGACY', allDay: true, startAt: new Date().toISOString(),
+      audiences: [{ type: 'branch', targetId: fixture.branch }],
+    }, 201);
+    await pool.query(`insert into app.task_closes (task_id, closed_by, request_id)
+      select id, created_by, $2 from app.shared_tasks where id = $1`,
+    [legacy.id, `legacy-${runId}`]);
+    await pool.query(`update app.shared_tasks set state = 'closed', version = version + 1
+      where id = $1`, [legacy.id]);
     await check('Task UI: creation, edit, cancellation, close and staff access', () =>
       runDeviceTest('tasks_live_test.dart', 'tasks-windows.log', {
         HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password,
           branchId: fixture.branch, accounts: fixture.clientAuditAccounts }),
       }));
+    await check('X08 new client process reopens persisted task badge', () =>
+      runDeviceTest('tasks_live_test.dart', 'tasks-restart-windows.log', {
+        HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password,
+          branchId: fixture.branch, accounts: fixture.clientAuditAccounts,
+          x08Restart: true }),
+      }));
     const tasks = (await pool.query(`select to_jsonb(task) as value from app.canonical_tasks task
       where title like 'TASK-AUDIT-%' order by title`)).rows.map(row => row.value);
     fs.writeFileSync(path.join(output, 'tasks-db.json'), JSON.stringify(tasks, null, 2));
+    const x08 = (await pool.query(`select task.id, task.title, task.state, task.start_at,
+      close.result_code, close.result_label, close.comment, close.closed_at, close.closed_by
+      from app.shared_tasks task left join app.task_closes close on close.task_id = task.id
+      where task.title like 'TASK-X08-%' order by task.title`)).rows;
+    fs.writeFileSync(path.join(output, 'tasks-x08-db.json'), JSON.stringify(x08, null, 2));
+    await check('X08 persisted 20 today → 5 closed; adjacent days and legacy result unchanged', async () => {
+      const today = x08.filter(row => row.title.startsWith('TASK-X08-TODAY-'));
+      assert.equal(today.length, 20);
+      assert.equal(today.filter(row => row.state === 'closed').length, 5);
+      assert.equal(today.filter(row => row.state === 'open').length, 15);
+      assert(today.filter(row => row.state === 'closed').every(row =>
+        row.result_code && row.closed_at && row.closed_by));
+      assert.equal(x08.filter(row => row.title.startsWith('TASK-X08-FUTURE-') && row.state === 'open').length, 2);
+      assert.equal(x08.filter(row => row.title.startsWith('TASK-X08-YESTERDAY-') && row.state === 'open').length, 2);
+      assert.equal(x08.find(row => row.id === legacy.id)?.result_code, null);
+    });
+    await check('X08 scoped badge, results, and forbidden task calls', async () => {
+      const originalToken = token;
+      try {
+        for (const role of ['admin', 'manager', 'foreign-manager', 'teacher', 'client']) {
+          const account = fixture.clientAuditAccounts.find(value => value.role === role);
+          const login = await request('POST', '/auth/login',
+            { email: account.email, password: fixture.password }, 200, { auth: false });
+          token = login.session.accessToken;
+          if (role === 'admin') {
+            assert.equal((await request('GET', '/crm/sections/unseen')).tasks, 15);
+            await request('POST', '/crm/shared-tasks', {
+              title: 'TASK-X08-FORBIDDEN', allDay: true, startAt: new Date().toISOString(),
+              audiences: [{ type: 'branch', targetId: fixture.branch }],
+            }, 403);
+          } else if (role === 'manager') {
+            const results = await request('GET', '/crm/shared-tasks/results?q=TASK-X08-');
+            assert.equal(results.items.filter(item => item.title.startsWith('TASK-X08-TODAY-')).length, 5);
+            assert(results.items.some(item => item.taskId === legacy.id && item.result === null));
+          } else if (role === 'foreign-manager' || role === 'teacher') {
+            const list = await request('GET', '/crm/shared-tasks?q=TASK-X08-TODAY-1');
+            assert.equal(list.items.length, 0);
+          } else {
+            await request('GET', '/crm/shared-tasks?q=TASK-X08-TODAY-1', undefined, 403);
+          }
+        }
+      } finally {
+        token = originalToken;
+      }
+    });
   }
   if (process.argv.includes('--audit-archive')) {
     const { runClientArchiveAudit } = require('./client-archive-verification.cjs');
@@ -666,8 +813,31 @@ async function main() {
     await check('Teacher branch assignments and availability save independently with version protection', () =>
       runDeviceTest('teacher_availability_live_test.dart', 'teacher-availability-windows.log', {
         HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password, accounts: fixture.clientAuditAccounts,
-          branchId: fixture.branch, extraBranchId: extra.id, teacherId: fixture.teachers[0], otherTeacherId: fixture.teachers[1] }),
+          branchId: fixture.branch, extraBranchId: extra.id, teacherId: fixture.teachers[0], otherTeacherId: fixture.teachers[1],
+          roomId: fixture.rooms[0], studentId: fixture.students[0] }),
       }));
+    await check('Client cannot change teacher availability', async () => {
+      const from = new Date();
+      const to = new Date(from.getTime() + 31 * 86400000);
+      const endpoint = `/crm/schedule-reference?branchId=${fixture.branch}&teacherId=${fixture.teachers[0]}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
+      const before = (await request('GET', endpoint)).teacher;
+      const login = await request('POST', '/auth/login', {
+        email: fixture.clientAuditAccounts.find(account => account.role === 'client').email,
+        password: fixture.password,
+      }, 200, { auth: false });
+      const adminToken = token;
+      try {
+        token = login.session.accessToken;
+        await request('PUT', `/crm/schedule-reference/teachers/${fixture.teachers[0]}/availability`, {
+          expectedVersion: before.version,
+          rules: before.availability.map(rule => Object.fromEntries(Object.entries(rule).filter(([, value]) => value !== null))),
+        }, 403);
+      } finally {
+        token = adminToken;
+      }
+      const after = (await request('GET', endpoint)).teacher;
+      assert.equal(after.version, before.version);
+    });
     const teachers = (await pool.query(`select t.id,p.first_name,t.schedule_reference_version,
       (select jsonb_agg(to_jsonb(a) order by a.branch_id) from app.teacher_branches a where a.teacher_id=t.id) assignments,
       (select jsonb_agg(to_jsonb(r) order by r.kind,r.weekday) from app.teacher_availability_rules r where r.teacher_id=t.id) rules
@@ -731,6 +901,78 @@ async function main() {
       }));
     const recipients = (await pool.query("select r.notification_id,u.role,r.is_read,r.read_at,n.title from app.notification_recipients r join app.notifications n on n.id=r.notification_id join app.users u on u.id=r.user_id where n.title like 'AUDIT-INBOX-%' order by u.role,n.title")).rows;
     fs.writeFileSync(path.join(output, 'notifications-inbox-db.json'), JSON.stringify(recipients, null, 2));
+  }
+  if (notificationSourceMode) {
+    const sourceId = (await pool.query(
+      "update app.lead_sources set canonical_name='st02',display_name='ST02 source' where canonical_name=$1 returning id",
+      [`http_${runId}`])).rows[0].id;
+    const controlDir = path.join(output, 'notification-control');
+    fs.mkdirSync(controlDir);
+    let deviceFinished = false;
+    const device = runDeviceTest('notification_source_live_test.dart', 'notification-source-windows.log', {
+      HTTP_JOURNEY_FIXTURE: JSON.stringify({baseUrl, password: fixture.password,
+        accounts: fixture.clientAuditAccounts, controlDir}),
+    }).finally(() => { deviceFinished = true; });
+    const webhook = (async () => {
+      const trigger = path.join(controlDir, 'trigger');
+      for (let attempt = 0; !fs.existsSync(trigger); attempt++) {
+        if (deviceFinished || attempt >= 600) throw Error('Native listener did not request inbound lead');
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      const ingestionId = randomUUID();
+      const payload = {firstName:'ST02',lastName:'Входящий',phone:'89991234568',sourceId,branchId:fixture.branch};
+      const timestamp = Math.floor(Date.now() / 1000);
+      const { createInboundLeadSignature } = require(path.join(server, 'src/crm/clients/inbound-lead-signature'));
+      const signature = createInboundLeadSignature(leadWebhookSecret, timestamp, ingestionId, payload);
+      async function send() {
+        const response = await fetch(`${baseUrl}/public/lead-webhook`, {method:'POST',
+          headers:{'content-type':'application/json','x-ingestion-id':ingestionId,
+            'x-webhook-timestamp':String(timestamp),'x-webhook-signature':signature},
+          body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
+        const body = await response.json();
+        assert.equal(response.status, 201, `Webhook returned ${response.status}`);
+        return body;
+      }
+      const first = await send(), replay = await send();
+      assert.equal(first.leadId, replay.leadId);
+      assert.equal(replay.replayed, true);
+      fs.writeFileSync(path.join(controlDir, 'inbound-result.json'), JSON.stringify(replay));
+      return {ingestionId, leadId:first.leadId};
+    })();
+    await check('Live Windows app listener routes manual and inbound lead notifications', async () => {
+      const [native, external] = await Promise.allSettled([device, webhook]);
+      if (native.status === 'rejected') throw native.reason;
+      if (external.status === 'rejected') throw external.reason;
+      const {ingestionId, leadId} = external.value;
+      if (integratedCandidateMode) integratedLeadId = leadId;
+      const state = {
+        manualLeads:(await pool.query("select id from app.leads where first_name='ST02Edited' and last_name='Ручной'")).rows.length,
+        manualNotifications:(await pool.query("select n.id from app.notifications n join app.leads l on l.id::text=n.data->>'entityId' where l.first_name='ST02Edited' and l.last_name='Ручной'")).rows.length,
+        inboundLeads:(await pool.query('select id from app.leads where inbound_id=$1',[ingestionId])).rows.length,
+        notifications:(await pool.query("select n.id,r.user_id,u.role from app.notifications n join app.notification_recipients r on r.notification_id=n.id join app.users u on u.id=r.user_id where n.data->>'entityId'=$1 order by u.role",[leadId])).rows,
+        outbox:(await pool.query("select event_id,published_at from app.platform_outbox_events where request_id=$1",[`inbound-lead:${ingestionId}`])).rows,
+      };
+      assert.equal(state.manualLeads, 1);
+      assert.equal(state.manualNotifications, 0);
+      assert.equal(state.inboundLeads, 1);
+      assert.equal(new Set(state.notifications.map(row=>row.user_id)).size, state.notifications.length);
+      assert(state.notifications.some(row=>row.role==='admin'));
+      assert(state.notifications.some(row=>row.role==='manager'));
+      assert(!state.notifications.some(row=>row.role==='teacher'||row.role==='client'));
+      const foreignUser = (await pool.query('select id from app.users where email=$1',
+        [fixture.clientAuditAccounts.find(account=>account.role==='foreign-manager').email])).rows[0].id;
+      assert(!state.notifications.some(row=>row.user_id===foreignUser));
+      assert.equal(state.outbox.length, 1);
+      assert(state.outbox[0].published_at);
+      fs.writeFileSync(path.join(output, 'notification-source-db.json'), JSON.stringify(state,null,2));
+      return {manualLeads:1, manualNotifications:0, inboundLeads:1,
+        recipients:state.notifications.length, outboxStatus:'published'};
+    });
+    if (integratedCandidateMode) assert(integratedLeadId, 'Integrated journey requires a passing inbound UI step');
+    if (!integratedCandidateMode) await require('./task-delivery-verification.cjs').runTaskDeliveryAudit({pool,fixture,baseUrl,output,check,
+      closeOpenTask:taskId=>runDeviceTest('notification_task_close_live_test.dart','notification-task-close-windows.log',{
+        HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,
+          accounts:fixture.clientAuditAccounts,taskId})})});
   }
   if (process.argv.includes('--audit-messenger-extras')) {
     const members = (await pool.query('select id from app.users where email=any($1::text[])', [fixture.clientAuditAccounts.map(a => a.email)])).rows;
@@ -914,16 +1156,28 @@ async function main() {
     fs.writeFileSync(path.join(output,'auth-runtime-db.json'),JSON.stringify(db,null,2));
   }
   if(process.argv.includes('--audit-client-extended')){
+    const cardPackage = await request('POST', '/crm/subscription-packages', {
+      name: 'CARD-VIEWPORT', branchId: fixture.branch, unitCount: 8,
+      basePriceMinor: '800000', currencyCode: 'RUB', validityDays: 90,
+    }, 201);
+    const cardPurchase = {packageId: cardPackage.id, payerStudentId: fixture.students[0],
+      fundingMode: 'personal_account', paymentAmountMinor: '800000', paymentMethod: 'cash',
+      purchaseReason: 'Карточка с оплаченным абонементом'};
+    const cardPreview = await request('POST', `/crm/students/${fixture.students[0]}/subscriptions/purchase/preview`, cardPurchase, 201);
+    assert(cardPreview.canCommit);
+    await request('POST', `/crm/students/${fixture.students[0]}/subscriptions/purchase`, {
+      ...cardPurchase, previewToken: cardPreview.previewToken, confirm: true,
+    }, 201);
     const secondBranchId=(await pool.query("insert into app.branches(name,timezone_name) values('AUDIT-SECOND-BRANCH','Europe/Moscow') returning id")).rows[0].id;
     await pool.query('insert into app.staff_branch_assignments(staff_member_id,branch_id) select sm.id,$1 from app.staff_members sm join app.profiles p on p.id=sm.profile_id join app.users u on u.id=p.user_id where u.email=any($2::text[])',[secondBranchId,fixture.clientAuditAccounts.map(a=>a.email)]);
     await check('Actual client creation dynamic fields and card branch source birthday',()=>runDeviceTest('client_extended_live_test.dart','client-extended-windows.log',{
-      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,branchId:fixture.branch,secondBranchId})
+      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,branchId:fixture.branch,secondBranchId,populatedStudentId:fixture.students[0]})
     }));
     const db={leads:(await pool.query("select id,first_name,last_name,branch_id,source_id,custom_data,version from app.leads where first_name='AUDIT-EXTENDED'")).rows,students:(await pool.query("select s.id,p.first_name,p.last_name,s.branch_id,s.source_id,s.custom_data,s.version from app.students s join app.profiles p on p.id=s.profile_id where p.first_name='AUDIT-EXTENDED'")).rows};
     db.fieldValues=(await pool.query('select d.field_key,v.entity_type,v.entity_id,v.value_text,v.value_number,v.value_boolean,v.value_date::text from app.client_custom_field_values v join app.client_custom_field_definitions d on d.id=v.definition_id where v.entity_id=any($1::uuid[])',[[...db.leads,...db.students].map(r=>r.id)])).rows;
     fs.writeFileSync(path.join(output,'client-extended-db.json'),JSON.stringify(db,null,2));
   }
-  if(process.argv.includes('--audit-plan-timeline')){
+  if(process.argv.includes('--audit-plan-timeline') || process.argv.includes('--audit-x03')){
     const timelineUser=(await pool.query("insert into app.users(email,role,is_app_account) values('audit-timeline@example.test','client',false) returning id")).rows[0].id;
     const timelineProfile=(await pool.query("insert into app.profiles(user_id,first_name,last_name) values($1,'AUDIT','TIMELINE') returning id",[timelineUser])).rows[0].id;
     const student=(await pool.query('insert into app.students(profile_id,branch_id) values($1,$2) returning id',[timelineProfile,fixture.branch])).rows[0].id;
@@ -940,10 +1194,56 @@ async function main() {
     },201,{key:randomUUID()});
     const snapshot=async()=>(await pool.query("select l.id,l.version,l.status,l.scheduled_at from app.lessons l join app.schedule_series s on s.id=l.series_id join app.schedule_plans p on p.id=s.plan_id where p.student_id=$1 order by l.scheduled_at",[student])).rows;
     const before=await snapshot();assert(before.length>90);
-    await check('Actual schedule plan and lesson timeline pagination and lesson opening',()=>runDeviceTest('plan_timeline_live_test.dart','plan-timeline-windows.log',{
-      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,branchId:fixture.branch,studentId:student,lessonIds:before.map(l=>l.id)})
+    const x03=process.argv.includes('--audit-x03');
+    await check(x03?'X-03 two staff UI sessions, real CRM stream and current timeline':'Actual schedule plan and lesson timeline pagination and lesson opening',()=>runDeviceTest(x03?'x03_live_test.dart':'plan_timeline_live_test.dart',x03?'x03-windows.log':'plan-timeline-windows.log',{
+      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,branchId:fixture.branch,studentId:student,lessonIds:before.map(l=>l.id),edgeLessonId:before[29].id,edgeScheduledAt:before[29].scheduled_at,recoveryLessonId:before[8].id,recoveryScheduledAt:before[8].scheduled_at,conflictLessonId:before[12].id,conflictScheduledAt:before[12].scheduled_at})
     }));
-    fs.writeFileSync(path.join(output,'plan-timeline-db.json'),JSON.stringify({before,after:await snapshot()},null,2));
+    const ui = JSON.parse(fs.readFileSync(path.join(output,x03?'x03-admin.json':'plan-timeline-director.json'),'utf8'));
+    const chain = ui.facts.find(fact=>fact.step==='CANCEL-CURRENT' && Array.isArray(fact.chain))?.chain;
+    assert.equal(chain?.length,3,'Two moves and cancellation must produce three linked lessons');
+    const linked=(await pool.query('select id,predecessor_id,successor_id,lifecycle_state from app.lessons where id=any($1::uuid[]) order by array_position($1::uuid[],id)',[chain])).rows;
+    assert.equal(linked.length,3);
+    assert.deepEqual(linked.map(row=>row.lifecycle_state),['rescheduled','rescheduled','cancelled']);
+    assert.deepEqual(linked.map(row=>row.successor_id),[chain[1],chain[2],null]);
+    const transitions=(await pool.query('select lesson_id,to_state,successor_id from app.lesson_transitions where lesson_id=any($1::uuid[]) order by array_position($1::uuid[],lesson_id)',[chain])).rows;
+    assert.deepEqual(transitions.map(row=>row.to_state),['rescheduled','rescheduled','cancelled']);
+    const audits=(await pool.query("select entity_id,action from app.audit_events where entity_type='lesson' and entity_id=any($1::text[]) and action in ('crm.lesson_rescheduled','crm.lesson_cancelled') order by array_position($1::text[],entity_id)",[chain])).rows;
+    assert.deepEqual(audits.map(row=>row.action),['crm.lesson_rescheduled','crm.lesson_rescheduled','crm.lesson_cancelled']);
+    const outbox=(await pool.query("select aggregate_id,event_type from app.platform_outbox_events where aggregate_type='schedule:lesson' and aggregate_id=any($1::text[]) and event_type='schedule.lesson.changed' order by array_position($1::text[],aggregate_id)",[chain])).rows;
+    assert.equal(outbox.length,3,'Each UI transition must retain one outbox event');
+    let otherChains=null;
+    if(x03){
+      const recovered=ui.facts.find(fact=>fact.step==='MISSED-EVENT' && fact.successorId);
+      const retried=ui.facts.find(fact=>fact.step==='ERROR-RETRY' && fact.successorId);
+      const conflict=ui.facts.find(fact=>fact.step==='CONCURRENT-VERSION' && fact.staleLessonId);
+      assert(recovered && retried && conflict,'Recovery, retry and concurrency UI facts are required');
+      const recoveryIds=[recovered.sourceId,recovered.successorId,retried.successorId];
+      const recoveryTransitions=(await pool.query('select lesson_id,to_state from app.lesson_transitions where lesson_id=any($1::uuid[]) order by array_position($1::uuid[],lesson_id)',[recoveryIds])).rows;
+      assert.deepEqual(recoveryTransitions.map(row=>row.to_state),['rescheduled','rescheduled']);
+      const conflictTransitions=(await pool.query('select lesson_id,to_state from app.lesson_transitions where lesson_id=$1',[conflict.staleLessonId])).rows;
+      assert.deepEqual(conflictTransitions.map(row=>row.to_state),['rescheduled']);
+      otherChains={recoveryIds,recoveryTransitions,conflictLessonId:conflict.staleLessonId,conflictTransitions};
+    }
+    await check('Linked client reads only scoped current timeline',async()=>{
+      const clientAccount=fixture.clientAuditAccounts.find(account=>account.role==='client');
+      const clientUser=(await pool.query('select id from app.users where email=$1',[clientAccount.email])).rows[0].id;
+      await pool.query("insert into app.user_crm_links(user_id,entity_type,entity_id,link_source,confirmed_at) values($1,'student',$2,'import',now())",[clientUser,student]);
+      const previousToken=token;
+      try {
+        token=(await request('POST','/auth/login',{email:clientAccount.email,password:fixture.password},200,{auth:false})).session.accessToken;
+        const own=await request('GET',`/crm/students/${student}/lesson-timeline`);
+        assert(own.items.length>0);
+        assert(own.items.every(item=>!chain.includes(item.id)));
+        const foreign=await request('GET',`/crm/students/${fixture.students[1]}/lesson-timeline`,undefined,[200,403,404]);
+        assert(!foreign.items?.length,'Unlinked student lessons must not be exposed');
+      } finally { token=previousToken; }
+    });
+    await check('Fresh Windows client process reads only current student lessons',()=>runDeviceTest('plan_timeline_live_test.dart','plan-timeline-restart-windows.log',{
+      ST04_TIMELINE_RESTART:'1',
+      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,
+        branchId:fixture.branch,studentId:student,lessonIds:before.map(lesson=>lesson.id),chain}),
+    }));
+    fs.writeFileSync(path.join(output,'plan-timeline-db.json'),JSON.stringify({before,after:await snapshot(),chain:linked,transitions,audits,outbox,otherChains},null,2));
   }
   if(process.argv.includes('--audit-task-navigation')){
     await check('Actual task calendar scope history and linked entity navigation',()=>runDeviceTest('task_navigation_live_test.dart','task-navigation-windows.log',{
@@ -1054,7 +1354,24 @@ async function main() {
     }));
     fs.writeFileSync(path.join(output,'schedule-context-db.json'),JSON.stringify({before,after:await snapshot()},null,2));
   }
-  if (process.argv.includes('--audit-customer-revisions')) {
+  if (process.argv.includes('--audit-customer-revisions') || integratedCandidateMode) {
+    const branchHours = (await pool.query(
+      'select weekday,open_local::text,close_local::text from app.branch_hours where branch_id=$1 order by weekday',
+      [fixture.branch],
+    )).rows;
+    const teacherHours = (await pool.query(
+      `select weekday,local_start::text,local_end::text from app.teacher_availability_rules
+       where teacher_id=$1 and available=true order by weekday`,
+      [fixture.teachers[0]],
+    )).rows;
+    assert.equal(branchHours.length, 7);
+    assert.equal(teacherHours.length, 7);
+    assert(branchHours.every(row => row.open_local === '08:00:00' && row.close_local === '22:00:00'));
+    assert(teacherHours.every(row => row.local_start === '08:00:00' && row.local_end === '22:00:00'));
+    fs.writeFileSync(path.join(output, 'trial-slot-preconditions.json'), JSON.stringify({
+      timezone: 'Europe/Moscow', branchHours, teacherHours,
+      createLocal: 'tomorrow 10:00/60m', editLocal: 'day after tomorrow 11:00/60m',
+    }, null, 2));
     for (let index = 2; index < 6; index++) {
       fixture.rooms.push((await pool.query(
         'insert into app.rooms(branch_id,name) values($1,$2) returning id',
@@ -1077,8 +1394,40 @@ async function main() {
       runDeviceTest('customer_revisions_live_test.dart', 'customer-revisions-windows.log', {
         HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password,
           accounts: fixture.clientAuditAccounts, branchId: fixture.branch,
-          lessonId: lesson.id, studentId: fixture.students[0], rooms: fixture.rooms }),
+          lessonId: lesson.id, studentId: fixture.students[0], rooms: fixture.rooms,
+          teacherId: fixture.teachers[0], roomId: fixture.rooms[0],
+          foreignBranchId: fixture.foreignBranch, integratedLeadId }),
       }));
+    if (!process.env.HTTP_JOURNEY_ANDROID_SERIAL) {
+    const trialRecords = Object.fromEntries((integratedCandidateMode ? ['manager', 'director'] : ['admin', 'manager', 'director']).map(role => {
+      const audit = JSON.parse(fs.readFileSync(path.join(output, `lead-trial-${role}.json`), 'utf8'));
+      const created = audit.facts.find(fact => fact.step === 'CREATE');
+      const cancelled = audit.facts.find(fact => fact.step === 'CANCEL');
+      assert(created?.leadId && cancelled?.calendarLesson?.status === 'cancelled');
+      return [role, { leadId: created.leadId, lessonId: cancelled.calendarLesson.id }];
+    }));
+    await check('Trial cancellation persists after a fresh Windows client process', () =>
+      runDeviceTest('customer_revisions_live_test.dart', 'trial-restart-windows.log', {
+        HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password,
+          accounts: fixture.clientAuditAccounts, trialRestart: true, trialRecords }),
+      }));
+    await check('Cancelled trials have one zero-value client and teacher fact each', async () => {
+      const lessonIds = Object.values(trialRecords).map(record => record.lessonId);
+      const clients = (await pool.query(`select lesson_id,charge_type,amount_minor::text,units::text
+        from app.lesson_client_charge_facts where lesson_id=any($1::uuid[])`, [lessonIds])).rows;
+      const teachers = (await pool.query(`select lesson_id,compensation_type,amount_minor::text
+        from app.lesson_teacher_compensation_facts where lesson_id=any($1::uuid[])`, [lessonIds])).rows;
+      assert.equal(clients.length, lessonIds.length);
+      assert.equal(teachers.length, lessonIds.length);
+      assert.deepEqual(clients.map(row => row.lesson_id).sort(), [...lessonIds].sort());
+      assert.deepEqual(teachers.map(row => row.lesson_id).sort(), [...lessonIds].sort());
+      assert(clients.every(row => row.charge_type === 'none' && row.amount_minor === '0' && Number(row.units) === 0));
+      assert(teachers.every(row => row.compensation_type === 'none' && row.amount_minor === '0'));
+      const facts = { clientFacts: clients.length, teacherFacts: teachers.length,
+        clientAmountMinor: '0', clientUnits: '0', teacherAmountMinor: '0' };
+      fs.writeFileSync(path.join(output, 'trial-financial-facts.json'), JSON.stringify(facts, null, 2));
+      return facts;
+    });
     if (process.env.HTTP_JOURNEY_ROLLBACK_IMAGE) {
       assert(process.env.HTTP_JOURNEY_IMAGE, 'Recovery switch requires an image-backed candidate');
       // Exercise the administrator workflow, not the operator's explicit-rate override.
@@ -1112,6 +1461,7 @@ async function main() {
             password: fixture.password }, 200, { auth: false })).session.accessToken;
         },
       });
+    }
     }
   }
   if(process.argv.includes('--audit-lesson-funding')){
@@ -1588,23 +1938,137 @@ async function main() {
     }
     fs.writeFileSync(path.join(output, 'statuses-db.json'), JSON.stringify(snapshots, null, 2));
   }
-  if (process.argv.includes('--audit-purchase') || process.argv.includes('--audit-subscription-cancel') || process.argv.includes('--audit-partial-purchase')) {
-    await request('POST', '/crm/subscription-packages', { name: 'PURCHASE-PACKAGE', branchId: fixture.branch,
-      unitCount: 8, basePriceMinor: '800000', currencyCode: 'RUB', validityDays: 90 }, 201);
-    if (process.argv.includes('--audit-partial-purchase')) {
-      await request('POST', '/crm/subscription-packages', { name: 'AUDIT-14400', branchId: fixture.branch,
-        unitCount: 4, basePriceMinor: '1440000', currencyCode: 'RUB', validityDays: 90 }, 201);
+  if (process.argv.includes('--audit-purchase') || process.argv.includes('--audit-subscription-cancel') || process.argv.includes('--audit-partial-purchase') || installmentCycleMode) {
+    if (installmentCycleMode) {
+      await stopApi();
+      await startApi(fixture, true);
+      token = (await request('POST', '/auth/login', {
+        email: fixture.email, password: fixture.password,
+      }, 200, { auth: false })).session.accessToken;
     }
+    const purchasePackage = await request('POST', '/crm/subscription-packages', { name: 'PURCHASE-PACKAGE', branchId: fixture.branch,
+      unitCount: installmentCycleMode ? 4 : 8,
+      basePriceMinor: installmentCycleMode ? '1440000' : '800000',
+      currencyCode: 'RUB', validityDays: 90 }, 201);
     await check('Subscription sale, cancellation, payment and lead conversion through actual form', () =>
-      runDeviceTest(process.argv.includes('--audit-partial-purchase') ? 'partial_purchase_live_test.dart' : 'client_purchase_live_test.dart', 'purchase-windows.log', {
+      runDeviceTest(process.argv.includes('--audit-partial-purchase') || installmentCycleMode ? 'partial_purchase_live_test.dart' : 'client_purchase_live_test.dart', 'purchase-windows.log', {
         HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password,
-          branchId: fixture.branch, accounts: fixture.clientAuditAccounts, auditCancellation: process.argv.includes('--audit-subscription-cancel') }),
+          branchId: fixture.branch,
+          roomId: fixture.rooms[installmentCycleMode ? 1 : 0],
+          teacherId: fixture.teachers[installmentCycleMode ? 1 : 0],
+          accounts: fixture.clientAuditAccounts, auditCancellation: process.argv.includes('--audit-subscription-cancel'),
+          auditInstallmentCycle: installmentCycleMode, integratedLeadId,
+          integratedTrialId: integratedCandidateMode
+            ? JSON.parse(fs.readFileSync(path.join(output, 'lead-trial-admin.json'), 'utf8'))
+              .facts.find(fact => fact.step === 'INTEGRATED-TRIAL')?.lessonId
+            : undefined }),
       }));
+    if (installmentCycleMode) await check('Two UI lesson charges create one durable installment due across restart', async () => {
+      const trace = JSON.parse(fs.readFileSync(path.join(output, 'partial-purchase-admin.json'), 'utf8'));
+      const purchase = trace.facts.find(fact => fact.step === (integratedCandidateMode ? 'lead-PURCHASE' : 'student-PURCHASE'));
+      const consumption = trace.facts.find(fact => fact.step === 'PAID-LESSON-2');
+      assert(purchase?.studentId && purchase?.subscription?.id);
+      assert.equal(consumption?.lessonIds?.length, 2);
+      if (integratedCandidateMode) {
+        assert.equal(purchase.id, integratedLeadId);
+        integratedStudentId = purchase.studentId;
+        const card = await request('GET', `/crm/leads/${integratedLeadId}/card`);
+        assert(card.linkedStudents.some(student => student.id === purchase.studentId));
+        fs.writeFileSync(path.join(output, 'integrated-client-link.json'), JSON.stringify({
+          leadId: integratedLeadId, studentId: purchase.studentId,
+          subscriptionId: purchase.subscription.id, lessonIds: consumption.lessonIds,
+        }, null, 2));
+      }
+      for (const role of ['admin', 'manager', 'director']) {
+        fs.copyFileSync(path.join(output, `partial-purchase-${role}.json`),
+          path.join(output, `installment-cycle-${role}.json`));
+      }
+      await stopApi();
+      await startApi(fixture, true);
+      token = (await request('POST', '/auth/login', {
+        email: fixture.email, password: fixture.password,
+      }, 200, { auth: false })).session.accessToken;
+      await runDeviceTest('partial_purchase_live_test.dart', 'purchase-restart-windows.log', {
+        HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, password: fixture.password,
+          accounts: fixture.clientAuditAccounts,
+          cycleRestartStudentId: purchase.studentId }),
+      });
+      const issued = (await pool.query(
+        'select id,student_id,final_price_minor::text from app.subscriptions where package_id=$1 order by id',
+        [purchasePackage.id],
+      )).rows;
+      assert.equal(issued.length, 6);
+      const records = [];
+      for (const subscription of issued) {
+        assert.equal(subscription.final_price_minor, '1440000');
+        const payments = (await pool.query(
+          'select id,amount_minor::text from app.payments where issued_subscription_id=$1 and deleted_at is null',
+          [subscription.id],
+        )).rows;
+        const installments = (await pool.query(
+          'select id,amount_minor::text,due_policy from app.subscription_installments where issued_subscription_id=$1',
+          [subscription.id],
+        )).rows;
+        assert.equal(payments.length, 1);
+        assert.equal(payments[0].amount_minor, '720000');
+        assert.equal(installments.length, 1);
+        assert.equal(installments[0].amount_minor, '720000');
+        assert.equal(installments[0].due_policy, 'consumption');
+        const due = (await pool.query(
+          'select id,trigger_charge_fact_id,due_at from app.subscription_installment_due_facts where installment_id=$1',
+          [installments[0].id],
+        )).rows;
+        assert.equal(due.length, subscription.id === purchase.subscription.id ? 1 : 0);
+        records.push({ subscriptionId: subscription.id, paymentId: payments[0].id,
+          installmentId: installments[0].id, dueFactId: due[0]?.id ?? null });
+      }
+      const charges = (await pool.query(
+        `select id,lesson_id,units::text,created_at from app.lesson_client_charge_facts_effective
+         where subscription_id=$1 and charge_type='subscription' order by created_at,id`,
+        [purchase.subscription.id],
+      )).rows;
+      assert.equal(charges.length, 2);
+      assert(charges.every(charge => Number(charge.units) === 1));
+      assert.deepEqual(charges.map(charge => charge.lesson_id).sort(), [...consumption.lessonIds].sort());
+      const target = records.find(record => record.subscriptionId === purchase.subscription.id);
+      const due = (await pool.query(
+        'select trigger_charge_fact_id,due_at from app.subscription_installment_due_facts where id=$1',
+        [target.dueFactId],
+      )).rows[0];
+      assert.equal(due.trigger_charge_fact_id,
+        charges.find(charge => charge.lesson_id === consumption.lessonIds[1]).id);
+      assert.equal(new Date(due.due_at).toISOString(),
+        new Date(charges.find(charge => charge.lesson_id === consumption.lessonIds[1]).created_at).toISOString());
+      const dueRecords = (await pool.query(
+        'select id,status,amount_minor::text from app.client_payment_records where installment_id=$1',
+        [target.installmentId],
+      )).rows;
+      assert.equal(dueRecords.length, 1);
+      assert.equal(dueRecords[0].status, 'posted_pending');
+      assert.equal(dueRecords[0].amount_minor, '720000');
+      const requestId = `installment-due:${target.installmentId}`;
+      const audit = (await pool.query('select id from app.audit_events where request_id=$1', [requestId])).rows;
+      const outbox = (await pool.query('select event_id from app.platform_outbox_events where request_id=$1', [requestId])).rows;
+      assert.equal(audit.length, 1);
+      assert.equal(outbox.length, 1);
+      const evidence = { subscriptionCount: issued.length, records, chargeFacts: charges,
+        dueAt: due.due_at, dueRecordId: dueRecords[0].id,
+        auditId: audit[0].id, outboxId: outbox[0].event_id };
+      fs.writeFileSync(path.join(output, 'installment-cycle-db.json'), JSON.stringify(evidence, null, 2));
+      return { subscriptions: 6, initialPayments: 6, futureInstallments: 6,
+        completedChargeFacts: 2, dueFacts: 1, pendingRecords: 1 };
+    });
     const snapshots = {};
     for (const table of ['leads', 'students', 'subscriptions', 'payments', 'client_payment_records', 'client_payment_status_events', 'subscription_obligation_facts', 'subscription_lifecycle_events', 'subscription_installments']) {
       snapshots[table] = (await pool.query(`select to_jsonb(row) value from app.${table} row`)).rows.map(row => row.value);
     }
     fs.writeFileSync(path.join(output, 'purchase-db.json'), JSON.stringify(snapshots, null, 2));
+    if (integratedCandidateMode) assert(integratedStudentId, 'Integrated task must follow a verified conversion and consumption');
+    if (integratedCandidateMode) await require('./task-delivery-verification.cjs').runTaskDeliveryAudit({pool,fixture,baseUrl,output,check,
+      linkedEntity: {type:'student',id:integratedStudentId},
+      closeOpenTask:taskId=>runDeviceTest('notification_task_close_live_test.dart','notification-task-close-windows.log',{
+        HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,
+          accounts:fixture.clientAuditAccounts,taskId, closeWithComment:true})})});
   }
   if (process.argv.includes('--audit-dynamic-fields')) {
     await check('Dynamic fields and status persistence through actual client cards', () =>
@@ -1673,7 +2137,7 @@ async function main() {
       scheduled.setUTCHours(16, 0, 0, 0);
       await runDeviceTest('employee_journey_live_test.dart', 'employee-windows.log', {
         HTTP_JOURNEY_FIXTURE: JSON.stringify({ baseUrl, email: fixture.employeeEmail, password: fixture.password,
-          branchId: fixture.branch, roomId: fixture.rooms[0], scheduledAt: scheduled.toISOString() }),
+          branchId: fixture.branch, roomId: fixture.rooms[0], teacherId: fixture.teachers[0], scheduledAt: scheduled.toISOString() }),
       });
       const result = JSON.parse(fs.readFileSync(path.join(output, 'employee-result.json'), 'utf8'));
       const { verifyEmployeeResult } = require('./release-journey-verification.cjs');
@@ -1712,7 +2176,13 @@ main().catch(error => {
     requestCountersScope: 'Built-in HTTP journeys only; native Flutter and client audit helper requests are additional.',
     revision, sourceSha256: testedSource,
     passed: results.filter(r => r.status === 'PASS').length, failed: results.filter(r => r.status === 'FAIL').length,
-    scope: 'Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.',
+    scope: notificationSourceMode
+      ? 'Local Windows Debug UI, real CRM Socket.IO, PostgreSQL outbox/task workers, OS notification MethodChannel capture; external push/email and actual OS display not verified.'
+      : process.argv.includes('--audit-tasks')
+        ? 'Local Windows Debug task UI, real CRM Socket.IO and PostgreSQL outbox worker; task reminder worker runs in separate notification-source mode. No production requests.'
+      : process.argv.includes('--audit-collaboration-recovery')
+        ? 'Local Windows Debug UI, two authenticated staff sessions, real CRM Socket.IO reconnect and PostgreSQL outbox worker; external delivery and production not used.'
+      : 'Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.',
     employeeUiRequired: process.argv.includes('--release-journeys'),
     clientPersistenceUiRequired: process.argv.includes('--client-persistence'),
     restoreRequired: process.argv.includes('--restore') || process.argv.includes('--release-journeys'), results };

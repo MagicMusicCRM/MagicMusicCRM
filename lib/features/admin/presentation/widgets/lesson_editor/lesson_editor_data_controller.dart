@@ -189,6 +189,14 @@ class LessonEditorDataController implements LessonEditorDataLoader {
     );
   }
 
+  LessonEditorDraft rebase(
+    LessonEditorSession previous,
+    LessonEditorDraft draft,
+    LessonEditorSession current,
+  ) => draft.notes == previous.draft.notes
+      ? draft.copyWith(notes: current.draft.notes)
+      : draft;
+
   Future<LessonEditorSession> reloadAfterConflict(
     LessonEditorInitialSource source,
     LessonEditorSession session,

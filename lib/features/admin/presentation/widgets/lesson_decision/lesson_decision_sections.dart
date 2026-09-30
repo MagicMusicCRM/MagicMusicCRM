@@ -34,7 +34,6 @@ class LessonDecisionReasonField extends StatelessWidget {
     decoration: const InputDecoration(
       labelText: 'Причина *',
       hintText: 'Что произошло и почему выбран этот расчёт',
-      helperText: 'Будет видна сотрудникам в истории действий',
     ),
     validator: (value) =>
         (value ?? '').trim().isEmpty ? 'Укажите причину' : null,
@@ -389,6 +388,24 @@ class LessonDecisionOptionsSection extends StatelessWidget {
         const SizedBox(height: AppSpace.md),
       ],
       if (canManageTeacherCompensation) ...[
+        AppDropdownButtonFormField<String>(
+          menuMaxHeight: 256,
+          key: const Key('lesson-decision-compensation'),
+          initialValue: compensationKey,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Оплата преподавателю *',
+          ),
+          items: [
+            for (final item in catalog.compensationRules)
+              DropdownMenuItem(value: item.key, child: Text(item.label)),
+          ],
+          validator: (value) => value == null ? 'Выберите оплату' : null,
+          onChanged: enabled && compensationTouched
+              ? onCompensationChanged
+              : null,
+        ),
+        const SizedBox(height: AppSpace.sm),
         CheckboxListTile(
           key: const Key('lesson-decision-compensation-edit-toggle'),
           contentPadding: EdgeInsets.zero,
@@ -404,31 +421,6 @@ class LessonDecisionOptionsSection extends StatelessWidget {
                   }
                 },
           title: const Text('Изменить оплату преподавателю вручную'),
-          subtitle: Text(
-            compensationTouched
-                ? 'Изменение будет сохранено с причиной и историей.'
-                : 'Действует рекомендуемое правило; поле защищено.',
-          ),
-        ),
-        AppDropdownButtonFormField<String>(
-          menuMaxHeight: 256,
-          key: const Key('lesson-decision-compensation'),
-          initialValue: compensationKey,
-          isExpanded: true,
-          decoration: InputDecoration(
-            labelText: 'Оплата преподавателю *',
-            helperText: compensationTouched
-                ? 'Задано вручную независимо от списания'
-                : 'Включите чекбокс выше, чтобы изменить правило',
-          ),
-          items: [
-            for (final item in catalog.compensationRules)
-              DropdownMenuItem(value: item.key, child: Text(item.label)),
-          ],
-          validator: (value) => value == null ? 'Выберите оплату' : null,
-          onChanged: enabled && compensationTouched
-              ? onCompensationChanged
-              : null,
         ),
       ],
       if (canManageTeacherCompensation &&

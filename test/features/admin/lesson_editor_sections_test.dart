@@ -581,7 +581,7 @@ void main() {
     expect(branch, 'branch-a');
     expect(room, 'room-a');
     expect(teacher, 'teacher-a');
-    expect(find.text('Занятость проверим перед сохранением.'), findsOneWidget);
+    expect(pickers.elementAt(2).enabled, isTrue);
   });
 
   testWidgets('group edit keeps frozen group copy and disables replacement', (

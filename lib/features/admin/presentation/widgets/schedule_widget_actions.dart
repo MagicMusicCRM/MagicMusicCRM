@@ -5,10 +5,17 @@ extension _ScheduleActions on _ScheduleWidgetState {
     ref.read(capabilitySnapshotProvider).asData?.value.role ?? '',
   );
 
-  Future<Map<String, dynamic>> _loadFinancialFilterCatalog(String? branchId) =>
-      ref
-          .read(magicCrmServiceProvider)
-          .getLessonDecisionCatalog(branchId: branchId);
+  Future<Map<String, dynamic>> _loadFinancialFilterCatalog(String? branchId) {
+    final catalogBranchId =
+        branchId ?? _homeBranchId ?? _branches.firstOrNull?['id']?.toString();
+    if (catalogBranchId == null) {
+      throw StateError('No branch is available for lesson decision filters');
+    }
+    return ref
+        .read(magicCrmServiceProvider)
+        .getLessonDecisionCatalog(branchId: catalogBranchId);
+  }
+
   bool get _canManageTeacherCompensation {
     final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
     return snapshot != null && crmCanManageTeacherRates(snapshot);
@@ -707,10 +714,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
       if (selectedWeekTeacher != null) {
         unawaited(_fetchTeacherWeekReference());
       } else if (_teacherWeekReference != null ||
-          _teacherWeekReferenceLoading) {
+          _teacherWeekReferenceLoading ||
+          _teacherWeekReferenceError != null) {
         _emitState(() {
           _teacherWeekReference = null;
           _teacherWeekReferenceLoading = false;
+          _teacherWeekReferenceError = null;
+          _teacherWeekReferenceKey = null;
           _teacherWeekReferenceGeneration++;
         });
       }
@@ -742,10 +752,6 @@ extension _ScheduleActions on _ScheduleWidgetState {
       return;
     }
     final generation = ++_teacherWeekReferenceGeneration;
-    _emitState(() {
-      _teacherWeekReference = null;
-      _teacherWeekReferenceLoading = true;
-    });
     final monday = DateTime(
       _selectedDate.year,
       _selectedDate.month,
@@ -756,6 +762,13 @@ extension _ScheduleActions on _ScheduleWidgetState {
       monday.month,
       monday.day,
     ).subtract(Duration(minutes: _selectedBranchOffset));
+    final key = '$branchId:$teacherId:${dateOnly(monday)}';
+    _emitState(() {
+      _teacherWeekReferenceKey = key;
+      _teacherWeekReference = null;
+      _teacherWeekReferenceError = null;
+      _teacherWeekReferenceLoading = true;
+    });
     try {
       final reference = await ref
           .read(magicCrmServiceProvider)
@@ -768,6 +781,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       if (!mounted || generation != _teacherWeekReferenceGeneration) return;
       _emitState(() {
         _teacherWeekReference = reference;
+        _teacherWeekReferenceError = null;
         _teacherWeekReferenceLoading = false;
       });
     } catch (error) {
@@ -775,6 +789,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       debugPrint('Error fetching teacher week availability: $error');
       _emitState(() {
         _teacherWeekReference = null;
+        _teacherWeekReferenceError = error;
         _teacherWeekReferenceLoading = false;
       });
     }

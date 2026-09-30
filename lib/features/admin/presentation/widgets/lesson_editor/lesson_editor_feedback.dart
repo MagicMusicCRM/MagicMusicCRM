@@ -243,7 +243,6 @@ class _SnapshotPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Container(
       key: const ValueKey('lesson-snapshot-preview'),
       padding: const EdgeInsets.all(AppSpace.md),
@@ -258,13 +257,6 @@ class _SnapshotPreview extends StatelessWidget {
           Text(
             'Расчёты перед созданием',
             style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: AppSpace.sm),
-          Text(
-            'Итоговые суммы проверяются сервером при сохранении.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
           ),
           const SizedBox(height: AppSpace.md),
           _SnapshotRow(

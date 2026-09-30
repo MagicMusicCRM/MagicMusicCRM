@@ -84,8 +84,9 @@ void main() {
         h.api.rawDio.interceptors.add(
           InterceptorsWrapper(
             onRequest: (o, handler) {
-              if (o.method == 'GET' && o.uri.path.endsWith('/leads/board'))
+              if (o.method == 'GET' && o.uri.path.endsWith('/leads/board')) {
                 query.add(Map<String, dynamic>.from(o.queryParameters));
+              }
               handler.next(o);
             },
           ),

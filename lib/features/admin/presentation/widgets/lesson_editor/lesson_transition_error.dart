@@ -26,7 +26,8 @@ String? lessonTransitionActionableLessonId(Object error) {
 
 MagicApiException mapLessonTransitionError(MagicApiException error) {
   final code = lessonTransitionErrorCode(error);
-  final effectiveCode = code == 'STALE_LESSON_VERSION'
+  final effectiveCode =
+      code == 'STALE_LESSON_VERSION' || code == 'STALE_AGGREGATE_VERSION'
       ? 'LESSON_VERSION_STALE'
       : code;
   final message = effectiveCode == null

@@ -242,8 +242,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         const visible = await new StudentLessonTimelineRepository(database).listPage(actor, fixture.studentIds[0]!, "next", {
           scheduledAt: "2000-01-01T00:00:00Z", id: "00000000-0000-0000-0000-000000000000",
         }, 100);
-        expect(visible).toHaveLength(before.rows.length);
-        expect(visible.every(lesson => lesson.lifecycle_state === "cancelled")).toBe(true);
+        expect(visible).toHaveLength(0);
+        const retained = await pool.query("select id, lifecycle_state from app.lessons where series_id = $1 order by id", [created.seriesIds[0]]);
+        expect(retained.rows).toEqual(before.rows.map(lesson => ({ ...lesson, lifecycle_state: "cancelled" })));
         expect((await pool.query(`select to_jsonb(f) as fact from app.lesson_client_charge_facts f
           where lesson_id = any($1::uuid[]) order by id`, [before.rows.map(r => r.id)])).rows).toEqual(factsBefore.rows);
         expect((await pool.query(`select to_jsonb(f) as fact from app.lesson_teacher_compensation_facts f
@@ -1495,6 +1496,24 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       expect(projectedPlan.exceptions.map((entry) => entry.lessonId)).toEqual([
         successorCId,
       ]);
+      const scheduledAt = (await pool.query<{ scheduled_at: Date }>(
+        "select scheduled_at from app.lessons where id = $1",
+        [sourceLessonId],
+      )).rows[0]!.scheduled_at;
+      const timeline = new StudentLessonTimelineRepository(database);
+      const page = () => timeline.listPage(actor, fixture.studentIds[0]!, "next", {
+        scheduledAt: new Date(scheduledAt.getTime() - 86400000).toISOString(),
+        id: "00000000-0000-0000-0000-000000000000",
+      }, 40, true, {
+        from: new Date(scheduledAt.getTime() - 86400000).toISOString(),
+        to: new Date(scheduledAt.getTime() + 4 * 86400000).toISOString(),
+      });
+      const currentIds = (await page()).map((entry) => entry.id);
+      expect(currentIds).toContain(successorCId);
+      expect(currentIds).not.toContain(sourceLessonId);
+      expect(currentIds).not.toContain(successorBId);
+      await pool.query("update app.lessons set lifecycle_state = 'cancelled' where id = $1", [successorCId]);
+      expect((await page()).map((entry) => entry.id)).not.toContain(successorCId);
     } finally {
       if (sourceLessonId) {
         await pool.query(

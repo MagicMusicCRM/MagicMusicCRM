@@ -66,6 +66,7 @@ export class InboundLeadService {
               email,
               source,
               source_id,
+              branch_id,
               notes,
               status_id,
               inbound_id
@@ -77,6 +78,7 @@ export class InboundLeadService {
               $4,
               source.canonical_name,
               source.id,
+              $8,
               $6,
               (
                 select status.id
@@ -102,6 +104,7 @@ export class InboundLeadService {
             validated.sourceId,
             notes,
             command.ingestionId,
+            validated.branchId ?? null,
           ],
         );
         const leadId = inserted.rows[0]?.id;

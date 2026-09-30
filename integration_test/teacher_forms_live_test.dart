@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_teacher_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
@@ -63,7 +64,7 @@ void main() {
             await h.tap(
               find.descendant(
                 of: find.byType(TeacherRateSelector),
-                matching: find.byType(DropdownButtonFormField<String>),
+                matching: find.byType(AppDropdownButtonFormField<String>),
               ),
             );
             await h.tap(find.text('750 ₽').last);

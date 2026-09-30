@@ -210,15 +210,7 @@ String? _subscriptionCourse(Subscription s) {
   return 'Курс: ${hours(total)} астр.ч.$money';
 }
 
-/// «Оплачено» — сколько денег пришло на личный счёт за этот абонемент.
-///
-/// ✔ Решение владельца 16.07: «оплату и переплату по абонементу считаем по
-/// личному счёту». Абонемент — бизнес-логика, которая кладёт свою стоимость на
-/// счёт клиента (`issueSubscription` заводит приход), поэтому «Оплачено» это и
-/// есть тот приход, а не отдельная сущность.
-///
-/// Возвращает null, если прихода нет: у старых абонементов не проставлен
-/// `payment_id`, и «Оплачено: 0 ₽» соврало бы про них.
+/// Actual payment linked to this subscription, separate from free wallet funds.
 String? _subscriptionPaid(Subscription s) {
   final paid = s.paidAmountRaw;
   final minor = BigInt.tryParse(s.raw['actual_paid_minor']?.toString() ?? '');
@@ -230,12 +222,8 @@ String? _subscriptionPaid(Subscription s) {
   return 'Оплачено: ${formatPaymentMajor(paid, currencyCode: currency)}';
 }
 
-/// «Переплата»/«Долг» — разница между тем, что пришло на счёт за абонемент, и
-/// его стоимостью. Считается ровно из этих двух ledger-величин.
-///
-/// Ноль не показываем: «Переплата: 0 ₽» — это шум под каждым абонементом,
-/// оплаченным ровно в стоимость, то есть под нормой.
-({String label, bool isDebt})? _subscriptionOverpayment(Subscription s) {
+/// Remaining price is not debt until the payment obligation becomes due.
+({String label, bool? isDebt})? _subscriptionOverpayment(Subscription s) {
   final paid = s.paidAmountRaw;
   final price = s.packagePriceRaw;
   final paidMinor = BigInt.tryParse(
@@ -249,10 +237,23 @@ String? _subscriptionPaid(Subscription s) {
     final diff = paidMinor - priceMinor;
     if (diff == BigInt.zero) return null;
     final amount = formatPaymentMinor(diff.abs(), currencyCode: currency);
-    return (
-      label: '${diff.isNegative ? 'Долг' : 'Переплата'}: $amount',
-      isDebt: diff.isNegative,
-    );
+    final dueMinor =
+        BigInt.tryParse(s.raw['debt_minor']?.toString() ?? '') ?? BigInt.zero;
+    final pendingMinor =
+        BigInt.tryParse(s.raw['pending_minor']?.toString() ?? '') ??
+        BigInt.zero;
+    if (diff.isNegative) {
+      final due = dueMinor > BigInt.zero
+          ? ' · долг: ${formatPaymentMinor(dueMinor, currencyCode: currency)}'
+          : pendingMinor > BigInt.zero
+          ? ' · срок наступил: ${formatPaymentMinor(pendingMinor, currencyCode: currency)}'
+          : '';
+      return (
+        label: 'Остаток к оплате: $amount$due',
+        isDebt: dueMinor > BigInt.zero ? true : null,
+      );
+    }
+    return (label: 'Переплата: $amount', isDebt: false);
   }
   if (paid is! num || price is! num) return null;
   final diff = paid - price;
@@ -264,8 +265,9 @@ String? _subscriptionPaid(Subscription s) {
           isDebt: false,
         )
       : (
-          label: 'Долг: ${formatPaymentMajor(-diff, currencyCode: currency)}',
-          isDebt: true,
+          label:
+              'Остаток к оплате: ${formatPaymentMajor(-diff, currencyCode: currency)}',
+          isDebt: null,
         );
 }
 

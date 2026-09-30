@@ -18,6 +18,7 @@ class PreferredScheduleEditorState {
     required this.teacherCompensationRuleKey,
     required this.teacherCreditedDurationInput,
     required this.teacherCompensationSource,
+    required this.plannedSettlementReason,
     required this.compensationTouched,
     required List<Map<String, dynamic>> clientDecisions,
     required this.openEnded,
@@ -42,6 +43,7 @@ class PreferredScheduleEditorState {
   final String? teacherCompensationRuleKey;
   final String? teacherCreditedDurationInput;
   final String? teacherCompensationSource;
+  final String plannedSettlementReason;
   final bool compensationTouched;
   final List<Map<String, dynamic>> clientDecisions;
   final bool openEnded;
@@ -62,6 +64,7 @@ class PreferredScheduleEditorState {
     Object? teacherCompensationRuleKey = _unset,
     Object? teacherCreditedDurationInput = _unset,
     Object? teacherCompensationSource = _unset,
+    String? plannedSettlementReason,
     bool? compensationTouched,
     List<Map<String, dynamic>>? clientDecisions,
     bool? openEnded,
@@ -94,6 +97,8 @@ class PreferredScheduleEditorState {
     teacherCompensationSource: identical(teacherCompensationSource, _unset)
         ? this.teacherCompensationSource
         : teacherCompensationSource as String?,
+    plannedSettlementReason:
+        plannedSettlementReason ?? this.plannedSettlementReason,
     compensationTouched: compensationTouched ?? this.compensationTouched,
     clientDecisions: clientDecisions ?? this.clientDecisions,
     openEnded: openEnded ?? this.openEnded,

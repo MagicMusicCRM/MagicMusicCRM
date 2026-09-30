@@ -228,6 +228,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     final details = Map<String, dynamic>.from(error.details! as Map);
     final code = details['code']?.toString();
     if (code != 'STALE_LESSON_VERSION' &&
+        code != 'STALE_AGGREGATE_VERSION' &&
         code != 'LESSON_VERSION_STALE' &&
         code != 'LESSON_ALREADY_RESCHEDULED' &&
         code != 'LESSON_TRANSITION_PREVIEW_STALE') {

@@ -18,7 +18,7 @@ import 'live_audit_harness.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => initializeDateFormatting('ru'));
-  for (final role in ['admin', 'manager', 'director'])
+  for (final role in ['admin', 'manager', 'director']) {
     testWidgets('$role actual inbox and chat directory', (tester) async {
       final h = LiveAuditHarness(tester, role, 'messenger-inbox');
       await h.initialize(size: const Size(1600, 1200));
@@ -53,15 +53,17 @@ void main() {
               'DIRECT-HEADER',
               'PROFILE-NOTE',
             }.contains(id) &&
-            !allowedMember)
+            !allowedMember) {
           return;
+        }
         if (Platform.environment['INBOX_LINKS_ONLY'] == 'true' &&
             !{
               'DIRECT-FROM-MEMBER',
               'DIRECT-HEADER',
               'PROFILE-NOTE',
-            }.contains(id))
+            }.contains(id)) {
           return;
+        }
         await h.check(id, description, body);
       }
 
@@ -69,7 +71,7 @@ void main() {
       h.api.rawDio.interceptors.add(
         InterceptorsWrapper(
           onResponse: (r, handler) {
-            if (r.requestOptions.uri.path.endsWith('/messenger/chats'))
+            if (r.requestOptions.uri.path.endsWith('/messenger/chats')) {
               pages.add({
                 'step': h.currentStep,
                 'query': Map<String, dynamic>.from(
@@ -79,6 +81,7 @@ void main() {
                     .map((x) => x['id'])
                     .toList(),
               });
+            }
             handler.next(r);
           },
         ),
@@ -248,7 +251,7 @@ void main() {
         await folder('Ученики');
         expect(find.text('Student0 HTTP test'), findsWidgets);
       });
-      if (!allowedMember)
+      if (!allowedMember) {
         await check(
           'MEMBER-LINK-HIDDEN',
           'Участник вне области доступа не предлагает открыть личный чат',
@@ -279,6 +282,7 @@ void main() {
             );
           },
         );
+      }
       await check(
         'DIRECT-FROM-MEMBER',
         'Начать личный чат с участником группы',
@@ -387,4 +391,5 @@ void main() {
       h.facts.add({'pages': pages});
       await h.finish();
     });
+  }
 }

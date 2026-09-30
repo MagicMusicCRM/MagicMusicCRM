@@ -30,11 +30,12 @@ void main() {
         h.api.rawDio.interceptors.add(
           InterceptorsWrapper(
             onRequest: (o, handler) {
-              if (o.method == 'GET')
+              if (o.method == 'GET') {
                 queries.add({
                   'path': o.uri.path,
                   'query': Map<String, dynamic>.from(o.queryParameters),
                 });
+              }
               handler.next(o);
             },
           ),

@@ -17,6 +17,7 @@ class PreferredScheduleDraft {
     this.teacherCompensationRuleKey = '',
     this.teacherCreditedDurationMinutes,
     this.teacherCompensationSource,
+    this.plannedSettlementReason = '',
     this.clientDecisions = const [],
     this.openEnded = false,
   });
@@ -38,6 +39,7 @@ class PreferredScheduleDraft {
   final String teacherCompensationRuleKey;
   final int? teacherCreditedDurationMinutes;
   final String? teacherCompensationSource;
+  final String plannedSettlementReason;
   final List<Map<String, dynamic>> clientDecisions;
   final bool openEnded;
 
@@ -59,6 +61,7 @@ class PreferredScheduleDraft {
     String? teacherCompensationRuleKey,
     int? teacherCreditedDurationMinutes,
     String? teacherCompensationSource,
+    String? plannedSettlementReason,
     List<Map<String, dynamic>>? clientDecisions,
     bool? openEnded,
   }) => PreferredScheduleDraft(
@@ -82,6 +85,8 @@ class PreferredScheduleDraft {
         teacherCreditedDurationMinutes ?? this.teacherCreditedDurationMinutes,
     teacherCompensationSource:
         teacherCompensationSource ?? this.teacherCompensationSource,
+    plannedSettlementReason:
+        plannedSettlementReason ?? this.plannedSettlementReason,
     clientDecisions: clientDecisions ?? this.clientDecisions,
     openEnded: openEnded ?? this.openEnded,
   );

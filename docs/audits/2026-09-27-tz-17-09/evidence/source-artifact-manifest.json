@@ -1,0 +1,102 @@
+[
+  {
+    "path": "dist/http-journeys/c321b83bca5c4b96b73aa481972d598a/result.json",
+    "sha256": "b2a75ddd9f78433ad85ff1d2171033ef131d00ff86fa9deeaa7017077335db0e",
+    "bytes": 839
+  },
+  {
+    "path": "dist/http-journeys/fc80eaec034f4169a7a24a6e43283fa3/result.json",
+    "sha256": "75201735803c3a9954e52bc066c24d9a2f9fa5566116fb61aa9b663b8258005d",
+    "bytes": 7441
+  },
+  {
+    "path": "dist/http-journeys/fc80eaec034f4169a7a24a6e43283fa3/customer-revisions-admin.json",
+    "sha256": "b398e6e973eda0952fe5b09bf88259a75fc53459c7959ac92a8cca87c49b6664",
+    "bytes": 8177
+  },
+  {
+    "path": "dist/http-journeys/fc80eaec034f4169a7a24a6e43283fa3/lead-trial-admin.json",
+    "sha256": "a6c48abc9e2efd309662fe7582e2e6216a6c640ae4495ca0f3fb1440308a9873",
+    "bytes": 4445
+  },
+  {
+    "path": "dist/http-journeys/d2ae1efef907428c8a3268c90048e5b7/result.json",
+    "sha256": "4cefdb4d1bc22ccca706cc678d9df0ecaba3213848fb624c6b19ffc742a7f37e",
+    "bytes": 7349
+  },
+  {
+    "path": "dist/http-journeys/d2ae1efef907428c8a3268c90048e5b7/partial-purchase-admin.json",
+    "sha256": "da1ee379352937a98fc15212d32e19a71e065a62e149f8401912aeb8d35a417d",
+    "bytes": 22583
+  },
+  {
+    "path": "dist/http-journeys/d2ae1efef907428c8a3268c90048e5b7/partial-purchase-director.json",
+    "sha256": "7389ad99fecb307e6db97f7838b58e12143970c347ad5957ac1a27caadfe7271",
+    "bytes": 22897
+  },
+  {
+    "path": "dist/http-journeys/d2ae1efef907428c8a3268c90048e5b7/partial-purchase-manager.json",
+    "sha256": "2b2cdc973c477799eacea21eb630f35cd35bae77daf8688c14c134632ba73fc7",
+    "bytes": 22692
+  },
+  {
+    "path": "dist/http-journeys/a6d343c3e9784603be55e45b69a3fc89/result.json",
+    "sha256": "04b0bff9b581a59296ee82668590d503fad2747077b9407b6844b95068b1c0c9",
+    "bytes": 7355
+  },
+  {
+    "path": "dist/http-journeys/a6d343c3e9784603be55e45b69a3fc89/teacher-availability-director.json",
+    "sha256": "14cf443f3d1490a489962ed5ba1efe8552bdce3c421086f7dfe761acff9a3d31",
+    "bytes": 27060
+  },
+  {
+    "path": "dist/http-journeys/28ca3ff0c6f04c2e93c18eccf0a9ae8b/result.json",
+    "sha256": "cd34967f770d67be373c45bcc298acd0ec2c59981c2f6947a27c6b84ecb98097",
+    "bytes": 7330
+  },
+  {
+    "path": "dist/http-journeys/28ca3ff0c6f04c2e93c18eccf0a9ae8b/tasks-admin.json",
+    "sha256": "a10cb55dd5165c958ac92a863443df360c85eb4526d74cf1219db8eb37dbb76b",
+    "bytes": 5984
+  },
+  {
+    "path": "dist/http-journeys/28ca3ff0c6f04c2e93c18eccf0a9ae8b/tasks-director.json",
+    "sha256": "2889cb111de16c5b708ce6040df33d0637c3b663665cecf49a3ad6ed72c137bf",
+    "bytes": 10173
+  },
+  {
+    "path": "dist/http-journeys/28ca3ff0c6f04c2e93c18eccf0a9ae8b/tasks-manager.json",
+    "sha256": "f5aa8597bdb9e71d54f3736781ab19cc0019e1855877ed729b0b3f450a794b81",
+    "bytes": 11454
+  },
+  {
+    "path": "server/coverage/test-runs/806ed1af966e6d18/summary.json",
+    "sha256": "1a70eb1107918292462eae1ba1ab1c076661d58904dafbed648ade259d7bd900",
+    "bytes": 850
+  },
+  {
+    "path": "dist/http-journeys/fc80eaec034f4169a7a24a6e43283fa3/lead-trial-admin-CREATE.png",
+    "sha256": "ec31f64f725bf08ee4a259fe64085c7020af763662a5c0ce2d896998820d80b8",
+    "bytes": 159859
+  },
+  {
+    "path": "dist/http-journeys/fc80eaec034f4169a7a24a6e43283fa3/customer-revisions-admin-DRAG.png",
+    "sha256": "29f3f2b847bae80b91edfb06a92f085d54098dcce52bcc0bdfdae6aa2af5f9f0",
+    "bytes": 88938
+  },
+  {
+    "path": "dist/http-journeys/d2ae1efef907428c8a3268c90048e5b7/partial-purchase-admin-lead-REOPEN.png",
+    "sha256": "ca399cfc1a374ed4245e390775177c25d9d648a6ad4ad358c258b737e9950e99",
+    "bytes": 126124
+  },
+  {
+    "path": "dist/http-journeys/a6d343c3e9784603be55e45b69a3fc89/teacher-availability-director-INTERVAL-SAVE.png",
+    "sha256": "1c3c1112001e8e9b22ecf1bdeeea5640fd7623065383e7c943b2def0e8c11604",
+    "bytes": 142981
+  },
+  {
+    "path": "dist/http-journeys/28ca3ff0c6f04c2e93c18eccf0a9ae8b/tasks-admin-TASKS-ADMIN-CLOSE.png",
+    "sha256": "c68d1da08d15918faa7e80ad9e8e4f03731c62995cc9e012528c651b1a4a9916",
+    "bytes": 48532
+  }
+]

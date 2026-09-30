@@ -337,6 +337,7 @@ Widget _host(
   bool defaultToMineToday = false,
   bool canViewResults = false,
   ValueChanged<EntityLink>? onOpenResultEntity,
+  DateTime Function()? now,
 }) {
   return ProviderScope(
     child: MaterialApp(
@@ -353,6 +354,7 @@ Widget _host(
           linkedEntity: linkedEntity,
           canWrite: canWrite,
           defaultToMineToday: defaultToMineToday,
+          now: now,
           canViewResults: canViewResults,
           onOpenResultEntity: onOpenResultEntity,
         ),
@@ -561,6 +563,43 @@ void main() {
     await tester.tap(find.text('Мой филиал').last);
     await tester.pumpAndSettle();
     expect(source.listedScope, 'branch');
+  });
+
+  testWidgets('today follows Moscow midnight without restoring a removed filter', (
+    tester,
+  ) async {
+    final source = FakeSharedTasksDataSource();
+    var now = DateTime.utc(2026, 9, 29, 20, 59, 50);
+    await tester.pumpWidget(
+      _host(
+        source,
+        canWrite: false,
+        defaultToMineToday: true,
+        now: () => now,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(source.listedFrom, DateTime.utc(2026, 9, 28, 21).toIso8601String());
+    final initialCalls = source.listCalls;
+
+    now = DateTime.utc(2026, 9, 29, 21, 0, 1);
+    await tester.pump(const Duration(seconds: 11));
+    await tester.pump();
+    expect(source.listedFrom, DateTime.utc(2026, 9, 29, 21).toIso8601String());
+    expect(source.listCalls, greaterThan(initialCalls));
+
+    final today = find.byKey(const Key('shared-task-today-filter'));
+    await tester.ensureVisible(today);
+    await tester.tap(today);
+    await tester.pumpAndSettle();
+    expect(source.listedFrom, isNull);
+
+    now = DateTime.utc(2026, 9, 30, 21, 0, 1);
+    await tester.pump(const Duration(days: 1));
+    await tester.pump();
+    expect(source.listedFrom, isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(days: 1));
   });
 
   testWidgets('all-day task due today is not overdue', (tester) async {

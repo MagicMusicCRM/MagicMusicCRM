@@ -4,13 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_cancel_sheet.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_sheet.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms_api.dart';
 
 import 'live_audit_harness.dart';
+import 'evidence_screenshot.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -21,17 +26,82 @@ void main() {
       (tester) async {
         final h = LiveAuditHarness(tester, role, 'partial-purchase');
         await h.initialize(size: const Size(1440, 1100));
+        final cycle = h.fixture['auditInstallmentCycle'] == true;
+        final integratedLeadId = role == 'admin'
+            ? h.fixture['integratedLeadId'] as String?
+            : null;
         final access = await h.scope.read(capabilitySnapshotProvider.future);
         final crm = h.scope.read(magicCrmServiceProvider);
+        final restartStudentId = h.fixture['cycleRestartStudentId']?.toString();
+        if (restartStudentId != null) {
+          if (role == 'admin') {
+            await h.check(
+              'RESTART',
+              'Новый Windows процесс видит оплату и наступивший срок',
+              () async {
+                final row = await crm.getStudent(restartStudentId);
+                await h.mount(
+                  Scaffold(
+                    body: ClientCard(
+                      key: UniqueKey(),
+                      lead: row,
+                      entityType: 'student',
+                      routed: true,
+                      initialSection: 'subscriptions',
+                      capabilitySnapshot: access,
+                      onClose: (_) {},
+                    ),
+                  ),
+                );
+                await h.waitFor(
+                  () => find
+                      .byKey(const Key('subscription-add'))
+                      .evaluate()
+                      .isNotEmpty,
+                  'Restarted card loaded',
+                );
+                await h.quiet();
+                await h.tap(
+                  find.byKey(const Key('client-section-heading-subscriptions')),
+                );
+                expect(find.textContaining('срок наступил:'), findsWidgets);
+                await h.tap(
+                  find.byKey(const Key('payment-installments-expansion')),
+                );
+                expect(
+                  find.textContaining('Первоначальный взнос · Оплачен'),
+                  findsOneWidget,
+                );
+                expect(
+                  find.textContaining('Срок после расходования объёма'),
+                  findsOneWidget,
+                );
+                final subscription = (await crm.getStudentCommerceProjection(
+                  restartStudentId,
+                )).student.subscriptions.single;
+                expect(subscription.units.used, 2);
+                expect(subscription.installments.single.dueKind, 'actual');
+              },
+            );
+          }
+          await h.finish();
+          return;
+        }
         final forms = h.scope.read(clientFormsApiProvider);
         final source = (await forms.listSources()).first;
+        String? cycleStudentId;
+        String? cycleSubscriptionId;
         for (final entity in ['lead', 'student']) {
           final branch = h.fixture['branchId'] as String;
           final pipeline = await crm.getClientPipeline(
             clientType: entity,
             branchId: branch,
           );
-          final created = entity == 'lead'
+          final created = entity == 'lead' && integratedLeadId != null
+              ? Map<String, dynamic>.from(
+                  (await crm.getLeadCard(integratedLeadId))['lead'] as Map,
+                )
+              : entity == 'lead'
               ? await forms.createLead(
                   identity: MagicMutationIdentity.create('audit.fixture.lead'),
                   firstName: 'Покупатель',
@@ -148,7 +218,7 @@ void main() {
                 'entity': entity,
                 'paymentInput': amount,
               });
-              expect(amount, '8000');
+              expect(amount, cycle ? '14400' : '8000');
             },
           );
           await h.check(
@@ -187,47 +257,147 @@ void main() {
           String? subscriptionId;
           await h.check(
             '$entity-PURCHASE',
-            'Частичная оплата 2000 ₽, скидка 10%, доплата 500 ₽, срок и рассрочка сохраняются',
+            cycle
+                ? '14400 ₽ / 4 занятия: первый платёж 7200 ₽ и один прогнозный 7200 ₽'
+                : 'Частичная оплата 2000 ₽, скидка 10%, доплата 500 ₽, срок и рассрочка сохраняются',
             () async {
               await open();
               await form();
               await h.tap(find.byKey(const Key('subscription-indefinite')));
-              await h.tap(
-                find.byKey(const Key('subscription-discount-percent')),
-              );
-              await tester.enterText(
-                find.byKey(const Key('subscription-discount-value')),
-                '10',
-              );
-              await tester.enterText(
-                find.byKey(const Key('subscription-discount-reason')),
-                'AUDIT-DISCOUNT',
-              );
-              await h.tap(
-                find.byKey(const Key('subscription-surcharge-toggle')),
-              );
-              await tester.enterText(
-                find.byKey(const Key('subscription-surcharge-amount')),
-                '500',
-              );
-              await tester.enterText(
-                find.byKey(const Key('subscription-surcharge-reason')),
-                'AUDIT-SURCHARGE',
-              );
+              if (cycle) {
+                // Use a past date inside the purchased period regardless of the run hour.
+                await h.tap(
+                  find.widgetWithText(TextFormField, 'Начало действия'),
+                );
+                final picker = find.byType(DatePickerDialog);
+                final locale = MaterialLocalizations.of(tester.element(picker));
+                await h.tap(find.byTooltip(locale.inputDateModeButtonLabel));
+                await tester.enterText(
+                  find.descendant(of: picker, matching: find.byType(TextField)),
+                  locale.formatCompactDate(
+                    DateTime.now().subtract(const Duration(days: 2)),
+                  ),
+                );
+                await h.tap(
+                  find.descendant(
+                    of: picker,
+                    matching: find.text(locale.okButtonLabel),
+                  ),
+                );
+              }
+              if (!cycle) {
+                await h.tap(
+                  find.byKey(const Key('subscription-discount-percent')),
+                );
+                await tester.enterText(
+                  find.byKey(const Key('subscription-discount-value')),
+                  '10',
+                );
+                await tester.enterText(
+                  find.byKey(const Key('subscription-discount-reason')),
+                  'AUDIT-DISCOUNT',
+                );
+                await h.tap(
+                  find.byKey(const Key('subscription-surcharge-toggle')),
+                );
+                await tester.enterText(
+                  find.byKey(const Key('subscription-surcharge-amount')),
+                  '500',
+                );
+                await tester.enterText(
+                  find.byKey(const Key('subscription-surcharge-reason')),
+                  'AUDIT-SURCHARGE',
+                );
+              }
               await h.tap(
                 find.byKey(const Key('subscription-funding-installment')),
               );
+              if (cycle) {
+                final rejectedAt = h.requests.length;
+                await tester.enterText(
+                  find.widgetWithText(TextFormField, 'Оплачено сейчас'),
+                  '-1',
+                );
+                await h.tap(find.byKey(const Key('subscription-issue-submit')));
+                expect(find.byType(SubscriptionIssueForm), findsOneWidget);
+                expect(
+                  h.requests
+                      .skip(rejectedAt)
+                      .where(
+                        (request) =>
+                            request['method'] == 'POST' &&
+                            (request['path'] as String).endsWith(
+                              '/subscriptions/purchase',
+                            ),
+                      ),
+                  isEmpty,
+                );
+                expect(find.text('-1'), findsWidgets);
+              }
+              final paymentField = find.widgetWithText(
+                TextFormField,
+                'Оплачено сейчас',
+              );
+              expect(
+                tester.widget<TextFormField>(paymentField).enabled,
+                isTrue,
+              );
+              await h.tap(paymentField);
               await tester.enterText(
-                find.widgetWithText(TextFormField, 'Оплачено сейчас'),
-                '2000',
+                find.descendant(
+                  of: paymentField,
+                  matching: find.byType(EditableText),
+                ),
+                cycle ? '7200' : '2000',
+              );
+              await h.quiet();
+              expect(
+                tester
+                    .widget<EditableText>(
+                      find.descendant(
+                        of: paymentField,
+                        matching: find.byType(EditableText),
+                      ),
+                    )
+                    .controller
+                    .text,
+                cycle ? '7200' : '2000',
               );
               await tester.enterText(
                 find.byKey(const Key('subscription-purchase-reason')),
                 'AUDIT-PARTIAL',
               );
-              await tester.pump();
+              await h.quiet();
+              if (cycle) {
+                await captureEvidence(
+                  tester,
+                  'installment-preview-$role-$entity',
+                );
+                expect(
+                  find.byKey(const Key('subscription-installment-initial')),
+                  findsOneWidget,
+                );
+                expect(
+                  find.byKey(const Key('subscription-installment-future-0')),
+                  findsOneWidget,
+                );
+                expect(
+                  find.byKey(const Key('subscription-installment-future-1')),
+                  findsNothing,
+                );
+                expect(find.textContaining('Прогноз:'), findsOneWidget);
+                expect(find.textContaining('Итого по графику'), findsOneWidget);
+              }
               final start = h.requests.length;
-              await h.tap(find.byKey(const Key('subscription-issue-submit')));
+              final submit = find.byKey(const Key('subscription-issue-submit'));
+              if (cycle) {
+                await tester.ensureVisible(submit);
+                await tester.tap(submit);
+                await tester.tap(submit);
+                await tester.pump(const Duration(milliseconds: 300));
+              } else {
+                await h.tap(submit);
+              }
               await h.waitFor(
                 () => find.byType(SubscriptionIssueForm).evaluate().isEmpty,
                 'Successful purchase closes the form',
@@ -243,10 +413,50 @@ void main() {
                   final header = find.byKey(const Key('client-header-name'));
                   if (header.evaluate().isEmpty) return false;
                   final name = tester.widget<Text>(header).data ?? '';
-                  return name.contains('Покупатель') &&
-                      name.contains('PURCHASE-$role');
+                  return integratedLeadId != null
+                      ? name.contains('ST02') && name.contains('Входящий')
+                      : name.contains('Покупатель') &&
+                            name.contains('PURCHASE-$role');
                 }, 'Converted card shows the student name');
                 expect(find.text('Ученик не найден'), findsNothing);
+                if (integratedLeadId != null) {
+                  final trialId = h.fixture['integratedTrialId'] as String;
+                  final trial = (await crm.listLessons(
+                    lessonId: trialId,
+                  )).single;
+                  expect(trial['student_id'], studentId);
+                  expect(trial['lead_id'], isNull);
+                  await h.waitFor(
+                    () => find
+                        .byKey(const Key('client-next-lesson'))
+                        .evaluate()
+                        .isNotEmpty,
+                    'Converted student retains the moved trial',
+                  );
+                  await h.tap(find.byKey(const Key('client-next-lesson')));
+                  await h.quiet();
+                  expect(
+                    tester
+                        .widget<CreateLessonDialog>(
+                          find.byType(CreateLessonDialog),
+                        )
+                        .lesson!['id'],
+                    trialId,
+                  );
+                  await captureEvidence(tester, 'integrated-converted-trial');
+                  await h.tap(
+                    find.descendant(
+                      of: find.byType(CreateLessonDialog),
+                      matching: find.widgetWithText(TextButton, 'Отмена'),
+                    ),
+                  );
+                  await h.quiet();
+                  h.facts.add({
+                    'step': 'INTEGRATED-CONVERTED-TRIAL',
+                    'lessonId': trialId,
+                    'studentId': studentId,
+                  });
+                }
               }
               final commerce = (await crm.getStudentCommerceProjection(
                 studentId!,
@@ -254,6 +464,11 @@ void main() {
               expect(commerce.subscriptions, hasLength(1));
               final subscription = commerce.subscriptions.single;
               subscriptionId = subscription.id;
+              if (cycle &&
+                  entity == (integratedLeadId == null ? 'student' : 'lead')) {
+                cycleStudentId = studentId;
+                cycleSubscriptionId = subscription.id;
+              }
               h.facts.add({
                 'step': h.currentStep,
                 'id': id,
@@ -269,16 +484,33 @@ void main() {
                 'closed': closed,
               });
               expect(subscription.status, 'active');
-              expect(subscription.units.total, 8);
-              expect(subscription.units.paid, inExclusiveRange(0, 8));
+              expect(subscription.units.total, cycle ? 4 : 8);
+              expect(
+                subscription.units.paid,
+                cycle ? 2 : inExclusiveRange(0, 8),
+              );
               expect(
                 subscription.financial.actualPaidMinor,
-                BigInt.from(200000),
+                BigInt.from(cycle ? 720000 : 200000),
               );
               expect(
                 subscription.financial.remainingObligationMinor,
-                BigInt.from(570000),
+                BigInt.from(cycle ? 720000 : 570000),
               );
+              if (cycle) {
+                expect(subscription.installments, hasLength(1));
+                expect(
+                  subscription.installments.single.amountMinor,
+                  BigInt.from(720000),
+                );
+                expect(subscription.installments.single.dueKind, 'forecast');
+                expect(
+                  commerce.accounts.every(
+                    (account) => account.balanceMinor == BigInt.zero,
+                  ),
+                  isTrue,
+                );
+              }
               final writes = h.requests
                   .skip(start)
                   .where((r) => r['method'] == 'POST')
@@ -319,8 +551,29 @@ void main() {
                 expect(commerce.subscriptions.single.id, subscriptionId);
                 expect(
                   commerce.subscriptions.single.financial.actualPaidMinor,
-                  BigInt.from(200000),
+                  BigInt.from(cycle ? 720000 : 200000),
                 );
+                if (cycle) {
+                  expect(
+                    find.textContaining('Остаток к оплате:'),
+                    findsWidgets,
+                  );
+                  expect(find.textContaining('Долг: 7 200'), findsNothing);
+                  await h.tap(
+                    find.byKey(const Key('payment-installments-expansion')),
+                  );
+                  expect(
+                    find.byKey(
+                      Key('payment-installment-initial-$subscriptionId'),
+                    ),
+                    findsOneWidget,
+                  );
+                  expect(
+                    find.textContaining('Первоначальный взнос · Оплачен'),
+                    findsOneWidget,
+                  );
+                  expect(find.textContaining('Прогноз:'), findsOneWidget);
+                }
                 if (entity == 'lead') {
                   expect(find.text('Лид → Ученик'), findsWidgets);
                 }
@@ -469,34 +722,233 @@ void main() {
             );
           }
         }
-        if (role == 'director') {
-          await h.check(
-            'EXACT-14400-7200-2',
-            '14 400 ₽, первый взнос 7 200 ₽, всего два платежа',
-            () async {
-              final branch = h.fixture['branchId'] as String;
-              final pipeline = await crm.getClientPipeline(
-                clientType: 'student',
-                branchId: branch,
-              );
-              final created = await forms.createStudent(
-                identity: MagicMutationIdentity.create(
-                  'audit.exact.installment',
+        if (cycle && role == 'admin' && cycleStudentId != null) {
+          final studentId = cycleStudentId!;
+          final subscriptionId = cycleSubscriptionId!;
+          Future<String?> createPaidLesson(
+            int hour, {
+            bool mayReject = false,
+          }) async {
+            final before = (await crm.listLessons(
+              studentId: studentId,
+              includeClosed: true,
+            )).map((lesson) => lesson['id']?.toString()).toSet();
+            final today = DateTime.now().toLocal();
+            final scheduled = DateTime(
+              today.year,
+              today.month,
+              today.day - 1,
+              hour,
+            );
+            await h.mount(
+              Scaffold(
+                body: Builder(
+                  builder: (context) => FilledButton(
+                    onPressed: () => CreateLessonDialog.show(
+                      context,
+                      initialDate: scheduled,
+                      clientType: 'student',
+                      clientId: studentId,
+                      clientName: 'Покупатель PURCHASE-admin',
+                      initialBranchId: h.fixture['branchId'] as String,
+                      initialRoomId: h.fixture['roomId'] as String,
+                    ),
+                    child: const Text('Записать'),
+                  ),
                 ),
-                firstName: 'Точный',
-                lastName: 'AUDIT-14400',
-                phone: '+79995554434',
-                sourceId: source['id'] as String,
-                branchId: branch,
-                status: pipeline.activeStages.first.key,
-                customFields: [],
+              ),
+            );
+            await h.tap(find.text('Записать'));
+            final teacher = find.byKey(const Key('lesson-teacher-field'));
+            await h.waitFor(
+              () =>
+                  teacher.evaluate().isNotEmpty &&
+                  tester.widget<SearchablePickerField>(teacher).enabled,
+              'Teacher availability loaded before selection',
+            );
+            await h.tap(teacher);
+            await tester.enterText(
+              find.descendant(of: teacher, matching: find.byType(TextField)),
+              'Teacher1',
+            );
+            await h.quiet();
+            await h.tap(
+              find.widgetWithText(MenuItemButton, 'Teacher1 HTTP test').last,
+            );
+            final source = find.byKey(
+              ValueKey('lesson-client-charge-type-$studentId'),
+            );
+            expect(source, findsOneWidget);
+            final subscription = find.byKey(
+              ValueKey('lesson-client-subscription-$studentId'),
+            );
+            await h.quiet();
+            if (mayReject && subscription.evaluate().isEmpty) return null;
+            await h.waitFor(
+              () => subscription.evaluate().isNotEmpty,
+              'Subscription funding loaded',
+            );
+            final selected = tester
+                .widget<SearchablePickerField>(subscription)
+                .selectedId;
+            if (mayReject && selected != subscriptionId) return null;
+            expect(selected, subscriptionId);
+            await h.tap(find.text('Создать'));
+            await h.quiet();
+            for (var attempt = 0; attempt < 60; attempt++) {
+              final rows = await crm.listLessons(
+                studentId: studentId,
+                includeClosed: true,
               );
-              final studentId = created['id'] as String;
-              final student = await crm.getStudent(studentId);
+              final added = rows
+                  .where((row) => !before.contains(row['id']?.toString()))
+                  .toList();
+              if (added.isNotEmpty) return added.single['id'] as String;
+              if (mayReject) return null;
+              await tester.pump(const Duration(milliseconds: 300));
+            }
+            throw StateError('Lesson was not saved through the UI');
+          }
+
+          Future<void> waitCompleted(String lessonId) async {
+            for (var attempt = 0; attempt < 80; attempt++) {
+              final row = (await crm.listLessons(
+                lessonId: lessonId,
+                limit: 1,
+              )).single;
+              if (row['status'] == 'completed') return;
+              await tester.pump(const Duration(milliseconds: 300));
+            }
+            throw StateError('Completion worker did not settle $lessonId');
+          }
+
+          String? firstLessonId;
+          String? secondLessonId;
+          await h.check(
+            'PAID-LESSON-1',
+            'Первый урок проводится через UI; взнос остаётся прогнозом',
+            () async {
+              firstLessonId = await createPaidLesson(9);
+              await waitCompleted(firstLessonId!);
+              final subscription =
+                  (await crm.getStudentCommerceProjection(studentId))
+                      .student
+                      .subscriptions
+                      .singleWhere((item) => item.id == subscriptionId);
+              expect(subscription.units.used, 1);
+              expect(subscription.units.paid, 2);
+              expect(subscription.installments.single.dueKind, 'forecast');
+              h.facts.add({
+                'step': h.currentStep,
+                'lessonId': firstLessonId,
+                'used': subscription.units.used,
+                'dueKind': subscription.installments.single.dueKind,
+              });
+            },
+          );
+          await h.check(
+            'PAID-LESSON-2',
+            'Второй урок проводится через UI; worker фиксирует один срок',
+            () async {
+              secondLessonId = await createPaidLesson(10);
+              await waitCompleted(secondLessonId!);
+              for (var attempt = 0; attempt < 50; attempt++) {
+                final subscription =
+                    (await crm.getStudentCommerceProjection(studentId))
+                        .student
+                        .subscriptions
+                        .singleWhere((item) => item.id == subscriptionId);
+                if (subscription.installments.single.dueKind == 'actual') {
+                  expect(subscription.units.used, 2);
+                  expect(subscription.units.available, 0);
+                  h.facts.add({
+                    'step': h.currentStep,
+                    'lessonIds': [firstLessonId, secondLessonId],
+                    'used': subscription.units.used,
+                    'dueKind': 'actual',
+                  });
+                  return;
+                }
+                await tester.pump(const Duration(milliseconds: 300));
+              }
+              throw StateError(
+                'Installment due worker did not record the second consumption',
+              );
+            },
+          );
+          await h.check(
+            'PAID-LESSON-3-GUARD',
+            'Третий урок через UI не создаёт неоплаченное списание',
+            () async {
+              final thirdLessonId = await createPaidLesson(11, mayReject: true);
+              if (thirdLessonId != null) {
+                for (var attempt = 0; attempt < 30; attempt++) {
+                  final row = (await crm.listLessons(
+                    lessonId: thirdLessonId,
+                    limit: 1,
+                  )).single;
+                  if (row['status'] == 'settlement_pending' ||
+                      row['status'] == 'review_required') {
+                    break;
+                  }
+                  await tester.pump(const Duration(milliseconds: 300));
+                }
+                final row = (await crm.listLessons(
+                  lessonId: thirdLessonId,
+                  limit: 1,
+                )).single;
+                expect(
+                  row['status'],
+                  anyOf('settlement_pending', 'review_required'),
+                );
+              }
+              final subscription =
+                  (await crm.getStudentCommerceProjection(studentId))
+                      .student
+                      .subscriptions
+                      .singleWhere((item) => item.id == subscriptionId);
+              expect(subscription.units.used, 2);
+              expect(
+                subscription.financial.actualPaidMinor,
+                BigInt.from(720000),
+              );
+              h.facts.add({
+                'step': h.currentStep,
+                'thirdLessonId': thirdLessonId,
+                'used': subscription.units.used,
+              });
+            },
+            expectedHttpErrors: const [
+              (
+                method: 'POST',
+                path: '/api/crm/lessons',
+                status: 400,
+                maxCount: 1,
+              ),
+              (
+                method: 'POST',
+                path: '/api/crm/lessons',
+                status: 409,
+                maxCount: 1,
+              ),
+              (
+                method: 'POST',
+                path: '/api/crm/lessons',
+                status: 422,
+                maxCount: 1,
+              ),
+            ],
+          );
+          await h.check(
+            'PAID-LESSON-REOPEN',
+            'Карточка повторно показывает наступивший срок и оплату',
+            () async {
+              final row = await crm.getStudent(studentId);
               await h.mount(
                 Scaffold(
                   body: ClientCard(
-                    lead: student,
+                    key: UniqueKey(),
+                    lead: row,
                     entityType: 'student',
                     routed: true,
                     initialSection: 'subscriptions',
@@ -505,80 +957,64 @@ void main() {
                   ),
                 ),
               );
+              await h.waitFor(
+                () => find
+                    .byKey(const Key('subscription-add'))
+                    .evaluate()
+                    .isNotEmpty,
+                'Reopened student card loaded',
+              );
               await h.quiet();
               await h.tap(
                 find.byKey(const Key('client-section-heading-subscriptions')),
               );
-              await h.tap(find.byKey(const Key('subscription-add')));
-              await h.quiet();
+              expect(find.textContaining('срок наступил:'), findsWidgets);
               await h.tap(
-                find.byKey(const Key('subscription-package-selector')),
+                find.byKey(const Key('payment-installments-expansion')),
               );
-              await h.tap(
-                find.widgetWithText(MenuItemButton, 'AUDIT-14400').last,
-              );
-              await h.tap(
-                find.byKey(const Key('subscription-funding-installment')),
-              );
-              await tester.enterText(
-                find.widgetWithText(TextFormField, 'Оплачено сейчас'),
-                '7200',
-              );
-              await tester.enterText(
-                find.byKey(const Key('subscription-purchase-reason')),
-                'AUDIT-EXACT-14400',
-              );
-              await tester.pump();
               expect(
-                find.byKey(const Key('subscription-installment-preview')),
+                find.byKey(Key('payment-installment-initial-$subscriptionId')),
                 findsOneWidget,
               );
-              await h.tap(find.byKey(const Key('subscription-issue-submit')));
-              await h.waitFor(
-                () => find.byType(SubscriptionIssueForm).evaluate().isEmpty,
-                'Exact purchase closes the form',
-              );
-              final subscription = (await crm.getStudentCommerceProjection(
-                studentId,
-              )).student.subscriptions.single;
-              expect(subscription.units.total, 4);
-              expect(subscription.units.paid, 2);
               expect(
-                subscription.financial.obligationMinor,
-                BigInt.from(1440000),
+                find.textContaining('Срок после расходования объёма'),
+                findsOneWidget,
               );
-              expect(
-                subscription.financial.actualPaidMinor,
-                BigInt.from(720000),
-              );
-              expect(
-                subscription.financial.remainingObligationMinor,
-                BigInt.from(720000),
-              );
-              expect(subscription.installments, hasLength(1));
-              expect(
-                subscription.installments.single.amountMinor,
-                BigInt.from(720000),
-              );
-              h.facts.add({
-                'step': h.currentStep,
-                'studentId': studentId,
-                'subscriptionId': subscription.id,
-                'paidUnits': subscription.units.paid,
-                'actualPaidMinor': subscription.financial.actualPaidMinor
-                    .toString(),
-                'obligationMinor': subscription.financial.obligationMinor
-                    .toString(),
-                'futureInstallments': subscription.installments
-                    .map(
-                      (row) => {
-                        'amountMinor': row.amountMinor.toString(),
-                        'status': row.status,
-                        'dueKind': row.dueKind,
+            },
+          );
+          await h.check(
+            'PAID-LESSON-CALENDAR',
+            'Оба проведённых урока видны в связанном календаре',
+            () async {
+              final lesson = (await crm.listLessons(
+                lessonId: firstLessonId,
+                limit: 1,
+              )).single;
+              await h.mount(
+                Scaffold(
+                  body: ScheduleWidget(
+                    initialBranchId: h.fixture['branchId'] as String,
+                    initialViewState: ContextViewState(
+                      date: DateTime.parse(
+                        lesson['scheduled_at'] as String,
+                      ).toLocal(),
+                      filters: {
+                        'view': 'day',
+                        'branchId': h.fixture['branchId'] as String,
                       },
-                    )
-                    .toList(),
-              });
+                    ),
+                  ),
+                ),
+              );
+              await h.quiet();
+              expect(
+                find.byKey(Key('schedule-lesson-$firstLessonId')),
+                findsWidgets,
+              );
+              expect(
+                find.byKey(Key('schedule-lesson-$secondLessonId')),
+                findsWidgets,
+              );
             },
           );
         }

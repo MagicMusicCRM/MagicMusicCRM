@@ -14,6 +14,12 @@ test('persisted verification uses the real camelCase API contract and preserves 
   const row = { id: 'new', status: 'scheduled', roomId: 'room1', scheduledAt: evidence.scheduledAt,
     durationMinutes: 45, settlementTypeKey: 'trial_lesson', teacherCompensationRuleKey: 'trial_lesson', clientChargeType: 'none' };
   assert.deepEqual(validatePersistedMove({ items: [row] }, fixture, evidence), row);
+  assert.deepEqual(validatePersistedMove({ items: [row] }, fixture,
+    { scheduledAt: '2027-01-12T09:30:00Z' }), row);
+  assert.throws(() => validatePersistedMove({ items: [row] }, fixture,
+    { scheduledAt: '2027-01-12T09:31:00Z' }));
+  assert.throws(() => validatePersistedMove({ items: [row] }, fixture,
+    { scheduledAt: 'invalid' }));
   for (const changed of [{ roomId: 'room0' }, { durationMinutes: 60 }, { id: 'old' },
     { teacherCompensationRuleKey: 'standard' }, { clientChargeType: 'subscription' }]) {
     assert.throws(() => validatePersistedMove({ items: [{ ...row, ...changed }] }, fixture, evidence));
