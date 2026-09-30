@@ -208,7 +208,7 @@ extension _ClientCardDesktopDashboard on _ClientCardState {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

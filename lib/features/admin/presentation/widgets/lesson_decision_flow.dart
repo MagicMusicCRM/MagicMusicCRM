@@ -26,6 +26,7 @@ Future<bool?> showLessonEditorSurface(
     subtitle: 'Расписание и расчёт занятия',
     icon: Icons.event_note_rounded,
     routeSettings: const RouteSettings(name: 'lesson-editor'),
+    scrollBody: false,
     builder: (_) => editor(true),
   );
 }

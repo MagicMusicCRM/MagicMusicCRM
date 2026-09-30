@@ -273,12 +273,14 @@ class _ClientInternalNoteCardState extends State<ClientInternalNoteCard> {
     final note = widget.note;
     return Container(
       key: const Key('client-internal-note'),
-      padding: EdgeInsets.all(widget.compact ? 10 : AppSpace.lg),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        border: Border.all(color: cs.outlineVariant),
-        borderRadius: BorderRadius.circular(AppRadius.control),
-      ),
+      padding: EdgeInsets.all(widget.compact ? 0 : AppSpace.lg),
+      decoration: widget.compact
+          ? null
+          : BoxDecoration(
+              color: cs.surfaceContainerLow,
+              border: Border.all(color: cs.outlineVariant),
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

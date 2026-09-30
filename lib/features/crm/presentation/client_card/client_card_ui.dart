@@ -12,19 +12,20 @@ InputDecorationTheme _clientCardInputTheme({bool compact = false}) {
     borderSide: const BorderSide(color: AppColor.borderSoft),
   );
   return InputDecorationTheme(
-    constraints: BoxConstraints(minHeight: compact ? 40 : 48),
+    constraints: const BoxConstraints(minHeight: 48),
+    visualDensity: VisualDensity.standard,
     filled: true,
     fillColor: AppColor.surface,
-    isDense: true,
+    isDense: false,
     contentPadding: EdgeInsets.symmetric(
       horizontal: compact ? 10 : 14,
       vertical: compact ? 8 : 13,
     ),
     prefixIconConstraints: compact
-        ? const BoxConstraints(minWidth: 32, minHeight: 40)
+        ? const BoxConstraints(minWidth: 32, minHeight: 48)
         : null,
     suffixIconConstraints: compact
-        ? const BoxConstraints(minWidth: 32, minHeight: 40)
+        ? const BoxConstraints(minWidth: 32, minHeight: 48)
         : null,
     labelStyle: const TextStyle(
       color: AppColor.text2,
@@ -141,7 +142,7 @@ InputDecoration clientCardInputDecoration(
     hintText: hint,
     helperText: helperText,
     errorText: errorText,
-    isDense: isDense,
+    isDense: false,
     suffixIcon: suffixIcon,
   ).applyDefaults(_clientCardInputTheme(compact: compact));
 }
