@@ -160,9 +160,15 @@ class MagicMessengerService {
     String chatId, {
     int limit = 100,
     String? before,
+    String? query,
+    String? beforeId,
+    String? atId,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
     if (before != null) queryParameters['before'] = before;
+    if (query != null) queryParameters['q'] = query;
+    if (beforeId != null) queryParameters['beforeId'] = beforeId;
+    if (atId != null) queryParameters['atId'] = atId;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/messenger/chats/$chatId/messages',
@@ -321,9 +327,15 @@ class MagicMessengerService {
     String channelId, {
     int limit = 100,
     String? before,
+    String? query,
+    String? beforeId,
+    String? atId,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
     if (before != null) queryParameters['before'] = before;
+    if (query != null) queryParameters['q'] = query;
+    if (beforeId != null) queryParameters['beforeId'] = beforeId;
+    if (atId != null) queryParameters['atId'] = atId;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/messenger/channels/$channelId/posts',

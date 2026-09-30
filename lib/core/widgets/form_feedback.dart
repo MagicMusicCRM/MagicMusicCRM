@@ -60,3 +60,22 @@ void revealFormFeedback(BuildContext root, Key key) {
     if (target != null) _reveal(target!);
   });
 }
+
+/// Dynamic schema forms use decoration errors instead of FormField validators.
+void revealFirstInputError(BuildContext root) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!root.mounted) return;
+    final errors = <Element>[];
+    void visit(Element element) {
+      final widget = element.widget;
+      if (widget is InputDecorator && widget.decoration.errorText != null) {
+        errors.add(element);
+      }
+      element.visitChildren(visit);
+    }
+
+    root.visitChildElements(visit);
+    errors.sort((a, b) => _top(a).compareTo(_top(b)));
+    if (errors.isNotEmpty) _reveal(errors.first);
+  });
+}

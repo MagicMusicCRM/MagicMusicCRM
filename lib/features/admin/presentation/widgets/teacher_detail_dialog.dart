@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -32,12 +33,14 @@ class TeacherDetailDialog extends ConsumerStatefulWidget {
     this.embedded = false,
     this.onChanged,
     this.onClose,
+    this.exitGuardKey,
   });
 
   final Map<String, dynamic> teacher;
   final bool embedded;
   final Future<void> Function()? onChanged;
   final VoidCallback? onClose;
+  final GlobalKey<FormDiscardGuardState>? exitGuardKey;
 
   static Future<bool?> show(
     BuildContext context,
@@ -65,6 +68,17 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   final _employmentKey = GlobalKey<TeacherEmploymentFieldsState>();
   bool _saving = false;
 
+  bool get _hasChanges {
+    final initial = TeacherDetailInitialData.fromTeacher(widget.teacher);
+    return _nameController.text != initial.name ||
+        _canonicalPhone != initial.phone ||
+        (_employmentKey.currentState?.hasChanges ?? false);
+  }
+
+  void _onEdited() {
+    if (mounted) setState(() {});
+  }
+
   String get _teacherId => _teacher['id'].toString();
   String get _actorRole =>
       ref.read(capabilitySnapshotProvider).asData?.value.role ?? '';
@@ -74,7 +88,8 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     super.initState();
     final initial = TeacherDetailInitialData.fromTeacher(widget.teacher);
     _teacher = initial.teacher;
-    _nameController = TextEditingController(text: initial.name);
+    _nameController = TextEditingController(text: initial.name)
+      ..addListener(_onEdited);
     _emailController = TextEditingController(text: initial.email);
     _canonicalPhone = initial.phone;
     _employmentInitial = initial.employment;
@@ -256,6 +271,25 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     target: EntityOpenTarget.newTab,
   );
 
+  Future<void> _openAvailability() => openEntityLink(
+    context,
+    ref,
+    EntityLink.typed(
+      entityType: EntityLinkType.report,
+      entityId: '__section__',
+      variant: 'configuration',
+      optionalFocus: EntityLinkFocus(
+        focus: 'learning',
+        filter: {'teacherId': _teacherId},
+      ),
+      presentation: EntityPresentationReference(
+        primary: 'График преподавателя',
+        context: _nameController.text.trim(),
+      ),
+    ),
+    target: EntityOpenTarget.newTab,
+  );
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -286,10 +320,11 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             snapshot.allows('system.settings.manage'));
     final content = TeacherDetailContent(
       teacher: _teacher,
+      onEdited: _onEdited,
       nameController: _nameController,
       emailController: _emailController,
       initialPhone: _canonicalPhone,
-      onPhoneChanged: (phone) => _canonicalPhone = phone,
+      onPhoneChanged: (phone) => setState(() => _canonicalPhone = phone),
       employmentKey: _employmentKey,
       employmentInitial: _employmentInitial,
       employmentReferenceGateway: _employmentReferenceGateway,
@@ -301,6 +336,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       canEditAvailability: canEditAvailability,
       saving: _saving,
       onOpenSchedule: () => unawaited(_openSchedule()),
+      onOpenAvailability: () => unawaited(_openAvailability()),
       onAccessChanged: () => unawaited(_refreshAccess()),
       onProvisionAccess: _provisionAccess,
       onManageLifecycle: _manageLifecycle,
@@ -328,18 +364,27 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       ),
     );
     if (widget.embedded) {
-      return PersonnelEmbeddedCardFrame(
-        key: const Key('teacher-detail-embedded'),
-        title: 'Карточка преподавателя',
-        icon: Icons.school_outlined,
-        personName: _nameController.text.trim(),
-        statusLabel: _teacher['lifecycle_state'] == 'archived'
-            ? 'В архиве'
-            : 'Активен',
-        body: content,
-        action: saveButton,
-        saving: _saving,
-        onClose: widget.onClose,
+      return FormDiscardGuard(
+        key: widget.exitGuardKey,
+        hasChanges: () => _hasChanges,
+        busy: () => _saving,
+        child: PersonnelEmbeddedCardFrame(
+          key: const Key('teacher-detail-embedded'),
+          title: _nameController.text.trim(),
+          icon: Icons.school_outlined,
+          body: content,
+          action: saveButton,
+          saving: _saving,
+          recordId: _teacherId,
+          dirty: _hasChanges,
+          onDiscard: () async {
+            if (await widget.exitGuardKey?.currentState?.confirmLeave() ??
+                false) {
+              if (mounted) await widget.onChanged?.call();
+            }
+          },
+          onClose: widget.onClose,
+        ),
       );
     }
     return AlertDialog(

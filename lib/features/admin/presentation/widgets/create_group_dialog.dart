@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 
@@ -17,6 +19,7 @@ Future<bool?> showCreateGroupSurface(BuildContext context) {
     title: 'Новая учебная группа',
     subtitle: 'Преподаватель, филиал и аудитория',
     icon: Icons.groups_2_outlined,
+    scrollBody: false,
     builder: (_) => const CreateGroupDialog(),
   );
 }
@@ -89,7 +92,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!validateAndRevealForm(_formKey)) return;
     if (_branchId == null || _teacherId == null || _roomId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -186,7 +189,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                       branch is Map && branch['id']?.toString() == _branchId,
                 );
           }).toList();
-    return Form(
+    final fields = Form(
       key: _formKey,
       child: Column(
         key: const ValueKey('create-group-form'),
@@ -286,32 +289,34 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
               onChanged: (rate) => _teacherRate = rate,
             ),
           ],
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _saving ? null : () => Navigator.pop(context),
-                  child: const Text('Отмена'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Создать группу'),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
+    );
+    return MagicFormBody(
+      hasChanges: () =>
+          _nameController.text.isNotEmpty ||
+          _priceController.text.isNotEmpty ||
+          _teacherId != null ||
+          _branchId != null ||
+          _roomId != null ||
+          _teacherRate != null,
+      busy: () => _saving,
+      actions: [
+        OutlinedButton(
+          onPressed: _saving ? null : () => Navigator.maybePop(context),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Создать группу'),
+        ),
+      ],
+      child: fields,
     );
   }
 

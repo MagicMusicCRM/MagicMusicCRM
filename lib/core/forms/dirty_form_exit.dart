@@ -16,11 +16,14 @@ enum DirtyFormExitDecision { save, discard, cancel }
 
 typedef DirtyFormSave = Future<bool> Function();
 
-Future<DirtyFormExitDecision?> showDirtyFormExitDialog(BuildContext context) {
+Future<DirtyFormExitDecision?> showDirtyFormExitDialog(
+  BuildContext context, {
+  bool allowSave = true,
+}) {
   return showMagicDialog<DirtyFormExitDecision>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('Сохранить изменения?'),
+      title: Text(allowSave ? 'Сохранить изменения?' : 'Выйти без сохранения?'),
       content: const Text(
         'В форме есть несохранённые данные. Выберите, что сделать перед выходом.',
       ),
@@ -35,13 +38,56 @@ Future<DirtyFormExitDecision?> showDirtyFormExitDialog(BuildContext context) {
               Navigator.pop(dialogContext, DirtyFormExitDecision.discard),
           child: const Text('Не сохранять'),
         ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.pop(dialogContext, DirtyFormExitDecision.save),
-          child: const Text('Сохранить'),
-        ),
+        if (allowSave)
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, DirtyFormExitDecision.save),
+            child: const Text('Сохранить'),
+          ),
       ],
     ),
+  );
+}
+
+/// Checks the current draft at exit time, including fields without controllers.
+class FormDiscardGuard extends StatefulWidget {
+  const FormDiscardGuard({
+    super.key,
+    required this.hasChanges,
+    required this.busy,
+    required this.child,
+  });
+  final bool Function() hasChanges;
+  final bool Function() busy;
+  final Widget child;
+
+  @override
+  State<FormDiscardGuard> createState() => FormDiscardGuardState();
+}
+
+class FormDiscardGuardState extends State<FormDiscardGuard> {
+  bool _resolving = false;
+
+  Future<bool> confirmLeave() async {
+    if (widget.busy() || _resolving) return false;
+    if (!widget.hasChanges()) return true;
+    _resolving = true;
+    try {
+      return await showDirtyFormExitDialog(context, allowSave: false) ==
+          DirtyFormExitDecision.discard;
+    } finally {
+      _resolving = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: false,
+    onPopInvokedWithResult: (didPop, result) async {
+      if (didPop || !await confirmLeave() || !context.mounted) return;
+      Navigator.of(context).pop(result);
+    },
+    child: widget.child,
   );
 }
 

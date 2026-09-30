@@ -1,3 +1,5 @@
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:convert';
 
@@ -12,6 +14,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 import 'client_forms_api.dart';
 
@@ -25,6 +28,7 @@ Future<Map<String, dynamic>?> showStudentCreateSurface(
     title: 'Новый ученик',
     subtitle: 'Карточка будет сразу добавлена в воронку',
     icon: Icons.person_add_alt_1_rounded,
+    scrollBody: false,
     builder: (_) =>
         StudentCreateDialog(initialBranchId: initialBranchId, embedded: true),
   );
@@ -54,6 +58,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
   String? _submitError;
   bool _loading = true;
   bool _saving = false;
+  bool _metadataEdited = false;
   bool _showAdditionalInformation = false;
   MagicMutationIdentity? _createIdentity;
   String? _createFingerprint;
@@ -214,6 +219,11 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
               : 'Не удалось создать заявку. Проверьте данные и повторите попытку.';
         }
       });
+      if (fieldError != null) {
+        revealFirstInputError(context);
+      } else {
+        revealFormFeedback(context, const ValueKey('client-form-submit-error'));
+      }
       if (fieldError?.$1 == 'sourceId') {
         await _loadMetadata(inactiveSourceRefresh: true);
       }
@@ -224,6 +234,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
     if (branchId == null || branchId == _branchId) return;
     setState(() {
       _branchId = branchId;
+      _metadataEdited = true;
       _saving = true;
       _submitError = null;
     });
@@ -266,6 +277,13 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
         .where((field) => !_isPrimaryLeadField(field))
         .toList();
     return _AdaptiveClientDialog(
+      hasChanges: () =>
+          _firstName.text.isNotEmpty ||
+          _lastName.text.isNotEmpty ||
+          _phone.isNotEmpty ||
+          _sourceId != null ||
+          (_customValues.isNotEmpty || _metadataEdited),
+      busy: () => _saving,
       title: 'Новый лид',
       loading: _loading,
       loadError: _loadError,
@@ -273,7 +291,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
       submitError: _submitError,
       actions: [
         TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          onPressed: _saving ? null : () => Navigator.of(context).maybePop(),
           child: const Text('Отмена'),
         ),
         FilledButton(
@@ -373,7 +391,10 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                         .toList(growable: false),
                     onChanged: _saving
                         ? null
-                        : (value) => setState(() => _status = value),
+                        : (value) => setState(() {
+                            _status = value;
+                            _metadataEdited = true;
+                          }),
                   ),
                 const SizedBox(height: AppSpace.sm),
                 if (_sources.isEmpty)
@@ -491,6 +512,8 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
   String? _submitError;
   bool _loading = true;
   bool _saving = false;
+  bool _metadataEdited = false;
+  bool _showAdditionalInformation = false;
   MagicMutationIdentity? _createIdentity;
   String? _createFingerprint;
 
@@ -595,6 +618,7 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
     final errors = _validate();
     if (errors.isNotEmpty) {
       setState(() => _fieldErrors = errors);
+      revealFirstInputError(context);
       return;
     }
     setState(() {
@@ -638,12 +662,18 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
         _saving = false;
         if (fieldError != null) {
           _fieldErrors = {fieldError.$1: fieldError.$2};
+          _showAdditionalInformation = true;
         } else {
           _submitError = error is MagicApiException && error.statusCode == 403
               ? 'Недостаточно прав для создания ученика.'
               : 'Не удалось создать ученика. Проверьте данные и повторите попытку.';
         }
       });
+      if (fieldError != null) {
+        revealFirstInputError(context);
+      } else {
+        revealFormFeedback(context, const ValueKey('client-form-submit-error'));
+      }
       if (fieldError?.$1 == 'sourceId') {
         await _loadMetadata(inactiveSourceRefresh: true);
       }
@@ -654,6 +684,7 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
     if (branchId == null || branchId == _branchId) return;
     setState(() {
       _branchId = branchId;
+      _metadataEdited = true;
       _saving = true;
       _submitError = null;
     });
@@ -682,7 +713,18 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
 
   @override
   Widget build(BuildContext context) {
+    bool primary(Map<String, dynamic> field) =>
+        field['required'] == true || field['key'] == 'category';
+    final primaryFields = _fields.where(primary).toList();
+    final additionalFields = _fields.where((field) => !primary(field)).toList();
     return _AdaptiveClientDialog(
+      hasChanges: () =>
+          _firstName.text.isNotEmpty ||
+          _lastName.text.isNotEmpty ||
+          _phone.isNotEmpty ||
+          _sourceId != null ||
+          (_customValues.isNotEmpty || _metadataEdited),
+      busy: () => _saving,
       title: 'Новый ученик',
       embedded: widget.embedded,
       loading: _loading,
@@ -691,7 +733,7 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
       submitError: _submitError,
       actions: [
         TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          onPressed: _saving ? null : () => Navigator.of(context).maybePop(),
           child: const Text('Отмена'),
         ),
         FilledButton(
@@ -815,15 +857,61 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
                         .toList(growable: false),
                     onChanged: _saving
                         ? null
-                        : (value) => setState(() => _status = value),
+                        : (value) => setState(() {
+                            _status = value;
+                            _metadataEdited = true;
+                          }),
                   ),
                 _ClientFieldInputs(
-                  fields: _fields,
+                  fields: primaryFields,
                   values: _customValues,
                   errors: _fieldErrors,
                   enabled: !_saving,
                   onChanged: (id, value) => _customValues[id] = value,
                 ),
+                if (additionalFields.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  InkWell(
+                    key: const ValueKey('student-additional-toggle'),
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    onTap: _saving
+                        ? null
+                        : () => setState(
+                            () => _showAdditionalInformation =
+                                !_showAdditionalInformation,
+                          ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpace.sm,
+                        vertical: AppSpace.md,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _showAdditionalInformation
+                                ? Icons.expand_less_rounded
+                                : Icons.expand_more_rounded,
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          const Expanded(
+                            child: Text(
+                              'Дополнительная информация',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_showAdditionalInformation)
+                    _ClientFieldInputs(
+                      fields: additionalFields,
+                      values: _customValues,
+                      errors: _fieldErrors,
+                      enabled: !_saving,
+                      onChanged: (id, value) => _customValues[id] = value,
+                    ),
+                ],
               ],
             ),
     );
@@ -833,6 +921,8 @@ class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
 class _AdaptiveClientDialog extends StatelessWidget {
   const _AdaptiveClientDialog({
     required this.title,
+    required this.hasChanges,
+    required this.busy,
     required this.loading,
     required this.loadError,
     required this.onRetry,
@@ -843,6 +933,8 @@ class _AdaptiveClientDialog extends StatelessWidget {
   });
 
   final String title;
+  final bool Function() hasChanges;
+  final bool Function() busy;
   final bool loading;
   final String? loadError;
   final VoidCallback onRetry;
@@ -878,12 +970,32 @@ class _AdaptiveClientDialog extends StatelessWidget {
       ],
     );
     if (embedded) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          content,
-          const SizedBox(height: AppSpace.lg),
+      return MagicFormBody(
+        actions: actions,
+        hasChanges: hasChanges,
+        busy: busy,
+        child: content,
+      );
+    }
+    return FormDiscardGuard(
+      hasChanges: hasChanges,
+      busy: busy,
+      child: AlertDialog(
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: width < 480 ? AppSpace.sm : AppSpace.xl,
+          vertical: AppSpace.lg,
+        ),
+        title: Text(title),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: SizedBox(
+            width: width < 480
+                ? (width - (AppSpace.sm * 2) - 48).clamp(0, 520).toDouble()
+                : 520,
+            child: SingleChildScrollView(child: content),
+          ),
+        ),
+        actions: [
           Wrap(
             alignment: WrapAlignment.end,
             spacing: AppSpace.sm,
@@ -891,31 +1003,7 @@ class _AdaptiveClientDialog extends StatelessWidget {
             children: actions,
           ),
         ],
-      );
-    }
-    return AlertDialog(
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: width < 480 ? AppSpace.sm : AppSpace.xl,
-        vertical: AppSpace.lg,
       ),
-      title: Text(title),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: SizedBox(
-          width: width < 480
-              ? (width - (AppSpace.sm * 2) - 48).clamp(0, 520).toDouble()
-              : 520,
-          child: SingleChildScrollView(child: content),
-        ),
-      ),
-      actions: [
-        Wrap(
-          alignment: WrapAlignment.end,
-          spacing: AppSpace.sm,
-          runSpacing: AppSpace.sm,
-          children: actions,
-        ),
-      ],
     );
   }
 }

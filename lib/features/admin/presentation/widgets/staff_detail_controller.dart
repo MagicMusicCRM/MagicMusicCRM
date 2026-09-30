@@ -40,6 +40,17 @@ class StaffDetailController extends ChangeNotifier {
   bool get saving => _saving;
   String? get branchesError => _branchesError;
 
+  bool get hasChanges {
+    final initial = StaffDetailDraft.fromStaff(_staff);
+    return draft.firstName != initial.firstName ||
+        draft.lastName != initial.lastName ||
+        draft.canonicalPhone != initial.canonicalPhone ||
+        draft.position != initial.position ||
+        draft.birthday != initial.birthday ||
+        draft.status != initial.status ||
+        !setEquals(draft.branchIds, initial.branchIds);
+  }
+
   bool get isArchived => _staff['lifecycle_state'] == 'archived';
   bool get isAppAccount => _staff['is_app_account'] == true;
   String get appRole => _staff['app_role']?.toString() ?? '';
@@ -80,6 +91,11 @@ class StaffDetailController extends ChangeNotifier {
 
   void setCanonicalPhone(String value) {
     draft.canonicalPhone = value;
+    _notify();
+  }
+
+  void setBirthday(String value) {
+    draft.birthday = value;
     _notify();
   }
 

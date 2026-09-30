@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -8,6 +9,7 @@ import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 
 Future<bool?> showCreateEmployeeSurface(BuildContext context) {
@@ -17,6 +19,7 @@ Future<bool?> showCreateEmployeeSurface(BuildContext context) {
     title: 'Новый сотрудник',
     subtitle: 'Карточка сотрудника и необязательный доступ',
     icon: Icons.person_add_alt_1_rounded,
+    scrollBody: false,
     builder: (_) => const CreateEmployeeDialog(),
   );
 }
@@ -86,7 +89,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!validateAndRevealForm(_formKey)) return;
     if (_branchIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Выберите хотя бы один филиал.')),
@@ -169,7 +172,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
       actorRole: actorRole,
       teacher: false,
     );
-    return Form(
+    final fields = Form(
       key: _formKey,
       child: Column(
         key: const ValueKey('create-employee-form'),
@@ -317,32 +320,38 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
                 ),
             ],
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _saving ? null : () => Navigator.pop(context),
-                  child: const Text('Отмена'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Добавить сотрудника'),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
+    );
+    return MagicFormBody(
+      hasChanges: () =>
+          [
+            _firstNameController,
+            _lastNameController,
+            _emailController,
+            _passwordController,
+            _passwordAgainController,
+          ].any((c) => c.text.isNotEmpty) ||
+          _canonicalPhone.isNotEmpty ||
+          _branchIds.isNotEmpty ||
+          _accessRole != 'admin',
+      busy: () => _saving,
+      actions: [
+        OutlinedButton(
+          onPressed: _saving ? null : () => Navigator.maybePop(context),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Добавить сотрудника'),
+        ),
+      ],
+      child: fields,
     );
   }
 }

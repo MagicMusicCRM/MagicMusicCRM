@@ -12,6 +12,7 @@ InputDecorationTheme _clientCardInputTheme({bool compact = false}) {
     borderSide: const BorderSide(color: AppColor.borderSoft),
   );
   return InputDecorationTheme(
+    constraints: BoxConstraints(minHeight: compact ? 40 : 48),
     filled: true,
     fillColor: AppColor.surface,
     isDense: true,
@@ -20,10 +21,10 @@ InputDecorationTheme _clientCardInputTheme({bool compact = false}) {
       vertical: compact ? 8 : 13,
     ),
     prefixIconConstraints: compact
-        ? const BoxConstraints(minWidth: 32, minHeight: 36)
+        ? const BoxConstraints(minWidth: 32, minHeight: 40)
         : null,
     suffixIconConstraints: compact
-        ? const BoxConstraints(minWidth: 32, minHeight: 36)
+        ? const BoxConstraints(minWidth: 32, minHeight: 40)
         : null,
     labelStyle: const TextStyle(
       color: AppColor.text2,
@@ -102,7 +103,7 @@ ThemeData clientCardControlTheme(ThemeData base, {bool compact = false}) {
         : base.iconButtonTheme,
     inputDecorationTheme: inputTheme,
     dropdownMenuTheme: DropdownMenuThemeData(
-      textStyle: const TextStyle(color: AppColor.text, fontSize: 15),
+      textStyle: const TextStyle(color: AppColor.text, fontSize: 14),
       inputDecorationTheme: inputTheme,
       disabledColor: AppColor.disabledText,
       menuStyle: MenuStyle(

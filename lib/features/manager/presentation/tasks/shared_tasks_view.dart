@@ -88,7 +88,10 @@ class _SharedTasksViewState extends State<SharedTasksView> {
           children: [
             if (widget.state.counters['overdue'] case final num overdue
                 when overdue > 0)
-              _ReminderBanner(overdue: overdue.toInt()),
+              _ReminderBanner(
+                overdue: overdue.toInt(),
+                onShow: () => _setStateFilter('overdue'),
+              ),
             mobile
                 ? _MobileTaskFilter(
                     value: widget.state.query.state,
@@ -231,6 +234,17 @@ class _SharedTasksViewState extends State<SharedTasksView> {
           : MagicPageState(
               kind: MagicPageStateKind.empty,
               title: 'Нет задач',
+              actionLabel: (contentQuery.search ?? '').isNotEmpty
+                  ? 'Очистить поиск'
+                  : widget.canCreate
+                  ? 'Новая задача'
+                  : null,
+              onAction: (contentQuery.search ?? '').isNotEmpty
+                  ? () =>
+                        widget.onQueryChanged(state.query.copyWith(search: ''))
+                  : widget.canCreate
+                  ? widget.onCreate
+                  : null,
               message: widget.canCreate
                   ? 'Создайте задачу или измените фильтр.'
                   : contentQuery.scope == 'mine'
@@ -303,71 +317,67 @@ class _TaskViewToolbar extends StatelessWidget {
         .toDouble();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            SizedBox(
-              width: searchWidth,
-              child: TextField(
-                key: const Key('shared-task-search'),
-                controller: search,
-                textInputAction: TextInputAction.search,
-                onChanged: onSearchChanged,
-                onSubmitted: (_) => onSearch(),
-                decoration: InputDecoration(
-                  isDense: true,
-                  labelText: 'Поиск',
-                  suffixIcon: IconButton(
-                    tooltip: 'Найти задачи',
-                    onPressed: onSearch,
-                    icon: const Icon(Icons.search_rounded),
-                  ),
+      child: Wrap(
+        spacing: AppSpace.sm,
+        runSpacing: AppSpace.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: searchWidth,
+            child: TextField(
+              key: const Key('shared-task-search'),
+              controller: search,
+              textInputAction: TextInputAction.search,
+              onChanged: onSearchChanged,
+              onSubmitted: (_) => onSearch(),
+              decoration: InputDecoration(
+                isDense: true,
+                labelText: 'Поиск',
+                suffixIcon: IconButton(
+                  tooltip: 'Найти задачи',
+                  onPressed: onSearch,
+                  icon: const Icon(Icons.search_rounded),
                 ),
               ),
             ),
-            const SizedBox(width: AppSpace.sm),
-            _FilterDropdown(
-              filterKey: const Key('shared-task-priority-filter'),
-              value: query.priority,
-              entries: _priorityFilters,
-              onChanged: onPriorityChanged,
+          ),
+          _FilterDropdown(
+            filterKey: const Key('shared-task-priority-filter'),
+            value: query.priority,
+            entries: _priorityFilters,
+            onChanged: onPriorityChanged,
+          ),
+          _FilterDropdown(
+            filterKey: const Key('shared-task-scope-filter'),
+            value: query.scope,
+            entries: _scopeFilters,
+            onChanged: onScopeChanged,
+          ),
+          ChoiceChip(
+            key: const Key('shared-task-today-filter'),
+            label: Text(
+              query.day == null ||
+                      _sameDay(query.day!, sharedTasksMoscowToday())
+                  ? 'Сегодня'
+                  : DateFormat('dd.MM.yyyy').format(query.day!),
             ),
-            const SizedBox(width: AppSpace.sm),
-            _FilterDropdown(
-              filterKey: const Key('shared-task-scope-filter'),
-              value: query.scope,
-              entries: _scopeFilters,
-              onChanged: onScopeChanged,
+            selected: query.day != null,
+            onSelected: (selected) =>
+                onDayChanged(selected ? sharedTasksMoscowToday() : null),
+          ),
+          IconButton.filledTonal(
+            key: const Key('shared-task-calendar-toggle'),
+            tooltip: query.calendarMode
+                ? 'Показать список'
+                : 'Показать календарь',
+            onPressed: () => onCalendarChanged(!query.calendarMode),
+            icon: Icon(
+              query.calendarMode
+                  ? Icons.view_list_rounded
+                  : Icons.calendar_month,
             ),
-            const SizedBox(width: AppSpace.sm),
-            ChoiceChip(
-              key: const Key('shared-task-today-filter'),
-              label: Text(
-                query.day == null ||
-                        _sameDay(query.day!, sharedTasksMoscowToday())
-                    ? 'Сегодня'
-                    : DateFormat('dd.MM.yyyy').format(query.day!),
-              ),
-              selected: query.day != null,
-              onSelected: (selected) =>
-                  onDayChanged(selected ? sharedTasksMoscowToday() : null),
-            ),
-            const SizedBox(width: AppSpace.sm),
-            IconButton.filledTonal(
-              key: const Key('shared-task-calendar-toggle'),
-              tooltip: query.calendarMode
-                  ? 'Показать список'
-                  : 'Показать календарь',
-              onPressed: () => onCalendarChanged(!query.calendarMode),
-              icon: Icon(
-                query.calendarMode
-                    ? Icons.view_list_rounded
-                    : Icons.calendar_month,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -502,7 +512,8 @@ class _SharedTaskMonthGrid extends StatelessWidget {
 }
 
 class _ReminderBanner extends StatelessWidget {
-  const _ReminderBanner({required this.overdue});
+  const _ReminderBanner({required this.overdue, required this.onShow});
+  final VoidCallback onShow;
   final int overdue;
 
   @override
@@ -524,6 +535,7 @@ class _ReminderBanner extends StatelessWidget {
         ),
         const SizedBox(width: AppSpace.sm),
         Expanded(child: Text('Просроченных задач: $overdue')),
+        TextButton(onPressed: onShow, child: const Text('Показать')),
       ],
     ),
   );

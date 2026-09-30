@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
@@ -248,15 +249,11 @@ class LessonEditorView extends StatelessWidget {
       actions: actions,
     );
     if (embeddedSurface) {
-      return Column(
+      return MagicFormBody(
         key: const ValueKey('lesson-editor-adaptive-content'),
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          content,
-          const SizedBox(height: AppSpace.lg),
-          actionsRow,
-        ],
+        scrollController: scrollController,
+        actions: [actionsRow],
+        child: content,
       );
     }
     final width = MediaQuery.sizeOf(context).width;

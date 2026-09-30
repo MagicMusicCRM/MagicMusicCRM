@@ -262,7 +262,7 @@ void main() {
       for (final key in [
         'client-edit-name',
         'client-add-to-group',
-        'client-book-trial',
+        'client-book-lesson',
         'client-sell-subscription',
         'client-internal-note-input',
       ]) {
@@ -345,28 +345,31 @@ void main() {
     },
   );
 
-  testWidgets('sidebar trial action prefills current student', (tester) async {
-    tester.view.physicalSize = const Size(1200, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final api = FakeCardApiClient(student: desktopStudent);
-    await pumpClientCard(
-      tester,
-      api: api,
-      seed: desktopStudent,
-      entityType: 'student',
-      routed: true,
-      capabilitySnapshot: desktopManager,
-    );
-    await tester.tap(find.byKey(const Key('client-book-trial')));
-    await tester.pumpAndSettle();
-    final editor = tester.widget<CreateLessonDialog>(
-      find.byType(CreateLessonDialog),
-    );
-    expect(editor.clientId, 'student-1');
-    expect(editor.clientType, 'student');
-    expect(editor.initialIsTrial, isTrue);
-    expect(editor.initialBranchId, 'branch-1');
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'sidebar lesson action prefills current student for a regular lesson',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = FakeCardApiClient(student: desktopStudent);
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: desktopStudent,
+        entityType: 'student',
+        routed: true,
+        capabilitySnapshot: desktopManager,
+      );
+      await tester.tap(find.byKey(const Key('client-book-lesson')));
+      await tester.pumpAndSettle();
+      final editor = tester.widget<CreateLessonDialog>(
+        find.byType(CreateLessonDialog),
+      );
+      expect(editor.clientId, 'student-1');
+      expect(editor.clientType, 'student');
+      expect(editor.initialIsTrial, isFalse);
+      expect(editor.initialBranchId, 'branch-1');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -14,6 +14,19 @@ import {
 
 export class MessengerListQuery {
   @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  q?: string;
+
+  @IsOptional()
+  @IsUUID()
+  beforeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  atId?: string;
+
+  @IsOptional()
   @IsDateString()
   before?: string;
 

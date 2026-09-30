@@ -1,6 +1,81 @@
 part of 'schedule_widget.dart';
 
 extension _ScheduleContextBanners on _ScheduleWidgetState {
+  void _setConflictFilter(bool selected) => _applyScheduleFilterResult((
+    branchId: _selectedBranchId,
+    mode: _dayViewMode,
+    teacherId: _filterTeacherId,
+    onlyTrial: _onlyTrial,
+    onlyConflicts: selected,
+    settlementTypes: _settlementTypes,
+    compensationRules: _compensationRules,
+  ));
+
+  Widget _buildConflictFilterBanner() {
+    final count = _lessonsInCurrentView()
+        .where((lesson) => conflictTypes(lesson['conflict_types']).isNotEmpty)
+        .length;
+    if (count == 0 && !_onlyConflicts) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: FilterChip(
+          key: const ValueKey('schedule-conflicts-shortcut'),
+          avatar: const Icon(
+            Icons.warning_amber_rounded,
+            color: AppColor.danger,
+            size: 18,
+          ),
+          label: Text('Занятий с конфликтами: $count'),
+          tooltip: 'В показанном периоде с учётом выбранных фильтров',
+          selected: _onlyConflicts,
+          onSelected: _setConflictFilter,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveFilterBanner() {
+    void remove(String filter) => _applyScheduleFilterResult((
+      branchId: _selectedBranchId,
+      mode: _dayViewMode,
+      teacherId: filter == 'teacher' ? null : _filterTeacherId,
+      onlyTrial: filter == 'trial' ? false : _onlyTrial,
+      onlyConflicts: filter == 'conflicts' ? false : _onlyConflicts,
+      settlementTypes: filter == 'settlement' ? <String>{} : _settlementTypes,
+      compensationRules: filter == 'compensation'
+          ? <String>{}
+          : _compensationRules,
+    ));
+    final labels = <String, String>{
+      if (_filterTeacherId != null)
+        'teacher':
+            'Преподаватель: ${_teacherFilterOptions.where((t) => t.id == _filterTeacherId).firstOrNull?.name ?? 'Выбран'}',
+      if (_onlyTrial) 'trial': 'Только пробные',
+      if (_onlyConflicts) 'conflicts': 'Только конфликты',
+      if (_settlementTypes.isNotEmpty)
+        'settlement': 'Типы расчёта: ${_settlementTypes.length}',
+      if (_compensationRules.isNotEmpty)
+        'compensation': 'Правила оплаты: ${_compensationRules.length}',
+    };
+    if (labels.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          for (final entry in labels.entries)
+            InputChip(
+              label: Text(entry.value),
+              onDeleted: () => remove(entry.key),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildClientFilterBanner() {
     final fallback = _filterClientType == 'lead' ? 'Лид' : 'Ученик';
     return Padding(
@@ -169,12 +244,16 @@ extension _ScheduleContextBanners on _ScheduleWidgetState {
                   ? AppTheme.warning
                   : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
-            _ScheduleBadge(
-              icon: Icons.warning_amber_rounded,
-              label: 'Конфликты: ${conflicts.length}',
-              color: conflicts.isEmpty
-                  ? Theme.of(context).colorScheme.onSurfaceVariant
-                  : AppColor.danger,
+            ActionChip(
+              avatar: const Icon(
+                Icons.warning_amber_rounded,
+                color: AppColor.danger,
+                size: 18,
+              ),
+              label: Text('Конфликты: ${conflicts.length}'),
+              onPressed: conflicts.isEmpty
+                  ? null
+                  : () => _setConflictFilter(true),
             ),
             if (availability.isEmpty && !_availabilityLoading)
               Text(

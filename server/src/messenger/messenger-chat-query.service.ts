@@ -307,6 +307,13 @@ const MESSAGE_LIST_SQL = `
   left join app.file_objects f on f.id = m.attachment_file_id and f.deleted_at is null
   where m.chat_id = $1
     and ($2::timestamptz is null or m.created_at < $2)
+    and ($5::text is null or (m.deleted_at is null and strpos(lower(m.content), lower($5)) > 0))
+    and ($6::uuid is null or (m.created_at, m.id) < (
+      select created_at, id from app.messages where id = $6 and chat_id = $1
+    ))
+    and ($7::uuid is null or (m.created_at, m.id) <= (
+      select created_at, id from app.messages where id = $7 and chat_id = $1 and deleted_at is null
+    ))
   order by m.created_at desc, m.id desc
   limit $3
 `;
@@ -378,7 +385,7 @@ export class MessengerChatQueryService {
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<MessageRow>(
       MESSAGE_LIST_SQL,
-      [chatId, query.before ?? null, limit, actor.userId],
+      [chatId, query.before ?? null, limit, actor.userId, query.q?.trim() || null, query.beforeId ?? null, query.atId ?? null],
     );
 
     // Privacy: the single non-staff member of an administration chat is its

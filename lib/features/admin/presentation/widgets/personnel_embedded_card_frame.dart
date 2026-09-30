@@ -1,56 +1,95 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 
-class PersonnelCardCanvas extends StatelessWidget {
-  const PersonnelCardCanvas({
-    super.key,
-    required this.summary,
-    required this.desktopLeft,
-    required this.desktopRight,
-    required this.mobileSections,
+class PersonnelCardSection {
+  const PersonnelCardSection({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.child,
   });
 
-  final Widget summary;
-  final List<Widget> desktopLeft;
-  final List<Widget> desktopRight;
-  final List<Widget> mobileSections;
+  final String id;
+  final String label;
+  final IconData icon;
+  final Widget child;
+}
+
+class PersonnelSectionedCardBody extends StatelessWidget {
+  const PersonnelSectionedCardBody({
+    super.key,
+    required this.keyPrefix,
+    required this.sections,
+  });
+
+  final String keyPrefix;
+  final List<PersonnelCardSection> sections;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final section in sections) ...[
+          if (section.id == 'overview' || section.id == 'employment')
+            KeyedSubtree(
+              key: ValueKey('$keyPrefix-personnel-content-${section.id}'),
+              child: section.child,
+            )
+          else
+            ExpansionTile(
+              key: PageStorageKey(
+                '$keyPrefix-personnel-section-${section.id}',
+              ),
+              leading: Icon(section.icon, size: 20),
+              title: Text(section.label),
+              maintainState: true,
+              children: [
+                KeyedSubtree(
+                  key: PageStorageKey(
+                    '$keyPrefix-personnel-storage-${section.id}',
+                  ),
+                  child: KeyedSubtree(
+                    key: ValueKey(
+                      '$keyPrefix-personnel-content-${section.id}',
+                    ),
+                    child: section.child,
+                  ),
+                ),
+              ],
+            ),
+          const SizedBox(height: 16),
+        ],
+      ],
+    ),
+  );
+}
+
+/// Equal columns for short fields; long labels and validation may grow vertically.
+class PersonnelFieldGrid extends StatelessWidget {
+  const PersonnelFieldGrid({super.key, required this.children});
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => Padding(
-      padding: const EdgeInsets.all(AppSpace.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    builder: (context, constraints) {
+      final twoColumns =
+          constraints.maxWidth >=
+          620 * MediaQuery.textScalerOf(context).scale(1);
+      final width = twoColumns
+          ? (constraints.maxWidth - 16) / 2
+          : constraints.maxWidth;
+      return Wrap(
+        spacing: 16,
+        runSpacing: 16,
         children: [
-          summary,
-          const SizedBox(height: AppSpace.md),
-          if (constraints.maxWidth >= 960)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: _column(desktopLeft)),
-                const SizedBox(width: AppSpace.md),
-                Expanded(child: _column(desktopRight)),
-              ],
-            )
-          else
-            _column(mobileSections),
+          for (final child in children) SizedBox(width: width, child: child),
         ],
-      ),
-    ),
-  );
-
-  Widget _column(List<Widget> sections) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      for (var index = 0; index < sections.length; index++) ...[
-        if (index > 0) const SizedBox(height: AppSpace.md),
-        sections[index],
-      ],
-    ],
+      );
+    },
   );
 }
 
@@ -299,8 +338,9 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
     required this.body,
     required this.action,
     required this.saving,
-    this.personName,
-    this.statusLabel,
+    this.dirty = false,
+    this.recordId,
+    this.onDiscard,
     this.onClose,
   });
 
@@ -309,8 +349,9 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
   final Widget body;
   final Widget action;
   final bool saving;
-  final String? personName;
-  final String? statusLabel;
+  final bool dirty;
+  final String? recordId;
+  final VoidCallback? onDiscard;
   final VoidCallback? onClose;
 
   @override
@@ -322,69 +363,18 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.xl,
-              AppSpace.lg,
-              AppSpace.md,
-              AppSpace.md,
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
             child: Row(
               children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: AppColor.goldSoft,
-                    borderRadius: BorderRadius.circular(AppRadius.icon),
-                    border: Border.all(color: AppColor.goldLine),
-                  ),
-                  child: Icon(icon, size: 22, color: AppColor.gold),
-                ),
-                const SizedBox(width: AppSpace.md),
+                Icon(icon),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        personName?.trim().isNotEmpty == true
-                            ? personName!
-                            : title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: statusLabel == 'В архиве'
-                                  ? AppColor.text3
-                                  : AppColor.success,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              '$title · ${statusLabel ?? 'Активен'}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                color: colors.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 if (onClose != null)
@@ -396,32 +386,43 @@ class PersonnelEmbeddedCardFrame extends StatelessWidget {
               ],
             ),
           ),
-          Divider(
-            height: 1,
-            color: colors.outlineVariant.withValues(alpha: 0.6),
-          ),
+          Divider(height: 1, color: colors.outlineVariant),
           Expanded(
             child: ColoredBox(
-              color: colors.surface,
-              child: MagicDesktopScrollbar(
-                axis: Axis.vertical,
-                builder: (context, controller) =>
-                    SingleChildScrollView(controller: controller, child: body),
+              color: AppColor.bg,
+              child: SingleChildScrollView(
+                key: PageStorageKey('personnel-scroll-$recordId'),
+                child: body,
               ),
             ),
           ),
-          Divider(
-            height: 1,
-            color: colors.outlineVariant.withValues(alpha: 0.6),
-          ),
+          Divider(height: 1, color: colors.outlineVariant),
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.xl,
-              AppSpace.md,
-              AppSpace.xl,
-              AppSpace.lg,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (dirty)
+                  const Text(
+                    'Есть изменения',
+                    style: TextStyle(color: AppColor.text2),
+                  ),
+                if (dirty && onDiscard != null)
+                  TextButton(
+                    onPressed: saving ? null : onDiscard,
+                    child: const Text('Отменить изменения'),
+                  ),
+                if (onClose != null)
+                  OutlinedButton(
+                    onPressed: saving ? null : onClose,
+                    child: const Text('Закрыть'),
+                  ),
+                action,
+              ],
             ),
-            child: Align(alignment: Alignment.centerRight, child: action),
           ),
         ],
       ),

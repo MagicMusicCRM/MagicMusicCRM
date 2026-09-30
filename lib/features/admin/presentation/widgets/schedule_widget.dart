@@ -564,6 +564,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
                 },
               ),
           ],
+          if (!firstLoad) _buildActiveFilterBanner(),
+          if (!firstLoad) _buildConflictFilterBanner(),
           if (!firstLoad && _filterClientId != null) _buildClientFilterBanner(),
           if (!firstLoad && widget.clientId != null)
             _buildClientContextBanner(),

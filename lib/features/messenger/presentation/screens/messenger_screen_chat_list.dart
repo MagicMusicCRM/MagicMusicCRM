@@ -128,7 +128,11 @@ extension _MessengerChatList on _MessengerScreenState {
           ),
         ),
         // Search
-        ChatSearchBar(onChanged: (q) => _emitState(() => _searchQuery = q)),
+        ChatSearchBar(
+          controller: _chatListSearchController,
+          hint: 'Поиск по названию чата',
+          onChanged: (q) => _emitState(() => _searchQuery = q),
+        ),
         // Folder bar — staff (manager/admin) only
         if (showInboxFolders(widget.role))
           InboxFolderBar(
@@ -228,13 +232,23 @@ extension _MessengerChatList on _MessengerScreenState {
                     }
 
                     if (listItems.isEmpty) {
-                      return Center(
-                        child: Text(
-                          _searchQuery.isNotEmpty
-                              ? 'Ничего не найдено'
-                              : 'Нет чатов',
-                          style: TextStyle(color: secondaryText),
-                        ),
+                      return MagicPageState(
+                        kind: MagicPageStateKind.empty,
+                        title: _searchQuery.isNotEmpty
+                            ? 'Чаты не найдены'
+                            : 'Нет чатов',
+                        message: showInboxFolders(widget.role)
+                            ? 'В выбранной папке и филиале нет подходящих чатов.'
+                            : 'Нет чатов с таким названием.',
+                        actionLabel: _searchQuery.isNotEmpty
+                            ? 'Очистить поиск'
+                            : null,
+                        onAction: _searchQuery.isEmpty
+                            ? null
+                            : () {
+                                _chatListSearchController.clear();
+                                _emitState(() => _searchQuery = '');
+                              },
                       );
                     }
 

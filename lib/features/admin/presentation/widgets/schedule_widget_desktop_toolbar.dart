@@ -14,7 +14,7 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
         _dayViewMode == DayViewMode.byTeacher;
     final singleRow =
         constraints.maxWidth >=
-        (teacherWeek ? 1320 : 1100) * MediaQuery.textScalerOf(context).scale(1);
+        (teacherWeek ? 1440 : 1220) * MediaQuery.textScalerOf(context).scale(1);
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -52,9 +52,7 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                 backgroundColor: AppColor.gold,
                 foregroundColor: AppColor.onGold,
               ),
-              child: constraints.maxWidth >= 1450
-                  ? const Text('+ Создать занятие')
-                  : const Icon(Icons.add_rounded, size: 20),
+              child: const Text('+ Занятие'),
             ),
           ),
       ],

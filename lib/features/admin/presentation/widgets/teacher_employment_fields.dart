@@ -1,3 +1,5 @@
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
+import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -82,6 +84,7 @@ class TeacherEmploymentFields extends StatefulWidget {
   final bool canManageRate;
   final bool requireRateConfirmation;
   final bool enabled;
+  final VoidCallback? onChanged;
 
   const TeacherEmploymentFields({
     super.key,
@@ -91,6 +94,7 @@ class TeacherEmploymentFields extends StatefulWidget {
     this.canManageRate = true,
     this.requireRateConfirmation = false,
     this.enabled = true,
+    this.onChanged,
   });
 
   @override
@@ -123,6 +127,25 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
   String? _loadError;
   String? _selectionError;
   int _disciplineLoadGeneration = 0;
+
+  bool get hasChanges =>
+      !setEquals(_branchIds, _idsOf(widget.initial.branches)) ||
+      !setEquals(_disciplineIds, _idsOf(widget.initial.disciplines)) ||
+      !setEquals(_levels, widget.initial.levels) ||
+      !setEquals(_categories, widget.initial.categories) ||
+      _birthday != widget.initial.birthday ||
+      _workStartDate != widget.initial.workStartDate ||
+      _isPartTime != widget.initial.isPartTime ||
+      _isBlacklisted != widget.initial.isBlacklisted ||
+      num.tryParse(_salaryController.text.trim().replaceAll(',', '.')) !=
+          widget.initial.salary ||
+      (_rateTouched && _rate != widget.initial.rate) ||
+      _rateEffectiveFrom != null;
+
+  void _change(VoidCallback change) {
+    setState(change);
+    widget.onChanged?.call();
+  }
 
   @override
   void initState() {
@@ -241,7 +264,7 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
   }
 
   TeacherEmploymentValue? validateAndRead() {
-    final formValid = _formKey.currentState?.validate() ?? false;
+    final formValid = validateAndRevealForm(_formKey);
     String? error;
     if (_loading) {
       error = 'Дождитесь загрузки настроек преподавателя.';
@@ -253,7 +276,12 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
       error = 'Выберите ставку преподавателя.';
     }
     setState(() => _selectionError = error);
-    if (!formValid || error != null) return null;
+    if (!formValid || error != null) {
+      if (formValid && error != null) {
+        revealFormFeedback(context, const ValueKey('teacher-employment-error'));
+      }
+      return null;
+    }
 
     final salaryText = _salaryController.text.trim().replaceAll(',', '.');
     final enteredSalary = salaryText.isEmpty ? null : num.parse(salaryText);
@@ -301,93 +329,16 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
 
     return Form(
       key: _formKey,
+      onChanged: widget.onChanged,
       child: Column(
         key: const ValueKey('teacher-employment-fields'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Условия работы и преподавания',
+            'Филиалы и преподавание',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 6),
-          if (widget.canManageRate) ...[
-            Text(
-              'Ставка: оплата преподавателю за астрономический час. '
-              'Она не списывается со счёта или абонемента ученика.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            if (widget.requireRateConfirmation) ...[
-              CheckboxListTile(
-                key: const Key('teacher-rate-change-confirmation'),
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _rateChangeConfirmed,
-                onChanged: !widget.enabled
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _rateChangeConfirmed = value == true;
-                          if (!_rateChangeConfirmed) {
-                            _rate = widget.initial.rate;
-                            _rateTouched = false;
-                            _rateEffectiveFrom = null;
-                          }
-                        });
-                      },
-                title: const Text('Разрешить изменение базовой ставки'),
-              ),
-              const SizedBox(height: 8),
-            ],
-            TeacherRateSelector(
-              key: ValueKey(
-                'teacher-rate-${widget.initial.rate}-$_rateChangeConfirmed',
-              ),
-              initialRate: widget.initial.rate,
-              allowUnset: true,
-              required: widget.requireRate,
-              enabled:
-                  widget.enabled &&
-                  (!widget.requireRateConfirmation || _rateChangeConfirmed),
-              label: 'Базовая ставка, ₽/астр.ч. *',
-              onChanged: (value) {
-                _rate = value;
-                _rateTouched = true;
-              },
-            ),
-            const SizedBox(height: 12),
-            _TeacherDateField(
-              label: 'Ставка действует с',
-              value: _rateEffectiveFrom,
-              firstDate: DateTime(2020),
-              lastDate: DateTime(2100),
-              enabled:
-                  widget.enabled &&
-                  (!widget.requireRateConfirmation || _rateChangeConfirmed),
-              onChanged: (value) => setState(() => _rateEffectiveFrom = value),
-            ),
-            const SizedBox(height: 12),
-          ],
-          TextFormField(
-            controller: _salaryController,
-            enabled: widget.enabled,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Оклад, ₽/мес',
-              helperText:
-                  'Справочная фиксированная часть; автоматически к урокам не начисляется.',
-              helperMaxLines: 2,
-            ),
-            validator: (value) {
-              final text = value?.trim().replaceAll(',', '.') ?? '';
-              if (text.isEmpty) return null;
-              final parsed = num.tryParse(text);
-              return parsed == null || parsed < 0
-                  ? 'Введите сумму не меньше нуля'
-                  : null;
-            },
-          ),
-          const SizedBox(height: 16),
           _chips(title: 'Филиалы *', options: _branches, selected: _branchIds),
           const SizedBox(height: 14),
           _loadingDisciplines
@@ -417,6 +368,7 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
             const SizedBox(height: 8),
             Text(
               _selectionError!,
+              key: const ValueKey('teacher-employment-error'),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],
@@ -430,7 +382,7 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
                   firstDate: DateTime(1940),
                   lastDate: DateTime.now(),
                   enabled: widget.enabled,
-                  onChanged: (value) => setState(() => _birthday = value),
+                  onChanged: (value) => _change(() => _birthday = value),
                 ),
               ),
               const SizedBox(width: 12),
@@ -441,7 +393,7 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
                   firstDate: DateTime(1990),
                   lastDate: DateTime(2100),
                   enabled: widget.enabled,
-                  onChanged: (value) => setState(() => _workStartDate = value),
+                  onChanged: (value) => _change(() => _workStartDate = value),
                 ),
               ),
             ],
@@ -452,7 +404,7 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
             value: _isPartTime,
             onChanged: !widget.enabled
                 ? null
-                : (value) => setState(() => _isPartTime = value),
+                : (value) => _change(() => _isPartTime = value),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -460,8 +412,93 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
             value: _isBlacklisted,
             onChanged: !widget.enabled
                 ? null
-                : (value) => setState(() => _isBlacklisted = value),
+                : (value) => _change(() => _isBlacklisted = value),
           ),
+          const Divider(height: 32),
+          Text(
+            'Условия оплаты',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          if (widget.canManageRate) ...[
+            Text(
+              'Ставка: оплата преподавателю за астрономический час. '
+              'Она не списывается со счёта или абонемента ученика.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            if (widget.requireRateConfirmation) ...[
+              CheckboxListTile(
+                key: const Key('teacher-rate-change-confirmation'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _rateChangeConfirmed,
+                onChanged: !widget.enabled
+                    ? null
+                    : (value) {
+                        _change(() {
+                          _rateChangeConfirmed = value == true;
+                          if (!_rateChangeConfirmed) {
+                            _rate = widget.initial.rate;
+                            _rateTouched = false;
+                            _rateEffectiveFrom = null;
+                          }
+                        });
+                      },
+                title: const Text('Разрешить изменение базовой ставки'),
+              ),
+              const SizedBox(height: 8),
+            ],
+            TeacherRateSelector(
+              key: ValueKey(
+                'teacher-rate-${widget.initial.rate}-$_rateChangeConfirmed',
+              ),
+              initialRate: widget.initial.rate,
+              allowUnset: true,
+              required: widget.requireRate,
+              enabled:
+                  widget.enabled &&
+                  (!widget.requireRateConfirmation || _rateChangeConfirmed),
+              label: 'Базовая ставка, ₽/астр.ч. *',
+              onChanged: (value) {
+                _rate = value;
+                _rateTouched = true;
+                widget.onChanged?.call();
+              },
+            ),
+            const SizedBox(height: 12),
+            _TeacherDateField(
+              label: 'Ставка действует с',
+              value: _rateEffectiveFrom,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2100),
+              enabled:
+                  widget.enabled &&
+                  (!widget.requireRateConfirmation || _rateChangeConfirmed),
+              onChanged: (value) => _change(() => _rateEffectiveFrom = value),
+            ),
+            const SizedBox(height: 12),
+          ],
+          TextFormField(
+            controller: _salaryController,
+            enabled: widget.enabled,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Оклад, ₽/мес',
+              helperText:
+                  'Справочная фиксированная часть; автоматически к урокам не начисляется.',
+              helperMaxLines: 2,
+            ),
+            validator: (value) {
+              final text = value?.trim().replaceAll(',', '.') ?? '';
+              if (text.isEmpty) return null;
+              final parsed = num.tryParse(text);
+              return parsed == null || parsed < 0
+                  ? 'Введите сумму не меньше нуля'
+                  : null;
+            },
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -500,7 +537,7 @@ class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
                     ? null
                     : (value) {
                         final id = option.id;
-                        setState(() {
+                        _change(() {
                           value ? selected.add(id) : selected.remove(id);
                           _selectionError = null;
                         });

@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -158,6 +159,27 @@ final staffSearchProvider =
       return ref.watch(magicCrmServiceProvider).listStaff(q: query, limit: 100);
     });
 
+final personnelDirectoryProvider =
+    FutureProvider.family<
+      List<Map<String, dynamic>>,
+      ({bool teachers, String query, String? branchId, String? status})
+    >((ref, filter) {
+      final crm = ref.watch(magicCrmServiceProvider);
+      return filter.teachers
+          ? crm.listTeachers(
+              q: filter.query,
+              branchId: filter.branchId,
+              status: filter.status,
+              limit: 100,
+            )
+          : crm.listStaff(
+              q: filter.query,
+              branchId: filter.branchId,
+              status: filter.status,
+              limit: 100,
+            );
+    });
+
 /// Operational personnel directory. It reuses the canonical teacher/staff
 /// records and their existing access-controlled cards; settings remain the
 /// place for account-wide configuration.
@@ -177,14 +199,18 @@ class PersonnelWorkspace extends ConsumerStatefulWidget {
 
 class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
   final _search = TextEditingController();
+  final _exitGuardKey = GlobalKey<FormDiscardGuardState>();
   String _section = 'teachers';
+  String? _directoryBranchId;
+  String? _directoryStatus;
   String? _openedLinkKey;
   Map<String, dynamic>? _selectedPerson;
   bool _selectedIsTeacher = true;
+  bool _showDirectory = true;
   bool _loadingSelected = false;
   String? _selectedError;
-  int _detailRevision = 0;
   int _selectionGeneration = 0;
+  GlobalKey _detailKey = GlobalKey(debugLabel: 'personnel-detail');
 
   @override
   void initState() {
@@ -222,13 +248,25 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
     });
   }
 
+  Future<bool> _canLeaveCard() async =>
+      await _exitGuardKey.currentState?.confirmLeave() ?? true;
+
+  Future<void> _closeCard() async {
+    if (!await _canLeaveCard() || !mounted) return;
+    setState(() {
+      ++_selectionGeneration;
+      _selectedPerson = null;
+      _loadingSelected = false;
+    });
+  }
+
   Future<void> _openLinkedCard(EntityLink link) async {
-    final isTeacher = link.rawEntityType == 'personnel_teacher';
+    if (!await _canLeaveCard() || !mounted) return;
     final generation = ++_selectionGeneration;
+    final isTeacher = link.rawEntityType == 'personnel_teacher';
     setState(() {
       _section = isTeacher ? 'teachers' : 'staff';
       _selectedIsTeacher = isTeacher;
-      _selectedPerson = null;
       _loadingSelected = true;
       _selectedError = null;
     });
@@ -241,7 +279,7 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
       setState(() {
         _selectedPerson = person;
         _loadingSelected = false;
-        _detailRevision++;
+        _detailKey = GlobalKey(debugLabel: 'personnel-detail');
       });
     } catch (error) {
       if (!mounted || generation != _selectionGeneration) return;
@@ -259,6 +297,11 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
     Map<String, dynamic> person,
     bool isTeacher,
   ) async {
+    if (_selectedPerson?['id'] == person['id'] &&
+        _selectedIsTeacher == isTeacher) {
+      return;
+    }
+    if (!await _canLeaveCard() || !mounted) return;
     final id = person['id']?.toString() ?? '';
     if (id.isEmpty) return;
     final generation = ++_selectionGeneration;
@@ -277,7 +320,7 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
       setState(() {
         _selectedPerson = fresh;
         _loadingSelected = false;
-        _detailRevision++;
+        _detailKey = GlobalKey(debugLabel: 'personnel-detail');
       });
     } catch (error) {
       if (!mounted || generation != _selectionGeneration) return;
@@ -292,6 +335,7 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
   }
 
   Future<void> _refreshSelected() async {
+    ref.invalidate(personnelDirectoryProvider);
     final person = _selectedPerson;
     final id = person?['id']?.toString() ?? '';
     if (id.isEmpty) return;
@@ -311,7 +355,7 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
       if (!mounted || _selectedPerson?['id']?.toString() != id) return;
       setState(() {
         _selectedPerson = updated;
-        _detailRevision++;
+        _detailKey = GlobalKey(debugLabel: 'personnel-detail');
       });
     } catch (error) {
       if (!mounted) return;
@@ -328,6 +372,8 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
   Widget _buildDirectory() => _section == 'teachers'
       ? _TeachersList(
           searchQuery: _search.text,
+          branchId: _directoryBranchId,
+          status: _directoryStatus,
           selectedId: _selectedIsTeacher
               ? (_selectedPerson?['id']?.toString())
               : null,
@@ -335,6 +381,9 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
         )
       : _EmployeesList(
           searchQuery: _search.text,
+          branchId: _directoryBranchId,
+          status: _directoryStatus,
+          currentRole: widget.snapshot.role,
           selectedId: !_selectedIsTeacher
               ? (_selectedPerson?['id']?.toString())
               : null,
@@ -361,22 +410,23 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
         message: 'Карточка откроется рядом со списком без отдельного окна.',
       );
     }
-    final id = person['id']?.toString() ?? '';
     return KeyedSubtree(
-      key: ValueKey('personnel-detail:$id:$_detailRevision'),
+      key: _detailKey,
       child: _selectedIsTeacher
           ? TeacherDetailDialog(
               teacher: person,
               embedded: true,
               onChanged: _refreshSelected,
-              onClose: () => setState(() => _selectedPerson = null),
+              onClose: _closeCard,
+              exitGuardKey: _exitGuardKey,
             )
           : StaffDetailDialog(
               staff: person,
               currentRole: widget.snapshot.role,
               embedded: true,
               onChanged: _refreshSelected,
-              onClose: () => setState(() => _selectedPerson = null),
+              onClose: _closeCard,
+              exitGuardKey: _exitGuardKey,
             ),
     );
   }
@@ -389,6 +439,7 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
       saved = await showCreateEmployeeSurface(context);
     }
     if (saved != true || !mounted) return;
+    ref.invalidate(personnelDirectoryProvider);
     final query = _search.text.trim();
     if (_section == 'teachers') {
       ref.invalidate(entitiesProvider('teachers'));
@@ -402,114 +453,252 @@ class _PersonnelWorkspaceState extends ConsumerState<PersonnelWorkspace> {
   @override
   Widget build(BuildContext context) {
     final canCreate = widget.snapshot.allows('crm.client.write');
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainerLowest,
-      child: Column(
-        children: [
-          _SettingsToolbar(
-            title: 'Персонал',
-            subtitle: _section == 'teachers'
-                ? 'Преподаватели, филиалы, доступность и условия работы'
-                : 'Сотрудники, филиалы и доступ в приложение',
-            action: canCreate
-                ? FilledButton.icon(
-                    key: const Key('personnel-create'),
-                    onPressed: _create,
-                    icon: const Icon(Icons.person_add_alt_1_rounded),
-                    label: Text(
-                      _section == 'teachers'
-                          ? 'Новый преподаватель'
-                          : 'Новый сотрудник',
-                    ),
-                  )
-                : null,
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final selector = SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                        value: 'teachers',
-                        label: Text('Преподаватели'),
+    return LayoutBuilder(
+      builder: (context, viewport) {
+        if (viewport.maxWidth < 900 &&
+            (_selectedPerson != null || _loadingSelected)) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _closeCard,
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('К списку персонала'),
+                ),
+              ),
+              Expanded(
+                child: KeyedSubtree(
+                  key: const Key('personnel-detail-pane'),
+                  child: _buildDetail(),
+                ),
+              ),
+            ],
+          );
+        }
+        return ColoredBox(
+          color: Theme.of(context).colorScheme.surfaceContainerLowest,
+          child: Column(
+            children: [
+              _SettingsToolbar(
+                title: 'Персонал',
+                subtitle: _section == 'teachers'
+                    ? 'Преподаватели, филиалы, доступность и условия работы'
+                    : 'Сотрудники, филиалы и доступ в приложение',
+                action: canCreate
+                    ? FilledButton.icon(
+                        key: const Key('personnel-create'),
+                        onPressed: _create,
+                        icon: const Icon(Icons.person_add_alt_1_rounded),
+                        label: Text(
+                          _section == 'teachers'
+                              ? 'Новый преподаватель'
+                              : 'Новый сотрудник',
+                        ),
+                      )
+                    : null,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final selector = SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'teachers',
+                            label: Text('Преподаватели'),
+                          ),
+                          ButtonSegment(
+                            value: 'staff',
+                            label: Text('Сотрудники'),
+                          ),
+                        ],
+                        selected: {_section},
+                        onSelectionChanged: (value) async {
+                          if (!await _canLeaveCard() || !mounted) return;
+                          setState(() {
+                            _section = value.first;
+                            ++_selectionGeneration;
+                            _loadingSelected = false;
+                            _directoryStatus = null;
+                            _selectedPerson = null;
+                            _selectedError = null;
+                          });
+                        },
                       ),
-                      ButtonSegment(value: 'staff', label: Text('Сотрудники')),
-                    ],
-                    selected: {_section},
-                    onSelectionChanged: (value) {
-                      setState(() {
-                        _section = value.first;
-                        _selectionGeneration++;
-                        _selectedPerson = null;
-                        _selectedError = null;
-                      });
-                    },
-                  ),
-                );
-                final search = TextField(
-                  controller: _search,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    prefixIcon: Icon(Icons.search_rounded),
-                    labelText: 'Поиск по персоналу',
-                  ),
-                );
-                if (constraints.maxWidth < 700) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    );
+                    final search = TextField(
+                      controller: _search,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        prefixIcon: Icon(Icons.search_rounded),
+                        labelText: 'Поиск по персоналу',
+                      ),
+                    );
+                    if (constraints.maxWidth < 700) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: selector,
+                          ),
+                          const SizedBox(height: 10),
+                          search,
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        selector,
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: _showDirectory
+                              ? 'Скрыть список персонала'
+                              : 'Показать список персонала',
+                          onPressed: () =>
+                              setState(() => _showDirectory = !_showDirectory),
+                          icon: Icon(
+                            _showDirectory
+                                ? Icons.view_sidebar_outlined
+                                : Icons.view_sidebar_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: search),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
                     children: [
-                      Align(alignment: Alignment.centerLeft, child: selector),
-                      const SizedBox(height: 10),
-                      search,
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    selector,
-                    const SizedBox(width: 12),
-                    Expanded(child: search),
-                  ],
-                );
-              },
-            ),
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < 900) {
-                  return _selectedPerson == null && !_loadingSelected
-                      ? _buildDirectory()
-                      : KeyedSubtree(
-                          key: const Key('personnel-detail-pane'),
-                          child: _buildDetail(),
-                        );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(width: 360, child: _buildDirectory()),
-                    VerticalDivider(
-                      width: 1,
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                    Expanded(
-                      child: KeyedSubtree(
-                        key: const Key('personnel-detail-pane'),
-                        child: _buildDetail(),
+                      SizedBox(
+                        width: 220,
+                        child: AppDropdownButtonFormField<String>(
+                          menuMaxHeight: 256,
+                          key: ValueKey('personnel-branch-$_directoryBranchId'),
+                          initialValue: _directoryBranchId ?? '',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Филиал',
+                            isDense: true,
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: '',
+                              child: Text('Все филиалы'),
+                            ),
+                            for (final branch
+                                in ref
+                                        .watch(entitiesProvider('branches'))
+                                        .asData
+                                        ?.value ??
+                                    <Map<String, dynamic>>[])
+                              DropdownMenuItem(
+                                value: branch['id'].toString(),
+                                child: Text(
+                                  branch['name']?.toString() ?? 'Филиал',
+                                ),
+                              ),
+                          ],
+                          onChanged: (value) => setState(
+                            () =>
+                                _directoryBranchId = value == '' ? null : value,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                      SizedBox(
+                        width: 180,
+                        child: AppDropdownButtonFormField<String>(
+                          menuMaxHeight: 256,
+                          key: ValueKey(
+                            'personnel-status-$_section-$_directoryStatus',
+                          ),
+                          initialValue: _directoryStatus ?? '',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Статус',
+                            isDense: true,
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: '',
+                              child: Text('Все статусы'),
+                            ),
+                            if (_section == 'staff')
+                              const DropdownMenuItem(
+                                value: 'working',
+                                child: Text('Работает'),
+                              ),
+                            const DropdownMenuItem(
+                              value: 'active',
+                              child: Text('Активен'),
+                            ),
+                            const DropdownMenuItem(
+                              value: 'inactive',
+                              child: Text('Неактивен'),
+                            ),
+                            const DropdownMenuItem(
+                              value: 'archived',
+                              child: Text('В архиве'),
+                            ),
+                          ],
+                          onChanged: (value) => setState(
+                            () => _directoryStatus = value == '' ? null : value,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 900) {
+                      return _selectedPerson == null && !_loadingSelected
+                          ? _buildDirectory()
+                          : KeyedSubtree(
+                              key: const Key('personnel-detail-pane'),
+                              child: _buildDetail(),
+                            );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_showDirectory || _selectedPerson == null) ...[
+                          SizedBox(width: 300, child: _buildDirectory()),
+                          VerticalDivider(
+                            width: 1,
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ],
+                        Expanded(
+                          child: KeyedSubtree(
+                            key: const Key('personnel-detail-pane'),
+                            child: _buildDetail(),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -767,6 +956,7 @@ class _SystemSettingsWorkspaceState
       'access' => _UsersSettings(
         currentRole: widget.role,
         initialSearch: widget.initialUserSearch,
+        canCreatePeople: snapshot.allows('crm.client.write'),
       ),
       'system' => _DataSettings(
         canManageDeletion:
@@ -1023,28 +1213,127 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
   }
 }
 
-class _UsersSettings extends StatelessWidget {
+class _UsersSettings extends StatefulWidget {
   const _UsersSettings({
     required this.currentRole,
     required this.initialSearch,
+    required this.canCreatePeople,
   });
 
   final String currentRole;
   final String? initialSearch;
+  final bool canCreatePeople;
+
+  @override
+  State<_UsersSettings> createState() => _UsersSettingsState();
+}
+
+class _UsersSettingsState extends State<_UsersSettings> {
+  final _search = TextEditingController();
+  String _section = 'access';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    bool? saved;
+    if (_section == 'staff') {
+      saved = await showCreateEmployeeSurface(context);
+    } else if (_section == 'teachers') {
+      saved = await showCreateTeacherSurface(context);
+    }
+    if (saved != true || !mounted) return;
+    final container = ProviderScope.containerOf(context);
+    final query = _search.text.trim();
+    if (_section == 'staff') {
+      container.invalidate(entitiesProvider('employees'));
+      container.invalidate(staffSearchProvider(query));
+    } else {
+      container.invalidate(entitiesProvider('teachers'));
+      container.invalidate(teacherSearchProvider(query));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final listSection = _section != 'access';
     return Column(
       children: [
-        const _SettingsToolbar(
+        _SettingsToolbar(
           title: 'Пользователи и доступы',
-          subtitle: 'Аккаунты, роли и персональные права',
+          subtitle: switch (_section) {
+            'staff' => 'Сотрудники школы',
+            'teachers' => 'Преподаватели и специализации',
+            _ => 'Аккаунты, роли и персональные права',
+          },
+          action: listSection && widget.canCreatePeople
+              ? FilledButton.icon(
+                  onPressed: _create,
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: Text(
+                    _section == 'staff'
+                        ? 'Новый сотрудник'
+                        : 'Новый преподаватель',
+                  ),
+                )
+              : null,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'access', label: Text('Доступы')),
+                      ButtonSegment(value: 'staff', label: Text('Сотрудники')),
+                      ButtonSegment(
+                        value: 'teachers',
+                        label: Text('Преподаватели'),
+                      ),
+                    ],
+                    selected: {_section},
+                    onSelectionChanged: (value) {
+                      setState(() => _section = value.first);
+                    },
+                  ),
+                ),
+              ),
+              if (listSection) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search_rounded),
+                      labelText: 'Поиск',
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
         Expanded(
-          child: UserRolesWidget(
-            currentRole: currentRole,
-            initialSearch: initialSearch,
-          ),
+          child: switch (_section) {
+            'staff' => _EmployeesList(
+              searchQuery: _search.text,
+              currentRole: widget.currentRole,
+            ),
+            'teachers' => _TeachersList(searchQuery: _search.text),
+            _ => UserRolesWidget(
+              currentRole: widget.currentRole,
+              initialSearch: widget.initialSearch,
+            ),
+          },
         ),
       ],
     );

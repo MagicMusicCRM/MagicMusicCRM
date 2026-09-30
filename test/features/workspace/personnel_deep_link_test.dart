@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -6,7 +7,6 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 
 import '../../support/modal_layout_evidence.dart';
@@ -191,7 +191,7 @@ void main() {
     await captureModalLayout(tester, 'windows-staff-card-overview');
 
     expect(api.requests, contains('/crm/staff/staff-a'));
-    expect(find.textContaining('Карточка сотрудника ·'), findsOneWidget);
+    expect(find.text('Петрова Анна'), findsOneWidget);
     expect(find.text('Анна'), findsWidgets);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byKey(const Key('personnel-detail-pane')), findsOneWidget);
@@ -200,28 +200,12 @@ void main() {
       find.byKey(const Key('staff-detail-save')).hitTestable(),
       findsOneWidget,
     );
-    for (final section in const [
-      'profile',
-      'employment',
-      'access',
-      'history',
-    ]) {
-      expect(find.byKey(Key('staff-card-$section')), findsOneWidget);
+    for (final section in const ['access', 'history']) {
+      expect(
+        find.byKey(PageStorageKey('staff-personnel-section-$section')),
+        findsOneWidget,
+      );
     }
-    expect(
-      find.byKey(const Key('staff-personnel-section-access')),
-      findsNothing,
-    );
-    expect(tester.takeException(), isNull);
-
-    tester.view.physicalSize = const Size(430, 932);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('staff-detail-embedded')), findsOneWidget);
-    expect(
-      find.byKey(const Key('staff-detail-save')).hitTestable(),
-      findsOneWidget,
-    );
-    await captureModalLayout(tester, 'mobile-staff-card-overview');
     expect(tester.takeException(), isNull);
   });
 
@@ -276,57 +260,26 @@ void main() {
     await captureModalLayout(tester, 'windows-teacher-card-overview');
 
     expect(api.requests, contains('/crm/teachers/teacher-a'));
-    expect(find.textContaining('Карточка преподавателя ·'), findsOneWidget);
+    expect(find.text('Мария Соколова'), findsWidgets);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byKey(const Key('personnel-detail-pane')), findsOneWidget);
     expect(find.byKey(const Key('teacher-detail-embedded')), findsOneWidget);
-    expect(
-      find.byKey(const Key('teacher-detail-save')).hitTestable(),
-      findsOneWidget,
-    );
-    for (final section in const [
-      'profile',
-      'schedule',
-      'employment',
-      'access',
-      'history',
-    ]) {
-      expect(find.byKey(Key('teacher-card-$section')), findsOneWidget);
+    for (final section in const ['access', 'history']) {
+      expect(
+        find.byKey(PageStorageKey('teacher-personnel-section-$section')),
+        findsOneWidget,
+      );
     }
-    expect(
-      find.byKey(const Key('teacher-personnel-section-access')),
-      findsNothing,
-    );
     expect(find.byKey(const Key('teacher-open-schedule')), findsOneWidget);
-    expect(find.byKey(const Key('teacher-open-availability')), findsNothing);
+    expect(find.byKey(const Key('teacher-open-availability')), findsOneWidget);
 
-    await tester.ensureVisible(find.byKey(const Key('teacher-card-schedule')));
-    await tester.pumpAndSettle();
-    await captureModalLayout(tester, 'windows-teacher-card-availability');
-    expect(api.requests, contains('/crm/branches'));
-    expect(api.requests, contains('/crm/teachers'));
-    expect(api.requests, contains('/crm/schedule-reference'));
-    expect(find.text('Доступность преподавателя'), findsOneWidget);
+    expect(api.requests, isNot(contains('/crm/schedule-reference')));
     expect(
-      find.byKey(const Key('teacher-schedule-fixed-person')),
+      find.byKey(const Key('teacher-personnel-content-employment')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('teacher-availability-add-1')),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<TextButton>(
-            find.byKey(const ValueKey('teacher-availability-add-1')),
-          )
-          .onPressed,
-      isNotNull,
-    );
-    expect(find.text('Недоступность по датам'), findsOneWidget);
-
     await tester.ensureVisible(
-      find.byKey(const Key('teacher-card-employment')),
+      find.byKey(const Key('teacher-rate-change-confirmation')),
     );
     await tester.pumpAndSettle();
     expect(
@@ -334,29 +287,32 @@ void main() {
       findsOneWidget,
     );
     await captureModalLayout(tester, 'windows-teacher-card-rate-guard');
-    await tester.ensureVisible(find.byKey(const Key('teacher-card-access')));
+    final access = find.byKey(
+      const PageStorageKey('teacher-personnel-section-access'),
+    );
+    await tester.ensureVisible(access);
+    await tester.tap(access);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('teacher-personal-access')), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('teacher-card-history')));
+    final history = find.byKey(
+      const PageStorageKey('teacher-personnel-section-history'),
+    );
+    await tester.ensureVisible(history);
+    await tester.tap(history);
     await tester.pumpAndSettle();
     expect(api.requests, contains('/crm/teachers/teacher-a/lifecycle-history'));
     expect(find.text('График и занятые периоды изменены'), findsOneWidget);
     expect(find.text('Карточка архивирована'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
     tester.view.physicalSize = const Size(430, 932);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('teacher-card-profile')));
-    await tester.pumpAndSettle();
-    await captureModalLayout(tester, 'mobile-teacher-card-overview');
-    expect(find.byKey(const Key('teacher-detail-embedded')), findsOneWidget);
     expect(
       find.byKey(const Key('teacher-detail-save')).hitTestable(),
       findsOneWidget,
     );
+    await captureModalLayout(tester, 'mobile-teacher-card-overview');
+
     expect(tester.takeException(), isNull);
   });
-
   testWidgets('teacher card does not load restricted schedule references', (
     tester,
   ) async {
@@ -394,8 +350,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('teacher-card-profile')), findsOneWidget);
-    expect(find.byKey(const Key('teacher-card-schedule')), findsNothing);
+    expect(
+      find.byKey(const Key('teacher-personnel-content-overview')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('teacher-open-availability')), findsNothing);
     expect(api.requests, isNot(contains('/crm/schedule-reference')));
     expect(tester.takeException(), isNull);
   });

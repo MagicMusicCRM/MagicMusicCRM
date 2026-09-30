@@ -109,6 +109,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   String? _chatListError;
   String? _messagesLoadError;
   String _searchQuery = '';
+  final _chatListSearchController = TextEditingController();
   bool _showMyProfile = false;
   int _currentLoadId = 0;
   List<String> _adminIds = [];
@@ -116,6 +117,12 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   final _chatSearchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   int _currentMatchIndex = 0;
+  Timer? _messageSearchTimer;
+  int _messageSearchGeneration = 0;
+  bool _messageSearchLoading = false;
+  bool _messageSearchHasMore = false;
+  String? _messageSearchError;
+  List<Map<String, dynamic>>? _searchContext;
 
   // Wave 1 Lifecycle State
   Map<String, dynamic>? _replyingTo;
@@ -186,6 +193,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   @override
   void dispose() {
+    _chatListSearchController.dispose();
+    _chatSearchController.dispose();
+    _messageSearchTimer?.cancel();
     _typingStopTimer?.cancel();
     _chatListReloadTimer?.cancel();
     _realtimeFallbackTimer?.cancel();

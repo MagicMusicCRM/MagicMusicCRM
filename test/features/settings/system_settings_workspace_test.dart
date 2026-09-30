@@ -447,7 +447,12 @@ void main() {
       await tester.tap(find.text('Смирнова Ольга'));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.byKey(const Key('staff-card-access')));
+      await tester.ensureVisible(
+        find.byKey(const PageStorageKey('staff-personnel-section-access')),
+      );
+      await tester.tap(
+        find.byKey(const PageStorageKey('staff-personnel-section-access')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Роль доступа'), findsOneWidget);
       expect(
@@ -487,6 +492,8 @@ void main() {
       find.widgetWithText(TextFormField, 'Имя *'),
       'Мария',
     );
+    await tester.tap(find.text('Доступ в приложение (необязательно)'));
+    await tester.pumpAndSettle();
     expect(
       find.widgetWithText(TextFormField, 'Почта для входа (необязательно)'),
       findsOneWidget,
@@ -623,13 +630,15 @@ void main() {
     await tester.tap(find.text('Мария Петрова'));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('teacher-card-access')));
+    await tester.ensureVisible(
+      find.byKey(const PageStorageKey('teacher-personnel-section-access')),
+    );
+    await tester.tap(
+      find.byKey(const PageStorageKey('teacher-personnel-section-access')),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('teacher-change-access-role')), findsOneWidget);
-    expect(
-      find.text('Роль доступа'),
-      findsOneWidget,
-    );
+    expect(find.text('Роль доступа'), findsOneWidget);
   });
 
   testWidgets('manager creates a group from the mounted schedule workspace', (
@@ -725,7 +734,7 @@ void main() {
 
     await tester.tap(find.text('Сотрудники').first);
     await tester.pumpAndSettle();
-    expect(find.text('Работает'), findsOneWidget);
+    expect(find.textContaining('Работает'), findsOneWidget);
     expect(find.textContaining('@migration.invalid'), findsNothing);
 
     await _pump(tester, api, initialArea: 'learning');
@@ -761,7 +770,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Смирнова Ольга'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('staff-card-access')));
+    await tester.ensureVisible(
+      find.byKey(const PageStorageKey('staff-personnel-section-access')),
+    );
+    await tester.tap(
+      find.byKey(const PageStorageKey('staff-personnel-section-access')),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.widgetWithText(FilledButton, 'Создать доступ'),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Создать доступ'));
     await tester.pumpAndSettle();
@@ -833,7 +851,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Смирнова Ольга'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('staff-card-access')));
+    await tester.ensureVisible(
+      find.byKey(const PageStorageKey('staff-personnel-section-access')),
+    );
+    await tester.tap(
+      find.byKey(const PageStorageKey('staff-personnel-section-access')),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.widgetWithText(FilledButton, 'Данные для входа'),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Данные для входа'));
     await tester.pumpAndSettle();
@@ -881,14 +908,19 @@ void main() {
       await tester.tap(find.text('Смирнова Ольга'));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.byKey(const Key('staff-card-access')));
+      await tester.ensureVisible(
+        find.byKey(const PageStorageKey('staff-personnel-section-access')),
+      );
+      await tester.tap(
+        find.byKey(const PageStorageKey('staff-personnel-section-access')),
+      );
       await tester.pumpAndSettle();
       expect(
         find.text('Доступ не создан. Карточку можно сохранить без него'),
         findsOneWidget,
       );
       await tester.ensureVisible(
-        find.byKey(const Key('staff-card-employment')),
+        find.byKey(const Key('staff-personnel-content-employment')),
       );
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -938,13 +970,20 @@ void main() {
       await tester.tap(find.text('Мария Петрова'));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.byKey(const Key('teacher-card-access')));
+      await tester.ensureVisible(
+        find.byKey(const PageStorageKey('teacher-personnel-section-access')),
+      );
+      await tester.tap(
+        find.byKey(const PageStorageKey('teacher-personnel-section-access')),
+      );
       await tester.pumpAndSettle();
       expect(
         find.text('Доступ не создан. Карточку можно сохранить без него'),
         findsOneWidget,
       );
-      await tester.ensureVisible(find.byKey(const Key('teacher-card-profile')));
+      await tester.ensureVisible(
+        find.byKey(const Key('teacher-personnel-content-overview')),
+      );
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextField, 'Имя Фамилия'),
@@ -998,12 +1037,14 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(
-      find.byKey(const Key('teacher-card-employment')),
+      find.byKey(const Key('teacher-personnel-content-employment')),
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('Базовая ставка'), findsNothing);
     expect(find.widgetWithText(TextFormField, 'Оклад, ₽/мес'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('teacher-card-profile')));
+    await tester.ensureVisible(
+      find.byKey(const Key('teacher-personnel-content-overview')),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Имя Фамилия'),

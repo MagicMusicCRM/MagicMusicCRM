@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_model.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/personnel_embedded_card_frame.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_settings.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/access_editor_sheet.dart';
 
 import 'teacher_employment_reference_gateway.dart';
@@ -28,11 +26,13 @@ class TeacherDetailContent extends StatelessWidget {
     required this.canEditAvailability,
     required this.saving,
     required this.onOpenSchedule,
+    required this.onOpenAvailability,
     required this.onAccessChanged,
     required this.onProvisionAccess,
     required this.onManageLifecycle,
     required this.onChangeAccessRole,
     this.embedded = false,
+    this.onEdited,
   });
 
   final Map<String, dynamic> teacher;
@@ -51,24 +51,24 @@ class TeacherDetailContent extends StatelessWidget {
   final bool canEditAvailability;
   final bool saving;
   final VoidCallback onOpenSchedule;
+  final VoidCallback onOpenAvailability;
   final VoidCallback onAccessChanged;
   final VoidCallback onProvisionAccess;
   final VoidCallback onManageLifecycle;
   final VoidCallback onChangeAccessRole;
   final bool embedded;
+  final VoidCallback? onEdited;
 
   @override
   Widget build(BuildContext context) {
     final identity = _TeacherDetailSection(
       title: 'Основные данные',
-      icon: Icons.person_outline_rounded,
-      child: Column(
+      child: PersonnelFieldGrid(
         children: [
           TextField(
             controller: nameController,
             decoration: const InputDecoration(labelText: 'Имя Фамилия'),
           ),
-          const SizedBox(height: 10),
           RuPhoneField(
             initialCanonical: initialPhone,
             onCanonicalChanged: onPhoneChanged,
@@ -78,7 +78,6 @@ class TeacherDetailContent extends StatelessWidget {
     );
     final employment = _TeacherDetailSection(
       title: 'Работа, филиалы и оплата',
-      icon: Icons.work_outline_rounded,
       child: TeacherEmploymentFields(
         key: employmentKey,
         gateway: employmentReferenceGateway,
@@ -86,6 +85,7 @@ class TeacherDetailContent extends StatelessWidget {
         canManageRate: canManageTeacherRates,
         requireRateConfirmation: true,
         enabled: !saving,
+        onChanged: onEdited,
       ),
     );
     final scheduleActions = Wrap(
@@ -97,13 +97,19 @@ class TeacherDetailContent extends StatelessWidget {
             key: const Key('teacher-open-schedule'),
             onPressed: onOpenSchedule,
             icon: const Icon(Icons.calendar_month_outlined),
-            label: const Text('Открыть расписание'),
+            label: const Text('Занятия преподавателя'),
+          ),
+        if (canViewAvailability)
+          OutlinedButton.icon(
+            key: const Key('teacher-open-availability'),
+            onPressed: onOpenAvailability,
+            icon: const Icon(Icons.open_in_new_rounded),
+            label: const Text('Рабочий график и отсутствие'),
           ),
       ],
     );
     final access = _TeacherDetailSection(
       title: 'Доступ в приложение',
-      icon: Icons.admin_panel_settings_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -185,73 +191,57 @@ class TeacherDetailContent extends StatelessWidget {
       ),
     );
     if (embedded) {
-      final teacherId = teacher['id']?.toString();
-      Widget section(String name, Widget child) =>
-          KeyedSubtree(key: Key('teacher-card-$name'), child: child);
-      final profile = section('profile', identity);
-      final work = section('employment', employment);
-      final schedule = section(
-        'schedule',
-        Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(
-              color: Theme.of(
-                context,
-              ).colorScheme.outlineVariant.withValues(alpha: 0.75),
+      return PersonnelSectionedCardBody(
+        keyPrefix: 'teacher',
+        sections: [
+          PersonnelCardSection(
+            id: 'overview',
+            label: 'Обзор',
+            icon: Icons.dashboard_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TeacherDetailSummary(
+                  teacher: teacher,
+                  canManageCredentials: canManageCredentials,
+                ),
+                if (scheduleActions.children.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  scheduleActions,
+                ],
+                const SizedBox(height: 12),
+                identity,
+              ],
             ),
           ),
-          child: teacherId == null || teacherId.isEmpty
-              ? const Center(
-                  child: Text('Не удалось определить преподавателя.'),
-                )
-              : ScheduleReferenceSettings(
-                  canEdit: canEditAvailability,
-                  section: ScheduleReferenceSection.teacherSchedule,
-                  initialTeacherId: teacherId,
-                  lockedTeacherId: teacherId,
-                  inline: true,
-                ),
-        ),
-      );
-      final permissions = section('access', access);
-      final history = section(
-        'history',
-        PersonnelHistorySummary(
-          createdAt: teacher['created_at'] ?? teacher['createdAt'],
-          lifecycleState: teacher['lifecycle_state']?.toString() ?? 'active',
-          offboardedAt: teacher['offboarded_at'] ?? teacher['offboardedAt'],
-          offboardReason:
-              teacher['offboard_reason'] ?? teacher['offboardReason'],
-          personId: teacherId,
-          personType: 'teacher',
-          canViewActivity: canManageCredentials,
-        ),
-      );
-      return PersonnelCardCanvas(
-        summary: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TeacherDetailSummary(
-              teacher: teacher,
-              canManageCredentials: canManageCredentials,
+          PersonnelCardSection(
+            id: 'employment',
+            label: 'Работа и условия оплаты',
+            icon: Icons.payments_outlined,
+            child: employment,
+          ),
+          PersonnelCardSection(
+            id: 'access',
+            label: 'Доступ',
+            icon: Icons.admin_panel_settings_outlined,
+            child: access,
+          ),
+          PersonnelCardSection(
+            id: 'history',
+            label: 'История',
+            icon: Icons.history_rounded,
+            child: PersonnelHistorySummary(
+              personId: teacher['id']?.toString(),
+              personType: 'teacher',
+              canViewActivity: canManageCredentials,
+              createdAt: teacher['created_at'] ?? teacher['createdAt'],
+              lifecycleState:
+                  teacher['lifecycle_state']?.toString() ?? 'active',
+              offboardedAt: teacher['offboarded_at'] ?? teacher['offboardedAt'],
+              offboardReason:
+                  teacher['offboard_reason'] ?? teacher['offboardReason'],
             ),
-            if (scheduleActions.children.isNotEmpty) ...[
-              const SizedBox(height: AppSpace.md),
-              scheduleActions,
-            ],
-          ],
-        ),
-        desktopLeft: [profile, work],
-        desktopRight: [if (canViewAvailability) schedule, permissions, history],
-        mobileSections: [
-          profile,
-          if (canViewAvailability) schedule,
-          work,
-          permissions,
-          history,
+          ),
         ],
       );
     }
@@ -294,58 +284,27 @@ class TeacherDetailContent extends StatelessWidget {
 }
 
 class _TeacherDetailSection extends StatelessWidget {
-  const _TeacherDetailSection({
-    required this.title,
-    required this.icon,
-    required this.child,
-  });
+  const _TeacherDetailSection({required this.title, required this.child});
 
   final String title;
-  final IconData icon;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Container(
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: colors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(
-          color: colors.outlineVariant.withValues(alpha: 0.75),
-        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpace.xl,
-              vertical: AppSpace.sm,
-            ),
-            child: Row(
-              children: [
-                Icon(icon, size: 19, color: AppColor.gold),
-                const SizedBox(width: AppSpace.sm),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(
-            height: 1,
-            color: colors.outlineVariant.withValues(alpha: 0.6),
-          ),
-          Padding(padding: const EdgeInsets.all(AppSpace.lg), child: child),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          child,
         ],
       ),
     );
@@ -434,7 +393,10 @@ class _AccessRoleField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InputDecorator(
-      decoration: const InputDecoration(labelText: 'Роль доступа'),
+      decoration: const InputDecoration(
+        labelText: 'Роль доступа',
+        helperText: 'Определяет права пользователя в приложении',
+      ),
       child: Row(
         children: [
           Expanded(child: Text(teacherDetailRoleLabel(role))),

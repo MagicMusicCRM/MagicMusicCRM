@@ -226,10 +226,19 @@ export class ChannelsService {
         where channel_id = $1
           and deleted_at is null
           and ($2::timestamptz is null or published_at < $2)
+          and ($4::text is null or strpos(lower(content), lower($4)) > 0)
+          and ($5::uuid is null or (published_at, id) < (
+            select published_at, id from app.channel_posts
+            where id = $5 and channel_id = $1
+          ))
+          and ($6::uuid is null or (published_at, id) <= (
+            select published_at, id from app.channel_posts
+            where id = $6 and channel_id = $1 and deleted_at is null
+          ))
         order by published_at desc, id desc
         limit $3
       `,
-      [channelId, query.before ?? null, limit],
+      [channelId, query.before ?? null, limit, query.q?.trim() || null, query.beforeId ?? null, query.atId ?? null],
     );
     return {
       items: result.rows.map((row) => this.toChannelPostDto(row)).reverse(),

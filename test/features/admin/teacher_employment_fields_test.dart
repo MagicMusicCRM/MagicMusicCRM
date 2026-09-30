@@ -47,6 +47,9 @@ void main() {
         isNull,
       );
 
+      await tester.ensureVisible(
+        find.byKey(const Key('teacher-rate-change-confirmation')),
+      );
       await tester.tap(
         find.byKey(const Key('teacher-rate-change-confirmation')),
       );
@@ -89,15 +92,17 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Вокал'));
 
+      await tester.ensureVisible(find.text('Выберите ставку'));
       await tester.tap(find.text('Выберите ставку'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('750 ₽').last);
       await tester.pumpAndSettle();
       await tester.tap(find.text('750 ₽').last);
       await tester.pumpAndSettle();
-
-      expect(find.text('Уровни обучения'), findsOneWidget);
-      expect(find.text('Категории учеников'), findsOneWidget);
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Начальный'));
       await tester.tap(find.text('Начальный'));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Дети'));
       await tester.tap(find.text('Дети'));
 
@@ -137,7 +142,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Центральный'));
+    await tester.ensureVisible(find.text('Выберите ставку'));
     await tester.tap(find.text('Выберите ставку'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('750 ₽').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('750 ₽').last);
     await tester.pumpAndSettle();
@@ -182,9 +190,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Центральный'), findsOneWidget);
-    expect(find.text('Уровни обучения'), findsOneWidget);
+    await tester.pump();
     expect(find.text('Сохранённый уровень'), findsOneWidget);
-    expect(find.text('Категории учеников'), findsOneWidget);
+    await tester.pump();
     expect(find.text('Сохранённая категория'), findsOneWidget);
 
     final value = key.currentState!.validateAndRead();

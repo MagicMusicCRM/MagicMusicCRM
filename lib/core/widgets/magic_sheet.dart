@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -6,6 +7,61 @@ import '../theme/design_tokens.dart';
 const magicModalDesktopBreakpoint = 840.0;
 // Matches the lesson editor: 680 logical pixels of content plus dialog padding.
 const magicModalFormWidth = 728.0;
+
+/// Form-owned actions stay reactive and outside the scrollable fields.
+/// Use with showMagicAdaptiveSurface(scrollBody: false).
+class MagicFormBody extends StatelessWidget {
+  const MagicFormBody({
+    super.key,
+    required this.child,
+    required this.actions,
+    this.hasChanges,
+    this.busy,
+    this.scrollController,
+  });
+
+  final ScrollController? scrollController;
+  final Widget child;
+  final List<Widget> actions;
+  final bool Function()? hasChanges;
+  final bool Function()? busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Flexible(
+          child: SingleChildScrollView(
+            key: const ValueKey('magic-form-fields'),
+            controller: scrollController,
+            padding: AppSpace.sheetBody,
+            child: child,
+          ),
+        ),
+        const Divider(height: 1, color: AppColor.divider),
+        Padding(
+          key: const ValueKey('magic-form-actions'),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            children: actions,
+          ),
+        ),
+      ],
+    );
+    return hasChanges == null
+        ? body
+        : FormDiscardGuard(
+            hasChanges: hasChanges!,
+            busy: busy ?? () => false,
+            child: body,
+          );
+  }
+}
 
 ThemeData _modalTheme(BuildContext context) {
   final theme = Theme.of(context);
@@ -127,6 +183,7 @@ Future<T?> showMagicSheet<T>(
   String? subtitle,
   IconData? icon,
   List<Widget>? actions,
+  bool scrollBody = true,
   RouteSettings? routeSettings,
 }) {
   if (usesDesktopMagicModal(context)) {
@@ -144,6 +201,7 @@ Future<T?> showMagicSheet<T>(
             subtitle: subtitle,
             icon: icon,
             actions: actions,
+            scrollBody: scrollBody,
             body: builder(context),
           ),
         ),
@@ -164,6 +222,7 @@ Future<T?> showMagicSheet<T>(
       subtitle: subtitle,
       icon: icon,
       actions: actions,
+      scrollBody: scrollBody,
       body: builder(context),
     ),
   );
@@ -178,6 +237,7 @@ class _MobileMagicSheet extends StatefulWidget {
     required this.body,
     this.embeddedDialog = false,
     this.showCloseButton = true,
+    this.scrollBody = true,
   });
 
   final String? title;
@@ -187,6 +247,7 @@ class _MobileMagicSheet extends StatefulWidget {
   final Widget body;
   final bool embeddedDialog;
   final bool showCloseButton;
+  final bool scrollBody;
 
   @override
   State<_MobileMagicSheet> createState() => _MobileMagicSheetState();
@@ -313,6 +374,7 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
                   subtitle: widget.subtitle,
                   icon: widget.icon,
                   actions: widget.actions,
+                  scrollBody: widget.scrollBody,
                   body: widget.body,
                   fillHeight: true,
                   showHandle: true,
@@ -349,6 +411,7 @@ class _MagicSheetFrame extends StatelessWidget {
     this.showHandle = false,
     this.embeddedDialog = false,
     this.showCloseButton = true,
+    this.scrollBody = true,
     super.key,
   });
 
@@ -366,6 +429,7 @@ class _MagicSheetFrame extends StatelessWidget {
   final bool showHandle;
   final bool embeddedDialog;
   final bool showCloseButton;
+  final bool scrollBody;
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +461,8 @@ class _MagicSheetFrame extends StatelessWidget {
               ],
             ),
           )
+        : !scrollBody
+        ? body
         : SingleChildScrollView(
             key: const ValueKey('magic-sheet-body-scroll'),
             controller: scrollController,

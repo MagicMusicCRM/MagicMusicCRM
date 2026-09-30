@@ -77,7 +77,11 @@ class StudentStatusColumn extends StatelessWidget {
         ),
         child: Column(
           children: [
-            _ColumnHeader(column: column, accent: accent),
+            _ColumnHeader(
+              column: column,
+              accent: accent,
+              partial: nextCursor != null,
+            ),
             _DropHint(
               visible: hovering || denied,
               denied: denied,
@@ -128,7 +132,12 @@ class StudentStatusColumn extends StatelessWidget {
 }
 
 class _ColumnHeader extends StatelessWidget {
-  const _ColumnHeader({required this.column, required this.accent});
+  const _ColumnHeader({
+    required this.column,
+    required this.accent,
+    required this.partial,
+  });
+  final bool partial;
 
   final StudentsBoardColumnData column;
   final Color accent;
@@ -155,7 +164,7 @@ class _ColumnHeader extends StatelessWidget {
             border: Border.all(color: accent.withAlpha(90)),
           ),
           child: Text(
-            '${column.students.length}',
+            '${column.students.length}${partial ? '+' : ''}',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 11,

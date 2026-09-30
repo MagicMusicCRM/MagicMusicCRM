@@ -75,7 +75,7 @@ extension _MessengerRealtime on _MessengerScreenState {
   }
 
   Future<void> _markMessagesRead() async {
-    if (_selectedChatId == null) return;
+    if (_selectedChatId == null || _searchContext != null) return;
     final chatId = _selectedChatId!;
     final previous = _unreadCounts[chatId] ?? 0;
     _emitState(() => _unreadCounts[chatId] = 0);
@@ -302,6 +302,14 @@ extension _MessengerRealtime on _MessengerScreenState {
     }
 
     _emitState(() {
+      final historicalIndex =
+          _searchContext?.indexWhere((msg) => msg['id'] == messageId) ?? -1;
+      if (historicalIndex >= 0) {
+        _searchContext![historicalIndex] = {
+          ..._searchContext![historicalIndex],
+          ...patch,
+        };
+      }
       final idx = _messages.indexWhere((msg) => msg['id'] == messageId);
       if (idx != -1) {
         _messages[idx] = {..._messages[idx], ...patch};

@@ -113,6 +113,18 @@ extension _ClientCardStudent on _ClientCardState {
         physics: embedded ? const NeverScrollableScrollPhysics() : null,
         padding: EdgeInsets.all(embedded ? 12 : AppSpace.xl),
         children: [
+          if (canWriteSchedule && !embedded) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                key: const Key('student-book-lesson'),
+                onPressed: _bookClientLesson,
+                icon: const Icon(Icons.event_available_outlined),
+                label: const Text('Записать на занятие'),
+              ),
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
           if (_commerceStudent != null && !embedded) ...[
             _lessonBalanceSummary(
               _commerceStudent!.lessonBalance,

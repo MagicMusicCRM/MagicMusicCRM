@@ -1950,6 +1950,7 @@ void main() {
     const allowedImports = <String, Set<String>>{
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_editor_view.dart':
           {
+            'package:magic_music_crm/core/widgets/magic_sheet.dart',
             'package:flutter/material.dart',
             'package:magic_music_crm/core/theme/app_theme.dart',
             'package:magic_music_crm/core/theme/design_tokens.dart',

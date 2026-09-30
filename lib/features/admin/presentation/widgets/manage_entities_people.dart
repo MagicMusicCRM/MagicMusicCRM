@@ -94,24 +94,35 @@ String _staffStatusLabel(String status) {
 
 class _TeachersList extends ConsumerWidget {
   final String searchQuery;
+  final String? branchId, status;
   final String? selectedId;
-  final ValueChanged<Map<String, dynamic>> onSelected;
+  final ValueChanged<Map<String, dynamic>>? onSelected;
   const _TeachersList({
     required this.searchQuery,
+    this.branchId,
+    this.status,
     this.selectedId,
-    required this.onSelected,
+    this.onSelected,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final query = searchQuery.trim();
-    final async = ref.watch(teacherSearchProvider(query));
+    final provider = branchId == null && status == null
+        ? teacherSearchProvider(query)
+        : personnelDirectoryProvider((
+            teachers: true,
+            query: query,
+            branchId: branchId,
+            status: status,
+          ));
+    final async = ref.watch(provider);
     return async.when(
       loading: () =>
           Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
       error: (_, _) => _EntityLoadError(
         title: 'Не удалось загрузить преподавателей',
-        onRetry: () => ref.invalidate(teacherSearchProvider(query)),
+        onRetry: () => ref.invalidate(provider),
       ),
       data: (items) {
         if (items.isEmpty) {
@@ -127,7 +138,7 @@ class _TeachersList extends ConsumerWidget {
 
         return RefreshIndicator(
           color: AppTheme.primaryGold,
-          onRefresh: () async => ref.invalidate(teacherSearchProvider(query)),
+          onRefresh: () async => ref.invalidate(provider),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: items.length,
@@ -165,7 +176,20 @@ class _TeachersList extends ConsumerWidget {
                     ? AppColor.goldSoft
                     : null,
                 child: ListTile(
-                  onTap: () => onSelected(item),
+                  onTap: () async {
+                    if (onSelected != null) {
+                      onSelected!(item);
+                      return;
+                    }
+                    final updated = await TeacherDetailDialog.show(
+                      context,
+                      item,
+                    );
+                    if (updated == true) {
+                      ref.invalidate(entitiesProvider('teachers'));
+                      ref.invalidate(provider);
+                    }
+                  },
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.secondaryGold.withAlpha(30),
                     child: Text(
@@ -201,61 +225,17 @@ class _TeacherSearchSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final branches = _branchesText(item['branches']);
-    final students = _asInt(item['students_count']);
-    final lessons = _asInt(item['lessons_count']);
-    final rating = _asNum(item['rating']);
-    final isAppAccount = item['is_app_account'] == true;
-    final appRole = item['app_role']?.toString() ?? '';
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Специализация: $spec',
-            style: TextStyle(color: muted, fontSize: 12),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              if (branches.isNotEmpty)
-                _StudentMetricChip(
-                  icon: Icons.location_on_outlined,
-                  label: branches,
-                  color: AppTheme.primaryGold,
-                ),
-              _StudentMetricChip(
-                icon: Icons.school_rounded,
-                label: 'Ученики: $students',
-                color: AppTheme.primaryGold,
-              ),
-              _StudentMetricChip(
-                icon: Icons.event_available_rounded,
-                label: 'Занятия: $lessons',
-                color: AppTheme.success,
-              ),
-              if (rating > 0)
-                _StudentMetricChip(
-                  icon: Icons.star_rounded,
-                  label: rating.toStringAsFixed(1),
-                  color: AppTheme.secondaryGold,
-                ),
-              _StudentMetricChip(
-                icon: isAppAccount
-                    ? Icons.verified_user_rounded
-                    : Icons.person_off_rounded,
-                label: isAppAccount ? _staffRoleLabel(appRole) : 'Без аккаунта',
-                color: isAppAccount ? AppTheme.success : muted,
-              ),
-            ],
-          ),
-        ],
+    return Text(
+      [
+        spec,
+        if (branches.isNotEmpty) branches,
+        if (item['lifecycle_state'] == 'archived') 'В архиве',
+      ].join(' · '),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        fontSize: 12,
       ),
     );
   }

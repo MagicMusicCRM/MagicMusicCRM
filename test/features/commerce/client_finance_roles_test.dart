@@ -686,13 +686,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Расходы').last);
+    await tester.pumpAndSettle();
     final more = find.text('Загрузить ещё');
     await tester.ensureVisible(more);
     await tester.pumpAndSettle();
     await tester.tap(more);
     await tester.pumpAndSettle();
     await tester.drag(
-      find.byKey(const ValueKey('expense-history-list')),
+      find.byKey(const PageStorageKey('expense-history-list')),
       const Offset(0, -160),
     );
     await tester.pumpAndSettle();
@@ -725,6 +727,8 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Расходы').last);
     await tester.pumpAndSettle();
     expect(find.text('Аренда'), findsOneWidget);
     expect(find.textContaining('Старая аренда'), findsOneWidget);
@@ -813,6 +817,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        await tester.tap(find.text('Расходы').last);
+        await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(ValueKey(testCase.actionKey)));
         await tester.pumpAndSettle();
@@ -850,8 +856,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Расходы').last);
+    await tester.pumpAndSettle();
 
-    final history = find.byKey(const ValueKey('expense-history-list'));
+    final history = find.byKey(const PageStorageKey('expense-history-list'));
     expect(history, findsOneWidget);
     await tester.drag(history, const Offset(0, -420));
     await tester.pumpAndSettle();

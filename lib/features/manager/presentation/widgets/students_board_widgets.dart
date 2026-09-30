@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -142,6 +143,18 @@ class StudentsBoardView extends StatelessWidget {
       title: 'Не удалось загрузить учеников',
       onRetry: onRetryBoard,
     ),
+    StudentsBoardContentState.data
+        when searchController.text.trim().isNotEmpty &&
+            columns.every((c) => c.students.isEmpty) =>
+      MagicPageState(
+        kind: MagicPageStateKind.empty,
+        title: nextCursor == null
+            ? 'Ученики не найдены'
+            : 'В загруженных карточках совпадений нет',
+        message: 'Поиск выполняется в выбранном филиале.',
+        actionLabel: nextCursor == null ? 'Очистить поиск' : 'Загрузить ещё',
+        onAction: nextCursor == null ? onClearSearch : onLoadMore,
+      ),
     StudentsBoardContentState.data => MagicDesktopScrollbar(
       axis: Axis.horizontal,
       controller: scrollController,
@@ -257,7 +270,17 @@ class _StudentsToolbar extends StatelessWidget {
       onSearchSubmitted: onSearchChanged,
       onClearSearch: onClearSearch,
       onFiltersPressed: onToggleFilters,
-      inlineFilters: filter,
+      inlineFilters: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 6),
+          Text(
+            'Филиал: ${state.selectedBranchId == '__none__' ? 'Без филиала' : state.branches.where((b) => b['id']?.toString() == state.selectedBranchId).firstOrNull?['name'] ?? 'Не выбран'}',
+            style: const TextStyle(color: AppColor.text2),
+          ),
+          ?filter,
+        ],
+      ),
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,6 +18,7 @@ class StaffDetailDialog extends ConsumerStatefulWidget {
   final bool embedded;
   final Future<void> Function()? onChanged;
   final VoidCallback? onClose;
+  final GlobalKey<FormDiscardGuardState>? exitGuardKey;
 
   const StaffDetailDialog({
     super.key,
@@ -24,6 +27,7 @@ class StaffDetailDialog extends ConsumerStatefulWidget {
     this.embedded = false,
     this.onChanged,
     this.onClose,
+    this.exitGuardKey,
   });
 
   static Future<bool?> show(
@@ -137,7 +141,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate() || _controller.saving) return;
+    if (!validateAndRevealForm(_formKey) || _controller.saving) return;
     try {
       await _controller.save();
       if (!mounted) return;
@@ -172,19 +176,31 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return StaffDetailContent(
-      controller: _controller,
-      formKey: _formKey,
-      currentRole: widget.currentRole,
-      onProvision: _provisionAccess,
-      onLifecycle: _manageLifecycle,
-      onRole: _changeAccessRole,
-      onAccessChanged: () => unawaited(_refreshAccess()),
-      onLink: _openUserLinking,
-      onSave: _save,
-      onCancel: () => Navigator.pop(context),
-      embedded: widget.embedded,
-      onClose: widget.onClose,
+    return FormDiscardGuard(
+      key: widget.exitGuardKey,
+      hasChanges: () => _controller.hasChanges,
+      busy: () => _controller.saving,
+      child: StaffDetailContent(
+        controller: _controller,
+        formKey: _formKey,
+        currentRole: widget.currentRole,
+        onProvision: _provisionAccess,
+        onLifecycle: _manageLifecycle,
+        onRole: _changeAccessRole,
+        onAccessChanged: () => unawaited(_refreshAccess()),
+        onLink: _openUserLinking,
+        onSave: _save,
+        onEdited: _onControllerChanged,
+        onDiscard: () async {
+          if (await widget.exitGuardKey?.currentState?.confirmLeave() ??
+              false) {
+            if (mounted) await widget.onChanged?.call();
+          }
+        },
+        onCancel: () => Navigator.maybePop(context),
+        embedded: widget.embedded,
+        onClose: widget.onClose,
+      ),
     );
   }
 }

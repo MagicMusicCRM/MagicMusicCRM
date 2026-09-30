@@ -34,6 +34,7 @@ Future<T?> showMagicAdaptiveSurface<T>(
   String? subtitle,
   IconData? icon,
   List<Widget>? actions,
+  bool scrollBody = true,
   RouteSettings? routeSettings,
 }) {
   final container = AdaptiveSurfacePolicy.containerFor(
@@ -63,6 +64,7 @@ Future<T?> showMagicAdaptiveSurface<T>(
       subtitle: subtitle,
       icon: icon,
       actions: actions,
+      scrollBody: scrollBody,
       routeSettings: routeSettings,
       builder: builder,
     ),

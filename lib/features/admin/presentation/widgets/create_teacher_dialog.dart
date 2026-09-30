@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/form_feedback.dart';
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -11,6 +12,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 
@@ -24,6 +26,7 @@ Future<bool?> showCreateTeacherSurface(BuildContext context) {
     title: 'Новый преподаватель',
     subtitle: 'Карточка, условия работы и необязательный доступ',
     icon: Icons.school_outlined,
+    scrollBody: false,
     builder: (_) => const CreateTeacherDialog(),
   );
 }
@@ -49,6 +52,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
   String _accessRole = 'teacher';
   bool _saving = false;
   bool _showPassword = false;
+  final _accessExpansion = ExpansibleController();
 
   @override
   void initState() {
@@ -61,6 +65,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
 
   @override
   void dispose() {
+    _accessExpansion.dispose();
     _firstName.dispose();
     _lastName.dispose();
     _email.dispose();
@@ -70,9 +75,20 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
   }
 
   Future<void> _save() async {
-    final identityValid = _identityFormKey.currentState?.validate() ?? false;
+    final identityValid = validateAndRevealForm(_identityFormKey);
     final employment = _employmentKey.currentState?.validateAndRead();
-    if (!identityValid || employment == null) return;
+    if (!identityValid || employment == null) {
+      if (!identityValid &&
+          (_email.text.isNotEmpty ||
+              _password.text.isNotEmpty ||
+              _passwordAgain.text.isNotEmpty)) {
+        _accessExpansion.expand();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) validateAndRevealForm(_identityFormKey);
+        });
+      }
+      return;
+    }
 
     setState(() => _saving = true);
     try {
@@ -128,7 +144,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
       actorRole: actorRole,
       teacher: true,
     );
-    return Column(
+    final fields = Column(
       key: const ValueKey('create-teacher-form'),
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -155,93 +171,106 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
               const SizedBox(height: 12),
               RuPhoneField(onCanonicalChanged: (value) => _phone = value),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Почта для входа (необязательно)',
-                ),
-                validator: (value) {
-                  final email = value?.trim() ?? '';
-                  if (email.isEmpty) {
-                    return _password.text.isEmpty
-                        ? null
-                        : 'Укажите почту вместе с паролем';
-                  }
-                  return email.contains('@')
-                      ? null
-                      : 'Введите корректный адрес почты';
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _password,
-                obscureText: !_showPassword,
-                decoration: InputDecoration(
-                  labelText: 'Пароль (необязательно)',
-                  helperText: 'Для доступа: $passwordMinimumHint',
-                  suffixIcon: IconButton(
-                    tooltip: _showPassword
-                        ? 'Скрыть пароль'
-                        : 'Показать пароль',
-                    onPressed: () =>
-                        setState(() => _showPassword = !_showPassword),
-                    icon: Icon(
-                      _showPassword ? Icons.visibility_off : Icons.visibility,
+              ExpansionTile(
+                controller: _accessExpansion,
+                title: const Text('Доступ в приложение (необязательно)'),
+                maintainState: true,
+                tilePadding: EdgeInsets.zero,
+                children: [
+                  TextFormField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Почта для входа (необязательно)',
                     ),
+                    validator: (value) {
+                      final email = value?.trim() ?? '';
+                      if (email.isEmpty) {
+                        return _password.text.isEmpty
+                            ? null
+                            : 'Укажите почту вместе с паролем';
+                      }
+                      return email.contains('@')
+                          ? null
+                          : 'Введите корректный адрес почты';
+                    },
                   ),
-                ),
-                validator: (value) {
-                  final password = value ?? '';
-                  if (password.isEmpty) {
-                    return _email.text.trim().isEmpty
-                        ? null
-                        : 'Укажите пароль вместе с почтой';
-                  }
-                  return password.length < minPasswordLength
-                      ? passwordMinimumError
-                      : null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _passwordAgain,
-                obscureText: !_showPassword,
-                decoration: const InputDecoration(
-                  labelText: 'Повторите пароль',
-                ),
-                validator: (value) {
-                  if (_password.text.isEmpty && (value?.isEmpty ?? true)) {
-                    return null;
-                  }
-                  return value != _password.text ? 'Пароли не совпадают' : null;
-                },
-              ),
-              if (accessRoles.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                AppDropdownButtonFormField<String>(
-                  menuMaxHeight: 256,
-                  key: const Key('create-teacher-access-role'),
-                  initialValue: accessRoles.contains(_accessRole)
-                      ? _accessRole
-                      : accessRoles.first,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Роль доступа *',
-                  ),
-                  items: [
-                    for (final role in accessRoles)
-                      DropdownMenuItem(
-                        value: role,
-                        child: Text(personAccessRoleLabels[role] ?? role),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _password,
+                    obscureText: !_showPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Пароль (необязательно)',
+                      helperText: 'Для доступа: $passwordMinimumHint',
+                      suffixIcon: IconButton(
+                        tooltip: _showPassword
+                            ? 'Скрыть пароль'
+                            : 'Показать пароль',
+                        onPressed: () =>
+                            setState(() => _showPassword = !_showPassword),
+                        icon: Icon(
+                          _showPassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
                       ),
+                    ),
+                    validator: (value) {
+                      final password = value ?? '';
+                      if (password.isEmpty) {
+                        return _email.text.trim().isEmpty
+                            ? null
+                            : 'Укажите пароль вместе с почтой';
+                      }
+                      return password.length < minPasswordLength
+                          ? passwordMinimumError
+                          : null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _passwordAgain,
+                    obscureText: !_showPassword,
+                    decoration: const InputDecoration(
+                      labelText: 'Повторите пароль',
+                    ),
+                    validator: (value) {
+                      if (_password.text.isEmpty && (value?.isEmpty ?? true)) {
+                        return null;
+                      }
+                      return value != _password.text
+                          ? 'Пароли не совпадают'
+                          : null;
+                    },
+                  ),
+                  if (accessRoles.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    AppDropdownButtonFormField<String>(
+                      menuMaxHeight: 256,
+                      key: const Key('create-teacher-access-role'),
+                      initialValue: accessRoles.contains(_accessRole)
+                          ? _accessRole
+                          : accessRoles.first,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Роль доступа *',
+                      ),
+                      items: [
+                        for (final role in accessRoles)
+                          DropdownMenuItem(
+                            value: role,
+                            child: Text(personAccessRoleLabels[role] ?? role),
+                          ),
+                      ],
+                      onChanged: _saving
+                          ? null
+                          : (value) => setState(
+                              () => _accessRole = value ?? 'teacher',
+                            ),
+                    ),
                   ],
-                  onChanged: _saving
-                      ? null
-                      : (value) =>
-                            setState(() => _accessRole = value ?? 'teacher'),
-                ),
-              ],
+                ],
+              ),
             ],
           ),
         ),
@@ -253,31 +282,37 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
           canManageRate: canManageRate,
           enabled: !_saving,
         ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _saving ? null : () => Navigator.pop(context),
-                child: const Text('Отмена'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                onPressed: _saving ? null : _save,
-                child: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Создать'),
-              ),
-            ),
-          ],
+      ],
+    );
+    return MagicFormBody(
+      hasChanges: () =>
+          [
+            _firstName,
+            _lastName,
+            _email,
+            _password,
+            _passwordAgain,
+          ].any((c) => c.text.isNotEmpty) ||
+          _phone.isNotEmpty ||
+          (_employmentKey.currentState?.hasChanges ?? false) ||
+          _accessRole != 'teacher',
+      busy: () => _saving,
+      actions: [
+        OutlinedButton(
+          onPressed: _saving ? null : () => Navigator.maybePop(context),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Создать'),
         ),
       ],
+      child: fields,
     );
   }
 }

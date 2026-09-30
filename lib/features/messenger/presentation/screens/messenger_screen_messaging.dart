@@ -357,6 +357,8 @@ extension _MessengerMessaging on _MessengerScreenState {
             .toString();
 
     _emitState(() {
+      _resetMessageSearch();
+      _isSearchingInChat = false;
       _selectedChatId = id;
       _selectedChatType = type;
       _selectedChatRawType = rawType;
@@ -405,6 +407,8 @@ extension _MessengerMessaging on _MessengerScreenState {
   void _deselectChat() {
     _leaveTypingChannel();
     _emitState(() {
+      _resetMessageSearch();
+      _isSearchingInChat = false;
       _selectedChatId = null;
       _selectedChatType = null;
       _selectedChatRawType = null;
@@ -428,12 +432,7 @@ extension _MessengerMessaging on _MessengerScreenState {
     }
 
     if (_isSearchingInChat) {
-      _emitState(() {
-        _isSearchingInChat = false;
-        _chatSearchController.clear();
-        _searchResults.clear();
-        _currentMatchIndex = 0;
-      });
+      _onSearchInChat();
       return;
     }
 

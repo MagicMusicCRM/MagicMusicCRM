@@ -161,24 +161,37 @@ class _GroupsList extends ConsumerWidget {
 // ─────────────────────────────────────────────────
 class _EmployeesList extends ConsumerWidget {
   final String searchQuery;
+  final String? branchId, status;
+  final String currentRole;
   final String? selectedId;
-  final ValueChanged<Map<String, dynamic>> onSelected;
+  final ValueChanged<Map<String, dynamic>>? onSelected;
   const _EmployeesList({
     required this.searchQuery,
+    this.branchId,
+    this.status,
+    required this.currentRole,
     this.selectedId,
-    required this.onSelected,
+    this.onSelected,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final query = searchQuery.trim();
-    final all = ref.watch(staffSearchProvider(query));
+    final provider = branchId == null && status == null
+        ? staffSearchProvider(query)
+        : personnelDirectoryProvider((
+            teachers: false,
+            query: query,
+            branchId: branchId,
+            status: status,
+          ));
+    final all = ref.watch(provider);
     return all.when(
       loading: () =>
           const Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
       error: (_, _) => _EntityLoadError(
         title: 'Не удалось загрузить сотрудников',
-        onRetry: () => ref.invalidate(staffSearchProvider(query)),
+        onRetry: () => ref.invalidate(provider),
       ),
       data: (items) {
         if (items.isEmpty) {
@@ -194,7 +207,7 @@ class _EmployeesList extends ConsumerWidget {
 
         return RefreshIndicator(
           color: AppTheme.primaryGold,
-          onRefresh: () async => ref.invalidate(staffSearchProvider(query)),
+          onRefresh: () async => ref.invalidate(provider),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: items.length,
@@ -206,25 +219,11 @@ class _EmployeesList extends ConsumerWidget {
                   ? 'Без имени'
                   : '$lastName $firstName'.trim();
               final role = e['role'] as String? ?? '';
-              final appRole = e['app_role'] as String? ?? '';
               final status = e['status'] as String? ?? '';
               final position = e['position'] as String? ?? '';
-              final email = (e['email'] as String? ?? '').trim();
-              final presentableEmail =
-                  email.endsWith('@migration.invalid') ||
-                      email.endsWith('@local.magicmusiccrm.invalid')
-                  ? ''
-                  : email;
               final roleLabel = _staffRoleLabel(role);
-              final roleColor = role == 'manager'
-                  ? const Color(0xFF8B5CF6)
-                  : role == 'director'
-                  ? const Color(0xFFEF4444)
-                  : role == 'teacher'
-                  ? const Color(0xFF3B82F6)
-                  : AppTheme.primaryGold;
+              const roleColor = AppColor.gold;
               final branches = _branchesText(e['branches']);
-              final isAppAccount = e['is_app_account'] == true;
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 color: selectedId == e['id']?.toString()
@@ -242,90 +241,38 @@ class _EmployeesList extends ConsumerWidget {
                     ),
                   ),
                   title: Text(fullName),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (presentableEmail.isNotEmpty)
-                          Text(
-                            presentableEmail,
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                              fontSize: 12,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        if ((e['phone'] ?? '').isNotEmpty)
-                          Text(
-                            e['phone'],
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                              fontSize: 12,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        const SizedBox(height: 6),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _StudentMetricChip(
-                                icon: Icons.badge_outlined,
-                                label: roleLabel,
-                                color: roleColor,
-                              ),
-                              if (position.trim().isNotEmpty)
-                                _StudentMetricChip(
-                                  icon: Icons.work_outline_rounded,
-                                  label: position.trim(),
-                                  color: AppTheme.secondaryGold,
-                                ),
-                              _StudentMetricChip(
-                                icon: Icons.circle_outlined,
-                                label: _staffStatusLabel(status),
-                                color: status == 'active'
-                                    ? AppTheme.success
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                              ),
-                              if (branches.isNotEmpty)
-                                _StudentMetricChip(
-                                  icon: Icons.location_on_outlined,
-                                  label: branches,
-                                  color: AppTheme.primaryGold,
-                                ),
-                              _StudentMetricChip(
-                                icon: isAppAccount
-                                    ? Icons.verified_user_rounded
-                                    : Icons.person_off_rounded,
-                                label: isAppAccount
-                                    ? _staffRoleLabel(appRole)
-                                    : 'Без аккаунта',
-                                color: isAppAccount
-                                    ? AppTheme.success
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                  subtitle: Text(
+                    [
+                      position.trim().isEmpty ? roleLabel : position.trim(),
+                      if (branches.isNotEmpty) branches,
+                      _staffStatusLabel(status),
+                    ].join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
                     ),
                   ),
                   trailing: Icon(
                     Icons.chevron_right_rounded,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                  onTap: () => onSelected(e),
+                  onTap: () async {
+                    if (onSelected != null) {
+                      onSelected!(e);
+                      return;
+                    }
+                    final updated = await StaffDetailDialog.show(
+                      context,
+                      e,
+                      currentRole: currentRole,
+                    );
+                    if (updated == true) {
+                      ref.invalidate(entitiesProvider('employees'));
+                      ref.invalidate(provider);
+                    }
+                  },
                 ),
               );
             },

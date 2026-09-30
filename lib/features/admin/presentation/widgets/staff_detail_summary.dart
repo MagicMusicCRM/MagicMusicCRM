@@ -127,3 +127,23 @@ class StaffAccessActions extends StatelessWidget {
     );
   }
 }
+
+PersonnelCardSection buildStaffHistorySection(
+  Map<String, dynamic> staff, {
+  required bool canViewActivity,
+}) {
+  return PersonnelCardSection(
+    id: 'history',
+    label: 'История',
+    icon: Icons.history_rounded,
+    child: PersonnelHistorySummary(
+      personId: staff['id']?.toString(),
+      personType: 'staff',
+      canViewActivity: canViewActivity,
+      createdAt: staff['created_at'] ?? staff['createdAt'],
+      lifecycleState: staff['lifecycle_state']?.toString() ?? 'active',
+      offboardedAt: staff['offboarded_at'] ?? staff['offboardedAt'],
+      offboardReason: staff['offboard_reason'] ?? staff['offboardReason'],
+    ),
+  );
+}

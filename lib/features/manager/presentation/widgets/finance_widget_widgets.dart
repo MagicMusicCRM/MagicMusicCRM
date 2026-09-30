@@ -153,6 +153,7 @@ class FinanceView extends StatefulWidget {
 
 class _FinanceViewState extends State<FinanceView> {
   final _paymentsScrollController = ScrollController();
+  bool _showExpenses = false;
 
   @override
   void dispose() {
@@ -178,31 +179,52 @@ class _FinanceViewState extends State<FinanceView> {
             onExportCsv: widget.onExportCsv,
             onExportXlsx: widget.onExportXlsx,
           ),
-          _ExpensesPanel(
-            hasMore: state.expensesNextCursor != null,
-            loadingMore: state.expensesLoadingMore,
-            pageError: state.expensesPageError,
-            onLoadMore: widget.onLoadMoreExpenses,
-            loading: state.expensesLoading,
-            error: state.expensesLoadError,
-            onRetry: widget.onRetryExpenses,
-            saving: state.savingExpense,
-            total: state.expensesTotal,
-            expenses: state.expenses,
-            onAdd: widget.onAddExpense,
-            onEdit: widget.onEditExpense,
-            onDelete: widget.onDeleteExpense,
-          ),
-          Expanded(
-            child: _PaymentsPanel(
-              state: state,
-              scrollController: _paymentsScrollController,
-              onLoadMore: widget.onLoadMorePayments,
-              onRetry: widget.onRetryPayments,
-              onRefresh: widget.onRefreshPayments,
-              onOpenStudent: widget.onOpenStudent,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: SegmentedButton<bool>(
+              key: const ValueKey('finance-operation-tabs'),
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: AppColor.gold,
+                selectedForegroundColor: AppColor.onGold,
+              ),
+              segments: const [
+                ButtonSegment(value: false, label: Text('Поступления')),
+                ButtonSegment(value: true, label: Text('Расходы')),
+              ],
+              selected: {_showExpenses},
+              onSelectionChanged: (values) =>
+                  setState(() => _showExpenses = values.single),
             ),
           ),
+          if (_showExpenses)
+            Expanded(
+              child: _ExpensesPanel(
+                hasMore: state.expensesNextCursor != null,
+                loadingMore: state.expensesLoadingMore,
+                pageError: state.expensesPageError,
+                onLoadMore: widget.onLoadMoreExpenses,
+                loading: state.expensesLoading,
+                error: state.expensesLoadError,
+                onRetry: widget.onRetryExpenses,
+                saving: state.savingExpense,
+                total: state.expensesTotal,
+                expenses: state.expenses,
+                onAdd: widget.onAddExpense,
+                onEdit: widget.onEditExpense,
+                onDelete: widget.onDeleteExpense,
+              ),
+            ),
+          if (!_showExpenses)
+            Expanded(
+              child: _PaymentsPanel(
+                state: state,
+                scrollController: _paymentsScrollController,
+                onLoadMore: widget.onLoadMorePayments,
+                onRetry: widget.onRetryPayments,
+                onRefresh: widget.onRefreshPayments,
+                onOpenStudent: widget.onOpenStudent,
+              ),
+            ),
         ],
       ),
     );
@@ -311,6 +333,47 @@ class _PeriodSelector extends StatelessWidget {
   }
 }
 
+class _FinanceColumns extends StatelessWidget {
+  const _FinanceColumns({
+    required this.date,
+    required this.party,
+    required this.description,
+    required this.amount,
+    this.action,
+  });
+  final Widget date, party, description, amount;
+  final Widget? action;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    child: Row(
+      children: [
+        Expanded(flex: 2, child: date),
+        const SizedBox(width: 16),
+        Expanded(flex: 3, child: party),
+        const SizedBox(width: 16),
+        Expanded(flex: 4, child: description),
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 3,
+          child: Align(alignment: Alignment.centerRight, child: amount),
+        ),
+        SizedBox(width: 48, child: action),
+      ],
+    ),
+  );
+}
+
+bool _financeTable(BuildContext context, double width) =>
+    width >= 900 * MediaQuery.textScalerOf(context).scale(1);
+
+Widget _financeTableHeading({bool expenses = false}) => _FinanceColumns(
+  date: const Text('Дата'),
+  party: Text(expenses ? 'Категория' : 'Клиент'),
+  description: const Text('Назначение'),
+  amount: const Text('Сумма'),
+);
+
 class _PaymentsPanel extends StatelessWidget {
   const _PaymentsPanel({
     this.onLoadMore,
@@ -348,36 +411,59 @@ class _PaymentsPanel extends StatelessWidget {
         ),
       );
     }
-    return MagicDesktopScrollbar(
-      axis: Axis.vertical,
-      controller: scrollController,
-      builder: (context, controller) => RefreshIndicator(
-        color: AppTheme.success,
-        onRefresh: onRefresh,
-        child: ListView.builder(
-          controller: controller,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          itemCount:
-              state.payments.length +
-              (state.paymentsNextCursor != null ? 1 : 0),
-          itemBuilder: (context, index) => index == state.payments.length
-              ? _FinanceNextPage(
-                  loading: state.paymentsLoadingMore,
-                  error: state.paymentsPageError,
-                  onLoad: onLoadMore,
-                )
-              : _PaymentTile(
-                  payment: state.payments[index],
-                  onOpenStudent: onOpenStudent,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final table = _financeTable(context, constraints.maxWidth);
+        return Column(
+          children: [
+            if (table)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: _financeTableHeading(),
+              ),
+            Expanded(
+              child: MagicDesktopScrollbar(
+                axis: Axis.vertical,
+                controller: scrollController,
+                builder: (context, controller) => RefreshIndicator(
+                  color: AppTheme.success,
+                  onRefresh: onRefresh,
+                  child: ListView.builder(
+                    controller: controller,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    itemCount:
+                        state.payments.length +
+                        (state.paymentsNextCursor != null ? 1 : 0),
+                    itemBuilder: (context, index) =>
+                        index == state.payments.length
+                        ? _FinanceNextPage(
+                            loading: state.paymentsLoadingMore,
+                            error: state.paymentsPageError,
+                            onLoad: onLoadMore,
+                          )
+                        : _PaymentTile(
+                            table: table,
+                            payment: state.payments[index],
+                            onOpenStudent: onOpenStudent,
+                          ),
+                  ),
                 ),
-        ),
-      ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
 class _PaymentTile extends StatelessWidget {
-  const _PaymentTile({required this.payment, required this.onOpenStudent});
+  const _PaymentTile({
+    required this.payment,
+    required this.onOpenStudent,
+    this.table = false,
+  });
+  final bool table;
 
   final Payment payment;
   final Future<void> Function(String id, String name) onOpenStudent;
@@ -403,6 +489,33 @@ class _PaymentTile extends StatelessWidget {
       if (dateLabel.isNotEmpty) dateLabel,
       if (payment.note.isNotEmpty) payment.note,
     ].join(' · ');
+    if (table) {
+      return InkWell(
+        key: ValueKey('finance-payment-${payment.id}'),
+        onTap: payment.hasStudent ? () => _openStudent(name) : null,
+        child: _FinanceColumns(
+          date: Text(dateLabel),
+          party: Text(name.isEmpty ? 'Без имени' : name),
+          description: Text(
+            [
+              _typeLabel(),
+              if (payment.note.isNotEmpty) payment.note,
+            ].join(' · '),
+          ),
+          amount: Text(
+            formatPaymentMajor(
+              payment.amountRaw ?? payment.amount,
+              currencyCode: payment.currency ?? 'RUB',
+            ),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: AppColor.success,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+    }
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -505,86 +618,39 @@ class _ExportBar extends StatelessWidget {
   final VoidCallback onExportXlsx;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-      child: Row(
-        children: [
-          Expanded(
-            child: _ExportButton(
-              icon: Icons.description_rounded,
-              label: 'Экспорт CSV',
-              busy: exporting,
-              onPressed: onExportCsv,
-            ),
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerRight,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      child: MenuAnchor(
+        builder: (context, controller, child) => OutlinedButton.icon(
+          onPressed: exporting
+              ? null
+              : () =>
+                    controller.isOpen ? controller.close() : controller.open(),
+          icon: exporting
+              ? const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.file_download_outlined),
+          label: Text(exporting ? 'Экспорт…' : 'Экспорт'),
+        ),
+        menuChildren: [
+          MenuItemButton(
+            onPressed: exporting ? null : onExportCsv,
+            child: const Text('Экспорт CSV'),
           ),
-          const SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: _ExportButton(
-              icon: Icons.table_chart_rounded,
-              label: 'Экспорт XLSX',
-              busy: exporting,
-              onPressed: onExportXlsx,
-            ),
+          MenuItemButton(
+            onPressed: exporting ? null : onExportXlsx,
+            child: const Text('Экспорт XLSX'),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
 }
 
-/// Flat-gold export button (no shadow — Magic Music primary-button rule). When
-/// [busy] it disables and swaps the leading icon for a small spinner.
-class _ExportButton extends StatelessWidget {
-  const _ExportButton({
-    required this.icon,
-    required this.label,
-    required this.busy,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.icon(
-      onPressed: busy ? null : onPressed,
-      icon: busy
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColor.onGold,
-              ),
-            )
-          : Icon(icon, size: 18),
-      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-      style: FilledButton.styleFrom(
-        backgroundColor: AppColor.gold,
-        foregroundColor: AppColor.onGold,
-        disabledBackgroundColor: AppColor.gold.withAlpha(120),
-        disabledForegroundColor: AppColor.onGold.withAlpha(160),
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-        ),
-        textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-/// v7 «Расходы» panel — total + the loaded expense history, with the flat-gold
-/// «+ Расход» action that opens the [showMagicSheet]-based add flow.
-///
-/// Theme-aware: surfaces/text read from [ColorScheme]; brand accents (gold) and
-/// the negative amount color (danger) come from the v7 [AppColor] tokens.
 class _ExpensesPanel extends StatelessWidget {
   const _ExpensesPanel({
     required this.hasMore,
@@ -667,56 +733,62 @@ class _ExpensesPanel extends StatelessWidget {
               _AddExpenseButton(saving: saving, onPressed: onAdd),
             ],
           ),
-          if (loading) ...[
-            const SizedBox(height: 12),
-            for (var i = 0; i < 2; i++)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: SkeletonBox(height: 14, radius: AppRadius.sm),
-              ),
-          ] else if (error != null) ...[
-            const SizedBox(height: 10),
-            const Text(
-              'Не удалось обновить расходы. Сохранённую операцию повторять не нужно.',
-            ),
-            TextButton(
-              onPressed: onRetry,
-              child: const Text('Обновить список'),
-            ),
-          ] else if (expenses.isEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Нет расходов за период',
-              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
-            ),
-          ] else ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              height: !hasMore && expenses.length <= 3
-                  ? expenses.length * 52
-                  : 196,
-              child: ListView.builder(
-                key: const ValueKey('expense-history-list'),
-                itemCount: expenses.length + (hasMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == expenses.length) {
-                    return _FinanceNextPage(
-                      loading: loadingMore,
-                      error: pageError,
-                      onLoad: onLoadMore,
-                    );
-                  }
-                  final expense = expenses[index];
-                  return _ExpenseRow(
-                    expense: expense,
-                    saving: saving,
-                    onEdit: () => onEdit(expense),
-                    onDelete: () => onDelete(expense),
+          const SizedBox(height: 12),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final table = _financeTable(context, constraints.maxWidth);
+                if (loading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (error != null) {
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Не удалось обновить расходы. Сохранённую операцию повторять не нужно.',
+                      ),
+                      TextButton(
+                        onPressed: onRetry,
+                        child: const Text('Обновить список'),
+                      ),
+                    ],
                   );
-                },
-              ),
+                }
+                if (expenses.isEmpty) {
+                  return const Center(child: Text('Нет расходов за период'));
+                }
+                return Column(
+                  children: [
+                    if (table) _financeTableHeading(expenses: true),
+                    Expanded(
+                      child: ListView.builder(
+                        key: const PageStorageKey('expense-history-list'),
+                        itemCount: expenses.length + (hasMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == expenses.length) {
+                            return _FinanceNextPage(
+                              loading: loadingMore,
+                              error: pageError,
+                              onLoad: onLoadMore,
+                            );
+                          }
+                          final expense = expenses[index];
+                          return _ExpenseRow(
+                            table: table,
+                            expense: expense,
+                            saving: saving,
+                            onEdit: () => onEdit(expense),
+                            onDelete: () => onDelete(expense),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -766,12 +838,14 @@ class _AddExpenseButton extends StatelessWidget {
 /// One expense-history row inside [_ExpensesPanel].
 class _ExpenseRow extends StatelessWidget {
   const _ExpenseRow({
+    this.table = false,
     required this.expense,
     required this.saving,
     required this.onEdit,
     required this.onDelete,
   });
 
+  final bool table;
   final Map<String, dynamic> expense;
   final bool saving;
   final VoidCallback onEdit;
@@ -793,6 +867,51 @@ class _ExpenseRow extends StatelessWidget {
       if (description.isNotEmpty) description,
     ].join(' · ');
 
+    final actions = PopupMenuButton<String>(
+      key: ValueKey('expense-actions-${expense['id']}'),
+      enabled: !saving,
+      tooltip: 'Действия с расходом',
+      onSelected: (value) {
+        if (value == 'edit') onEdit();
+        if (value == 'delete') onDelete();
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: 'edit',
+          child: ListTile(
+            dense: true,
+            leading: Icon(Icons.edit_rounded),
+            title: Text('Изменить'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: ListTile(
+            dense: true,
+            leading: Icon(Icons.delete_outline_rounded),
+            title: Text('Удалить'),
+          ),
+        ),
+      ],
+    );
+    if (table) {
+      return _FinanceColumns(
+        date: Text(
+          dt == null ? '' : DateFormat('d MMM yyyy', 'ru').format(dt.toLocal()),
+        ),
+        party: Text(category),
+        description: Text(description),
+        amount: Text(
+          '− ${formatPaymentMajor(amount)}',
+          textAlign: TextAlign.right,
+          style: const TextStyle(
+            color: AppColor.danger,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        action: actions,
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -845,33 +964,7 @@ class _ExpenseRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 2),
-          PopupMenuButton<String>(
-            key: ValueKey('expense-actions-${expense['id']}'),
-            enabled: !saving,
-            tooltip: 'Действия с расходом',
-            onSelected: (value) {
-              if (value == 'edit') onEdit();
-              if (value == 'delete') onDelete();
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'edit',
-                child: ListTile(
-                  dense: true,
-                  leading: Icon(Icons.edit_rounded),
-                  title: Text('Изменить'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: ListTile(
-                  dense: true,
-                  leading: Icon(Icons.delete_outline_rounded),
-                  title: Text('Удалить'),
-                ),
-              ),
-            ],
-          ),
+          actions,
         ],
       ),
     );

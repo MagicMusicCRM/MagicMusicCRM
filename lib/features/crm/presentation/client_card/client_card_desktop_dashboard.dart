@@ -37,10 +37,12 @@ extension _ClientCardDesktopDashboard on _ClientCardState {
               ),
             if (canWriteSchedule)
               _desktopAction(
-                'client-book-trial',
+                _isStudent ? 'client-book-lesson' : 'client-book-trial',
                 Icons.event_available_outlined,
-                'Записать на пробное занятие',
-                _bookClientTrial,
+                _isStudent
+                    ? 'Записать на занятие'
+                    : 'Записать на пробное занятие',
+                _bookClientLesson,
               ),
             if (canReadSchedule)
               _desktopAction(
@@ -281,7 +283,7 @@ extension _ClientCardDesktopDashboard on _ClientCardState {
     ),
   );
 
-  Future<void> _bookClientTrial() async {
+  Future<void> _bookClientLesson() async {
     final access = ClientCardAccessPolicy.project(
       actorRole: _currentActorRole() ?? '',
       capabilitySnapshot: widget.capabilitySnapshot,
@@ -296,7 +298,7 @@ extension _ClientCardDesktopDashboard on _ClientCardState {
       leadId: _isStudent ? null : _leadId,
       leadName: _isStudent ? null : _clientPresentationLabel,
       initialBranchId: _clientBranchId,
-      initialIsTrial: true,
+      initialIsTrial: !_isStudent,
     );
     if (saved == true && mounted) await _refreshClientLessonData();
   }

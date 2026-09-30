@@ -228,10 +228,45 @@ extension _MessengerConversationView on _MessengerScreenState {
               onSearchChanged: (val) => _performSearch(val),
               onSearchSubmitted: (val) => _performSearch(val, jump: true),
               matchCount: _searchResults.length,
+              searchLoading: _messageSearchLoading,
+              hasMoreMatches: _messageSearchHasMore,
+              searchFailed: _messageSearchError != null,
               currentMatchIndex: _currentMatchIndex + 1,
-              onNextMatch: _nextSearchMatch,
-              onPrevMatch: _prevSearchMatch,
+              onNextMatch:
+                  !_messageSearchLoading &&
+                      (_currentMatchIndex + 1 < _searchResults.length ||
+                          _messageSearchHasMore)
+                  ? _nextSearchMatch
+                  : null,
+              onPrevMatch: !_messageSearchLoading && _currentMatchIndex > 0
+                  ? _prevSearchMatch
+                  : null,
             ),
+            if (_messageSearchError != null)
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(_messageSearchError!),
+                  TextButton(
+                    onPressed: () =>
+                        _performSearch(_chatSearchController.text, jump: true),
+                    child: const Text('Повторить поиск'),
+                  ),
+                ],
+              ),
+            if (_searchContext != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey('messenger-latest-messages'),
+                  onPressed: () {
+                    _onSearchInChat();
+                    _loadMessages();
+                  },
+                  icon: const Icon(Icons.arrow_downward_rounded),
+                  label: const Text('Фрагмент истории · К новым сообщениям'),
+                ),
+              ),
             if (_pinnedMessages.isNotEmpty) _buildPinnedBar(),
             _PresenceBanner(
               chatId: _selectedChatId,
@@ -253,7 +288,7 @@ extension _MessengerConversationView on _MessengerScreenState {
                       actionLabel: 'Повторить',
                       onAction: _loadMessages,
                     )
-                  : _messages.isEmpty
+                  : (_searchContext ?? _messages).isEmpty
                   ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -277,7 +312,7 @@ extension _MessengerConversationView on _MessengerScreenState {
                     )
                   : _MessageListView(
                       key: _messagesActionKey,
-                      messages: _messages,
+                      messages: _searchContext ?? _messages,
                       currentUserId: _userId,
                       isGroupChat: isGroup,
                       isChannel: isChannel,

@@ -22,6 +22,7 @@ class ChatHeader extends StatelessWidget {
   final VoidCallback? onNextMatch;
   final VoidCallback? onPrevMatch;
   final int matchCount;
+  final bool searchLoading, hasMoreMatches, searchFailed;
   final int currentMatchIndex; // 1-indexed for UI display
   final ValueChanged<String>? onSearchChanged;
   final ValueChanged<String>? onSearchSubmitted;
@@ -43,6 +44,9 @@ class ChatHeader extends StatelessWidget {
     this.onNextMatch,
     this.onPrevMatch,
     this.matchCount = 0,
+    this.searchLoading = false,
+    this.hasMoreMatches = false,
+    this.searchFailed = false,
     this.currentMatchIndex = 0,
     this.onSearchChanged,
     this.onSearchSubmitted,
@@ -59,20 +63,23 @@ class ChatHeader extends StatelessWidget {
         color: isDark ? TelegramColors.darkSurface : TelegramColors.lightBg,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? TelegramColors.darkDivider : TelegramColors.lightDivider,
+            color: isDark
+                ? TelegramColors.darkDivider
+                : TelegramColors.lightDivider,
             width: 0.5,
           ),
         ),
       ),
-      child: isSearchActive ? _buildSearchBar(context, isDark) : _buildNormalHeader(context, isDark),
+      child: isSearchActive
+          ? _buildSearchBar(context, isDark)
+          : _buildNormalHeader(context, isDark),
     );
   }
 
   Widget _buildNormalHeader(BuildContext context, bool isDark) {
     return Row(
       children: [
-        if (showBackButton)
-          AppBackButton(onPressed: onBack),
+        if (showBackButton) AppBackButton(onPressed: onBack),
         if (!showBackButton) const SizedBox(width: 8),
         // Avatar
         GestureDetector(
@@ -145,6 +152,14 @@ class ChatHeader extends StatelessWidget {
         Expanded(
           child: TextField(
             controller: searchController,
+            maxLength: 200,
+            buildCounter:
+                (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) => null,
             autofocus: true,
             style: const TextStyle(fontSize: 16),
             onChanged: onSearchChanged,
@@ -152,19 +167,31 @@ class ChatHeader extends StatelessWidget {
             keyboardType: TextInputType.text,
             textInputAction: TextInputAction.search,
             decoration: const InputDecoration(
-              hintText: 'Поиск...',
+              hintText: 'Поиск по всей истории',
               border: InputBorder.none,
               focusedBorder: InputBorder.none,
               enabledBorder: InputBorder.none,
             ),
           ),
         ),
+        if (searchLoading)
+          const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        if (!searchLoading &&
+            !searchFailed &&
+            matchCount == 0 &&
+            (searchController?.text.trim().isNotEmpty ?? false))
+          const Text('0 совпадений'),
         if (matchCount > 0) ...[
           Text(
-            '$currentMatchIndex / $matchCount',
+            '$currentMatchIndex / $matchCount${hasMoreMatches ? '+' : ''}',
             style: TextStyle(
               fontSize: 13,
-              color: isDark ? TelegramColors.darkTextSecondary : TelegramColors.lightTextSecondary,
+              color: isDark
+                  ? TelegramColors.darkTextSecondary
+                  : TelegramColors.lightTextSecondary,
             ),
           ),
           const SizedBox(width: 8),
