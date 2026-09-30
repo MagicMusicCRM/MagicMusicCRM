@@ -1,0 +1,248 @@
+{
+  "finishedAt": "2026-09-30T19:05:47.368Z",
+  "requestCount": 43,
+  "serverErrorCount": 0,
+  "requestCountersScope": "Built-in HTTP journeys only; native Flutter and client audit helper requests are additional.",
+  "revision": "37122f0f24a545f421cb1c71d51a0d8b6e7b56d4",
+  "sourceSha256": "ca3d1c76a981c8ba4c52ecf2ba441bdd49b6ac6c55658b8eb75b1afb37f3e0ae",
+  "passed": 26,
+  "failed": 0,
+  "scope": "Real HTTP/PostgreSQL and synthetic fixtures. Employee mode uses native Flutter product surfaces and the real completion worker; realtime delivery is disabled. No production requests.",
+  "employeeUiRequired": true,
+  "clientPersistenceUiRequired": false,
+  "restoreRequired": true,
+  "results": [
+    {
+      "name": "HTTP authentication and current capabilities",
+      "status": "PASS"
+    },
+    {
+      "name": "Reject null displayName without HTTP 500",
+      "status": "PASS",
+      "detail": {
+        "statusCode": 400,
+        "code": "HTTP_400",
+        "message": "displayName must be shorter than or equal to 120 characters; displayName must be a string",
+        "requestId": "c7dde43a-cd0b-48bf-99be-26ae154a4231",
+        "timestamp": "2026-09-30T19:00:22.731Z",
+        "path": "/api/crm/client-config/sources/743e0d45-df65-4b75-b80a-f60387c6e3c5"
+      }
+    },
+    {
+      "name": "Reject blank displayName without HTTP 500",
+      "status": "PASS",
+      "detail": {
+        "code": "REQUIRED",
+        "field": "displayName",
+        "statusCode": 422,
+        "message": "Обязательное поле не заполнено.",
+        "requestId": "874c0ec9-25d4-4ad9-964a-28553a0aa962",
+        "timestamp": "2026-09-30T19:00:22.747Z",
+        "path": "/api/crm/client-config/sources/743e0d45-df65-4b75-b80a-f60387c6e3c5"
+      }
+    },
+    {
+      "name": "Reject null label without HTTP 500",
+      "status": "PASS",
+      "detail": {
+        "statusCode": 400,
+        "code": "HTTP_400",
+        "message": "label must be shorter than or equal to 120 characters; label must be a string",
+        "requestId": "0e21422e-fe61-4ba2-a20a-c5dd6c7d6aee",
+        "timestamp": "2026-09-30T19:00:22.759Z",
+        "path": "/api/crm/client-config/fields/6bdc528f-1c56-45ed-bbca-a40a6c51e8fc"
+      }
+    },
+    {
+      "name": "Reject blank label without HTTP 500",
+      "status": "PASS",
+      "detail": {
+        "code": "REQUIRED",
+        "field": "label",
+        "statusCode": 422,
+        "message": "Обязательное поле не заполнено.",
+        "requestId": "5b9c8ad2-40ce-4296-93e3-c07137aee774",
+        "timestamp": "2026-09-30T19:00:22.779Z",
+        "path": "/api/crm/client-config/fields/6bdc528f-1c56-45ed-bbca-a40a6c51e8fc"
+      }
+    },
+    {
+      "name": "Reject null names on a system source without changing it",
+      "status": "PASS"
+    },
+    {
+      "name": "Malformed IDs return HTTP 400",
+      "status": "PASS",
+      "detail": {
+        "statusCode": 400,
+        "code": "HTTP_400",
+        "message": "Validation failed (uuid is expected)",
+        "requestId": "62132134-8839-4760-b3d7-4da90686645e",
+        "timestamp": "2026-09-30T19:00:22.820Z",
+        "path": "/api/crm/client-config/fields/not-a-uuid"
+      }
+    },
+    {
+      "name": "Create individual lesson and safely replay creation",
+      "status": "PASS"
+    },
+    {
+      "name": "Update and clear lesson notes with safe replay and unchanged financial data",
+      "status": "PASS"
+    },
+    {
+      "name": "Concurrent saves reject the stale version without HTTP 500",
+      "status": "PASS"
+    },
+    {
+      "name": "Null completion type returns validation error instead of 500",
+      "status": "PASS",
+      "detail": {
+        "code": "LESSON_TRANSITION_REQUIRED",
+        "fields": [
+          "completionType"
+        ],
+        "statusCode": 422,
+        "message": "Protected lesson changes require the transition endpoint.",
+        "requestId": "d8686020-96b4-4a52-8685-307070f7e945",
+        "timestamp": "2026-09-30T19:00:23.295Z",
+        "path": "/api/crm/lessons/4d7915a7-c172-5ea1-9265-118e39696af3"
+      }
+    },
+    {
+      "name": "Conflicting individual lesson is rejected without HTTP 500",
+      "status": "PASS",
+      "detail": {
+        "code": "LESSON_CONSTRAINT_VIOLATIONS",
+        "violations": [
+          {
+            "code": "TEACHER_OVERLAP",
+            "resource": {
+              "type": "teacher",
+              "id": "63c2e744-81d0-467e-8a22-06cd25c6ed59"
+            },
+            "conflictingLessonIds": [
+              "4d7915a7-c172-5ea1-9265-118e39696af3"
+            ],
+            "ruleIds": []
+          },
+          {
+            "code": "CLIENT_OVERLAP",
+            "resource": {
+              "type": "client",
+              "id": "68de25b2-5562-459e-9b83-d18f916dd49b"
+            },
+            "conflictingLessonIds": [
+              "4d7915a7-c172-5ea1-9265-118e39696af3"
+            ],
+            "ruleIds": []
+          },
+          {
+            "code": "ROOM_OVERLAP",
+            "resource": {
+              "type": "room",
+              "id": "196bef8e-08c4-4738-9de7-2033d522d899"
+            },
+            "conflictingLessonIds": [
+              "4d7915a7-c172-5ea1-9265-118e39696af3"
+            ],
+            "ruleIds": []
+          }
+        ],
+        "statusCode": 422,
+        "message": "Lesson draft violates schedule constraints.",
+        "requestId": "7a1bbe3c-66d9-4718-9100-976126e99bf3",
+        "timestamp": "2026-09-30T19:00:23.398Z",
+        "path": "/api/crm/lessons"
+      }
+    },
+    {
+      "name": "Create full September–December schedule and replay",
+      "status": "PASS",
+      "detail": {
+        "activeFrom": "2026-09-01",
+        "activeUntil": "2026-12-01",
+        "lessons": 13
+      }
+    },
+    {
+      "name": "12 reservations and standard teacher pay on every created lesson",
+      "status": "PASS"
+    },
+    {
+      "name": "Lesson tray shows the whole explicit range",
+      "status": "PASS"
+    },
+    {
+      "name": "Change teacher and room with pure preview and idempotent save",
+      "status": "PASS"
+    },
+    {
+      "name": "Edit an uncovered lesson without consuming a subscription unit",
+      "status": "PASS"
+    },
+    {
+      "name": "Change payer to personal account with discount and surcharge",
+      "status": "PASS"
+    },
+    {
+      "name": "Switch to another payer subscription and return to original reservation",
+      "status": "PASS"
+    },
+    {
+      "name": "Stale lesson version returns HTTP 409",
+      "status": "PASS",
+      "detail": {
+        "code": "STALE_AGGREGATE_VERSION",
+        "statusCode": 409,
+        "message": "Данные уже изменились. Обновите экран и повторите действие.",
+        "requestId": "d412cf75-ff53-4306-85eb-a71433458fb3",
+        "timestamp": "2026-09-30T19:00:27.360Z",
+        "path": "/api/crm/lessons/b56a3623-c50b-4ba9-b218-62c2ffa22a8a/planned-settlement/preview"
+      }
+    },
+    {
+      "name": "Missing financial decision returns validation error instead of 500",
+      "status": "PASS"
+    },
+    {
+      "name": "Planned edits never create actual client charges or teacher accruals",
+      "status": "PASS"
+    },
+    {
+      "name": "History search respects chat and channel access",
+      "status": "PASS"
+    },
+    {
+      "name": "UI usability: forms, finance tables, conflicts and complete message history",
+      "status": "PASS"
+    },
+    {
+      "name": "Employee UI journey with real persistence and failure recovery",
+      "status": "PASS",
+      "detail": {
+        "scenarios": [
+          "student-created",
+          "network-loss-draft-preserved",
+          "payment-retried-once",
+          "lesson-booked",
+          "lesson-completed",
+          "lesson-edit-calculated",
+          "lesson-cancelled",
+          "refund-balanced",
+          "concurrent-edit-conflict",
+          "reopened-saved-state"
+        ],
+        "verified": "UI → HTTP → PostgreSQL"
+      }
+    },
+    {
+      "name": "Backup restores into a fresh isolated database with identical persisted facts",
+      "status": "PASS",
+      "detail": {
+        "tableCount": 142,
+        "durationMs": 5965
+      }
+    }
+  ]
+}

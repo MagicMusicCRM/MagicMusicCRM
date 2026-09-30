@@ -1,0 +1,48 @@
+{
+  "status": "ok",
+  "service": "magic-music-crm-api",
+  "timestamp": "2026-09-30T19:25:31.522Z",
+  "checks": {
+    "database": "ok",
+    "migrations": "ok",
+    "lessonCompletionWorker": "ok",
+    "platformOutbox": "ok",
+    "v4Rollout": "ok"
+  },
+  "latestMigrationId": "0161_restore_notification_preferences",
+  "lessonCompletionWorker": {
+    "due": 0,
+    "claimed": 0,
+    "retry": 0,
+    "poison": 0,
+    "completed": 15,
+    "oldestDueSeconds": null,
+    "maxAttempts": 1
+  },
+  "platformOutbox": {
+    "pending": 0,
+    "deadLetter": 0,
+    "oldestDueSeconds": null,
+    "maxAttempts": 0
+  },
+  "v4Rollout": [
+    {
+      "domain": "access",
+      "configuredMode": "v4",
+      "effectivePath": "v4",
+      "shadowCompare": false,
+      "killSwitch": false,
+      "enableAllowed": true,
+      "reason": "v4"
+    },
+    {
+      "domain": "schedule",
+      "configuredMode": "v4",
+      "effectivePath": "v4",
+      "shadowCompare": false,
+      "killSwitch": false,
+      "enableAllowed": true,
+      "reason": "v4"
+    }
+  ]
+}

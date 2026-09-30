@@ -1,0 +1,64 @@
+{
+  "assets": [
+    {
+      "apiUrl": "https://api.github.com/repos/MagicMusicCRM/MagicMusicCRM/releases/assets/601642441",
+      "contentType": "application/x-msdownload",
+      "createdAt": "2026-09-30T19:25:07Z",
+      "digest": "sha256:e6208c80698fb5c495a094e83c9eba39f3a85abd0804a518c4b43b0df224f643",
+      "downloadCount": 0,
+      "id": "RA_kwDORjkTO84j3FXJ",
+      "label": "",
+      "name": "MagicMusicCRM-1.5.52-232-Setup.exe",
+      "size": 15750201,
+      "state": "uploaded",
+      "updatedAt": "2026-09-30T19:25:30Z",
+      "url": "https://github.com/MagicMusicCRM/MagicMusicCRM/releases/download/v1.5.52/MagicMusicCRM-1.5.52-232-Setup.exe"
+    },
+    {
+      "apiUrl": "https://api.github.com/repos/MagicMusicCRM/MagicMusicCRM/releases/assets/601642443",
+      "contentType": "application/zip",
+      "createdAt": "2026-09-30T19:25:07Z",
+      "digest": "sha256:66d698d00c3684499912d6d8b77c77ae21092c002296e2d7f77b682efbbd2235",
+      "downloadCount": 0,
+      "id": "RA_kwDORjkTO84j3FXL",
+      "label": "",
+      "name": "MagicMusicCRM-1.5.52-232-windows-x64.zip",
+      "size": 19626889,
+      "state": "uploaded",
+      "updatedAt": "2026-09-30T19:25:36Z",
+      "url": "https://github.com/MagicMusicCRM/MagicMusicCRM/releases/download/v1.5.52/MagicMusicCRM-1.5.52-232-windows-x64.zip"
+    },
+    {
+      "apiUrl": "https://api.github.com/repos/MagicMusicCRM/MagicMusicCRM/releases/assets/601642442",
+      "contentType": "application/octet-stream",
+      "createdAt": "2026-09-30T19:25:07Z",
+      "digest": "sha256:f1bc840790c9a90be9b46d3aed7e5f9cfe0bafbbb9573590b2eb461b7d410384",
+      "downloadCount": 0,
+      "id": "RA_kwDORjkTO84j3FXK",
+      "label": "",
+      "name": "MagicMusicCRM-1.5.52-232.aab",
+      "size": 62431100,
+      "state": "uploaded",
+      "updatedAt": "2026-09-30T19:26:17Z",
+      "url": "https://github.com/MagicMusicCRM/MagicMusicCRM/releases/download/v1.5.52/MagicMusicCRM-1.5.52-232.aab"
+    },
+    {
+      "apiUrl": "https://api.github.com/repos/MagicMusicCRM/MagicMusicCRM/releases/assets/601642446",
+      "contentType": "application/vnd.android.package-archive",
+      "createdAt": "2026-09-30T19:25:07Z",
+      "digest": "sha256:b4c836d02d619da1607fd0345a137fbfbe63156c16a56fb2f536b9edd7d2192e",
+      "downloadCount": 0,
+      "id": "RA_kwDORjkTO84j3FXO",
+      "label": "",
+      "name": "MagicMusicCRM-1.5.52-232.apk",
+      "size": 91171514,
+      "state": "uploaded",
+      "updatedAt": "2026-09-30T19:26:26Z",
+      "url": "https://github.com/MagicMusicCRM/MagicMusicCRM/releases/download/v1.5.52/MagicMusicCRM-1.5.52-232.apk"
+    }
+  ],
+  "isDraft": false,
+  "isPrerelease": false,
+  "tagName": "v1.5.52",
+  "url": "https://github.com/MagicMusicCRM/MagicMusicCRM/releases/tag/v1.5.52"
+}

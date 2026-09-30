@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "version": "1.5.52+232",
+  "apkSha256": "b4c836d02d619da1607fd0345a137fbfbe63156c16a56fb2f536b9edd7d2192e",
+  "serial": "emulator-5558",
+  "pid": "2768",
+  "scope": "Production APK installed; login screen checked offline without production authentication",
+  "screenshot": "android-evidence/production-apk-login.png",
+  "crashBytes": 0,
+  "externalDefaultNetwork": "none"
+}

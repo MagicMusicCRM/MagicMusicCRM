@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "scope": "Production Release binary, isolated profile, native first-frame ack and 5-second survival; no authenticated production mutations",
+  "executable": "C:\\Users\\Alinka\\.codex\\worktrees\\ui-release-232\\MagicMusicCRM\\build\\windows\\x64\\runner\\Release\\magic_music_crm.exe",
+  "sha256": "13a6cf5586616492da67330b80509067cd40cfb794072ae413943ee4c5ddaace",
+  "pid": 22112,
+  "ack": {
+    "type": "health_ack",
+    "protocolVersion": 1,
+    "updateId": "run_232_e60e87c69dbb4c93be0e381c79b7796d",
+    "appPid": 22112,
+    "timestampUtc": "2026-09-30T19:15:43.146448Z"
+  },
+  "elapsedMs": 5577.7842
+}
