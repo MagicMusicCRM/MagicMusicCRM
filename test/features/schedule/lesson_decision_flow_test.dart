@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'dart:io';
 
@@ -2500,9 +2501,12 @@ void main() {
                   onPressed: () => showLessonEditorSurface(
                     context,
                     title: 'Новое занятие',
-                    editor: (_) => const SizedBox(
-                      key: Key('adaptive-lesson-editor-body'),
-                      height: 640,
+                    editor: (_) => const MagicFormBody(
+                      actions: [Text('Сохранить')],
+                      child: SizedBox(
+                        key: Key('adaptive-lesson-editor-body'),
+                        height: 640,
+                      ),
                     ),
                   ),
                   child: const Text('Открыть редактор'),
@@ -2528,9 +2532,10 @@ void main() {
           surfaceCase.mobile ? findsOneWidget : findsNothing,
         );
         expect(find.byTooltip('Закрыть'), findsOneWidget);
+        expect(find.byKey(const Key('magic-form-fields')), findsOneWidget);
         expect(
-          find.byKey(const Key('magic-sheet-body-scroll')),
-          findsOneWidget,
+          tester.getBottomRight(find.byKey(const Key('magic-form-actions'))).dy,
+          lessThanOrEqualTo(900),
         );
 
         await tester.tap(find.byTooltip('Закрыть'));
@@ -2558,7 +2563,10 @@ void main() {
                 title: 'Изменить занятие',
                 editor: (_) => const LessonEditorDismissGuard(
                   isDirty: true,
-                  child: SizedBox(height: 640),
+                  child: MagicFormBody(
+                    actions: [Text('Сохранить')],
+                    child: SizedBox(height: 640),
+                  ),
                 ),
               ),
               child: const Text('Открыть грязную форму'),

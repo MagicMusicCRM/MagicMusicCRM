@@ -35,7 +35,8 @@ class MagicFormBody extends StatelessWidget {
         Flexible(
           child: SingleChildScrollView(
             key: const ValueKey('magic-form-fields'),
-            controller: scrollController,
+            controller:
+                PrimaryScrollController.maybeOf(context) ?? scrollController,
             padding: AppSpace.sheetBody,
             child: child,
           ),
@@ -462,7 +463,12 @@ class _MagicSheetFrame extends StatelessWidget {
             ),
           )
         : !scrollBody
-        ? body
+        ? scrollController == null
+              ? PrimaryScrollController.none(child: body)
+              : PrimaryScrollController(
+                  controller: scrollController!,
+                  child: body,
+                )
         : SingleChildScrollView(
             key: const ValueKey('magic-sheet-body-scroll'),
             controller: scrollController,
