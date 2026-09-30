@@ -1,4 +1,28 @@
-# Подготовка релизного кандидата после ST — в работе
+# Release 1.5.51+231 — подготовлен к этапу развёртывания
+
+## Итог на 30.09.2026
+
+Подготовка завершена. Production не изменялся, клиентские каналы не опубликованы. Исправлены RC-01…RC-05: восстановление после конкурентного изменения занятия, ближайшее занятие в карточке, совместимый сервер для отката, лишние последовательные preview группового расписания и недоступная сетка Android. Чекбокс ручной оплаты находится после обоих полей; повторяющиеся пояснения убраны. Рабочие возможности 227–230 сохранены.
+
+Клиент: `a453155ea89ef366ff1bc3f2cec27941897a7549`. Сервер: `b001956361b9b8c237af6b119bc06dbb23d71400`; server tree этих двух commit идентичен. Проверенный серверный образ не пересобирался после клиентской правки. Последующий документационный commit не меняет эти источники сборки.
+
+| Область | Финальный результат и граница |
+|---|---|
+| Backend | 4166 PASS / 324 suites, 0 skipped, run `c59a8238469e2ac1`. Fingerprint текущего сервера `3deba8e499a6dd82ef37fccc8d3d9f59a308164e17b3d4e2840769770292294a` совпадает. Typecheck/build PASS. |
+| Flutter | Полный финальный прогон: 1886 PASS, 1 FAIL — устаревшее ожидание release history 230. После обновления метаданных этот файл: 5 PASS. После RC-05 существующие проверки расписания: 15 PASS, analyze 0 issues. Свежий полностью зелёный прогон всей suite после этих правок не заявляется. |
+| Бизнес-сценарии | Принятые X-03/X-05…X-10, finance, группы и повторяющийся план перечислены ниже и в `dist/rc231/accepted-ui-runs.json`. X-10 `c662de61a3b24af09b60a7189f2c09a5`: 39/0, цельная цепочка с сохранением, перезапуском, ролями и задачами. Общие HTTP baseline checks не суммируются как уникальные сценарии. |
+| Эксплуатация | Exact candidate image + synthetic restore `0ef9e11487194c299a4723b54c47c8d0`: 24/0. Candidate/recovery image gates PASS. Текущий клиент на recovery `61efd505bf31466d82645e9be75d473d`: 24/0. |
+| Android и упаковка | Real main Release UI/API `70954806e6234f30a896540c082279ad`: 23/0. Финальные Windows Release и production APK отдельно запущены. ZIP: 27/27 файлов совпадают с Release. APK/AAB подписаны одним сертификатом. |
+
+Артефакты: [manifest с SHA-256](../../dist/release-231/artifact-manifest.json), [Setup](../../dist/release-231/MagicMusicCRM-1.5.51-231-Setup.exe), [Windows ZIP](../../dist/release-231/MagicMusicCRM-1.5.51-231-windows-x64.zip), [APK](../../dist/release-231/MagicMusicCRM-1.5.51-231.apk), [AAB](../../dist/release-231/MagicMusicCRM-1.5.51-231.aab). В том же каталоге находятся экспорт двух серверных образов, release history и черновики обоих update manifest; оба Windows-канала указывают на ZIP. Это локальные файлы, URL из черновиков ещё не опубликованы.
+
+Трассировка всех 41 требований: [матрица](release-231-requirements.md). Границы: точный набор REQ-013 20→15 и все settings UI REQ-029 не повторялись в финальной серии; текущие проверки счётчика/компонентов описаны отдельно. Physical Windows IME, iOS/macOS и реальные внешние платежи/доставка сообщений не подтверждены. Windows Setup не имеет Authenticode-подписи; его установка поверх пользовательской версии не выполнялась. AAB проверен локально, приёмка Google Play не выполнялась; `jarsigner` сообщает self-signed/no timestamp и различие порядка manifest для JarInputStream, полный лог сохранён. Это не заявление о готовности всего приложения на всех платформах.
+
+До фактического выпуска остаются только действия [runbook](release-231-runbook.md) по отдельной прямой команде владельца: актуальный production preflight, свежий backup с проверкой восстановления и совместимости, API-first deploy, публикация клиентов и post-deploy reconciliation. Проверка на синтетической БД не заменяет проверку свежего production backup.
+
+## Хронология подготовки
+
+Ниже сохранены промежуточные FAIL, блокировки среды и прежние статусы «в работе». Они относятся к указанным снимкам и заменяются итогом выше; это история доказательств, а не дополнительные открытые блокеры.
 
 ## Авторизация и исходная версия
 
@@ -101,3 +125,33 @@ X-10 `60c45f7e81a24c138efbefdeccffe910` — **26/3**, первый FAIL посл
 Финальный интегрированный X-10 `c662de61a3b24af09b60a7189f2c09a5`: **39/0**, 48 запросов основного HTTP runner (native запросы учитываются отдельно), 0 server errors. Одна сквозная цепочка: inbound lead → два UI переноса пробного на корректные октябрьские даты → покупка/конверсия с сохранением ID пробного и открытием его из карточки ученика → два UI оплаченных занятия, запрет третьего без покрытия → worker создаёт ровно один взнос к оплате → restart сохраняет факты → связанная задача, реальное напоминание, закрытие с результатом/комментарием, счётчик и журнал → следующий tick без дубля. Роли Admin/Manager/Director; Client и foreign-scope Manager denial. Все 8 целевых функциональных областей прошли; финальные общие/операционные проверки продолжаются.
 
 Финальный полный Flutter запуск: **1886 PASS, 1 FAIL, 0 SKIP**, 4м18с. Единственный FAIL — ожидаемые metadata 230/70 releases в `test/core/update/release_history_test.dart` при добавленном 231-м build/71 releases. Обновлены три точных ожидания, проверки истории/языка/уникальности не удалены. Адресный повтор файла: **5 PASS**, `dist/rc231/release-history-final.log`. Все четыре updater integration cases выполнены в уникальном synthetic каталоге. Это полный запуск + адресное закрытие единственного сбоя, не повторно запущенный зелёный полный набор. Product source между ними не менялся. `flutter analyze --no-pub`: **0 issues**, 33.3с. Server typecheck/build: **PASS**. Backend full **4166/4166** ранее; текущий server fingerprint по-прежнему `3deba8e499a6dd82ef37fccc8d3d9f59a308164e17b3d4e2840769770292294a`.
+
+Исходный commit кандидата: `b001956361b9b8c237af6b119bc06dbb23d71400`, версия `1.5.51+231`. Рабочее дерево было чистым после фиксации; последующие изменения — только release evidence. Контроль 1735 product файлов против предфинального manifest подтвердил ровно одну последующую правку — RC-04 в preferred schedule editor, покрытую повторными plan/group E2E.
+
+Candidate image `magicmusiccrm-server:1.5.51-231-candidate`: `sha256:17e9e0e7a192278c7ee87fc0f231479062ec93eb9187a3259f41969b7fab9a39`; OCI revision совпадает с commit. Recovery `magicmusiccrm-server:230-recovery-231-8a966d97d05d`: `sha256:dd59b74f776d1c27acc32f6bb6517c283c980b4251a1cdc6ebb6a03d047a2471`; база eb2575d3, пять backports и их hashes в `dist/rc231/recovery-image.json`.
+
+Production-like: **PASS**, схема 0161, live/ready, invalid configuration fail-closed, reconciliation 0 issues. Полный employee UI/HTTP и synthetic backup restore на **точном candidate image**: `0ef9e11487194c299a4723b54c47c8d0`, **24/0**, восстановленные persisted facts идентичны. `image-runtime.json` подтверждает image ID до/после restart. Candidate и recovery image gates: **PASS** invalid flags, healthy readiness, degraded HTTP 503, cleanup owned databases/containers.
+
+RC-03 закрыт в локальном контуре: новый клиент на точном recovery image прошёл X-06 `61efd505bf31466d82645e9be75d473d`, **24/0**, все шесть правил, отказ/повтор и expectedVersion conflict. Это проверенный совместимый fallback, а не неизменённый vanilla 230. Восстановление свежего production backup остаётся шагом отдельно разрешённого deploy; синтетическая проверка его не заменяет.
+
+RC-05 (B, REQ-006/007/028, мобильный пользовательский путь): ordinary Android Release `4d97caa6d6774c8a9892bc1c44698bbd` — **22/1**, намеренно зафиксирован FAIL после успешных LOGIN/NAVIGATION. На экране 720×1600, штатный масштаб, day toolbar + legend + summary занимали почти всю высоту; включение поиска выталкивало временную сетку под нижнюю навигацию. Это реальная UI-находка, не ошибка инструмента. До: `dist/rc231/android-evidence/11-day-grid.png`, `13-search-result.png`. База удалена штатным runner, никакие данные production не использовались.
+
+Минимальная правка в общей точке `schedule_widget.dart`: при ширине <720 controls помещаются в отдельный scroll с максимумом 45% высоты; сетка получает остальное пространство. Все существующие действия, фильтры, легенда и RBAC сохранены, desktop сохраняет прежний плоский порядок widgets. Приёмка: сетка остаётся видимой с поиском, controls достижимы прокруткой, lesson edit/move/reopen сохраняются. Существующие `schedule_regression_test.dart` и `schedule_redesign_test.dart` (включая 360×800): **15 PASS**, analyze **0 issues**. Исправление — client commit `a453155ea`; точный SHA в `dist/rc231/client-commit.txt`. Android Release повтор выполняется, PASS ещё не заявлен.
+
+Компоненты фиксируются раздельно: server image остаётся проверенным неизменяемым b00195636; новый client commit наследует тот же server tree. Не пересобирать и не подменять проверенный серверный образ только ради смены OCI label; deploy-параметры API брать из `candidate-image.json`, клиентский source — из artifact manifest. Windows после RC-05 будет пересобран перед упаковкой.
+
+RC-05 закрыт: ordinary Android Release повтор `70954806e6234f30a896540c082279ad` — **23/0**, источник `a453155ea89ef366ff1bc3f2cec27941897a7549`, точный API image 17e9e0e7. Через ADB по фактической UI hierarchy: login, штатный профиль/consent синтетической учётной записи, навигация месяц→день, включение поиска, открытие занятия, перенос 12→13 января в Room 1, подтверждение, повторное открытие, полный force-stop/start и повторный UI read. Календарь явно использует +03:00 при device timezone GMT. API независимо подтвердил `2027-01-13T08:15:00Z`, 45 минут, новый lifecycle successor, `trial_lesson`/`trial_lesson`, client charge none. Crash log пуст. Fixture/defines с credentials удалены runner; БД очищена.
+
+На 720×1600 сетка после исправления занимает область примерно y=824…1448 вместо y=1312…1448 и остаётся такой же с поиском. Дневное занятие доступно без обходного API-вызова. До/после и сохранение: [до](release-231-evidence/android-grid-before.png), [после с поиском](release-231-evidence/android-grid-after-search.png), [после перезапуска](release-231-evidence/android-move-after-restart.png). [Checkbox в Windows](release-231-evidence/manual-pay-checkbox-windows.png). Все имена/данные в этих screenshots синтетические.
+
+Android QA APK сохранён только в `dist/rc231/qa-release-main-x64-fixed.apk`, содержит loopback API/изолированный профиль и НЕ является публикуемым артефактом. Публикуемый universal APK/AAB собирается отдельно без этих defines из того же client source. Это явная граница UI E2E; собственный startup финального production APK проверяется отдельно без авторизации в production.
+
+## Финальная упаковка и закрытие среды
+
+Из client commit a453155ea выполнены `flutter build windows --release --no-pub`, Inno Setup, `flutter build apk --release --no-pub --target=lib/main.dart` и соответствующий `appbundle`. Production builds не получают QA defines. Команды и логи: `dist/rc231/package-release.ps1`, `windows-build-final.log`, `android-apk-build.log`, `android-aab-build.log`. Windows smoke: `windows-release-smoke.json`, first-frame ack с точным PID, процесс жив через 5 секунд. ZIP содержит 27 совпадающих runtime-файлов, включая Dart assets, без лишних записей.
+
+`aapt dump badging` подтверждает magic.crm, versionCode 231/versionName 1.5.51, arm64-v8a/armeabi-v7a/x86_64. `apksigner verify --verbose --print-certs` — PASS v2; `jarsigner -verify` — jar verified с предупреждениями, указанными в итоговых границах. AAB certificate SHA-256 совпадает с APK. Логи сохранены в `dist/release-231/evidence` вместе с source manifest и metadata запусков.
+
+Production APK установлен на собственный emulator-5558; Activity взята из `aapt` (`com.magicmusiccrm.magic_music_crm.MainActivity`). Первая диагностическая команда с сокращённым `.MainActivity` не нашла Activity; это ошибка команды, исправленная по manifest, не сбой приложения. После штатного запроса разрешения уведомлений открыт [экран входа](release-231-evidence/production-apk-login.png), процесс жив, crash log пуст. Wi-Fi/data отключены, external default network none, production login не выполнялся. Evidence: `dist/rc231/production-apk-smoke.json`.
+
+Финальный source manifest содержит ровно две продуктовые разницы с pre-final snapshot: preferred_schedule_editor.dart (RC-04) и schedule_widget.dart (RC-05), обе имеют адресную проверку. Server fingerprint повторно совпал. Собственный QA emulator остановлен; во временном PostgreSQL осталась только системная postgres DB, после проверки точного ID контейнер остановлен и удалён. Посторонние контейнеры и исходная рабочая копия не изменялись при очистке. Релизные файлы, образы и диагностика сохранены.

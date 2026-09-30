@@ -18,6 +18,12 @@
 
 ## Артефакты локальной подготовки
 
+Клиентский source: `a453155ea89ef366ff1bc3f2cec27941897a7549`; серверный source: `b001956361b9b8c237af6b119bc06dbb23d71400`. Server tree идентичен; API revision для deploy брать именно из metadata образа. Документационные commit после них не требуют новой сборки.
+
+Candidate image: `sha256:17e9e0e7a192278c7ee87fc0f231479062ec93eb9187a3259f41969b7fab9a39`. Совместимый recovery: `sha256:dd59b74f776d1c27acc32f6bb6517c283c980b4251a1cdc6ebb6a03d047a2471`. Оба экспортированы в `dist/release-231/server-images.tar`; SHA-256 архива и клиентских файлов в [artifact-manifest.json](../../dist/release-231/artifact-manifest.json). После `docker load` сверить image ID, не доверять одному tag.
+
+`latest.json` и `latest-v2.json` в release directory — неопубликованные черновики. Оба сохраняют действующий ZIP-контракт updater. Их публикация допустима только после приёмки API. APK/AAB имеют сертификат SHA-256 `0d0c576061e04a920a550d478ab3f4b85fb9e3b4acfe91c5238280c0ecef4b97`; подпись Windows Setup отсутствует. Проверка магазина Android и установка Windows поверх существующего пользовательского профиля не входят в локальную приёмку.
+
 Рабочая копия: `C:/Users/Alinka/.codex/worktrees/release-st-completion/MagicMusicCRM`.
 
 Релизный каталог — `dist/release-231`; диагностический — `dist/rc231`; native/API evidence — `dist/http-journeys/<runId>`. Наличие этих каталогов само по себе не означает PASS: ориентироваться на итоговый статус кандидата и manifest. Скрипты сборки/проверки в `dist/rc231` создают только локальные артефакты и временные БД на loopback PostgreSQL 54357.
