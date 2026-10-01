@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "scope": "Production Release binary, isolated profile, native first-frame ack and 5-second survival; no authenticated production mutations",
+  "executable": "C:\\Users\\Alinka\\.codex\\b234\\build\\windows\\x64\\runner\\Release\\magic_music_crm.exe",
+  "sha256": "a4bf9053884030c67a98f2f42b1893fa4958957ec4fab0bd1806cc1cd4637579",
+  "pid": 15904,
+  "ack": {
+    "type": "health_ack",
+    "protocolVersion": 1,
+    "updateId": "run_234_6eedad2b02634f8f84b0372c2c1ed53a",
+    "appPid": 15904,
+    "timestampUtc": "2026-10-01T23:15:40.101353Z"
+  },
+  "elapsedMs": 5660.5859
+}

@@ -1,0 +1,530 @@
+{
+  "revision": "75d6e23722b3d287bf118e52932159eb214fea0c",
+  "steps": 99,
+  "runs": [
+    {
+      "name": "groups",
+      "runId": "2d5bc0dbd0d74324b9f287c1fb3f7d66",
+      "revision": "75d6e23722b3d287bf118e52932159eb214fea0c",
+      "sourceSha256": "79c62e0a09775f2f97e85c96fe7d51df927697639bb3c80aab908e6b941d93e5",
+      "passed": 28,
+      "failed": 0,
+      "requests": 73,
+      "serverErrors": 0,
+      "suites": [
+        {
+          "suite": "group-plan",
+          "role": "director",
+          "steps": [
+            {
+              "id": "GROUP-DEFAULTS",
+              "description": "Создать группу с типами расчёта вместо числовой цены и ставки",
+              "status": "PASS"
+            },
+            {
+              "id": "LEGACY-CANCEL",
+              "description": "Оба действия старой группы открывают настройки; отмена ничего не создаёт",
+              "status": "PASS"
+            },
+            {
+              "id": "BRANCH-REFRESH",
+              "description": "После настройки старой группы редактор использует её новый филиал и каталог",
+              "status": "PASS"
+            },
+            {
+              "id": "OPEN",
+              "description": "Сохранить типы старой группы и продолжить создание расписания",
+              "status": "PASS"
+            },
+            {
+              "id": "EMPTY",
+              "description": "Запретить сохранение без участников",
+              "status": "PASS"
+            },
+            {
+              "id": "DRAFT",
+              "description": "Выбрать двух участников с абонементами и заполнить план",
+              "status": "PASS"
+            },
+            {
+              "id": "CREATE",
+              "description": "Создать групповые занятия с двумя учениками",
+              "status": "PASS"
+            },
+            {
+              "id": "GROUP-TIMELINE",
+              "description": "Созданные занятия видны в списке группы",
+              "status": "PASS"
+            },
+            {
+              "id": "REMOVE",
+              "description": "Убрать второго участника только с 11 января",
+              "status": "PASS"
+            },
+            {
+              "id": "REOPEN",
+              "description": "Переоткрыть состав и вернуть второго участника",
+              "status": "PASS"
+            },
+            {
+              "id": "RESTORED",
+              "description": "После открытия состав содержит обоих учеников",
+              "status": "PASS"
+            },
+            {
+              "id": "EDIT-DEFAULTS",
+              "description": "Изменить тип оплаты в карточке группы без изменения созданных занятий",
+              "status": "PASS"
+            },
+            {
+              "id": "SINGLE",
+              "description": "Создать одиночное занятие всей группе с её преподавателем и типами расчёта",
+              "status": "PASS"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "system",
+      "runId": "2b4b75560b224d808365614a4ac84182",
+      "revision": "75d6e23722b3d287bf118e52932159eb214fea0c",
+      "sourceSha256": "79c62e0a09775f2f97e85c96fe7d51df927697639bb3c80aab908e6b941d93e5",
+      "passed": 26,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0,
+      "suites": [
+        {
+          "suite": "ui-usability",
+          "role": "director",
+          "steps": [
+            {
+              "id": "STUDENT",
+              "description": "Основные поля, раскрытие, сохранность значений и закреплённые действия",
+              "status": "PASS"
+            },
+            {
+              "id": "SHORT-employee",
+              "description": "Действия формы employee в окне 390×640",
+              "status": "PASS"
+            },
+            {
+              "id": "SHORT-teacher",
+              "description": "Действия формы teacher в окне 390×640",
+              "status": "PASS"
+            },
+            {
+              "id": "SHORT-group",
+              "description": "Действия формы group в окне 390×640",
+              "status": "PASS"
+            },
+            {
+              "id": "SHORT-student",
+              "description": "Действия формы student в окне 390×640",
+              "status": "PASS"
+            },
+            {
+              "id": "STAFF",
+              "description": "Персонал А: черновик при переключении, сохранение и повторное чтение",
+              "status": "PASS"
+            },
+            {
+              "id": "TEACHER",
+              "description": "Единая карточка преподавателя сохраняет рабочие данные без изменения ставки",
+              "status": "PASS"
+            },
+            {
+              "id": "PERSONNEL-SETTINGS",
+              "description": "В настройках нет графиков и списков персонала",
+              "status": "PASS"
+            },
+            {
+              "id": "FINANCE",
+              "description": "Поступления/расходы, таблица и мобильные карточки",
+              "status": "PASS"
+            },
+            {
+              "id": "TASKS",
+              "description": "Фильтры задач доступны в узком окне",
+              "status": "PASS"
+            },
+            {
+              "id": "BOARD",
+              "description": "Воронка показывает филиал и позволяет очистить пустой поиск",
+              "status": "PASS"
+            },
+            {
+              "id": "CLIENT-CARD",
+              "description": "Геометрия реальной карточки ученика",
+              "status": "PASS"
+            },
+            {
+              "id": "BOOK-student",
+              "description": "Быстрая запись: клиент, филиал и вид занятия",
+              "status": "PASS"
+            },
+            {
+              "id": "BOOK-lead",
+              "description": "Быстрая запись: клиент, филиал и вид занятия",
+              "status": "PASS"
+            },
+            {
+              "id": "SCHEDULE",
+              "description": "Подпись создания занятия доступна в рабочем окне",
+              "status": "PASS"
+            },
+            {
+              "id": "CONFLICTS",
+              "description": "Счётчик и фильтр относятся к выбранному дню и филиалу",
+              "status": "PASS"
+            },
+            {
+              "id": "MESSENGER",
+              "description": "Пустой поиск чатов объясняет контекст и очищается",
+              "status": "PASS"
+            },
+            {
+              "id": "HISTORY-CHAT",
+              "description": "Поиск по всей истории и переход к старому сообщению",
+              "status": "PASS"
+            },
+            {
+              "id": "HISTORY-CHANNEL",
+              "description": "Поиск по всей истории и переход к старому сообщению",
+              "status": "PASS"
+            }
+          ]
+        }
+      ],
+      "employee": [
+        "student-created",
+        "network-loss-draft-preserved",
+        "payment-retried-once",
+        "lesson-booked",
+        "lesson-completed",
+        "lesson-edit-calculated",
+        "lesson-cancelled",
+        "refund-balanced",
+        "concurrent-edit-conflict",
+        "reopened-saved-state"
+      ]
+    },
+    {
+      "name": "schedule",
+      "runId": "22e789d17e434c7591fe8e5dfbebb6fc",
+      "revision": "75d6e23722b3d287bf118e52932159eb214fea0c",
+      "sourceSha256": "79c62e0a09775f2f97e85c96fe7d51df927697639bb3c80aab908e6b941d93e5",
+      "passed": 23,
+      "failed": 0,
+      "requests": 46,
+      "serverErrors": 0,
+      "suites": [
+        {
+          "suite": "schedule-views",
+          "role": "director",
+          "steps": [
+            {
+              "id": "OPEN",
+              "description": "Открыть расписание на дату реального занятия",
+              "status": "PASS"
+            },
+            {
+              "id": "DETAIL",
+              "description": "Открыть и закрыть карточку занятия",
+              "status": "PASS"
+            },
+            {
+              "id": "BRANCH-TOOLBAR",
+              "description": "Филиал на экране, компактная дата и выбор в обоих режимах",
+              "status": "PASS"
+            },
+            {
+              "id": "DAY-NAV",
+              "description": "Следующий и предыдущий день",
+              "status": "PASS"
+            },
+            {
+              "id": "GROUPING",
+              "description": "Группировка по преподавателям и аудиториям",
+              "status": "PASS"
+            },
+            {
+              "id": "DENSITY",
+              "description": "Масштаб дня переключается и возвращается",
+              "status": "PASS"
+            },
+            {
+              "id": "TEACHER-DRAG",
+              "description": "Перенос времени выбранного преподавателя и отмена",
+              "status": "PASS"
+            },
+            {
+              "id": "WEEK",
+              "description": "Неделя и соседние недели",
+              "status": "PASS"
+            },
+            {
+              "id": "MONTH",
+              "description": "Месяц и соседние месяцы",
+              "status": "PASS"
+            },
+            {
+              "id": "DAY-RETURN",
+              "description": "Вернуться к дневному виду",
+              "status": "PASS"
+            },
+            {
+              "id": "SEARCH",
+              "description": "Поиск по Enter, число совпадений и очистка",
+              "status": "PASS"
+            },
+            {
+              "id": "LEGEND",
+              "description": "Открыть и закрыть обозначения занятости",
+              "status": "PASS"
+            },
+            {
+              "id": "FILTER-CANCEL",
+              "description": "Закрытие фильтров без применения сохраняет состояние",
+              "status": "PASS"
+            },
+            {
+              "id": "TRIAL",
+              "description": "Применение фильтра пробных занятий",
+              "status": "PASS"
+            },
+            {
+              "id": "CONFLICTS",
+              "description": "Применение фильтра конфликтов",
+              "status": "PASS"
+            },
+            {
+              "id": "REOPEN",
+              "description": "Повторное открытие восстанавливает переданное состояние фильтров",
+              "status": "PASS"
+            },
+            {
+              "id": "RESET",
+              "description": "Сброс дополнительных фильтров возвращает занятие",
+              "status": "PASS"
+            },
+            {
+              "id": "CREATE-CANCEL",
+              "description": "Открыть и отменить создание занятия из расписания",
+              "status": "PASS"
+            },
+            {
+              "id": "REFRESH-TODAY",
+              "description": "Обновление и возврат к сегодняшнему дню",
+              "status": "PASS"
+            }
+          ]
+        },
+        {
+          "suite": "schedule-views",
+          "role": "admin",
+          "steps": [
+            {
+              "id": "OPEN",
+              "description": "Открыть расписание на дату реального занятия",
+              "status": "PASS"
+            },
+            {
+              "id": "DETAIL",
+              "description": "Открыть и закрыть карточку занятия",
+              "status": "PASS"
+            },
+            {
+              "id": "BRANCH-TOOLBAR",
+              "description": "Филиал на экране, компактная дата и выбор в обоих режимах",
+              "status": "PASS"
+            },
+            {
+              "id": "DAY-NAV",
+              "description": "Следующий и предыдущий день",
+              "status": "PASS"
+            },
+            {
+              "id": "GROUPING",
+              "description": "Группировка по преподавателям и аудиториям",
+              "status": "PASS"
+            },
+            {
+              "id": "DENSITY",
+              "description": "Масштаб дня переключается и возвращается",
+              "status": "PASS"
+            },
+            {
+              "id": "TEACHER-DRAG",
+              "description": "Перенос времени выбранного преподавателя и отмена",
+              "status": "PASS"
+            },
+            {
+              "id": "WEEK",
+              "description": "Неделя и соседние недели",
+              "status": "PASS"
+            },
+            {
+              "id": "MONTH",
+              "description": "Месяц и соседние месяцы",
+              "status": "PASS"
+            },
+            {
+              "id": "DAY-RETURN",
+              "description": "Вернуться к дневному виду",
+              "status": "PASS"
+            },
+            {
+              "id": "SEARCH",
+              "description": "Поиск по Enter, число совпадений и очистка",
+              "status": "PASS"
+            },
+            {
+              "id": "LEGEND",
+              "description": "Открыть и закрыть обозначения занятости",
+              "status": "PASS"
+            },
+            {
+              "id": "FILTER-CANCEL",
+              "description": "Закрытие фильтров без применения сохраняет состояние",
+              "status": "PASS"
+            },
+            {
+              "id": "TRIAL",
+              "description": "Применение фильтра пробных занятий",
+              "status": "PASS"
+            },
+            {
+              "id": "CONFLICTS",
+              "description": "Применение фильтра конфликтов",
+              "status": "PASS"
+            },
+            {
+              "id": "REOPEN",
+              "description": "Повторное открытие восстанавливает переданное состояние фильтров",
+              "status": "PASS"
+            },
+            {
+              "id": "RESET",
+              "description": "Сброс дополнительных фильтров возвращает занятие",
+              "status": "PASS"
+            },
+            {
+              "id": "CREATE-CANCEL",
+              "description": "Открыть и отменить создание занятия из расписания",
+              "status": "PASS"
+            },
+            {
+              "id": "REFRESH-TODAY",
+              "description": "Обновление и возврат к сегодняшнему дню",
+              "status": "PASS"
+            }
+          ]
+        },
+        {
+          "suite": "schedule-views",
+          "role": "manager",
+          "steps": [
+            {
+              "id": "OPEN",
+              "description": "Открыть расписание на дату реального занятия",
+              "status": "PASS"
+            },
+            {
+              "id": "DETAIL",
+              "description": "Открыть и закрыть карточку занятия",
+              "status": "PASS"
+            },
+            {
+              "id": "BRANCH-TOOLBAR",
+              "description": "Филиал на экране, компактная дата и выбор в обоих режимах",
+              "status": "PASS"
+            },
+            {
+              "id": "DAY-NAV",
+              "description": "Следующий и предыдущий день",
+              "status": "PASS"
+            },
+            {
+              "id": "GROUPING",
+              "description": "Группировка по преподавателям и аудиториям",
+              "status": "PASS"
+            },
+            {
+              "id": "DENSITY",
+              "description": "Масштаб дня переключается и возвращается",
+              "status": "PASS"
+            },
+            {
+              "id": "TEACHER-DRAG",
+              "description": "Перенос времени выбранного преподавателя и отмена",
+              "status": "PASS"
+            },
+            {
+              "id": "WEEK",
+              "description": "Неделя и соседние недели",
+              "status": "PASS"
+            },
+            {
+              "id": "MONTH",
+              "description": "Месяц и соседние месяцы",
+              "status": "PASS"
+            },
+            {
+              "id": "DAY-RETURN",
+              "description": "Вернуться к дневному виду",
+              "status": "PASS"
+            },
+            {
+              "id": "SEARCH",
+              "description": "Поиск по Enter, число совпадений и очистка",
+              "status": "PASS"
+            },
+            {
+              "id": "LEGEND",
+              "description": "Открыть и закрыть обозначения занятости",
+              "status": "PASS"
+            },
+            {
+              "id": "FILTER-CANCEL",
+              "description": "Закрытие фильтров без применения сохраняет состояние",
+              "status": "PASS"
+            },
+            {
+              "id": "TRIAL",
+              "description": "Применение фильтра пробных занятий",
+              "status": "PASS"
+            },
+            {
+              "id": "CONFLICTS",
+              "description": "Применение фильтра конфликтов",
+              "status": "PASS"
+            },
+            {
+              "id": "REOPEN",
+              "description": "Повторное открытие восстанавливает переданное состояние фильтров",
+              "status": "PASS"
+            },
+            {
+              "id": "RESET",
+              "description": "Сброс дополнительных фильтров возвращает занятие",
+              "status": "PASS"
+            },
+            {
+              "id": "CREATE-CANCEL",
+              "description": "Открыть и отменить создание занятия из расписания",
+              "status": "PASS"
+            },
+            {
+              "id": "REFRESH-TODAY",
+              "description": "Обновление и возврат к сегодняшнему дню",
+              "status": "PASS"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "scope": "Native Windows Debug product surfaces with isolated synthetic HTTP/PostgreSQL; includes employee scenario checkpoints. No production mutations."
+}

@@ -1,0 +1,34 @@
+{
+  "liveSeries": 4,
+  "firstViolationCodes": {
+    "TEACHER_UNAVAILABLE": 3
+  },
+  "checks": [
+    {
+      "candidates": 1,
+      "checked": 1,
+      "violations": [
+        "TEACHER_UNAVAILABLE"
+      ]
+    },
+    {
+      "candidates": 1,
+      "checked": 1,
+      "violations": [
+        "TEACHER_UNAVAILABLE"
+      ]
+    },
+    {
+      "candidates": 1,
+      "checked": 1,
+      "violations": [
+        "TEACHER_UNAVAILABLE"
+      ]
+    },
+    {
+      "candidates": 0,
+      "checked": 0,
+      "violations": []
+    }
+  ]
+}

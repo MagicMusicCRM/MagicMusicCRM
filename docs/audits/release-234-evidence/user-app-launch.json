@@ -1,0 +1,9 @@
+{
+  "version": "1.5.54+234",
+  "pid": 20384,
+  "executable": "dist/release234/runtime/magic_music_crm.exe",
+  "sha256": "a4bf9053884030c67a98f2f42b1893fa4958957ec4fab0bd1806cc1cd4637579",
+  "status": "RUNNING",
+  "profile": "default",
+  "startedAt": "2026-10-01T23:31:43.1472239Z"
+}

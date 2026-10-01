@@ -1,0 +1,13 @@
+{
+  "version": "1.5.54+234",
+  "sourceRevision": "75d6e23722b3d287bf118e52932159eb214fea0c",
+  "serial": "emulator-5558",
+  "network": "offline",
+  "package": "magic.crm",
+  "pid": "3664",
+  "startup": "PASS",
+  "loginScreen": "PASS",
+  "crashBuffer": "clean",
+  "notifications": "denied in isolated QA",
+  "screenshot": "android-evidence/login-ready.png"
+}

@@ -1,4 +1,40 @@
-# MagicMusicCRM — актуальная передача 233
+# MagicMusicCRM — актуальная передача 234
+
+## Production client 1.5.54+234 — выпущен 02.10.2026 (Europe/Moscow)
+
+По действующей прямой команде владельца выпущено исправление немедленной ошибки
+при открытии разового занятия и постоянного расписания старой группы. Общая
+проверка открывает существующую настройку незаданных типов; после явного Save
+продолжает действие с актуальными группой, филиалом и каталогом. Отмена не
+создаёт записи. Общий sanitizer показывает безопасные русские `Bad state:`
+пояснения; числовые legacy цены не превращаются в типы автоматически.
+
+Client source/tag: `75d6e23722b3d287bf118e52932159eb214fea0c` / `v1.5.54`.
+API остаётся 233: source `d22915db72f477c9f1bbb89aca6204c9dd98e068`, image
+`sha256:533a0aba265cb16051b6b339e8645f3d0583ee297d172e49406710b03147bee8`,
+schema `0162_group_lesson_defaults`. API deploy/миграций не было.
+Setup/ZIP/APK/AAB, оба канала и GitHub digest/размеры проверены; Windows 234
+запущен с обычным профилем из `dist/release234/runtime`, PID 20384.
+
+Flutter 1884 PASS / 4 skip, analyze 0; Native 99 контрольных шагов, HTTP 467
+PASS с повторными базовыми проверками. Все финальные Native прогоны на одном
+source fingerprint. Backend unchanged fingerprint совпадает с 4167 PASS;
+новые проверки HTTP используют точный production image. Release Windows и
+Android startup PASS; Android smoke offline, авторизованные UI E2E Windows.
+Полная граница и команды: [release 234 audit](../audits/release-234-production.md).
+
+Новые pre/post encrypted backups внешне сохранены и восстановлены в изоляции
+на API 233 и recovery 232+SQL0162. Post reconciliation `issues=[]`, readiness
+OK, outbox 0/0, healthy/restart 0. Клиентский rollback возвращает оба канала и
+историю на 233: `/opt/magicmusiccrm/releases/1.5.54-234/restore-233.sh`;
+API/live DB сохраняются. Старый API rollback описан ниже, raw232 несовместим с162.
+
+Read-only production проверка нашла три будущих кандидата существующих серий,
+заблокированных `TEACHER_UNAVAILABLE`. Это проверка рабочего графика, не HTTP500;
+не менять время/график/историю без продуктового решения. Owner UAT с реальными
+данными не заявляется. Не использовать stale origin/main для нового кандидата;
+начинать с immutable client tag и фактического API233. Исходная грязная копия
+`Documents/Codex Import/MagicMusicCRM` не затронута.
 
 ## Production 1.5.53+233 — выпущен 02.10.2026 (Europe/Moscow)
 

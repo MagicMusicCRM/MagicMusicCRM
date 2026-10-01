@@ -1,0 +1,95 @@
+{
+  "reports": [
+    {
+      "mode": "--client-persistence-api",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --client-persistence-api",
+      "runId": "b4f47359fc8f4f2baffce8a5dfeed183",
+      "passed": 36,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-group-boundaries",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-group-boundaries",
+      "runId": "2b912feb6c1d4247b349a6bdde3e4090",
+      "passed": 40,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-family-boundaries",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-family-boundaries",
+      "runId": "e7cd5a8e93fe458ea4a9a89896bfd2c6",
+      "passed": 38,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-data-quality-boundaries",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-data-quality-boundaries",
+      "runId": "17cce404ed1d4e2ca061b2e2684bef53",
+      "passed": 36,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-auth-delivery",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-auth-delivery",
+      "runId": "3d4622ca76a1430d8222f5cc070e1512",
+      "passed": 46,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-messenger-lifecycle",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-messenger-lifecycle",
+      "runId": "62a3dfa162a94309b6dfd0f4d1b76c01",
+      "passed": 71,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-responsible",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-responsible",
+      "runId": "65c3c0fa42ed4b67b2f5a2a097edd069",
+      "passed": 34,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-comment-rules",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-comment-rules",
+      "runId": "d87397d1e10343c0becdfbb6846b0cb9",
+      "passed": 33,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-task-delivery",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-task-delivery",
+      "runId": "089d29f8b04c4fdf8a1129ac45248996",
+      "passed": 32,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    },
+    {
+      "mode": "--audit-payroll-export",
+      "command": "HTTP_JOURNEY_IMAGE=magicmusiccrm-server:1.5.53-233-candidate node scripts/http-journey-check.cjs --audit-payroll-export",
+      "runId": "f7024f3c3dec41fd945a438e6e0acd68",
+      "passed": 24,
+      "failed": 0,
+      "requests": 43,
+      "serverErrors": 0
+    }
+  ],
+  "scope": "Ten independent synthetic HTTP/PostgreSQL audits against the exact production API image; includes repeated baseline checks."
+}

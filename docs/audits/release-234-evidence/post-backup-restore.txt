@@ -1,0 +1,4 @@
+sha256:533a0aba265cb16051b6b339e8645f3d0583ee297d172e49406710b03147bee8|healthy|0
+POST_RECONCILIATION|PASS|issues=[]
+a64f8d5d9b91235c1c6e8584fd139fd1ced07acfd2cd2d019cf988baea558b5c  /opt/magicmusiccrm/backups/encrypted/magicmusiccrm-staging-20261001T233015Z.tgz.enc
+VERIFY_RELEASE_BACKUP_COMPATIBILITY|PASS|backup=magicmusiccrm-staging-20261001T233015Z.tgz.enc|candidate=magicmusiccrm-server:1.5.53-233-candidate|rollback=magicmusiccrm-server:1.5.52-232-recovery-0162|migration=0162_group_lesson_defaults
