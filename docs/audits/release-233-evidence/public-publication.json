@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "name": "latest.json",
+      "version": "1.5.53+233",
+      "sha256": "2fc4ee1a2b1eb2088574c50b3ae0d071d7aba062a7f71ebe65271d73b0121e0b"
+    },
+    {
+      "name": "latest-v2.json",
+      "version": "1.5.53+233",
+      "sha256": "2fc4ee1a2b1eb2088574c50b3ae0d071d7aba062a7f71ebe65271d73b0121e0b"
+    },
+    {
+      "name": "MagicMusicCRM-1.5.53-233-Setup.exe",
+      "bytes": 15760446,
+      "status": 200
+    },
+    {
+      "name": "MagicMusicCRM-1.5.53-233-windows-x64.zip",
+      "bytes": 19645630,
+      "status": 200
+    },
+    {
+      "name": "MagicMusicCRM-1.5.53-233.aab",
+      "bytes": 62479540,
+      "status": 200
+    },
+    {
+      "name": "MagicMusicCRM-1.5.53-233.apk",
+      "bytes": 91417670,
+      "status": 200
+    }
+  ],
+  "downloadedSha256Verified": [
+    "Windows ZIP",
+    "Android APK"
+  ],
+  "history": "1.5.53+233",
+  "checkedAt": "2026-10-01T21:52:25.0367220Z"
+}

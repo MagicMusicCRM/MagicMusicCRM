@@ -1,0 +1,27 @@
+{
+  "version": "1.5.53+233",
+  "revision": "d22915db72f477c9f1bbb89aca6204c9dd98e068",
+  "createdAt": "2026-10-01T21:44:30.4820952Z",
+  "artifacts": [
+    {
+      "name": "MagicMusicCRM-1.5.53-233-Setup.exe",
+      "bytes": 15760446,
+      "sha256": "88d4b38681a0b9225ccb555aa17c3db28797dcb96adb38d45ae39f0a5dd50bf4"
+    },
+    {
+      "name": "MagicMusicCRM-1.5.53-233-windows-x64.zip",
+      "bytes": 19645630,
+      "sha256": "2fc4ee1a2b1eb2088574c50b3ae0d071d7aba062a7f71ebe65271d73b0121e0b"
+    },
+    {
+      "name": "MagicMusicCRM-1.5.53-233.aab",
+      "bytes": 62479540,
+      "sha256": "8f3e4e9402623570113370f7b98613265dffc2b5d28fd5358bc153c22635416b"
+    },
+    {
+      "name": "MagicMusicCRM-1.5.53-233.apk",
+      "bytes": 91417670,
+      "sha256": "f152bfb7558a836215f32809e625110285584edbdc7f7ec836d2732ce32e5a3e"
+    }
+  ]
+}

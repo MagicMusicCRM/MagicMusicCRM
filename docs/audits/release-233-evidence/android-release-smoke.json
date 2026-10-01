@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "version": "1.5.53+233",
+  "activity": "com.magicmusiccrm.magic_music_crm.MainActivity",
+  "pid": "3091",
+  "scope": "Owned offline emulator; production APK launch, no production authentication or mutation",
+  "certificateSha256": "0d0c576061e04a920a550d478ab3f4b85fb9e3b4acfe91c5238280c0ecef4b97"
+}

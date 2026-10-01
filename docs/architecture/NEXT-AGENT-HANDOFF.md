@@ -1,4 +1,41 @@
-# MagicMusicCRM — актуальная передача 232
+# MagicMusicCRM — актуальная передача 233
+
+## Production 1.5.53+233 — выпущен 02.10.2026 (Europe/Moscow)
+
+По прямой команде владельца выпущены изменения этой задачи: типы списания/оплаты
+в группе, наследование настроек и разовые занятия всей группе, пакетный подбор
+преподавателя; связанные настройки персонала и филиалов, отдельные Группы,
+переработанные настройки/CRM, компактное расписание, перенос времени у
+преподавателя и сведения о филиале/абонементе в выборе клиента.
+
+Client/API source/tag: `d22915db72f477c9f1bbb89aca6204c9dd98e068` / `v1.5.53`.
+API image `sha256:533a0aba265cb16051b6b339e8645f3d0583ee297d172e49406710b03147bee8`,
+schema `0162_group_lesson_defaults`, PostgreSQL 16.4, healthy/restart 0,
+readiness OK, outbox 0/0, reconciliation `issues=[]`. Setup/ZIP/APK/AAB,
+оба update-канала, история и GitHub Release проверены по размерам/хешам.
+Windows Release 233 запущен с обычным пользовательским профилем.
+
+Проверенный исходник: полный backend 4167 PASS; Flutter 1883 PASS / 4 skip,
+анализ без замечаний; Native 68 шагов, HTTP 51 сценарий. Номер версии и история
+выпуска повышены после этих прогонов без изменения поведения; Windows/Android
+Release и оба image gate проверены отдельно. Точная граница —
+[release 233 audit](../audits/release-233-production.md).
+
+Pre/post encrypted backups сохранены вне сервера и восстановлены в изоляции на
+candidate и recovery. Исходный API 232 отвергает неизвестную миграцию 0162:
+для отката использовать только `magicmusiccrm-server:1.5.52-232-recovery-0162`,
+image `sha256:0c96f188dc281b3e97bf628c00ededb7c0ba07159bab30aa713ec01db14e5c96`,
+revision `0d859b4eea335cfdfaa9f561502cd5d591360f57` с reviewed SQL 0162.
+Скрипты — `/opt/magicmusiccrm/releases/1.5.53-233`, `recover-api-232.sh` и
+`restore-232.sh`. Схему и историю сохранять, SQL down/восстановление старой
+production-БД не применять. Новые групповые функции клиента 233 при recovery
+недоступны; вместе с API возвращаются каналы клиента 232.
+
+Старым группам нужно один раз выбрать типы в карточке; исторические настройки
+не угадываются. Ручная приёмка владельцем с реальными данными не заявляется.
+`origin/main` всё ещё `532a68f224dda750680d32b345c82377cca53311`, а точный
+production source хранится в immutable tag и `codex/ui-release-232`.
+При следующих изменениях начинать с проверенного production source.
 
 ## Production 1.5.52+232 — выпущен 30.09.2026 (Europe/Moscow)
 

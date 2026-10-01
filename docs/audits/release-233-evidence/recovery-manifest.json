@@ -1,0 +1,24 @@
+{
+  "candidateRevision": "d22915db72f477c9f1bbb89aca6204c9dd98e068",
+  "candidateImage": "magicmusiccrm-server:1.5.53-233-candidate",
+  "candidateImageId": "sha256:533a0aba265cb16051b6b339e8645f3d0583ee297d172e49406710b03147bee8",
+  "rollbackBaseRevision": "0d859b4eea335cfdfaa9f561502cd5d591360f57",
+  "rollbackImage": "magicmusiccrm-server:1.5.52-232-recovery-0162",
+  "rollbackImageId": "sha256:0c96f188dc281b3e97bf628c00ededb7c0ba07159bab30aa713ec01db14e5c96",
+  "rollbackBackports": [
+    {
+      "name": "0162_group_lesson_defaults.down.sql",
+      "sha256": "5c233a156e41d394fce9faf138a1136126e0f162fd6eb4a6d9b68b339a502213"
+    },
+    {
+      "name": "0162_group_lesson_defaults.up.sql",
+      "sha256": "f841d8e9ee39920933530e8ed1913a752f9f576252d1240ce47f0991f2c57be9"
+    }
+  ],
+  "backupCompatibility": "PASS",
+  "schema": "0162_group_lesson_defaults",
+  "limitations": [
+    "Recovery API preserves old 232 behavior; new group defaults and one-off group creation require candidate API. Restore client channels to 232 together with API recovery; keep schema and history."
+  ],
+  "createdAt": "2026-10-01T21:43:20.9361819Z"
+}

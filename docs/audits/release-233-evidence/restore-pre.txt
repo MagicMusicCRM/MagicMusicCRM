@@ -1,0 +1,1 @@
+VERIFY_RELEASE_BACKUP_COMPATIBILITY|PASS|backup=magicmusiccrm-staging-20261001T213801Z.tgz.enc|candidate=magicmusiccrm-server:1.5.53-233-candidate|rollback=magicmusiccrm-server:1.5.52-232-recovery-0162|migration=0162_group_lesson_defaults

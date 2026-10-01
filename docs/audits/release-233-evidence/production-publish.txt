@@ -1,0 +1,8 @@
+MagicMusicCRM-1.5.53-233-Setup.exe: OK
+MagicMusicCRM-1.5.53-233-windows-x64.zip: OK
+MagicMusicCRM-1.5.53-233.aab: OK
+MagicMusicCRM-1.5.53-233.apk: OK
+latest.json: OK
+latest-v2.json: OK
+release-history.json: OK
+PROMOTE_MANIFESTS|PASS|build=233|channels=2|artifacts=4

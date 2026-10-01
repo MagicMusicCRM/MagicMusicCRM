@@ -1,0 +1,18 @@
+{
+  "status": "PRODUCTION_PUBLISHED",
+  "version": "1.5.53+233",
+  "revision": "d22915db72f477c9f1bbb89aca6204c9dd98e068",
+  "image": "sha256:533a0aba265cb16051b6b339e8645f3d0583ee297d172e49406710b03147bee8",
+  "schema": "0162_group_lesson_defaults",
+  "healthy": true,
+  "restartCount": 0,
+  "reconciliationIssues": [],
+  "backupPre": "e459e7679efc396cad1262d967636b19511345354695183a01967a9cb3fff519",
+  "backupPost": "b4853456acf59d14fc379c89dda3f69ca52057c53a990a645f4964e8166e0ac9",
+  "backupPreRestore": "PASS",
+  "backupPostRestore": "PASS",
+  "publicArtifacts": "PASS",
+  "githubArtifacts": "PASS",
+  "userWindowsApp": "RUNNING",
+  "finishedAt": "2026-10-01T21:55:11.5304376Z"
+}

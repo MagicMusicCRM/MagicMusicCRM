@@ -1,0 +1,3 @@
+sha256:533a0aba265cb16051b6b339e8645f3d0583ee297d172e49406710b03147bee8|healthy|0
+POST_RECONCILIATION|PASS|issues=[]
+b4853456acf59d14fc379c89dda3f69ca52057c53a990a645f4964e8166e0ac9  /opt/magicmusiccrm/backups/encrypted/magicmusiccrm-staging-20261001T215114Z.tgz.enc

@@ -1,0 +1,7 @@
+ Container magicmusiccrm-v3-api-1 Recreate 
+ Container magicmusiccrm-v3-api-1 Recreated 
+ Container magicmusiccrm-v3-api-1 Starting 
+ Container magicmusiccrm-v3-api-1 Started 
+ Container magicmusiccrm-v3-caddy-1 Starting 
+ Container magicmusiccrm-v3-caddy-1 Started 
+DEPLOY_API_RELEASE|PASS|image=magicmusiccrm-server:1.5.53-233-candidate|revision=d22915db72f477c9f1bbb89aca6204c9dd98e068|migration=0162_group_lesson_defaults
