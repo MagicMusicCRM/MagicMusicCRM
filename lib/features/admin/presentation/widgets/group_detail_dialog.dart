@@ -164,6 +164,66 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
     }
   }
 
+  Future<void> _createSingleLesson() async {
+    setState(() => _saving = true);
+    try {
+      final group = await ensureGroupLessonDefaults(
+        context,
+        ref.read(magicCrmServiceProvider),
+        _group['id'].toString(),
+      );
+      if (!mounted || group == null) return;
+      _changed = _changed || group['version'] != _group['version'];
+      setState(() => _group = group);
+      final saved = await CreateLessonDialog.show(
+        context,
+        clientType: 'group',
+        clientId: group['id'].toString(),
+        clientName: group['name']?.toString(),
+        initialTeacherId: group['teacher_id']?.toString(),
+        initialRoomId: group['room_id']?.toString(),
+        initialBranchId: group['branch_id']?.toString(),
+      );
+      if (saved == true && mounted) {
+        _changed = true;
+        await _loadData();
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _editGroupDefaults() async {
+    setState(() => _saving = true);
+    try {
+      final group = await ref
+          .read(magicCrmServiceProvider)
+          .getGroup(_group['id'].toString());
+      if (!mounted) return;
+      _changed = _changed || group['version'] != _group['version'];
+      setState(() => _group = group);
+      if (await showCreateGroupSurface(context, group: group) == true &&
+          mounted) {
+        _changed = true;
+        await _loadData();
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(userErrorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _removeStudent(String studentId) async {
     final confirm = await showMagicDialog<bool>(
       context: context,
@@ -275,18 +335,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
                           children: [
                             OutlinedButton.icon(
                               key: const ValueKey('group-edit-defaults'),
-                              onPressed: _saving
-                                  ? null
-                                  : () async {
-                                      if (await showCreateGroupSurface(
-                                            context,
-                                            group: _group,
-                                          ) ==
-                                          true) {
-                                        _changed = true;
-                                        await _loadData();
-                                      }
-                                    },
+                              onPressed: _saving ? null : _editGroupDefaults,
                               icon: const Icon(Icons.tune),
                               label: const Text('Настройки группы'),
                             ),
@@ -294,26 +343,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
                               key: const ValueKey('group-single-lesson'),
                               onPressed: _saving || _groupStudents.isEmpty
                                   ? null
-                                  : () async {
-                                      if (await CreateLessonDialog.show(
-                                            context,
-                                            clientType: 'group',
-                                            clientId: _group['id'].toString(),
-                                            clientName: _group['name']
-                                                ?.toString(),
-                                            initialTeacherId:
-                                                _group['teacher_id']
-                                                    ?.toString(),
-                                            initialRoomId: _group['room_id']
-                                                ?.toString(),
-                                            initialBranchId: _group['branch_id']
-                                                ?.toString(),
-                                          ) ==
-                                          true) {
-                                        _changed = true;
-                                        await _loadData();
-                                      }
-                                    },
+                                  : _createSingleLesson,
                               icon: const Icon(Icons.add),
                               label: const Text('Одиночное занятие'),
                             ),

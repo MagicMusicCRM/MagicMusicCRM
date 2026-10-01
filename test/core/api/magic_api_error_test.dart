@@ -32,6 +32,21 @@ void main() {
     });
   }
   group('userErrorMessage', () {
+    test(
+      'shows safe Russian StateError guidance without a technical prefix',
+      () {
+        const message = 'Сначала выберите типы расчёта в настройках группы.';
+        expect(
+          userErrorMessage(
+            StateError(message),
+            fallback: 'Не удалось создать расписание.',
+          ),
+          message,
+        );
+        expect(userErrorText('Bad state: $message'), message);
+      },
+    );
+
     test('keeps safe Russian email business errors visible', () {
       for (final message in const [
         'Пользователь с таким email уже существует.',

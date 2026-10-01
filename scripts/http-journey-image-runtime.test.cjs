@@ -9,11 +9,12 @@ test('image runner refuses remote or non-owned databases before starting Docker'
 });
 test('image runner maps only the owned local fixture and keeps synthetic keys', () => {
   const env = imageEnvironment({ DATABASE_URL: 'postgresql://u:p@127.0.0.1:54329/magiccrm_http_test_' + 'a'.repeat(32),
-    JWT_ACCESS_SECRET: 'synthetic', PATH: 'host-path', TS_NODE_PROJECT: 'host-file' });
+    JWT_ACCESS_SECRET: 'synthetic', PATH: 'host-path', TS_NODE_PROJECT: 'host-file', SMTP_FALLBACK_HOST: '127.0.0.1' });
   assert.equal(new URL(env.DATABASE_URL).hostname, 'host.docker.internal');
   assert.equal(new URL(env.DATABASE_URL).port, '54329');
   assert.equal(env.PORT, '3000');
   assert.equal(env.JWT_ACCESS_SECRET, 'synthetic');
   assert.equal(env.PATH, undefined);
   assert.equal(env.TS_NODE_PROJECT, undefined);
+  assert.equal(env.SMTP_FALLBACK_HOST, 'host.docker.internal');
 });

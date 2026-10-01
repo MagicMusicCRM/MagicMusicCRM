@@ -47,10 +47,10 @@ void main() {
         return p;
       }
 
-      Future<void> open() async {
+      Future<void> open({String? groupId}) async {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
-        final row = await crm.getGroup(group);
+        final row = await crm.getGroup(groupId ?? group);
         await h.mount(
           Scaffold(
             body: Builder(
@@ -160,12 +160,98 @@ void main() {
         },
       );
       await h.check(
+        'LEGACY-CANCEL',
+        'Оба действия старой группы открывают настройки; отмена ничего не создаёт',
+        () async {
+          await open();
+          for (final action in ['group-single-lesson', 'schedule-plan-add']) {
+            await click(action);
+            await h.quiet();
+            expect(find.byType(CreateGroupDialog), findsOneWidget);
+            await h.tap(find.widgetWithText(OutlinedButton, 'Отмена').last);
+            await h.quiet();
+            await h.tap(find.text('Не сохранять'));
+            await h.quiet();
+            expect(find.byType(CreateGroupDialog), findsNothing);
+            expect((await crm.getGroup(group))['settlement_type_key'], isNull);
+            expect(await plans(), isEmpty);
+            expect(await crm.listLessons(groupId: group), isEmpty);
+          }
+        },
+      );
+      await h.check(
+        'BRANCH-REFRESH',
+        'После настройки старой группы редактор использует её новый филиал и каталог',
+        () async {
+          final row = await crm.createGroup(
+            name: 'AUDIT-GROUP-BRANCH-REFRESH',
+            teacherId: h.fixture['teacherId'],
+            branchId: h.fixture['branchId'],
+            roomId: h.fixture['roomId'],
+            pricePerLesson: 1000,
+          );
+          await crm.addGroupStudent(
+            groupId: row['id'],
+            studentId: students.first,
+          );
+          await open(groupId: row['id']);
+          await click('schedule-plan-add');
+          await h.quiet();
+          await select(
+            'group-branch-${h.fixture['branchId']}',
+            'GROUP-SECOND-BRANCH',
+          );
+          await select('group-teacher-field', 'Teacher1 HTTP test');
+          await select('group-room-field', 'GROUP-SECOND-ROOM');
+          await h.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+          await h.quiet();
+          await click('group-plan-participants-submit');
+          await h.quiet();
+          final editor = tester.widget<PreferredScheduleEditor>(
+            find.byType(PreferredScheduleEditor),
+          );
+          expect(
+            editor.branches.map((b) => b['id']),
+            contains(h.fixture['secondBranchId']),
+          );
+          expect(
+            editor.decisionCatalogs,
+            contains(h.fixture['secondBranchId']),
+          );
+          expect(editor.initialDraft!.branchId, h.fixture['secondBranchId']);
+          expect(await crm.listLessons(groupId: row['id']), isEmpty);
+          expect(await crm.listSchedulePlans(groupId: row['id']), isEmpty);
+          await h.tap(find.text('Отмена').last);
+          await h.quiet();
+          if (find.text('Не сохранять').evaluate().isNotEmpty) {
+            await h.tap(find.text('Не сохранять'));
+            await h.quiet();
+          }
+          await click('group-edit-defaults');
+          await h.quiet();
+          expect(
+            key('group-branch-${h.fixture['secondBranchId']}'),
+            findsOneWidget,
+          );
+          expect(key('group-settlement-lesson'), findsOneWidget);
+          expect(key('group-compensation-standard'), findsOneWidget);
+        },
+      );
+      await h.check(
         'OPEN',
-        'Открыть групповую карточку и участников нового расписания',
+        'Сохранить типы старой группы и продолжить создание расписания',
         () async {
           await open();
           await click('schedule-plan-add');
           await h.quiet();
+          expect(find.byType(CreateGroupDialog), findsOneWidget);
+          expect(key('group-settlement-lesson'), findsOneWidget);
+          expect(key('group-compensation-standard'), findsOneWidget);
+          await h.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+          await h.quiet();
+          final updated = await crm.getGroup(group);
+          expect(updated['settlement_type_key'], 'lesson');
+          expect(updated['teacher_compensation_rule_key'], 'standard');
           expect(find.byType(GroupScheduleParticipantsEditor), findsOneWidget);
           expect(find.byType(CheckboxListTile), findsNWidgets(2));
         },

@@ -20,11 +20,34 @@ Future<bool?> showCreateGroupSurface(
     context,
     kind: AppSurfaceKind.selection,
     title: group == null ? 'Новая учебная группа' : 'Настройки группы',
-    subtitle: 'Преподаватель, филиал и аудитория',
+    subtitle:
+        group != null &&
+            (group['settlement_type_key'] == null ||
+                group['teacher_compensation_rule_key'] == null)
+        ? 'Для новых занятий выберите тип списания и оплаты преподавателю'
+        : 'Преподаватель, филиал и аудитория',
     icon: Icons.groups_2_outlined,
     scrollBody: false,
     builder: (_) => CreateGroupDialog(group: group),
   );
+}
+
+Future<Map<String, dynamic>?> ensureGroupLessonDefaults(
+  BuildContext context,
+  MagicCrmService crm,
+  String groupId,
+) async {
+  var group = await crm.getGroup(groupId);
+  if (!context.mounted) return null;
+  if (group['settlement_type_key'] == null ||
+      group['teacher_compensation_rule_key'] == null) {
+    if (await showCreateGroupSurface(context, group: group) != true ||
+        !context.mounted) {
+      return null;
+    }
+    group = await crm.getGroup(groupId);
+  }
+  return group;
 }
 
 class CreateGroupDialog extends ConsumerStatefulWidget {

@@ -16,6 +16,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/utils/money_format.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_create_dialogs.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
@@ -338,16 +339,18 @@ void main() {
         );
         await tap(find.text('Записать'));
         final teacher = find.byKey(const Key('lesson-teacher-field'));
+        await waitFor(
+          () =>
+              teacher.evaluate().isNotEmpty &&
+              tester.widget<SearchablePickerField>(teacher).enabled &&
+              tester
+                  .widget<SearchablePickerField>(teacher)
+                  .items
+                  .any((item) => item.label == 'Teacher0 HTTP test'),
+          'Teacher option loaded before selection',
+        );
         await tap(teacher);
-        await tester.enterText(
-          find.descendant(of: teacher, matching: find.byType(TextField)),
-          'Teacher0',
-        );
-        await tap(
-          find
-              .widgetWithText(MenuItemButton, 'Teacher0 HTTP test')
-              .hitTestable(),
-        );
+        await tap(find.text('Teacher0 HTTP test').last);
         await tap(find.byKey(ValueKey('lesson-client-charge-type-$id')));
         await tap(find.text('С личного счёта').last);
         final price = find.byKey(ValueKey('lesson-client-price-$id'));
@@ -430,11 +433,10 @@ void main() {
       expect(
         availability.violations.map((violation) => violation.code),
         isEmpty,
-        reason: 'Release fixture teacher must be available for the completed lesson',
+        reason:
+            'Release fixture teacher must be available for the completed lesson',
       );
-      final completedLesson = await createLesson(
-        completedAt,
-      );
+      final completedLesson = await createLesson(completedAt);
       await evidence('lesson-booked');
       // Completion follows the product rule: the durable worker settles due lessons.
       for (var attempt = 0; attempt < 100; attempt++) {

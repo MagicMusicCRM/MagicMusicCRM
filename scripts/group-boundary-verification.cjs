@@ -30,7 +30,7 @@ async function runGroupBoundaryAudit({ pool, fixture, baseUrl, output, check }) 
   // Assignment belongs only to this disposable fixture and enables valid foreign references.
   await pool.query("insert into app.teacher_branches(teacher_id,branch_id,active_from,active_until) values ($1,$2,'2020-01-01','2100-12-31')", [fixture.teachers[0], foreignBranch.id]);
   const foreign = ok(await call('director', 'POST', '/crm/groups', { name: 'GROUP-BOUNDARY-FOREIGN', teacherId: fixture.teachers[0], branchId: foreignBranch.id, roomId: foreignRoom.id, pricePerLesson: 1000 }));
-  const own = ok(await call('director', 'POST', '/crm/groups', { name: 'GROUP-BOUNDARY-OWN', teacherId: fixture.teachers[0], branchId: fixture.branch, roomId: fixture.rooms[0], pricePerLesson: 1000 }));
+  const own = ok(await call('director', 'POST', '/crm/groups', { name: 'GROUP-BOUNDARY-OWN', teacherId: fixture.teachers[0], branchId: fixture.branch, roomId: fixture.rooms[0], settlementTypeKey: 'lesson', teacherCompensationRuleKey: 'standard' }));
   for (const [id, method, endpoint, body] of [
     ['FOREIGN-GET', 'GET', `/crm/groups/${foreign.id}`], ['FOREIGN-MEMBERS', 'GET', `/crm/groups/${foreign.id}/students`],
     ['FOREIGN-ADD', 'POST', `/crm/groups/${foreign.id}/students`, { studentId: fixture.students[0] }],

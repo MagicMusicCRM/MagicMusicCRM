@@ -1304,9 +1304,12 @@ async function main() {
       await pool.query("insert into app.teacher_rates(teacher_id,rate,effective_from) values($1,800,'2020-01-01')", [teacher]);
     }
     const students=[];
+    const secondBranch=await request('POST','/crm/branches',{name:'GROUP-SECOND-BRANCH',weeklyHours:Array.from({length:7},(_,i)=>({weekday:i+1,open:'08:00',close:'22:00'}))},201);
+    await request('POST','/crm/rooms',{name:'GROUP-SECOND-ROOM',branchId:secondBranch.id,capacity:8},201);
+    await pool.query("insert into app.teacher_branches(teacher_id,branch_id,active_from,active_until) values($1,$2,'2020-01-01','2100-12-31')",[fixture.teachers[1],secondBranch.id]);
     const pkg=await request('POST','/crm/subscription-packages',{name:'GROUP-PLAN-PACKAGE',branchId:fixture.branch,unitCount:20,basePriceMinor:'2000000',currencyCode:'RUB',validityDays:365},201);
-    const group=await request('POST','/crm/groups',{name:'AUDIT-GROUP-PLAN',teacherId:fixture.teachers[1],branchId:fixture.branch,roomId:fixture.rooms[1],settlementTypeKey:'lesson',teacherCompensationRuleKey:'standard'},201);
-    assert.equal(group.settlementTypeKey,'lesson');assert.equal(group.teacherCompensationRuleKey,'standard');
+    const group=await request('POST','/crm/groups',{name:'AUDIT-GROUP-PLAN',teacherId:fixture.teachers[1],branchId:fixture.branch,roomId:fixture.rooms[1],pricePerLesson:1000},201);
+    assert.equal(group.settlementTypeKey,null);assert.equal(group.teacherCompensationRuleKey,null);
     for(let i=0;i<2;i++){
       const u=(await pool.query("insert into app.users(email,role,is_app_account) values($1,'client',false) returning id",['audit-group-plan-'+i+'@example.test'])).rows[0];
       const p=(await pool.query("insert into app.profiles(user_id,first_name,last_name) values($1,$2,'HTTP test') returning id",[u.id,'AUDIT-GROUP-STUDENT-'+i])).rows[0];
@@ -1317,7 +1320,7 @@ async function main() {
       await request('POST','/crm/groups/'+group.id+'/students',{studentId:st.id},201);
     }
     await check('Actual group plan creation and dated participants replacement',()=>runDeviceTest('group_plan_live_test.dart','group-plan-windows.log',{
-      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,students,groupId:group.id,branchId:fixture.branch,teacherId:fixture.teachers[1],roomId:fixture.rooms[1],performanceTeachers,performancePhase:process.env.GROUP_PERF_PHASE||'unspecified'})
+      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,students,groupId:group.id,branchId:fixture.branch,secondBranchId:secondBranch.id,teacherId:fixture.teachers[1],roomId:fixture.rooms[1],performanceTeachers,performancePhase:process.env.GROUP_PERF_PHASE||'unspecified'})
     }));
     await check('Group defaults update replays safely and leaves existing lesson decisions unchanged', async()=>{
       const before=(await pool.query('select lesson_id,decision from app.lesson_settlement_plans order by lesson_id')).rows;

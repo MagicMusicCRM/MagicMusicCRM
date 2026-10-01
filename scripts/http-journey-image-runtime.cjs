@@ -12,6 +12,9 @@ function imageEnvironment(env) {
   database.hostname = 'host.docker.internal';
   const mapped = Object.fromEntries(Object.entries(env).filter(([key]) =>
     !['SystemRoot', 'WINDIR', 'PATH', 'Path', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'TS_NODE_PROJECT'].includes(key)));
+  if (['127.0.0.1', 'localhost', '::1'].includes(mapped.SMTP_FALLBACK_HOST)) {
+    mapped.SMTP_FALLBACK_HOST = 'host.docker.internal';
+  }
   return { ...mapped, DATABASE_URL: database.toString(), PORT: '3000', FILE_STORAGE_ROOT: '/opt/magicmusiccrm/storage/private' };
 }
 

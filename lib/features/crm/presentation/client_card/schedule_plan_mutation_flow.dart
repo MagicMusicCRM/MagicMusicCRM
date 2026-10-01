@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/create_group_dialog.dart';
 
 import 'group_schedule_participants_editor.dart';
 import 'preferred_schedule_editor.dart';
@@ -14,6 +15,7 @@ import 'schedule_plan_rows_review.dart';
 enum SchedulePlanMutationResult { committed, cancelled }
 
 typedef _SchedulePlanReferences = ({
+  List<Map<String, dynamic>> branches,
   List<Map<String, dynamic>> teachers,
   List<Map<String, dynamic>> rooms,
   Map<String, LessonDecisionCatalog> decisionCatalogs,
@@ -52,10 +54,12 @@ class SchedulePlanMutationFlow {
   };
 
   Future<SchedulePlanMutationResult> create(BuildContext context) async {
-    final group = _groupMode ? await service.getGroup(groupId!) : null;
+    final group = _groupMode
+        ? await ensureGroupLessonDefaults(context, service, groupId!)
+        : null;
     if (!context.mounted) return SchedulePlanMutationResult.cancelled;
-    if (group != null && group['settlement_type_key'] == null) {
-      throw StateError('Сначала выберите типы расчёта в настройках группы.');
+    if (_groupMode && group == null) {
+      return SchedulePlanMutationResult.cancelled;
     }
     GroupScheduleParticipantsDraft? participantDraft;
     if (_groupMode) {
@@ -70,7 +74,16 @@ class SchedulePlanMutationFlow {
         return SchedulePlanMutationResult.cancelled;
       }
     }
-    final references = await _references();
+    final references = await _references(
+      branchOptions: group == null
+          ? null
+          : [
+              {
+                'id': group['branch_id'],
+                'name': (group['branches'] as Map?)?['name'] ?? 'Филиал',
+              },
+            ],
+    );
     if (!context.mounted) return SchedulePlanMutationResult.cancelled;
     final draft = await showMagicSheet<PreferredScheduleDraft>(
       context,
@@ -114,7 +127,7 @@ class SchedulePlanMutationFlow {
             : subscriptions.first['id']?.toString(),
         requireSubscription: !_groupMode,
         allowOpenEnded: true,
-        branches: branches,
+        branches: references.branches,
         teachers: references.teachers,
         rooms: references.rooms,
         defaultBranchId: defaultBranchId,
@@ -222,7 +235,7 @@ class SchedulePlanMutationFlow {
         initialSubscriptionId: plan.subscriptionId,
         requireSubscription: !plan.isGroup,
         allowOpenEnded: true,
-        branches: branches,
+        branches: references.branches,
         teachers: references.teachers,
         rooms: references.rooms,
         defaultBranchId: defaultBranchId,
@@ -438,7 +451,7 @@ class SchedulePlanMutationFlow {
     icon: Icons.edit_calendar_outlined,
     builder: (_) => PreferredScheduleEditor(
       financialDefaultsFromGroup: _groupMode,
-      branches: branches,
+      branches: references.branches,
       teachers: references.teachers,
       rooms: references.rooms,
       defaultBranchId: defaultBranchId,
@@ -571,7 +584,7 @@ class SchedulePlanMutationFlow {
       (item) => item?['id']?.toString() == row.roomId,
       orElse: () => null,
     );
-    final branch = branches.cast<Map<String, dynamic>?>().firstWhere(
+    final branch = references.branches.cast<Map<String, dynamic>?>().firstWhere(
       (item) => item?['id']?.toString() == row.branchId,
       orElse: () => null,
     );
@@ -583,11 +596,14 @@ class SchedulePlanMutationFlow {
         '${row.lessonsPerDay > 1 ? ' × ${row.lessonsPerDay}' : ''}';
   }
 
-  Future<_SchedulePlanReferences> _references() async {
+  Future<_SchedulePlanReferences> _references({
+    List<Map<String, dynamic>>? branchOptions,
+  }) async {
+    final referenceBranches = branchOptions ?? branches;
     final teachersFuture = service.listTeachers(limit: 100);
     final roomsFuture = service.listRooms(limit: 100);
     final catalogsFuture = Future.wait<Map<String, dynamic>>([
-      for (final branch in branches)
+      for (final branch in referenceBranches)
         api.get<Map<String, dynamic>>(
           '/crm/configuration/lesson-decisions',
           queryParameters: {'branchId': branch['id']?.toString()},
@@ -597,12 +613,14 @@ class SchedulePlanMutationFlow {
     final rooms = await roomsFuture;
     final rawCatalogs = await catalogsFuture;
     return (
+      branches: referenceBranches,
       teachers: List<Map<String, dynamic>>.from(teachers),
       rooms: List<Map<String, dynamic>>.from(rooms),
       decisionCatalogs: {
-        for (var index = 0; index < branches.length; index++)
-          if (branches[index]['id']?.toString().isNotEmpty == true)
-            branches[index]['id'].toString(): LessonDecisionCatalog.fromJson(
+        for (var index = 0; index < referenceBranches.length; index++)
+          if (referenceBranches[index]['id']?.toString().isNotEmpty == true)
+            referenceBranches[index]['id']
+                .toString(): LessonDecisionCatalog.fromJson(
               rawCatalogs[index],
               LessonDecisionOperation.settle,
             ),

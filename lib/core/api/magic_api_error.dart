@@ -125,7 +125,10 @@ String userErrorText(
 
 String _userMessage(String raw, {int? statusCode, required String fallback}) {
   final normalized = raw
-      .replaceFirst(RegExp(r'^(Exception|FormatException|StateError):\s*'), '')
+      .replaceFirst(
+        RegExp(r'^(Exception|FormatException|StateError|Bad state):\s*'),
+        '',
+      )
       .replaceAll(RegExp(r'\s*[—–]\s*'), ': ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
