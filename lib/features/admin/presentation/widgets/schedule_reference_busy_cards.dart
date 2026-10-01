@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/widgets/magic_picker.dart';
+import 'schedule_reference_dialogs.dart';
 
 import 'schedule_reference_controller.dart';
 import 'schedule_reference_interval_busy_dialog.dart';
@@ -22,7 +24,7 @@ class TeacherWeeklyBusySection extends StatelessWidget {
     final rules =
         controller.state.teacherDraft?.unavailableRecurring ??
         const <Map<String, dynamic>>[];
-    final canEdit = controller.canEdit && !controller.availabilityLocked;
+    final canEdit = controller.canEdit;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -135,7 +137,7 @@ class TeacherDateBusySection extends StatelessWidget {
     final extraAvailability =
         controller.state.teacherDraft?.availableIntervals ??
         const <Map<String, dynamic>>[];
-    final canEdit = controller.canEdit && !controller.availabilityLocked;
+    final canEdit = controller.canEdit;
     final timezone = controller.state.branchDraft?.timezone ?? 'Europe/Moscow';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -144,7 +146,7 @@ class TeacherDateBusySection extends StatelessWidget {
           children: [
             const Expanded(
               child: Text(
-                'Недоступность по датам',
+                'Отсутствия по датам',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
@@ -157,6 +159,7 @@ class TeacherDateBusySection extends StatelessWidget {
               ),
           ],
         ),
+        if (rules.isEmpty) const Text('Отсутствия не добавлены'),
         for (final rule in rules)
           _DateBusyRow(
             rule: rule,
@@ -279,4 +282,115 @@ String _intervalLabel(Map<String, dynamic> rule, String timezone) {
 String _reason(Map<String, dynamic> rule) {
   final reason = rule['reason']?.toString().trim() ?? '';
   return reason.isEmpty ? '' : ' · $reason';
+}
+
+class TeacherRecurringRuleRow extends StatelessWidget {
+  const TeacherRecurringRuleRow({
+    super.key,
+    required this.rule,
+    required this.controller,
+    required this.editable,
+  });
+
+  final Map<String, dynamic> rule;
+  final ScheduleReferenceController controller;
+  final bool editable;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = rule['localStart']?.toString() ?? '09:00';
+    final end = rule['localEnd']?.toString() ?? '21:00';
+    final validFrom = DateTime.tryParse(rule['validFrom']?.toString() ?? '');
+    final validUntil = DateTime.tryParse(rule['validUntil']?.toString() ?? '');
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          TextButton.icon(
+            onPressed: editable
+                ? () => _pickTime(context, 'localStart', start)
+                : null,
+            icon: const Icon(Icons.schedule_rounded, size: 16),
+            label: Text(start),
+          ),
+          const Text('—'),
+          TextButton(
+            onPressed: editable
+                ? () => _pickTime(context, 'localEnd', end)
+                : null,
+            child: Text(end),
+          ),
+          TextButton.icon(
+            onPressed: editable
+                ? () => _pickDate(context, 'validFrom', validFrom)
+                : null,
+            icon: const Icon(Icons.event_available_outlined, size: 16),
+            label: Text(
+              'с ${validFrom == null ? 'сегодня' : DateFormat('dd.MM.yyyy').format(validFrom)}',
+            ),
+          ),
+          TextButton.icon(
+            onPressed: editable
+                ? () => _pickDate(context, 'validUntil', validUntil)
+                : null,
+            icon: const Icon(Icons.event_busy_outlined, size: 16),
+            label: Text(
+              validUntil == null
+                  ? 'без срока'
+                  : 'до ${DateFormat('dd.MM.yyyy').format(validUntil)}',
+            ),
+          ),
+          if (validUntil != null)
+            IconButton(
+              tooltip: 'Убрать дату окончания',
+              onPressed: editable
+                  ? () =>
+                        controller.updateRecurringRule(rule, 'validUntil', null)
+                  : null,
+              icon: const Icon(Icons.event_busy_rounded, size: 18),
+            ),
+          IconButton(
+            tooltip: 'Удалить рабочий интервал',
+            onPressed: editable
+                ? () => controller.removeRecurringRule(rule)
+                : null,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickTime(
+    BuildContext context,
+    String field,
+    String current,
+  ) async {
+    final next = await pickScheduleTime(context, current);
+    if (next != null) controller.updateRecurringRule(rule, field, next);
+  }
+
+  Future<void> _pickDate(
+    BuildContext context,
+    String field,
+    DateTime? current,
+  ) async {
+    final now = DateUtils.dateOnly(DateTime.now());
+    final next = await showMagicDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (next != null) {
+      controller.updateRecurringRule(
+        rule,
+        field,
+        DateFormat('yyyy-MM-dd').format(next),
+      );
+    }
+  }
 }

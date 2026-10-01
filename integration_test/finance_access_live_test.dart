@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/security/access_management.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/access_invalidation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
+import 'package:magic_music_crm/core/widgets/client_selection_details.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 import 'live_audit_harness.dart';
 
@@ -198,6 +199,28 @@ void main() {
           expectedHttpErrors: [
             (method: 'GET', path: '/api$endpoint', status: 403, maxCount: 1),
           ],
+        );
+        await h.check(
+          'PICKER-DENIED',
+          'Выбор клиента не читает абонемент без разрешения',
+          () async {
+            await unmount();
+            final n = h.requests.length;
+            await h.mount(
+              Scaffold(
+                body: ClientSelectionDetails(type: 'student', id: student),
+              ),
+            );
+            await h.quiet();
+            expect(
+              find.textContaining('Абонемент: нет доступа'),
+              findsOneWidget,
+            );
+            expect(
+              h.requests.skip(n).where((r) => r['path'] == '/api$endpoint'),
+              isEmpty,
+            );
+          },
         );
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();

@@ -19,6 +19,7 @@ class PreferredScheduleEditor extends StatefulWidget {
     required this.defaultBranchId,
     this.series,
     this.planMode = false,
+    this.financialDefaultsFromGroup = false,
     this.initialTitle,
     this.initialDraft,
     this.subscriptionOptions = const [],
@@ -32,6 +33,7 @@ class PreferredScheduleEditor extends StatefulWidget {
     this.initialClientDecisions = const [],
     this.participantLabels = const {},
     this.teacherAvailable,
+    this.availableTeachers,
     super.key,
   });
 
@@ -41,6 +43,7 @@ class PreferredScheduleEditor extends StatefulWidget {
   final String? defaultBranchId;
   final Map<String, dynamic>? series;
   final bool planMode;
+  final bool financialDefaultsFromGroup;
   final String? initialTitle;
   final PreferredScheduleDraft? initialDraft;
   final List<Map<String, dynamic>> subscriptionOptions;
@@ -54,6 +57,11 @@ class PreferredScheduleEditor extends StatefulWidget {
   final List<Map<String, dynamic>> initialClientDecisions;
   final Map<String, String> participantLabels;
   final Future<bool> Function(PreferredScheduleDraft draft)? teacherAvailable;
+  final Future<Set<String>> Function(
+    PreferredScheduleDraft draft,
+    List<String> candidates,
+  )?
+  availableTeachers;
 
   @override
   State<PreferredScheduleEditor> createState() =>
@@ -89,6 +97,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       series: widget.series,
       planMode: widget.planMode,
       initialDraft: widget.initialDraft,
+      financialDefaultsFromGroup: widget.financialDefaultsFromGroup,
       subscriptionOptions: widget.subscriptionOptions,
       initialSubscriptionId: widget.initialSubscriptionId,
       requireSubscription: widget.requireSubscription,
@@ -130,14 +139,15 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     change();
     _exitController.markDirty();
     _teacherOptionsTimer?.cancel();
-    _teacherOptionsTimer = Timer(const Duration(milliseconds: 500), () {
+    _teacherOptionsTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted) unawaited(_refreshTeacherOptions());
     });
   }
 
   Future<void> _refreshTeacherOptions({bool force = false}) async {
     final check = widget.teacherAvailable;
-    if (check == null) return;
+    final batchCheck = widget.availableTeachers;
+    if (check == null && batchCheck == null) return;
     final draft = _draft;
     final candidates = _controller.teachersForBranch;
     final roomId = draft.roomId.isNotEmpty
@@ -153,7 +163,8 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     if (roomId.isEmpty ||
         draft.weekdays.isEmpty ||
         rangeMissesDay ||
-        (draft.teacherCompensationSource == 'manual' &&
+        (!widget.financialDefaultsFromGroup &&
+            draft.teacherCompensationSource == 'manual' &&
             draft.plannedSettlementReason.isEmpty)) {
       ++_teacherOptionsGeneration;
       setState(() {
@@ -199,21 +210,37 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       await previous;
       if (!mounted || generation != _teacherOptionsGeneration) return;
       final available = <String>{};
-      // ponytail: four concurrent plan previews cap DB work; batch if branches regularly exceed 100 teachers.
-      for (var index = 0; index < candidates.length; index += 4) {
-        final chunk = candidates.skip(index).take(4).toList();
-        final results = await Future.wait([
-          for (final teacher in chunk)
-            check(
-              draft.copyWith(
-                teacherId: teacher['id'].toString(),
-                roomId: roomId,
-              ),
+      if (batchCheck != null && candidates.isNotEmpty) {
+        for (var index = 0; index < candidates.length; index += 100) {
+          available.addAll(
+            await batchCheck(
+              draft.copyWith(roomId: roomId),
+              candidates
+                  .skip(index)
+                  .take(100)
+                  .map((teacher) => teacher['id'].toString())
+                  .toList(),
             ),
-        ]);
-        if (!mounted || generation != _teacherOptionsGeneration) return;
-        for (var i = 0; i < chunk.length; i++) {
-          if (results[i]) available.add(chunk[i]['id'].toString());
+          );
+          if (!mounted || generation != _teacherOptionsGeneration) return;
+        }
+      } else if (check != null) {
+        // Existing update previews include the plan's saved rows and exclusions.
+        for (var index = 0; index < candidates.length; index += 4) {
+          final chunk = candidates.skip(index).take(4).toList();
+          final results = await Future.wait([
+            for (final teacher in chunk)
+              check(
+                draft.copyWith(
+                  teacherId: teacher['id'].toString(),
+                  roomId: roomId,
+                ),
+              ),
+          ]);
+          if (!mounted || generation != _teacherOptionsGeneration) return;
+          for (var i = 0; i < chunk.length; i++) {
+            if (results[i]) available.add(chunk[i]['id'].toString());
+          }
         }
       }
       if (!mounted || generation != _teacherOptionsGeneration) return;
@@ -294,12 +321,16 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       state: _controller.state,
       branches: widget.branches,
       subscriptionOptions: widget.subscriptionOptions,
-      teachers: widget.teacherAvailable == null
+      teachers:
+          widget.teacherAvailable == null && widget.availableTeachers == null
           ? _controller.teachersForBranch
           : _controller.teachersForBranch
                 .where(
                   (teacher) =>
-                      _availableTeacherIds.contains(teacher['id']?.toString()),
+                      _availableTeacherIds.contains(
+                        teacher['id']?.toString(),
+                      ) ||
+                      teacher['id']?.toString() == _controller.state.teacherId,
                 )
                 .toList(),
       selectedTeacherLabel: _controller.teachersForBranch
@@ -314,6 +345,13 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
           )
           .firstOrNull,
       teacherOptionsLoading: _teacherOptionsLoading,
+      selectedTeacherUnavailable:
+          (widget.teacherAvailable != null ||
+              widget.availableTeachers != null) &&
+          !_teacherOptionsLoading &&
+          _teacherOptionsError == null &&
+          _controller.state.teacherId != null &&
+          !_availableTeacherIds.contains(_controller.state.teacherId),
       teacherOptionsError: _teacherOptionsError,
       onTeacherOptionsRetry: () =>
           unawaited(_refreshTeacherOptions(force: true)),
@@ -325,6 +363,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       planMode: widget.planMode,
       requireFinancialDecision: widget.requireFinancialDecision,
       canManageTeacherCompensation: widget.canManageTeacherCompensation,
+      financialDefaultsFromGroup: widget.financialDefaultsFromGroup,
       participantLabels: widget.participantLabels,
       requireSubscription: widget.requireSubscription,
       allowOpenEnded: widget.allowOpenEnded,

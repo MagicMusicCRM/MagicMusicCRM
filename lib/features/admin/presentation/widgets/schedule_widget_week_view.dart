@@ -143,6 +143,13 @@ extension _ScheduleWeekView on _ScheduleWidgetState {
         teacherId: teacherMode ? selectedTeacherId : null,
       ),
       onOpenLesson: _showLessonDetails,
+      onProposeMove: teacherMode && widget.canWrite
+          ? (entry, _, start) => _proposeDayMove(
+              entry,
+              entry.lesson['room_id']?.toString(),
+              start,
+            )
+          : null,
       initialVerticalOffset: _dayScrollOffset,
       onVerticalOffsetChanged: _updateDayScrollOffset,
     );

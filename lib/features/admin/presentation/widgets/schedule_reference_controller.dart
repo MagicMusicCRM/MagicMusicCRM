@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -13,6 +15,7 @@ class ScheduleReferenceController extends ChangeNotifier {
     String? initialBranchId,
     String? initialTeacherId,
     this.lockedTeacherId,
+    this.lockedBranchId,
     DateTime Function()? clock,
   }) : _crm = crm,
        _branchId = initialBranchId,
@@ -24,6 +27,7 @@ class ScheduleReferenceController extends ChangeNotifier {
   final ScheduleReferenceSection section;
   final bool canEdit;
   final String? lockedTeacherId;
+  final String? lockedBranchId;
 
   List<Map<String, dynamic>> _branches = const [];
   List<Map<String, dynamic>> _teachers = const [];
@@ -31,6 +35,8 @@ class ScheduleReferenceController extends ChangeNotifier {
   String? _teacherId;
   BranchHoursDraft? _branchDraft;
   TeacherScheduleDraft? _teacherDraft;
+  String? _savedAvailability;
+  String? _savedBranchHours;
   bool _loading = true;
   bool _saving = false;
   Object? _error;
@@ -50,7 +56,18 @@ class ScheduleReferenceController extends ChangeNotifier {
     error: _error,
   );
   // Multiple recurring windows are a supported first-class draft shape.
-  bool get availabilityLocked => false;
+  bool get hasAvailabilityChanges =>
+      _teacherDraft != null &&
+      _savedAvailability !=
+          jsonEncode(teacherAvailabilityPayload(_teacherDraft!));
+  String? get _branchHoursPayload => _branchDraft == null
+      ? null
+      : jsonEncode([
+          branchWeeklyPayload(_branchDraft!),
+          branchExceptionsPayload(_branchDraft!),
+        ]);
+  bool get hasBranchHoursChanges =>
+      _branchDraft != null && _savedBranchHours != _branchHoursPayload;
 
   bool get canLoadReference => switch (section) {
     ScheduleReferenceSection.branchHours => _branchId != null,
@@ -71,7 +88,9 @@ class ScheduleReferenceController extends ChangeNotifier {
       if (!_catalogIsCurrent(generation)) return;
       _branches = result.first;
       _teachers = result.length > 1 ? result[1] : const [];
-      _branchId = validScheduleReferenceSelection(_branchId, _branches);
+      _branchId =
+          lockedBranchId ??
+          validScheduleReferenceSelection(_branchId, _branches);
       _teacherId =
           lockedTeacherId ??
           validScheduleReferenceSelection(_teacherId, _teachers);
@@ -86,7 +105,8 @@ class ScheduleReferenceController extends ChangeNotifier {
   }
 
   Future<void> selectBranch(String branchId) async {
-    if (branchId == _branchId ||
+    if (lockedBranchId != null ||
+        branchId == _branchId ||
         !containsScheduleReferenceId(_branches, branchId)) {
       return;
     }
@@ -132,6 +152,7 @@ class ScheduleReferenceController extends ChangeNotifier {
   void _applyReference(Map<String, dynamic> data) {
     if (section == ScheduleReferenceSection.branchHours) {
       _branchDraft = BranchHoursDraft.fromJson(data);
+      _savedBranchHours = _branchHoursPayload;
       return;
     }
     _branchDraft = BranchHoursDraft.fromJson(
@@ -140,35 +161,7 @@ class ScheduleReferenceController extends ChangeNotifier {
     _teacherDraft = TeacherScheduleDraft.fromJson(
       data['teacher'] as Map<String, dynamic>? ?? const {},
     );
-  }
-
-  void setBranchDayEnabled(int weekday, bool enabled) {
-    final draft = _branchDraft;
-    if (!_canEditDraft || draft == null) return;
-    _branchDraft = withBranchDayEnabled(draft, weekday, enabled: enabled);
-    _notify();
-  }
-
-  void setBranchTime(int weekday, String field, String value) {
-    final draft = _branchDraft;
-    if (!_canEditDraft || draft?.weekly[weekday] == null) return;
-    _branchDraft = withBranchTime(draft!, weekday, field, value);
-    _notify();
-  }
-
-  void replaceBranchException(Map<String, dynamic> exception) {
-    final draft = _branchDraft;
-    final date = exception['date']?.toString();
-    if (!_canEditDraft || draft == null || date == null) return;
-    _branchDraft = withBranchException(draft, exception);
-    _notify();
-  }
-
-  void removeBranchException(String date) {
-    final draft = _branchDraft;
-    if (!_canEditDraft || draft == null) return;
-    _branchDraft = withoutBranchException(draft, date);
-    _notify();
+    _savedAvailability = jsonEncode(teacherAvailabilityPayload(_teacherDraft!));
   }
 
   Future<void> saveBranchHours() async {
@@ -208,6 +201,11 @@ class ScheduleReferenceController extends ChangeNotifier {
         expectedVersion: target.draft.version,
         rules: teacherAvailabilityPayload(target.draft),
       );
+      if (_teacherId == target.teacherId) {
+        _savedAvailability = jsonEncode(
+          teacherAvailabilityPayload(target.draft),
+        );
+      }
       _applyReturnedTeacherVersion(target, result);
     });
   }
@@ -237,6 +235,7 @@ class ScheduleReferenceController extends ChangeNotifier {
     _branchDraft = target.draft.copyWith(
       version: returnedScheduleVersion(result, target.draft.version),
     );
+    _savedBranchHours = _branchHoursPayload;
   }
 
   void _applyReturnedTeacherVersion(
@@ -264,7 +263,6 @@ class ScheduleReferenceController extends ChangeNotifier {
   }
 
   bool get _canEditDraft => canEdit && !_saving;
-  bool get _canEditAvailability => _canEditDraft;
 
   void _startLoading() {
     _loading = true;
@@ -317,7 +315,7 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
 
   void addRecurringRule(int weekday) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withRecurringRuleAdded(
       draft,
       weekday,
@@ -333,14 +331,14 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
     Object? value,
   ) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withRecurringRuleUpdated(draft, rule, field, value);
     _notify();
   }
 
   void removeRecurringRule(Map<String, dynamic> rule) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withoutRecurringRule(draft, rule);
     _notify();
   }
@@ -354,7 +352,7 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
 
   void setRecurringEnabled(int weekday, bool enabled) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withRecurringDay(
       draft,
       weekday,
@@ -367,14 +365,14 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
 
   void setRecurringTime(int weekday, String field, String value) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft?.recurring[weekday] == null) return;
+    if (!_canEditDraft || draft?.recurring[weekday] == null) return;
     _teacherDraft = withRecurringTime(draft!, weekday, field, value);
     _notify();
   }
 
   void addUnavailableInterval(Map<String, dynamic> interval) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withUnavailableInterval(draft, interval);
     _notify();
   }
@@ -384,7 +382,7 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
     Map<String, dynamic> newInterval,
   ) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withUnavailableInterval(
       draft,
       newInterval,
@@ -395,14 +393,14 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
 
   void addUnavailableRecurringRule(Map<String, dynamic> rule) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withUnavailableRecurringRule(draft, rule);
     _notify();
   }
 
   void removeUnavailableRecurringRule(Map<String, dynamic> rule) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withoutUnavailableRecurringRule(draft, rule);
     _notify();
   }
@@ -412,7 +410,7 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
     Map<String, dynamic> newRule,
   ) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withUnavailableRecurringRule(
       draft,
       newRule,
@@ -423,8 +421,39 @@ extension ScheduleReferenceTeacherDraftCommands on ScheduleReferenceController {
 
   void removeUnavailableInterval(Map<String, dynamic> interval) {
     final draft = _teacherDraft;
-    if (!_canEditAvailability || draft == null) return;
+    if (!_canEditDraft || draft == null) return;
     _teacherDraft = withoutUnavailableInterval(draft, interval);
+    _notify();
+  }
+}
+
+extension ScheduleReferenceBranchDraftCommands on ScheduleReferenceController {
+  void setBranchDayEnabled(int weekday, bool enabled) {
+    final draft = _branchDraft;
+    if (!_canEditDraft || draft == null) return;
+    _branchDraft = withBranchDayEnabled(draft, weekday, enabled: enabled);
+    _notify();
+  }
+
+  void setBranchTime(int weekday, String field, String value) {
+    final draft = _branchDraft;
+    if (!_canEditDraft || draft?.weekly[weekday] == null) return;
+    _branchDraft = withBranchTime(draft!, weekday, field, value);
+    _notify();
+  }
+
+  void replaceBranchException(Map<String, dynamic> exception) {
+    final draft = _branchDraft;
+    final date = exception['date']?.toString();
+    if (!_canEditDraft || draft == null || date == null) return;
+    _branchDraft = withBranchException(draft, exception);
+    _notify();
+  }
+
+  void removeBranchException(String date) {
+    final draft = _branchDraft;
+    if (!_canEditDraft || draft == null) return;
+    _branchDraft = withoutBranchException(draft, date);
     _notify();
   }
 }

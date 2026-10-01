@@ -1,5 +1,5 @@
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
-import 'package:magic_music_crm/core/widgets/magic_picker.dart';
+import 'schedule_reference_cards.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +8,9 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_room_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/room_lifecycle_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/reference_catalog_lifecycle_dialog.dart';
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
+import 'schedule_reference_settings.dart';
+import 'personnel_embedded_card_frame.dart';
 
 String _utcOffsetLabel(int minutes) {
   final sign = minutes >= 0 ? '+' : '-';
@@ -26,8 +29,20 @@ String _utcOffsetLabel(int minutes) {
 
 class BranchFormDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic>? branch;
+  final bool embedded, canEdit, canManageLifecycle;
+  final VoidCallback? onSaved, onClose;
+  final GlobalKey<FormDiscardGuardState>? exitGuardKey;
 
-  const BranchFormDialog({super.key, this.branch});
+  const BranchFormDialog({
+    super.key,
+    this.branch,
+    this.embedded = false,
+    this.canEdit = true,
+    this.canManageLifecycle = true,
+    this.onSaved,
+    this.onClose,
+    this.exitGuardKey,
+  });
 
   @override
   ConsumerState<BranchFormDialog> createState() => _BranchFormDialogState();
@@ -46,6 +61,18 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
 
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
+  final _hoursKey = GlobalKey<ScheduleReferenceSettingsState>();
+  final _localExitGuardKey = GlobalKey<FormDiscardGuardState>();
+  bool get _busy => _saving || (_hoursKey.currentState?.saving ?? false);
+  bool get _dirty =>
+      widget.canEdit &&
+      (_nameController.text != (widget.branch?['name'] ?? '') ||
+          _addressController.text != (widget.branch?['address'] ?? '') ||
+          _utcOffsetMinutes !=
+              ((widget.branch?['utc_offset_minutes'] as num?)?.toInt() ??
+                  180) ||
+          _weeklyHours.isNotEmpty ||
+          (_hoursKey.currentState?.hasChanges ?? false));
   final Map<int, Map<String, dynamic>> _weeklyHours = {};
   int _utcOffsetMinutes = 180;
   bool _saving = false;
@@ -66,6 +93,8 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   @override
   void initState() {
     super.initState();
+    _nameController.addListener(_draftChanged);
+    _addressController.addListener(_draftChanged);
     if (widget.branch != null) {
       _nameController.text = widget.branch!['name'] as String? ?? '';
       _addressController.text = widget.branch!['address'] as String? ?? '';
@@ -73,6 +102,22 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
           (widget.branch!['utc_offset_minutes'] as num?)?.toInt() ?? 180;
       _loadRooms();
       _loadDisciplines();
+    }
+  }
+
+  void _draftChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _close() async {
+    final guard = (widget.exitGuardKey ?? _localExitGuardKey).currentState;
+    if (!await (guard?.confirmLeave() ?? Future.value(true)) || !mounted) {
+      return;
+    }
+    if (widget.embedded) {
+      widget.onClose?.call();
+    } else {
+      Navigator.pop(context);
     }
   }
 
@@ -226,6 +271,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   }
 
   Future<void> _save() async {
+    if (_busy || !widget.canEdit) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(
@@ -280,6 +326,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
       } else {
         final id = widget.branch!['id']?.toString();
         if (id == null || id.isEmpty) return;
+        await _hoursKey.currentState?.saveChanges();
         await crm.updateBranch(
           id,
           name: name,
@@ -287,7 +334,13 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
           utcOffsetMinutes: _utcOffsetMinutes,
         );
       }
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) {
+        if (widget.embedded) {
+          widget.onSaved?.call();
+        } else {
+          Navigator.pop(context, true);
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -303,21 +356,6 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     }
   }
 
-  Future<String?> _pickTime(String current) async {
-    final parts = current.split(':').map(int.tryParse).toList();
-    final picked = await showMagicTimePicker(
-      context: context,
-      initialTime: TimeOfDay(
-        hour: parts.firstOrNull ?? 9,
-        minute: parts.elementAtOrNull(1) ?? 0,
-      ),
-    );
-    return picked == null
-        ? null
-        : '${picked.hour.toString().padLeft(2, '0')}:'
-              '${picked.minute.toString().padLeft(2, '0')}';
-  }
-
   Widget _workingHoursEditor() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -330,55 +368,19 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
         const Text('Занятия можно создавать только внутри этого графика.'),
         const SizedBox(height: 8),
         for (final day in _dayNames.entries)
-          Row(
-            children: [
-              Semantics(
-                label:
-                    '${day.value}: ${_weeklyHours.containsKey(day.key) ? 'включено' : 'выключено'}',
-                toggled: _weeklyHours.containsKey(day.key),
-                child: ExcludeSemantics(
-                  child: Switch(
-                    value: _weeklyHours.containsKey(day.key),
-                    onChanged: (enabled) => setState(() {
-                      if (enabled) {
-                        _weeklyHours[day.key] = {
-                          'open': '09:00',
-                          'close': '21:00',
-                        };
-                      } else {
-                        _weeklyHours.remove(day.key);
-                      }
-                    }),
-                  ),
-                ),
-              ),
-              Expanded(child: Text(day.value)),
-              if (_weeklyHours[day.key] case final hours?) ...[
-                TextButton(
-                  onPressed: () async {
-                    final value = await _pickTime(
-                      hours['open']?.toString() ?? '09:00',
-                    );
-                    if (value != null && mounted) {
-                      setState(() => hours['open'] = value);
-                    }
-                  },
-                  child: Text(hours['open']?.toString() ?? '09:00'),
-                ),
-                const Text('Не указано'),
-                TextButton(
-                  onPressed: () async {
-                    final value = await _pickTime(
-                      hours['close']?.toString() ?? '21:00',
-                    );
-                    if (value != null && mounted) {
-                      setState(() => hours['close'] = value);
-                    }
-                  },
-                  child: Text(hours['close']?.toString() ?? '21:00'),
-                ),
-              ],
-            ],
+          ScheduleTimeRow(
+            label: day.value,
+            value: _weeklyHours[day.key],
+            editable: widget.canEdit && !_saving,
+            onEnabled: (enabled) => setState(() {
+              if (enabled) {
+                _weeklyHours[day.key] = {'open': '09:00', 'close': '21:00'};
+              } else {
+                _weeklyHours.remove(day.key);
+              }
+            }),
+            onTime: (field, value) =>
+                setState(() => _weeklyHours[day.key]![field] = value),
           ),
       ],
     );
@@ -387,224 +389,278 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.branch != null;
-    return AlertDialog(
-      title: Text(isEdit ? 'Редактировать филиал' : 'Новый филиал'),
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Название *'),
-                textCapitalization: TextCapitalization.words,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _addressController,
-                decoration: const InputDecoration(labelText: 'Адрес'),
-                textCapitalization: TextCapitalization.sentences,
-              ),
-              const SizedBox(height: 12),
-              AppDropdownButtonFormField<int>(
-                menuMaxHeight: 256,
-                initialValue: _utcOffsetMinutes,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Часовой пояс'),
-                items: _offsetOptions
-                    .map(
-                      (m) => DropdownMenuItem(
-                        value: m,
-                        child: Text(_utcOffsetLabel(m)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _utcOffsetMinutes = v);
-                },
-              ),
-              if (!isEdit) ...[
-                const SizedBox(height: 20),
-                _workingHoursEditor(),
-              ],
-              if (isEdit) ...[
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Дисциплины филиала',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: _loadingDisciplines ? null : _addDiscipline,
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Добавить'),
-                    ),
-                  ],
+    final body = AbsorbPointer(
+      absorbing: _saving,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!widget.canEdit) ...[
+            Text(
+              widget.branch?['lifecycle_state'] == 'archived'
+                  ? 'Филиал в архиве. Доступен только просмотр.'
+                  : 'Только просмотр. Редактирование выдаёт директор.',
+            ),
+            const SizedBox(height: 12),
+          ],
+          TextField(
+            readOnly: !widget.canEdit,
+            controller: _nameController,
+            decoration: const InputDecoration(labelText: 'Название *'),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            readOnly: !widget.canEdit,
+            controller: _addressController,
+            decoration: const InputDecoration(labelText: 'Адрес'),
+            textCapitalization: TextCapitalization.sentences,
+          ),
+          const SizedBox(height: 12),
+          AppDropdownButtonFormField<int>(
+            menuMaxHeight: 256,
+            initialValue: _utcOffsetMinutes,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Часовой пояс'),
+            items: _offsetOptions
+                .map(
+                  (m) => DropdownMenuItem(
+                    value: m,
+                    child: Text(_utcOffsetLabel(m)),
+                  ),
+                )
+                .toList(),
+            onChanged: !widget.canEdit
+                ? null
+                : (v) {
+                    if (v != null) setState(() => _utcOffsetMinutes = v);
+                  },
+          ),
+          if (!isEdit) ...[const SizedBox(height: 20), _workingHoursEditor()],
+          if (isEdit) ...[
+            const SizedBox(height: 20),
+            ScheduleReferenceSettings(
+              key: _hoursKey,
+              canEdit: widget.canEdit,
+              section: ScheduleReferenceSection.branchHours,
+              lockedBranchId: widget.branch!['id'].toString(),
+              inline: true,
+              onChanged: _draftChanged,
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Дисциплины филиала',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                if (_loadingDisciplines)
-                  const Center(child: CircularProgressIndicator())
-                else if (_disciplinesError != null)
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text('Не удалось загрузить дисциплины.'),
+                if (widget.canManageLifecycle)
+                  FilledButton.tonalIcon(
+                    onPressed: _loadingDisciplines ? null : _addDiscipline,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Добавить'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_loadingDisciplines)
+              const Center(child: CircularProgressIndicator())
+            else if (_disciplinesError != null)
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Не удалось загрузить дисциплины.'),
+                  ),
+                  TextButton(
+                    onPressed: _loadDisciplines,
+                    child: const Text('Повторить'),
+                  ),
+                ],
+              )
+            else if (_disciplines.isEmpty)
+              const Text('Дисциплин пока нет.')
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final discipline in _disciplines)
+                    InputChip(
+                      avatar: Icon(
+                        discipline['lifecycle_state'] == 'archived'
+                            ? Icons.restore_rounded
+                            : Icons.school_outlined,
+                        size: 18,
                       ),
-                      TextButton(
-                        onPressed: _loadDisciplines,
-                        child: const Text('Повторить'),
+                      label: Text(
+                        '${discipline['name']?.toString() ?? 'Дисциплина'}'
+                        '${discipline['lifecycle_state'] == 'archived' ? ' (в архиве)' : ''}',
                       ),
-                    ],
-                  )
-                else if (_disciplines.isEmpty)
-                  const Text('Дисциплин пока нет.')
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                      tooltip: discipline['lifecycle_state'] == 'archived'
+                          ? 'Восстановить привязку'
+                          : 'Проверить связи и отвязать',
+                      onPressed: widget.canManageLifecycle
+                          ? () => _openDisciplineLifecycle(discipline)
+                          : null,
+                    ),
+                ],
+              ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Аудитории филиала',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _loadingRooms
+                      ? null
+                      : () {
+                          setState(
+                            () => _showArchivedRooms = !_showArchivedRooms,
+                          );
+                          _loadRooms();
+                        },
+                  icon: Icon(
+                    _showArchivedRooms
+                        ? Icons.visibility_off_outlined
+                        : Icons.inventory_2_outlined,
+                  ),
+                  label: Text(_showArchivedRooms ? 'Скрыть архив' : 'Архив'),
+                ),
+                const SizedBox(width: 8),
+                if (widget.canEdit)
+                  FilledButton.tonalIcon(
+                    onPressed: _openRoom,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Добавить'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_loadingRooms)
+              const Center(child: CircularProgressIndicator())
+            else if (_roomsError != null)
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Не удалось загрузить аудитории.'),
+                  ),
+                  TextButton(
+                    onPressed: _loadRooms,
+                    child: const Text('Повторить'),
+                  ),
+                ],
+              )
+            else if (_rooms.isEmpty)
+              const Text('Аудиторий пока нет.')
+            else
+              for (final room in _rooms)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    room['lifecycle_state'] == 'archived'
+                        ? Icons.inventory_2_outlined
+                        : Icons.meeting_room_outlined,
+                  ),
+                  title: Text(room['name']?.toString() ?? 'Аудитория'),
+                  subtitle: Text(
+                    room['lifecycle_state'] == 'archived'
+                        ? 'В архиве${room['archive_reason'] == null ? '' : ' • ${room['archive_reason']}'}'
+                        : 'Вместимость: ${room['capacity']?.toString() ?? 'не указана'}',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      for (final discipline in _disciplines)
-                        InputChip(
-                          avatar: Icon(
-                            discipline['lifecycle_state'] == 'archived'
+                      if (widget.canEdit &&
+                          room['lifecycle_state'] != 'archived')
+                        IconButton(
+                          tooltip: 'Редактировать',
+                          onPressed: () => _openRoom(room),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                      if (widget.canManageLifecycle)
+                        IconButton(
+                          tooltip: room['lifecycle_state'] == 'archived'
+                              ? 'Восстановить'
+                              : 'Проверить связи и архивировать',
+                          onPressed: () => _openRoomLifecycle(room),
+                          icon: Icon(
+                            room['lifecycle_state'] == 'archived'
                                 ? Icons.restore_rounded
-                                : Icons.school_outlined,
-                            size: 18,
+                                : Icons.archive_outlined,
                           ),
-                          label: Text(
-                            '${discipline['name']?.toString() ?? 'Дисциплина'}'
-                            '${discipline['lifecycle_state'] == 'archived' ? ' (в архиве)' : ''}',
-                          ),
-                          tooltip: discipline['lifecycle_state'] == 'archived'
-                              ? 'Восстановить привязку'
-                              : 'Проверить связи и отвязать',
-                          onPressed: () => _openDisciplineLifecycle(discipline),
                         ),
                     ],
                   ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Аудитории филиала',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _loadingRooms
-                          ? null
-                          : () {
-                              setState(
-                                () => _showArchivedRooms = !_showArchivedRooms,
-                              );
-                              _loadRooms();
-                            },
-                      icon: Icon(
-                        _showArchivedRooms
-                            ? Icons.visibility_off_outlined
-                            : Icons.inventory_2_outlined,
-                      ),
-                      label: Text(
-                        _showArchivedRooms ? 'Скрыть архив' : 'Архив',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.tonalIcon(
-                      onPressed: _openRoom,
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Добавить'),
-                    ),
-                  ],
+                  onTap:
+                      !widget.canEdit ||
+                          (room['lifecycle_state'] == 'archived' &&
+                              !widget.canManageLifecycle)
+                      ? null
+                      : room['lifecycle_state'] == 'archived'
+                      ? () => _openRoomLifecycle(room)
+                      : () => _openRoom(room),
                 ),
-                const SizedBox(height: 8),
-                if (_loadingRooms)
-                  const Center(child: CircularProgressIndicator())
-                else if (_roomsError != null)
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text('Не удалось загрузить аудитории.'),
-                      ),
-                      TextButton(
-                        onPressed: _loadRooms,
-                        child: const Text('Повторить'),
-                      ),
-                    ],
-                  )
-                else if (_rooms.isEmpty)
-                  const Text('Аудиторий пока нет.')
-                else
-                  for (final room in _rooms)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        room['lifecycle_state'] == 'archived'
-                            ? Icons.inventory_2_outlined
-                            : Icons.meeting_room_outlined,
-                      ),
-                      title: Text(room['name']?.toString() ?? 'Аудитория'),
-                      subtitle: Text(
-                        room['lifecycle_state'] == 'archived'
-                            ? 'В архиве${room['archive_reason'] == null ? '' : ' • ${room['archive_reason']}'}'
-                            : 'Вместимость: ${room['capacity']?.toString() ?? 'не указана'}',
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (room['lifecycle_state'] != 'archived')
-                            IconButton(
-                              tooltip: 'Редактировать',
-                              onPressed: () => _openRoom(room),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                          IconButton(
-                            tooltip: room['lifecycle_state'] == 'archived'
-                                ? 'Восстановить'
-                                : 'Проверить связи и архивировать',
-                            onPressed: () => _openRoomLifecycle(room),
-                            icon: Icon(
-                              room['lifecycle_state'] == 'archived'
-                                  ? Icons.restore_rounded
-                                  : Icons.archive_outlined,
-                            ),
-                          ),
-                        ],
-                      ),
-                      onTap: room['lifecycle_state'] == 'archived'
-                          ? () => _openRoomLifecycle(room)
-                          : () => _openRoom(room),
-                    ),
-              ],
-            ],
-          ),
-        ),
+          ],
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
+    );
+    final save = FilledButton(
+      key: const Key('branch-save'),
+      onPressed: _busy || !widget.canEdit ? null : _save,
+      child: _busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : const Text('Сохранить'),
+    );
+    return FormDiscardGuard(
+      key: widget.exitGuardKey ?? _localExitGuardKey,
+      hasChanges: () => _dirty,
+      busy: () => _busy,
+      child: widget.embedded
+          ? PersonnelEmbeddedCardFrame(
+              title: isEdit ? _nameController.text : 'Новый филиал',
+              icon: Icons.apartment_outlined,
+              saving: _busy,
+              dirty: _dirty,
+              recordId: widget.branch?['id']?.toString(),
+              onClose: _close,
+              action: widget.canEdit ? save : const SizedBox.shrink(),
+              body: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: body,
                   ),
-                )
-              : const Text('Сохранить'),
-        ),
-      ],
+                ),
+              ),
+            )
+          : AlertDialog(
+              title: Text(isEdit ? 'Редактировать филиал' : 'Новый филиал'),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(child: body),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _busy ? null : _close,
+                  child: const Text('Отмена'),
+                ),
+                save,
+              ],
+            ),
     );
   }
 }

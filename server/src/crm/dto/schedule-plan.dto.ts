@@ -1,6 +1,7 @@
 import { Transform, Type } from "class-transformer";
 import {
   ArrayMinSize,
+  ArrayMaxSize,
   Equals,
   IsArray,
   IsBoolean,
@@ -122,7 +123,14 @@ export class CreateSchedulePlanDto {
   participants?: SchedulePlanParticipantDto[];
 }
 
-export class SchedulePlanConstraintPreviewDto extends CreateSchedulePlanDto {}
+export class SchedulePlanConstraintPreviewDto extends CreateSchedulePlanDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @IsUUID(undefined, { each: true })
+  candidateTeacherIds?: string[];
+}
 
 export class UpdateSchedulePlanDto {
   @Type(() => Number)

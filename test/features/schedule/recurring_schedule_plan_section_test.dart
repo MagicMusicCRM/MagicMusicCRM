@@ -1060,7 +1060,7 @@ void main() {
         find.byKey(const ValueKey('group-plan-participants-submit')),
       );
       await tester.pumpAndSettle();
-      await _chooseReferences(tester);
+      await _chooseReferences(tester, inherited: true);
       await tester.ensureVisible(
         find.byKey(const ValueKey('preferred-schedule-save')),
       );
@@ -1234,7 +1234,7 @@ void main() {
         find.byKey(const ValueKey('group-plan-participants-submit')),
       );
       await tester.pumpAndSettle();
-      await _chooseReferences(tester);
+      await _chooseReferences(tester, inherited: true);
       await tester.ensureVisible(
         find.byKey(const ValueKey('preferred-schedule-save')),
       );
@@ -1569,7 +1569,21 @@ Future<void> _expandPlan(WidgetTester tester, String id) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _chooseReferences(WidgetTester tester) async {
+Future<void> _chooseReferences(
+  WidgetTester tester, {
+  bool inherited = false,
+}) async {
+  if (inherited) {
+    expect(
+      find.byKey(const ValueKey("schedule-plan-settlement-type")),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey("schedule-plan-compensation-rule")),
+      findsNothing,
+    );
+    return;
+  }
   await _chooseSearchable(
     tester,
     const ValueKey('preferred-schedule-teacher'),

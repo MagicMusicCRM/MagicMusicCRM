@@ -580,14 +580,14 @@ export class ScheduleSeriesMaterializerService {
         )
         select lesson.id, plan.group_id, 'standard.success', 'none', 0,
           case when rate.value <= 0 then 'none'
-            when lesson_group.teacher_rate is not null then 'fixed' else 'hourly' end,
+            when lesson_group.settlement_type_key is null and lesson_group.teacher_rate is not null then 'fixed' else 'hourly' end,
           rate.value, false, lesson.duration_minutes
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
         join app.schedule_plans plan on plan.id = series.plan_id
         join app.groups lesson_group on lesson_group.id = plan.group_id
         cross join lateral (
-          select coalesce(lesson_group.teacher_rate, (
+          select coalesce(case when lesson_group.settlement_type_key is null then lesson_group.teacher_rate end, (
             select teacher_rate.rate
             from app.teacher_rates teacher_rate
             where teacher_rate.teacher_id = series.teacher_id

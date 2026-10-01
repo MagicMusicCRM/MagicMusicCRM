@@ -31,7 +31,6 @@ import 'schedule_legends.dart';
 import 'schedule_shared.dart';
 import 'schedule_month_view.dart';
 import 'schedule_day_mode_toggle.dart';
-import 'schedule_timezone_dialog.dart';
 import 'schedule_filters_sheet.dart';
 import 'schedule_search_dialog.dart';
 import 'schedule_teacher_timeline.dart';
@@ -570,12 +569,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           if (!firstLoad && widget.clientId != null)
             _buildClientContextBanner(),
           if (!firstLoad && _hasScheduleSearch) _buildScheduleSearchBanner(),
-          if (!desktop &&
-              !firstLoad &&
-              widget.canWrite &&
-              _currentView != ScheduleView.month) ...[
-            ScheduleDayLegend(week: _currentView == ScheduleView.week),
-          ],
           if (!desktop && !firstLoad && _currentView == ScheduleView.day) ...[
             _buildAvailabilitySummary(),
           ],

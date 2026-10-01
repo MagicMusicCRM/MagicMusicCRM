@@ -7,6 +7,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/create_room_
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 
 import 'live_audit_harness.dart';
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -36,8 +37,24 @@ void main() {
         await tester.pump();
       }
 
-      Future<void> button(Finder dialog, String label) =>
-          h.tap(find.descendant(of: dialog, matching: find.text(label)));
+      Future<void> button(Finder dialog, String label) async {
+        if (dialog == branchDialog && label == 'Сохранить') {
+          await h.tap(find.byKey(const Key('branch-save')));
+        } else if (dialog == branchDialog && label == 'Отмена') {
+          await h.tap(
+            find.descendant(
+              of: dialog,
+              matching: find.widgetWithText(OutlinedButton, 'Закрыть'),
+            ),
+          );
+          if (find.text('Не сохранять').evaluate().isNotEmpty) {
+            await h.tap(find.text('Не сохранять'));
+          }
+        } else {
+          await h.tap(find.descendant(of: dialog, matching: find.text(label)));
+        }
+      }
+
       Future<void> catalog() async {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
@@ -65,6 +82,7 @@ void main() {
         await h.tap(find.text(branchName));
         await h.quiet();
         expect(branchDialog, findsOneWidget);
+        expect(find.byType(AlertDialog), findsNothing);
       }
 
       Future<Map<String, dynamic>> readBranch() async {
@@ -193,8 +211,8 @@ void main() {
           );
           expect(
             tester
-                .widget<DropdownButtonFormField<int>>(
-                  find.byType(DropdownButtonFormField<int>),
+                .widget<AppDropdownButtonFormField<int>>(
+                  find.byType(AppDropdownButtonFormField<int>),
                 )
                 .initialValue,
             180,
@@ -208,7 +226,7 @@ void main() {
           await editBranch();
           await fill(branchDialog, 'Название *', 'BRANCH-FORM-UPDATED');
           await fill(branchDialog, 'Адрес', 'Аудит, дом 2');
-          await h.tap(find.byType(DropdownButtonFormField<int>));
+          await h.tap(find.byType(AppDropdownButtonFormField<int>));
           await h.tap(find.text('Калининград (+2 ч)').last);
           await button(branchDialog, 'Сохранить');
           await h.quiet();
@@ -239,8 +257,8 @@ void main() {
           );
           expect(
             tester
-                .widget<DropdownButtonFormField<int>>(
-                  find.byType(DropdownButtonFormField<int>),
+                .widget<AppDropdownButtonFormField<int>>(
+                  find.byType(AppDropdownButtonFormField<int>),
                 )
                 .initialValue,
             120,

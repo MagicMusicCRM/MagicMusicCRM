@@ -13,6 +13,8 @@ interface ConflictRow {
   resource_type: "teacher" | "client" | "room";
   resource_id: string;
   lesson_id: string;
+  starts_at: Date;
+  ends_at: Date;
 }
 
 export interface AlternativeRoom {
@@ -179,7 +181,9 @@ export class ConstraintEngineRepository {
             'TEACHER_OVERLAP'::text as code,
             'teacher'::text as resource_type,
             lesson.teacher_id as resource_id,
-            lesson.id as lesson_id
+            lesson.id as lesson_id,
+            lesson.scheduled_at as starts_at,
+            lesson.scheduled_at + lesson.duration_minutes * interval '1 minute' as ends_at
           from candidate
           join app.lessons lesson
             on lesson.teacher_id = candidate.teacher_id
@@ -211,7 +215,9 @@ export class ConstraintEngineRepository {
             'ROOM_OVERLAP'::text as code,
             'room'::text as resource_type,
             lesson.room_id as resource_id,
-            lesson.id as lesson_id
+            lesson.id as lesson_id,
+            lesson.scheduled_at as starts_at,
+            lesson.scheduled_at + lesson.duration_minutes * interval '1 minute' as ends_at
           from candidate
           join app.lessons lesson
             on lesson.room_id = candidate.room_id
@@ -243,7 +249,9 @@ export class ConstraintEngineRepository {
             'CLIENT_OVERLAP'::text as code,
             'client'::text as resource_type,
             candidate.client_id as resource_id,
-            lesson.id as lesson_id
+            lesson.id as lesson_id,
+            lesson.scheduled_at as starts_at,
+            lesson.scheduled_at + lesson.duration_minutes * interval '1 minute' as ends_at
           from candidate
           join app.lessons lesson
             on (
@@ -294,13 +302,13 @@ export class ConstraintEngineRepository {
              )
            )
         )
-        select code, resource_type, resource_id, lesson_id
+        select code, resource_type, resource_id, lesson_id, starts_at, ends_at
         from teacher_conflicts
         union all
-        select code, resource_type, resource_id, lesson_id
+        select code, resource_type, resource_id, lesson_id, starts_at, ends_at
         from client_conflicts
         union all
-        select code, resource_type, resource_id, lesson_id
+        select code, resource_type, resource_id, lesson_id, starts_at, ends_at
         from room_conflicts
         order by code, resource_id, lesson_id
       `,
@@ -324,6 +332,8 @@ export class ConstraintEngineRepository {
         id: row.resource_id,
       },
       lessonId: row.lesson_id,
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
     }));
   }
 }

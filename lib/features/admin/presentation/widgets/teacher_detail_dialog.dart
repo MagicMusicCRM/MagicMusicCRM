@@ -25,6 +25,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payr
 
 import 'magic_teacher_employment_reference_gateway.dart';
 import 'teacher_employment_reference_gateway.dart';
+import 'schedule_reference_settings.dart';
 
 class TeacherDetailDialog extends ConsumerStatefulWidget {
   const TeacherDetailDialog({
@@ -66,13 +67,15 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   late final TeacherPayrollVersionLoader _payrollVersion;
   late final TeacherEmploymentReferenceGateway _employmentReferenceGateway;
   final _employmentKey = GlobalKey<TeacherEmploymentFieldsState>();
+  final _availabilityKey = GlobalKey<ScheduleReferenceSettingsState>();
   bool _saving = false;
 
   bool get _hasChanges {
     final initial = TeacherDetailInitialData.fromTeacher(widget.teacher);
     return _nameController.text != initial.name ||
         _canonicalPhone != initial.phone ||
-        (_employmentKey.currentState?.hasChanges ?? false);
+        (_employmentKey.currentState?.hasChanges ?? false) ||
+        (_availabilityKey.currentState?.hasChanges ?? false);
   }
 
   void _onEdited() {
@@ -123,6 +126,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   Future<void> _executeSave(TeacherDetailSaveCommand command) async {
     setState(() => _saving = true);
     try {
+      await _availabilityKey.currentState?.saveChanges();
       final updated = await command.execute(
         ref.read(magicCrmServiceProvider),
         _teacherId,
@@ -271,25 +275,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     target: EntityOpenTarget.newTab,
   );
 
-  Future<void> _openAvailability() => openEntityLink(
-    context,
-    ref,
-    EntityLink.typed(
-      entityType: EntityLinkType.report,
-      entityId: '__section__',
-      variant: 'configuration',
-      optionalFocus: EntityLinkFocus(
-        focus: 'learning',
-        filter: {'teacherId': _teacherId},
-      ),
-      presentation: EntityPresentationReference(
-        primary: 'График преподавателя',
-        context: _nameController.text.trim(),
-      ),
-    ),
-    target: EntityOpenTarget.newTab,
-  );
-
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -332,11 +317,25 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       canManageCredentials: canManageCredentials,
       canManageTeacherRates: canManageTeacherRates,
       canOpenSchedule: canOpenSchedule,
-      canViewAvailability: canViewAvailability,
-      canEditAvailability: canEditAvailability,
       saving: _saving,
       onOpenSchedule: () => unawaited(_openSchedule()),
-      onOpenAvailability: () => unawaited(_openAvailability()),
+      availabilityEditor: canViewAvailability
+          ? AbsorbPointer(
+              absorbing: _saving,
+              child: ScheduleReferenceSettings(
+                key: _availabilityKey,
+                canEdit:
+                    canEditAvailability &&
+                    _teacher['lifecycle_state'] != 'archived',
+                section: ScheduleReferenceSection.teacherSchedule,
+                initialBranchId: _employmentInitial.branches.firstOrNull?['id']
+                    ?.toString(),
+                lockedTeacherId: _teacherId,
+                inline: true,
+                onChanged: _onEdited,
+              ),
+            )
+          : null,
       onAccessChanged: () => unawaited(_refreshAccess()),
       onProvisionAccess: _provisionAccess,
       onManageLifecycle: _manageLifecycle,
@@ -345,7 +344,10 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     );
     final saveButton = FilledButton.icon(
       key: const Key('teacher-detail-save'),
-      onPressed: _saving || _teacher['lifecycle_state'] == 'archived'
+      onPressed:
+          _saving ||
+              (_availabilityKey.currentState?.saving ?? false) ||
+              _teacher['lifecycle_state'] == 'archived'
           ? null
           : _save,
       icon: _saving
@@ -359,7 +361,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
         _saving
             ? 'Сохранение профиля…'
             : widget.embedded
-            ? 'Сохранить профиль'
+            ? 'Сохранить изменения'
             : 'Сохранить',
       ),
     );
@@ -367,7 +369,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       return FormDiscardGuard(
         key: widget.exitGuardKey,
         hasChanges: () => _hasChanges,
-        busy: () => _saving,
+        busy: () => _saving || (_availabilityKey.currentState?.saving ?? false),
         child: PersonnelEmbeddedCardFrame(
           key: const Key('teacher-detail-embedded'),
           title: _nameController.text.trim(),

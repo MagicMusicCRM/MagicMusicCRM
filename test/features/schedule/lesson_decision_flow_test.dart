@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_sections.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
+import '../../support/client_picker_test_scope.dart';
 
 const _lessonId = '10000000-0000-4000-8000-000000000001';
 const _branchId = '20000000-0000-4000-8000-000000000001';
@@ -572,21 +573,23 @@ Widget _host(
   LessonDecisionOperation operation = LessonDecisionOperation.reschedule,
   bool canManageTeacherCompensation = true,
   LessonDecisionCommitted? afterCommit,
-}) => MaterialApp(
-  theme: ThemeData(platform: TargetPlatform.windows),
-  home: Scaffold(
-    body: Builder(
-      builder: (context) => FilledButton(
-        onPressed: () => showLessonDecisionFlow(
-          context,
-          crm: MagicCrmService(api),
-          canManageTeacherCompensation: canManageTeacherCompensation,
-          operation: operation,
-          lesson: lesson,
-          successor: successor,
-          afterCommit: afterCommit,
+}) => clientPickerTestScope(
+  MaterialApp(
+    theme: ThemeData(platform: TargetPlatform.windows),
+    home: Scaffold(
+      body: Builder(
+        builder: (context) => FilledButton(
+          onPressed: () => showLessonDecisionFlow(
+            context,
+            crm: MagicCrmService(api),
+            canManageTeacherCompensation: canManageTeacherCompensation,
+            operation: operation,
+            lesson: lesson,
+            successor: successor,
+            afterCommit: afterCommit,
+          ),
+          child: const Text('Открыть'),
         ),
-        child: const Text('Открыть'),
       ),
     ),
   ),
@@ -1633,35 +1636,37 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(platform: TargetPlatform.windows),
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => FilledButton(
-                onPressed: () => showLessonDecisionFlow(
-                  context,
-                  crm: MagicCrmService(api),
-                  canManageTeacherCompensation: true,
-                  operation: LessonDecisionOperation.plannedSettlement,
-                  lesson: const {
-                    'id': _groupLessonId,
-                    'version': 4,
-                    'branchId': _branchId,
-                    'groupId': '60000000-0000-4000-8000-000000000001',
-                    'scheduledAt': '2026-08-13T09:00:00.000Z',
-                    'groupParticipants': [
-                      {
-                        'clientId': _firstGroupStudentId,
-                        'clientName': 'Анна Иванова',
-                      },
-                      {
-                        'clientId': _secondGroupStudentId,
-                        'clientName': 'Борис Петров',
-                      },
-                    ],
-                  },
+        clientPickerTestScope(
+          MaterialApp(
+            theme: ThemeData(platform: TargetPlatform.windows),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => FilledButton(
+                  onPressed: () => showLessonDecisionFlow(
+                    context,
+                    crm: MagicCrmService(api),
+                    canManageTeacherCompensation: true,
+                    operation: LessonDecisionOperation.plannedSettlement,
+                    lesson: const {
+                      'id': _groupLessonId,
+                      'version': 4,
+                      'branchId': _branchId,
+                      'groupId': '60000000-0000-4000-8000-000000000001',
+                      'scheduledAt': '2026-08-13T09:00:00.000Z',
+                      'groupParticipants': [
+                        {
+                          'clientId': _firstGroupStudentId,
+                          'clientName': 'Анна Иванова',
+                        },
+                        {
+                          'clientId': _secondGroupStudentId,
+                          'clientName': 'Борис Петров',
+                        },
+                      ],
+                    },
+                  ),
+                  child: const Text('Открыть оплату'),
                 ),
-                child: const Text('Открыть оплату'),
               ),
             ),
           ),
@@ -2602,22 +2607,24 @@ Future<void> _openStoredDecision(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
-    MaterialApp(
-      theme: ThemeData(platform: TargetPlatform.windows),
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => FilledButton(
-            onPressed: () => showLessonDecisionFlow(
-              context,
-              crm: MagicCrmService(api),
-              operation: operation,
-              lesson: lesson,
-              successor: operation == LessonDecisionOperation.reschedule
-                  ? _successor
-                  : null,
-              canManageTeacherCompensation: true,
+    clientPickerTestScope(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showLessonDecisionFlow(
+                context,
+                crm: MagicCrmService(api),
+                operation: operation,
+                lesson: lesson,
+                successor: operation == LessonDecisionOperation.reschedule
+                    ? _successor
+                    : null,
+                canManageTeacherCompensation: true,
+              ),
+              child: const Text('Открыть сохранённый расчёт'),
             ),
-            child: const Text('Открыть сохранённый расчёт'),
           ),
         ),
       ),

@@ -9,6 +9,7 @@ class SubscriptionIssueFormSections extends StatelessWidget {
   const SubscriptionIssueFormSections({
     super.key,
     required this.controller,
+    this.recipientType = 'student',
     required this.packages,
     required this.acceptedByLabel,
     required this.searchPayers,
@@ -16,6 +17,7 @@ class SubscriptionIssueFormSections extends StatelessWidget {
   });
 
   final SubscriptionIssueController controller;
+  final String recipientType;
   final List<Map<String, dynamic>> packages;
   final String acceptedByLabel;
   final Future<List<SearchableSelectItem>> Function(String query) searchPayers;
@@ -56,6 +58,7 @@ class SubscriptionIssueFormSections extends StatelessWidget {
           },
         ),
         SubscriptionIssuePaymentSection(
+          recipientType: recipientType,
           draft: draft,
           defaultPaymentMinor: controller.pricing.finalPriceMinor,
           fieldsEnabled: fieldsEnabled,

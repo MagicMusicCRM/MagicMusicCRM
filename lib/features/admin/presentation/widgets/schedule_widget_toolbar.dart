@@ -84,6 +84,7 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
                     ],
                   ),
                 ),
+                _desktopLegend(),
                 IconButton(
                   icon: const Icon(Icons.search_rounded, size: 21),
                   color: _hasScheduleSearch
@@ -125,11 +126,11 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
             ],
             if (!firstLoad) ...[
               const SizedBox(height: AppSpace.md),
-              _buildViewSwitcher(),
-              const SizedBox(height: AppSpace.sm),
               _buildDateNavigation(),
               const SizedBox(height: AppSpace.sm),
               _buildBranchSelector(),
+              const SizedBox(height: AppSpace.sm),
+              _buildViewSwitcher(),
               if (_showScheduleTabs &&
                   _dayViewMode == DayViewMode.byTeacher) ...[
                 const SizedBox(height: AppSpace.sm),
@@ -253,106 +254,50 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
         : _branches.first['id']?.toString();
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 230, maxWidth: 330),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Expanded(
-            child: AppDropdownButtonFormField<String>(
-              menuMaxHeight: 256,
-              key: ValueKey('schedule-branch-selector-${value ?? 'none'}'),
-              initialValue: value,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Филиал',
-                prefixIcon: Icon(Icons.location_on_outlined, size: 19),
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12),
+      key: const ValueKey('schedule-branch-control'),
+      constraints: const BoxConstraints(minWidth: 170, maxWidth: 330),
+      child: AppDropdownButtonFormField<String>(
+        menuMaxHeight: 256,
+        key: ValueKey('schedule-branch-selector-${value ?? 'none'}'),
+        initialValue: value,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Филиал',
+          prefixIcon: Icon(Icons.location_on_outlined, size: 19),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12),
+        ),
+        items: [
+          const DropdownMenuItem(
+            value: _allBranchesScopeValue,
+            child: Text('Все филиалы'),
+          ),
+          for (final branch in _branches)
+            DropdownMenuItem(
+              value: branch['id']?.toString(),
+              child: Text(
+                branch['name']?.toString() ?? 'Филиал',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              items: [
-                const DropdownMenuItem(
-                  value: _allBranchesScopeValue,
-                  child: Text('Все филиалы'),
-                ),
-                for (final branch in _branches)
-                  DropdownMenuItem(
-                    value: branch['id']?.toString(),
-                    child: Text(
-                      branch['name']?.toString() ?? 'Филиал',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: (id) {
-                if (id == null) return;
-                final allBranches = id == _allBranchesScopeValue;
-                if (allBranches == _allBranchesSelected &&
-                    (allBranches || id == _selectedBranchId)) {
-                  return;
-                }
-                _emitState(() {
-                  _clearHighlight();
-                  _allBranchesSelected = allBranches;
-                  _selectedBranchId = allBranches ? null : id;
-                });
-                _fetchAll();
-              },
             ),
-          ),
-          const SizedBox(width: AppSpace.xs),
-          IconButton(
-            onPressed: !widget.canWrite || _selectedBranchId == null
-                ? null
-                : _editBranchTimezone,
-            tooltip: 'Часовой пояс: ${offsetLabel(_selectedBranchOffset)}',
-            icon: const Icon(Icons.schedule_rounded, size: 19),
-          ),
         ],
+        onChanged: (id) {
+          if (id == null) return;
+          final allBranches = id == _allBranchesScopeValue;
+          if (allBranches == _allBranchesSelected &&
+              (allBranches || id == _selectedBranchId)) {
+            return;
+          }
+          _emitState(() {
+            _clearHighlight();
+            _allBranchesSelected = allBranches;
+            _selectedBranchId = allBranches ? null : id;
+          });
+          _fetchAll();
+        },
       ),
     );
-  }
-
-  Future<void> _editBranchTimezone() async {
-    if (!widget.canWrite) return;
-    final branchId = _selectedBranchId;
-    if (branchId == null) return;
-    final branch = _branches.firstWhere(
-      (b) => b['id'].toString() == branchId,
-      orElse: () => <String, dynamic>{},
-    );
-    final branchName = branch['name']?.toString() ?? 'Филиал';
-    final saved = await showBranchTimezoneDialog(
-      context,
-      branchName: branchName,
-      currentOffset: _selectedBranchOffset,
-    );
-    if (saved == null || saved == _selectedBranchOffset || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateBranch(branchId, utcOffsetMinutes: saved);
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Часовой пояс обновлён: ${offsetLabel(saved)}'),
-          backgroundColor: AppColor.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      _fetchAll();
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            userErrorMessage(e, fallback: 'Не удалось обновить часовой пояс.'),
-          ),
-          backgroundColor: AppColor.danger,
-        ),
-      );
-    }
   }
 
   // ── Day-view mode toggle (По аудиториям / По педагогу) ────────────────────
@@ -378,7 +323,7 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
       ScheduleView.day => 'день',
     };
     return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 280, maxWidth: 390),
+      constraints: BoxConstraints(minWidth: compact ? 240 : 280, maxWidth: 390),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -404,12 +349,12 @@ extension _ScheduleToolbar on _ScheduleWidgetState {
               ),
             ),
           ),
-          TextButton(onPressed: _goToToday, child: const Text('Сегодня')),
           IconButton(
             onPressed: onNext,
             tooltip: 'Следующий $unit',
             icon: const Icon(Icons.chevron_right_rounded, size: 22),
           ),
+          TextButton(onPressed: _goToToday, child: const Text('Сегодня')),
         ],
       ),
     );

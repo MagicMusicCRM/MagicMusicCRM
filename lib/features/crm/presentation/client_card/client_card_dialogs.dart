@@ -278,6 +278,7 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
                 ? row['label'].toString()
                 : 'Клиент без имени',
             subtitle: entityType == 'lead' ? 'Лид' : 'Ученик',
+            data: row,
           ),
     ];
   }

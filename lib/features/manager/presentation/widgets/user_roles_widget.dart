@@ -3,14 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/access_editor_sheet.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/notification_preferences_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
 
 part 'user_roles_actions.dart';
 part 'user_roles_widgets.dart';
@@ -37,6 +35,8 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   String _searchQuery = '';
   String _selectedRole = 'all';
   String? _linkingProfileId;
+  String? _selectedProfileId;
+  bool _selectedAccess = false;
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   Timer? _realtimeDebounce;
@@ -61,15 +61,6 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
     'system_admin': 'Администратор системы',
   };
 
-  static const _roleColors = {
-    'client': Color(0xFF10B981),
-    'teacher': Color(0xFF3B82F6),
-    'manager': Color(0xFF8B5CF6),
-    'admin': Color(0xFFF59E0B),
-    'director': Color(0xFFEF4444),
-    'system_admin': Color(0xFFC5A059),
-  };
-
   @override
   void initState() {
     super.initState();
@@ -81,7 +72,9 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
   void didUpdateWidget(covariant UserRolesWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialSearch != widget.initialSearch) {
+      _selectedProfileId = null;
       _applyInitialSearch(widget.initialSearch);
+      _loadProfiles(preserveContent: true);
     }
   }
 
@@ -99,6 +92,32 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
 
   @override
   Widget build(BuildContext context) {
+    if (_selectedProfileId != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() => _selectedProfileId = null);
+                _loadProfiles(preserveContent: true);
+              },
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('К списку пользователей'),
+            ),
+          ),
+          Expanded(
+            child: ProfileDetailScreen(
+              key: ValueKey('settings-profile-$_selectedProfileId'),
+              profileId: _selectedProfileId!,
+              embedded: true,
+              initialAccess: _selectedAccess,
+            ),
+          ),
+        ],
+      );
+    }
     // Realtime: refresh the user/roles list when another staff member changes a
     // user (role/profile). Skip while loading or while a role update is in
     // flight — those refetch/patch themselves on completion.
@@ -126,6 +145,25 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
           constraints: const BoxConstraints(maxWidth: 1100),
           child: Column(
             children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Пользователи',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Аккаунты приложения, роли и связанные карточки',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Row(
@@ -172,18 +210,6 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                       ),
                     ),
                     SizedBox(width: 10),
-                    // Notification routing is per-role, so it belongs with the
-                    // roles rather than behind a settings screen the app does not
-                    // have.
-                    IconButton(
-                      icon: Icon(
-                        Icons.notifications_active_outlined,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      tooltip: 'Настройки уведомлений',
-                      onPressed: () =>
-                          NotificationPreferencesDialog.show(context),
-                    ),
                     IconButton(
                       icon: Icon(
                         Icons.refresh,
@@ -203,9 +229,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                   itemBuilder: (context, index) {
                     final role = roleFilters[index];
                     final selected = _selectedRole == role;
-                    final color =
-                        _roleColors[role] ??
-                        Theme.of(context).colorScheme.primary;
+                    const color = AppColor.gold;
                     return ChoiceChip(
                       selected: selected,
                       label: Text(_roleLabels[role] ?? role),
@@ -294,9 +318,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                         itemBuilder: (_, i) {
                           final p = filtered[i];
                           final role = p['role'] as String? ?? 'client';
-                          final roleColor =
-                              _roleColors[role] ??
-                              Theme.of(context).colorScheme.onSurfaceVariant;
+                          const roleColor = AppColor.gold;
                           final avatar = CircleAvatar(
                             radius: 24,
                             backgroundColor: roleColor.withAlpha(40),
@@ -436,14 +458,10 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                                 IconButton(
                                   key: Key('access-editor-$accessUserId'),
                                   tooltip: 'Настроить доступ',
-                                  onPressed: () => AccessEditorSheet.show(
-                                    context,
-                                    actorRole: widget.currentRole,
-                                    userId: accessUserId,
-                                    userLabel: _fullName(p),
-                                    onChanged: () =>
-                                        _loadProfiles(preserveContent: true),
-                                  ),
+                                  onPressed: () => setState(() {
+                                    _selectedProfileId = p['id']?.toString();
+                                    _selectedAccess = true;
+                                  }),
                                   icon: const Icon(Icons.admin_panel_settings),
                                   color: AppColor.gold,
                                 ),
@@ -469,12 +487,12 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                             child: Material(
                               color: Colors.transparent,
                               child: InkWell(
-                                // Открыть карточку пользователя (профиль/админ).
                                 onTap: (profileId == null || profileId.isEmpty)
                                     ? null
-                                    : () => context.push(
-                                        '/admin/profiles/$profileId',
-                                      ),
+                                    : () => setState(() {
+                                        _selectedProfileId = profileId;
+                                        _selectedAccess = false;
+                                      }),
                                 child: Padding(
                                   padding: const EdgeInsets.all(14),
                                   // Narrow (phone) screens stack the role dropdown

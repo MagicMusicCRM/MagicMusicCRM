@@ -29,6 +29,17 @@ class ScheduleReferenceView extends StatelessWidget {
 
   Widget _buildContent(BuildContext context) {
     if (controller.state.error != null) return _errorView();
+    if (inline &&
+        (controller.lockedTeacherId != null ||
+            controller.lockedBranchId != null)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (controller.state.loading) const LinearProgressIndicator(),
+          _body(context),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -96,15 +107,17 @@ class ScheduleReferenceView extends StatelessWidget {
             ),
           )
         else ...[
-          TeacherAssignmentsCard(
-            controller: controller,
-            onSave: () => _save(
-              context,
-              controller.saveAssignments,
-              'Назначения сохранены',
+          if (controller.lockedTeacherId == null) ...[
+            TeacherAssignmentsCard(
+              controller: controller,
+              onSave: () => _save(
+                context,
+                controller.saveAssignments,
+                'Назначения сохранены',
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
           TeacherAvailabilityCard(
             controller: controller,
             onSave: () => _save(

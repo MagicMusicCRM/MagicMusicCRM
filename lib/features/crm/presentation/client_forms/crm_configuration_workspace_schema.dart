@@ -30,47 +30,112 @@ const _fieldPlacementLabels = <String, String>{
 class _CrmFieldList extends StatelessWidget {
   const _CrmFieldList({
     required this.fields,
+    required this.total,
     required this.categories,
+    required this.search,
+    required this.category,
+    required this.target,
+    required this.onSearch,
+    required this.onCategory,
+    required this.onTarget,
     required this.selectedKey,
     required this.canManageStructure,
     required this.onSelect,
     required this.onAddField,
-    required this.onAddCategory,
-    required this.onEditCategory,
-    required this.onReorderCategory,
   });
 
   final List<Map<String, dynamic>> fields;
+  final int total;
   final List<Map<String, dynamic>> categories;
+  final TextEditingController search;
+  final String? category;
+  final String? target;
+  final ValueChanged<String> onSearch;
+  final ValueChanged<String?> onCategory;
+  final ValueChanged<String?> onTarget;
   final String? selectedKey;
   final bool canManageStructure;
   final ValueChanged<String> onSelect;
   final VoidCallback onAddField;
-  final VoidCallback onAddCategory;
-  final ValueChanged<Map<String, dynamic>> onEditCategory;
-  final void Function(int from, int delta) onReorderCategory;
 
   @override
   Widget build(BuildContext context) => _CrmConfigurationListPane(
-    title: 'Поля форм и карточек',
+    title: 'Поля · ${fields.length} из $total',
     addLabel: 'Добавить поле',
     onAdd: canManageStructure ? onAddField : null,
+    emptyLabel: 'Поля не найдены. Измените поиск или фильтры.',
+    controls: Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.md,
+        0,
+        AppSpace.md,
+        AppSpace.sm,
+      ),
+      child: Column(
+        children: [
+          TextField(
+            key: const ValueKey('configuration-field-search'),
+            controller: search,
+            onChanged: onSearch,
+            decoration: InputDecoration(
+              hintText: 'Найти поле',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Очистить поиск полей',
+                      onPressed: () {
+                        search.clear();
+                        onSearch('');
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            children: [
+              Expanded(
+                child: AppDropdownButtonFormField<String?>(
+                  menuMaxHeight: 256,
+                  key: const ValueKey('configuration-field-category'),
+                  initialValue: category,
+                  decoration: const InputDecoration(labelText: 'Категория'),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Все категории'),
+                    ),
+                    for (final item in categories)
+                      DropdownMenuItem(
+                        value: item['key']?.toString(),
+                        child: Text(item['label']?.toString() ?? 'Категория'),
+                      ),
+                  ],
+                  onChanged: onCategory,
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: AppDropdownButtonFormField<String?>(
+                  menuMaxHeight: 256,
+                  key: const ValueKey('configuration-field-target'),
+                  initialValue: target,
+                  decoration: const InputDecoration(labelText: 'Карточка'),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Все карточки')),
+                    DropdownMenuItem(value: 'lead', child: Text('Лид')),
+                    DropdownMenuItem(value: 'student', child: Text('Ученик')),
+                  ],
+                  onChanged: onTarget,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
     children: [
-      const ListTile(
-        leading: Icon(Icons.info_outline_rounded),
-        title: Text('Структура и видимость полей'),
-        subtitle: Text(
-          'Название, тип, категория и показ в карточках лида или ученика. Значения списков меняются только в разделе «Варианты для полей».',
-        ),
-      ),
-      _CrmCategorySection(
-        categories: categories,
-        canManage: canManageStructure,
-        onAdd: onAddCategory,
-        onEdit: onEditCategory,
-        onReorder: onReorderCategory,
-      ),
-      const Divider(),
       for (final field in fields)
         _CrmFieldTile(
           field: field,
@@ -182,20 +247,24 @@ class _CrmFieldTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final key = field['key']?.toString() ?? '';
-    return ListTile(
-      selected: selected,
-      title: Text(field['label']?.toString() ?? 'Поле'),
-      subtitle: Text(
-        '${_fieldVisibilityLabel(field)} · '
-        '${_fieldTypes[field['valueType']] ?? field['valueType']}',
+    return Material(
+      color: selected ? AppColor.selectionBg : Colors.transparent,
+      child: ListTile(
+        selected: selected,
+        title: Text(field['label']?.toString() ?? 'Поле'),
+        subtitle: Text(
+          '${_fieldVisibilityLabel(field)} · '
+          '${_fieldTypes[field['valueType']] ?? field['valueType']}'
+          '${field['active'] == false ? ' · В архиве' : ''}',
+        ),
+        trailing: field['system'] == true
+            ? const Tooltip(
+                message: 'Системное поле',
+                child: Icon(Icons.lock_outline),
+              )
+            : null,
+        onTap: () => onSelect(key),
       ),
-      trailing: field['system'] == true
-          ? const Tooltip(
-              message: 'Системное поле',
-              child: Icon(Icons.lock_outline),
-            )
-          : null,
-      onTap: () => onSelect(key),
     );
   }
 }
@@ -223,13 +292,6 @@ class _CrmOptionSetList extends StatelessWidget {
     addLabel: 'Добавить набор',
     onAdd: canManageStructure ? onAdd : null,
     children: [
-      const ListTile(
-        leading: Icon(Icons.info_outline_rounded),
-        title: Text('Значения списков и справочников'),
-        subtitle: Text(
-          'Один набор используется обеими карточками. Здесь же настраивается системный рекламный источник.',
-        ),
-      ),
       ListTile(
         selected: selectedKey == _clientSourcesKey,
         leading: const Icon(Icons.campaign_outlined),
@@ -296,11 +358,13 @@ class _CrmBusinessSettingsList extends StatelessWidget {
 class _CrmFieldPreview extends StatelessWidget {
   const _CrmFieldPreview({
     required this.field,
+    required this.categories,
     required this.canManageStructure,
     required this.onEdit,
   });
 
   final Map<String, dynamic> field;
+  final List<Map<String, dynamic>> categories;
   final bool canManageStructure;
   final VoidCallback onEdit;
 
@@ -345,12 +409,26 @@ class _CrmFieldPreview extends StatelessWidget {
         ),
       _CrmConfigurationProperty(
         label: 'Категория',
-        value: field['categoryKey'],
+        value:
+            categories
+                .where((item) => item['key'] == field['categoryKey'])
+                .firstOrNull?['label'] ??
+            field['categoryKey'],
       ),
-      _CrmConfigurationProperty(label: 'Ширина', value: field['width']),
+      _CrmConfigurationProperty(
+        label: 'Ширина',
+        value: switch (field['width']) {
+          'full' => 'Вся строка',
+          'half' => 'Половина строки',
+          'third' => 'Треть строки',
+          _ => field['width'],
+        },
+      ),
       _CrmConfigurationProperty(
         label: 'Размещения',
-        value: (field['placements'] as List? ?? const []).join(', '),
+        value: (field['placements'] as List? ?? const [])
+            .map((key) => _fieldPlacementLabels[key] ?? key)
+            .join(', '),
       ),
       _CrmConfigurationProperty(
         label: 'Состояние',

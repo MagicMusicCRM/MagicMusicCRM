@@ -493,6 +493,8 @@ extension MagicCrmOrg on MagicCrmService {
     required String teacherId,
     required String branchId,
     required String roomId,
+    String? settlementTypeKey,
+    String? teacherCompensationRuleKey,
     num? pricePerLesson,
     // KVA-238: переопределение ставки педагога (0 = «входит в оклад»).
     num? teacherRate,
@@ -503,6 +505,12 @@ extension MagicCrmOrg on MagicCrmService {
       'branchId': branchId.trim(),
       'roomId': roomId.trim(),
     };
+    if (settlementTypeKey != null) {
+      data['settlementTypeKey'] = settlementTypeKey;
+    }
+    if (teacherCompensationRuleKey != null) {
+      data['teacherCompensationRuleKey'] = teacherCompensationRuleKey;
+    }
     if (pricePerLesson != null) data['pricePerLesson'] = pricePerLesson;
     if (teacherRate != null) data['teacherRate'] = teacherRate;
 
@@ -522,6 +530,8 @@ extension MagicCrmOrg on MagicCrmService {
     String? teacherId,
     String? branchId,
     String? roomId,
+    String? settlementTypeKey,
+    String? teacherCompensationRuleKey,
     num? pricePerLesson,
     num? teacherRate,
     bool setTeacherRate = false,
@@ -532,12 +542,21 @@ extension MagicCrmOrg on MagicCrmService {
     if (teacherId != null) data['teacherId'] = teacherId;
     if (branchId != null) data['branchId'] = branchId;
     if (roomId != null) data['roomId'] = roomId;
+    if (settlementTypeKey != null) {
+      data['settlementTypeKey'] = settlementTypeKey;
+    }
+    if (teacherCompensationRuleKey != null) {
+      data['teacherCompensationRuleKey'] = teacherCompensationRuleKey;
+    }
     if (pricePerLesson != null) data['pricePerLesson'] = pricePerLesson;
     if (setTeacherRate) {
       data['teacherRate'] = teacherRate;
       data['expectedVersion'] = expectedVersion;
     }
 
+    if (settlementTypeKey != null || teacherCompensationRuleKey != null) {
+      data['expectedVersion'] = expectedVersion;
+    }
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/groups/$id',
       data: data,

@@ -56,7 +56,8 @@ class CrmConfigurationWorkspace extends ConsumerStatefulWidget {
 class _CrmConfigurationWorkspaceState
     extends ConsumerState<CrmConfigurationWorkspace> {
   static const _commonAreas = <(String, String, IconData)>[
-    ('fields', 'Поля и категории', Icons.dynamic_form_outlined),
+    ('fields', 'Поля карточек', Icons.dynamic_form_outlined),
+    ('categories', 'Категории', Icons.folder_outlined),
     ('options', 'Варианты для полей', Icons.list_alt_outlined),
     ('settings', 'Бизнес-параметры', Icons.tune_rounded),
     ('funnel', 'Воронки клиентов', Icons.view_kanban_outlined),
@@ -67,6 +68,9 @@ class _CrmConfigurationWorkspaceState
   String _area = 'fields';
   String? _branchId;
   String? _selectedKey;
+  final _fieldSearch = TextEditingController();
+  String? _fieldCategory;
+  String? _fieldTarget;
   int _baseVersion = 0;
   bool _dirty = false;
   bool _loading = true;
@@ -94,6 +98,7 @@ class _CrmConfigurationWorkspaceState
 
   @override
   void dispose() {
+    _fieldSearch.dispose();
     _exitController.dispose();
     super.dispose();
   }
@@ -168,6 +173,27 @@ class _CrmConfigurationWorkspaceState
               .map((item) => Map<String, dynamic>.from(item))
               .toList()
         : <Map<String, dynamic>>[];
+  }
+
+  List<Map<String, dynamic>> get _visibleFields {
+    final query = _fieldSearch.text.trim().toLowerCase();
+    return _items('fields').where((field) {
+      return (query.isEmpty ||
+              '${field['label']} ${field['key']}'.toLowerCase().contains(
+                query,
+              )) &&
+          (_fieldCategory == null || field['categoryKey'] == _fieldCategory) &&
+          (_fieldTarget == null ||
+              (field['visibility'] as Map?)?[_fieldTarget] == true);
+    }).toList();
+  }
+
+  String? get _previewKey {
+    if (_area != 'fields') return _selectedKey;
+    final fields = _visibleFields;
+    return fields.any((field) => field['key'] == _selectedKey)
+        ? _selectedKey
+        : fields.firstOrNull?['key']?.toString();
   }
 
   void _replaceItems(String key, List<Map<String, dynamic>> items) {
@@ -283,6 +309,7 @@ class _CrmConfigurationWorkspaceState
       onRetry: _loadInitial,
       onScopeChanged: _changeScope,
       onAreaChanged: _changeArea,
+      onBackToList: () => setState(() => _selectedKey = null),
       onSaveDraft: _saveDraft,
       onPublish: _previewAndPublish,
     );
@@ -302,6 +329,18 @@ class _CrmConfigurationWorkspaceState
 
   Widget _areaContent() => switch (_area) {
     'fields' => _fieldList(),
+    'categories' => ListView(
+      padding: const EdgeInsets.all(AppSpace.md),
+      children: [
+        _CrmCategorySection(
+          categories: _sortedCategories,
+          canManage: _canEdit && _branchId == null,
+          onAdd: () => _editCategory(),
+          onEdit: (category) => _editCategory(category),
+          onReorder: _reorderCategory,
+        ),
+      ],
+    ),
     'options' => _optionSetList(),
     'settings' => _settingList(),
     'funnel' => _CrmFunnelEntry(
@@ -321,25 +360,34 @@ class _CrmConfigurationWorkspaceState
     _ => const SizedBox.shrink(),
   };
 
-  Widget _fieldList() {
-    final categories = _items('categories')
-      ..sort(
+  List<Map<String, dynamic>> get _sortedCategories =>
+      _items('categories')..sort(
         (left, right) => ((left['order'] as num?)?.toInt() ?? 0).compareTo(
           (right['order'] as num?)?.toInt() ?? 0,
         ),
       );
-    return _CrmFieldList(
-      fields: _items('fields'),
-      categories: categories,
-      selectedKey: _selectedKey,
-      canManageStructure: _canEdit && _branchId == null,
-      onSelect: _selectItem,
-      onAddField: () => _editField(null),
-      onAddCategory: () => _editCategory(),
-      onEditCategory: (category) => _editCategory(category),
-      onReorderCategory: _reorderCategory,
-    );
-  }
+
+  Widget _fieldList() => _CrmFieldList(
+    fields: _visibleFields,
+    total: _items('fields').length,
+    categories: _sortedCategories,
+    search: _fieldSearch,
+    category: _fieldCategory,
+    target: _fieldTarget,
+    onSearch: (_) => setState(() => _selectedKey = null),
+    onCategory: (value) => setState(() {
+      _fieldCategory = value;
+      _selectedKey = null;
+    }),
+    onTarget: (value) => setState(() {
+      _fieldTarget = value;
+      _selectedKey = null;
+    }),
+    selectedKey: _previewKey,
+    canManageStructure: _canEdit && _branchId == null,
+    onSelect: _selectItem,
+    onAddField: () => _editField(null),
+  );
 
   Widget _optionSetList() => _CrmOptionSetList(
     sets: _items('optionSets'),
@@ -356,10 +404,8 @@ class _CrmConfigurationWorkspaceState
     onSelect: _selectItem,
   );
   Widget _editorPane() {
-    if (_selectedKey == null) {
-      return const Center(
-        child: Text('Выберите элемент для просмотра и настройки'),
-      );
+    if (_previewKey == null) {
+      return const Center(child: Text('Выберите элемент в списке слева'));
     }
     return switch (_area) {
       'fields' => _selectedFieldPreview(),
@@ -372,11 +418,12 @@ class _CrmConfigurationWorkspaceState
   Widget _selectedFieldPreview() {
     final field = _items(
       'fields',
-    ).where((item) => item['key']?.toString() == _selectedKey).firstOrNull;
+    ).where((item) => item['key']?.toString() == _previewKey).firstOrNull;
     return field == null
         ? const SizedBox.shrink()
         : _CrmFieldPreview(
             field: field,
+            categories: _sortedCategories,
             canManageStructure: _canEdit && _branchId == null,
             onEdit: () => _editField(field),
           );
@@ -478,7 +525,12 @@ class _CrmConfigurationWorkspaceState
       fields[index] = {...?current, ...draft};
     }
     _replaceItems('fields', fields);
-    setState(() => _selectedKey = draft['key']?.toString());
+    setState(() {
+      _fieldSearch.clear();
+      _fieldCategory = null;
+      _fieldTarget = null;
+      _selectedKey = draft['key']?.toString();
+    });
   }
 
   Future<void> _editCategory([Map<String, dynamic>? current]) async {

@@ -128,6 +128,17 @@ class _GroupDetailApi extends MagicApiClient {
     bool authenticated = true,
   }) async {
     paths.add(path);
+    if (path == '/crm/groups/group-1') {
+      return <String, dynamic>{
+            'id': 'group-1',
+            'name': 'Группа вокала',
+            'branchId': 'branch-1',
+            'branchName': 'Сокол',
+            'settlementTypeKey': 'lesson',
+            'teacherCompensationRuleKey': 'standard',
+          }
+          as T;
+    }
     if (path == '/crm/groups/group-1/students') {
       return <String, dynamic>{'items': groupStudents} as T;
     }

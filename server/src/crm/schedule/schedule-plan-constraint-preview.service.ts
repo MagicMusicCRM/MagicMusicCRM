@@ -64,6 +64,7 @@ export class SchedulePlanConstraintPreviewService {
     const normalized = this.definition.normalizeCreate(dto);
     return this.database.transaction(async (client) => {
       const studentIds = this.createStudentIds(normalized);
+      const candidates = [...new Set(dto.candidateTeacherIds ?? [])];
       await this.definition.lockAndValidate(
         client,
         {
@@ -75,7 +76,9 @@ export class SchedulePlanConstraintPreviewService {
           groupId: normalized.groupId,
           subscriptionId: normalized.subscriptionId,
           participants: normalized.participants,
-          rows: normalized.rows,
+          rows: candidates.length
+            ? candidates.flatMap((teacherId) => normalized.rows.map((row) => ({ ...row, teacherId })))
+            : normalized.rows,
         },
         actor,
       );
@@ -85,11 +88,38 @@ export class SchedulePlanConstraintPreviewService {
         normalized.activeFrom,
         normalized.activeUntil,
       );
+      if (candidates.length) {
+        const blocked = new Set([
+          "INVALID_INTERVAL", "OUTSIDE_BRANCH_HOURS", "TEACHER_UNAVAILABLE",
+          "TEACHER_BRANCH_MISMATCH", "TEACHER_OVERLAP",
+        ]);
+        const availableTeacherIds: string[] = [];
+        for (const teacherId of candidates) {
+          const rows = await this.previewRows(
+            client,
+            normalized.rows.map((row) => ({ ...row, teacherId })),
+            normalized.activeFrom,
+            normalized.activeUntil,
+            studentIds.slice(0, 1),
+            { includePast: true },
+          );
+          if (!rows.some((row) => row.failures.some((failure) =>
+            failure.violations.some((violation) => blocked.has(violation.code))))) {
+            availableTeacherIds.push(teacherId);
+          }
+        }
+        // Resource selection checks teacher/branch constraints. The existing
+        // final preview and command still check every participant and settlement.
+        return { valid: availableTeacherIds.length > 0, availableTeacherIds,
+          conflicts: [], rows: [], historical: this.emptyHistoricalProjection() };
+      }
       const preparedRows = await this.prepareRows(
         client,
         actor,
         normalized.rows,
         studentIds,
+        undefined,
+        normalized.groupId ?? undefined,
       );
       const rows = await this.previewRows(
         client,
@@ -237,7 +267,13 @@ export class SchedulePlanConstraintPreviewService {
     rows: SchedulePlanRowDto[],
     allowedClientIds: string[],
     prepared?: PreparedSchedulePlanUpdate,
+    groupId?: string,
   ): Promise<PreparedSchedulePlanRow[]> {
+    groupId ??= rows.some((row) => !row.seriesId) ? prepared?.plan.group_id ?? undefined : undefined;
+    const group = groupId ? (await client.query<{ settlement_type_key: string | null; teacher_compensation_rule_key: string | null }>(
+      'select settlement_type_key, teacher_compensation_rule_key from app.groups where id = $1 and deleted_at is null', [groupId]
+    )).rows[0] : undefined;
+    if (groupId && (!group?.settlement_type_key || !group.teacher_compensation_rule_key)) failSchedulePlan('GROUP_LESSON_DEFAULTS_REQUIRED', ['groupId']);
     return Promise.all(
       rows.map((row) =>
         prepareSchedulePlanRow({
@@ -248,6 +284,7 @@ export class SchedulePlanConstraintPreviewService {
           policy: this.policy,
           settlement: this.settlement,
           prepared,
+          groupDefaults: group && (!prepared || !row.seriesId) ? { settlementTypeKey: group.settlement_type_key!, teacherCompensationRuleKey: group.teacher_compensation_rule_key! } : undefined,
         }),
       ),
     );

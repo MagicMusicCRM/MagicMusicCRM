@@ -58,6 +58,27 @@ class SettingsTestApi extends MagicApiClient {
       branchReads++;
       return <String, dynamic>{'items': branches} as T;
     }
+    if (path == '/crm/configuration/lesson-decisions') {
+      return {
+            'settlementTypes': [
+              {
+                'stableKey': 'lesson',
+                'label': 'Обычное занятие',
+                'defaultTeacherCompensationRuleKey': 'standard',
+                'allowedContexts': ['settle'],
+              },
+            ],
+            'teacherCompensationRules': [
+              {
+                'stableKey': 'standard',
+                'label': 'Обычная оплата',
+                'mode': 'standard',
+                'value': '0',
+              },
+            ],
+          }
+          as T;
+    }
     if (path == '/crm/teachers') {
       return <String, dynamic>{'items': teachers} as T;
     }

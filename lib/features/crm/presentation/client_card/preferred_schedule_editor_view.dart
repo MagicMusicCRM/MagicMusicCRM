@@ -16,6 +16,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required this.teachers,
     this.selectedTeacherLabel,
     this.teacherOptionsLoading = false,
+    this.selectedTeacherUnavailable = false,
     this.teacherOptionsError,
     this.onTeacherOptionsRetry,
     required this.rooms,
@@ -24,6 +25,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
     required this.notesController,
     required this.isEdit,
     required this.planMode,
+    this.financialDefaultsFromGroup = false,
     required this.requireFinancialDecision,
     required this.canManageTeacherCompensation,
     required this.participantLabels,
@@ -61,6 +63,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
   final List<Map<String, dynamic>> teachers;
   final String? selectedTeacherLabel;
   final bool teacherOptionsLoading;
+  final bool selectedTeacherUnavailable;
   final String? teacherOptionsError;
   final VoidCallback? onTeacherOptionsRetry;
   final List<Map<String, dynamic>> rooms;
@@ -69,6 +72,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
   final TextEditingController notesController;
   final bool isEdit;
   final bool planMode;
+  final bool financialDefaultsFromGroup;
   final bool requireFinancialDecision;
   final bool canManageTeacherCompensation;
   final Map<String, String> participantLabels;
@@ -111,6 +115,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
         teachers: teachers,
         selectedTeacherLabel: selectedTeacherLabel,
         teacherOptionsLoading: teacherOptionsLoading,
+        selectedTeacherUnavailable: selectedTeacherUnavailable,
         teacherOptionsError: teacherOptionsError,
         onTeacherOptionsRetry: onTeacherOptionsRetry,
         rooms: rooms,
@@ -123,6 +128,7 @@ class PreferredScheduleEditorView extends StatelessWidget {
           state: state,
           catalog: decisionCatalog,
           canManageTeacherCompensation: canManageTeacherCompensation,
+          financialDefaultsFromGroup: financialDefaultsFromGroup,
           participantLabels: participantLabels,
           onSettlementChanged: onSettlementTypeChanged,
           onCompensationChanged: onCompensationRuleChanged,
@@ -370,6 +376,7 @@ class _ResourceFields extends StatelessWidget {
     required this.teachers,
     required this.selectedTeacherLabel,
     required this.teacherOptionsLoading,
+    required this.selectedTeacherUnavailable,
     required this.teacherOptionsError,
     required this.onTeacherOptionsRetry,
     required this.rooms,
@@ -381,6 +388,7 @@ class _ResourceFields extends StatelessWidget {
   final List<Map<String, dynamic>> teachers;
   final String? selectedTeacherLabel;
   final bool teacherOptionsLoading;
+  final bool selectedTeacherUnavailable;
   final String? teacherOptionsError;
   final VoidCallback? onTeacherOptionsRetry;
   final List<Map<String, dynamic>> rooms;
@@ -420,10 +428,7 @@ class _ResourceFields extends StatelessWidget {
         ),
       ] else if (teacherOptionsLoading)
         const Text('Проверяем доступность педагогов…')
-      else if (state.teacherId != null &&
-          !teachers.any(
-            (teacher) => teacher['id']?.toString() == state.teacherId,
-          ))
+      else if (selectedTeacherUnavailable)
         const Text('Выбранный педагог недоступен на указанное время.')
       else if (state.roomId == null)
         const Text('Сначала выберите аудиторию.'),
@@ -453,6 +458,7 @@ class _DecisionFields extends StatelessWidget {
     required this.state,
     required this.catalog,
     required this.canManageTeacherCompensation,
+    this.financialDefaultsFromGroup = false,
     required this.participantLabels,
     required this.onSettlementChanged,
     required this.onCompensationChanged,
@@ -466,6 +472,7 @@ class _DecisionFields extends StatelessWidget {
   final LessonDecisionCatalog? catalog;
   final bool canManageTeacherCompensation;
   final Map<String, String> participantLabels;
+  final bool financialDefaultsFromGroup;
   final ValueChanged<String?> onSettlementChanged;
   final ValueChanged<String?> onCompensationChanged;
   final ValueChanged<String> onPlannedSettlementReasonChanged;
@@ -495,19 +502,27 @@ class _DecisionFields extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (financialDefaultsFromGroup)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.sm),
+            child: Text(
+              'Из настроек группы: ${settlement?.label ?? state.settlementTypeKey} · ${catalog?.compensationRules.where((item) => item.key == state.teacherCompensationRuleKey).firstOrNull?.label ?? state.teacherCompensationRuleKey}',
+            ),
+          ),
         _ResponsiveFields(
           fields: [
-            _dropdown(
-              key: const ValueKey('schedule-plan-settlement-type'),
-              label: 'Тип списания *',
-              value: state.settlementTypeKey,
-              items: _itemsWithStoredValue(
-                catalog?.settlementTypes ?? const [],
-                state.settlementTypeKey,
+            if (!financialDefaultsFromGroup)
+              _dropdown(
+                key: const ValueKey('schedule-plan-settlement-type'),
+                label: 'Тип списания *',
+                value: state.settlementTypeKey,
+                items: _itemsWithStoredValue(
+                  catalog?.settlementTypes ?? const [],
+                  state.settlementTypeKey,
+                ),
+                onChanged: onSettlementChanged,
               ),
-              onChanged: onSettlementChanged,
-            ),
-            if (canManageTeacherCompensation)
+            if (canManageTeacherCompensation && !financialDefaultsFromGroup)
               _dropdown(
                 key: const ValueKey('schedule-plan-compensation-rule'),
                 label: 'Оплата преподавателю *',
@@ -520,7 +535,7 @@ class _DecisionFields extends StatelessWidget {
                 enabled: state.compensationTouched,
               ),
             if (canManageTeacherCompensation &&
-                state.compensationTouched &&
+                (state.compensationTouched || financialDefaultsFromGroup) &&
                 settlement?.teacherDurationMode == 'manual')
               _MinutesField(
                 key: const ValueKey('schedule-plan-teacher-minutes'),
@@ -531,7 +546,7 @@ class _DecisionFields extends StatelessWidget {
               ),
           ],
         ),
-        if (canManageTeacherCompensation) ...[
+        if (canManageTeacherCompensation && !financialDefaultsFromGroup) ...[
           const SizedBox(height: AppSpace.sm),
           CheckboxListTile(
             key: const ValueKey('schedule-plan-compensation-edit-toggle'),
@@ -711,6 +726,7 @@ class _ResponsiveFields extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
+      if (fields.isEmpty) return const SizedBox.shrink();
       if (constraints.maxWidth < 520) {
         return Column(
           children: [

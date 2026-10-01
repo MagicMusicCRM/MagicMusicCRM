@@ -1,3 +1,5 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
@@ -141,22 +143,35 @@ void main() {
         var changed = false;
         final session = _session(client: _studentRef, isEdit: isEdit);
         await tester.pumpWidget(
-          MaterialApp(
-            home: Material(
-              child: LessonParticipantSection(
-                model: LessonParticipantSectionModel(
-                  session: session,
-                  draft: session.draft,
-                  references: const LessonEditorReferenceState.empty(),
+          ProviderScope(
+            overrides: [
+              capabilitySnapshotProvider.overrideWith(
+                (ref) async => const CapabilitySnapshot(
+                  accountId: "layout",
+                  role: "client",
+                  accessVersion: 1,
+                  capabilities: {},
+                  scopes: {},
                 ),
-                onSearchClients: (_) async {
-                  searched = true;
-                  return [];
-                },
-                onClientChanged: (_) => changed = true,
-                onBranchChanged: (_) {},
-                onRoomChanged: (_) {},
-                onTeacherChanged: (_) {},
+              ),
+            ],
+            child: MaterialApp(
+              home: Material(
+                child: LessonParticipantSection(
+                  model: LessonParticipantSectionModel(
+                    session: session,
+                    draft: session.draft,
+                    references: const LessonEditorReferenceState.empty(),
+                  ),
+                  onSearchClients: (_) async {
+                    searched = true;
+                    return [];
+                  },
+                  onClientChanged: (_) => changed = true,
+                  onBranchChanged: (_) {},
+                  onRoomChanged: (_) {},
+                  onTeacherChanged: (_) {},
+                ),
               ),
             ),
           ),

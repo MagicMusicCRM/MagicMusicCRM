@@ -317,7 +317,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
 
   Future<void> _proposeDayMove(
     ScheduleEntry entry,
-    String roomId,
+    String? roomId,
     DateTime start,
   ) async {
     if (!widget.canWrite) return;
@@ -336,8 +336,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
     final targetRoom = _rooms
         .where((room) => room['id']?.toString() == roomId)
         .firstOrNull;
-    if (targetRoom == null ||
-        targetRoom['branch_id'] != actionable['branch_id']) {
+    if (roomId != null &&
+        (targetRoom == null ||
+            targetRoom['branch_id'] != actionable['branch_id'])) {
       MagicToast.show(
         context,
         'Для переноса в другой филиал откройте редактор занятия.',
@@ -1412,6 +1413,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
   Future<void> _showScheduleFilters() async {
     final result = await showScheduleFiltersSheet(
       context,
+      showBranchSelector: false,
       initialBranchId: _selectedBranchId,
       initialMode: _dayViewMode,
       branches: _branches,

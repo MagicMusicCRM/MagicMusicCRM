@@ -22,11 +22,9 @@ class TeacherDetailContent extends StatelessWidget {
     required this.canManageCredentials,
     required this.canManageTeacherRates,
     required this.canOpenSchedule,
-    required this.canViewAvailability,
-    required this.canEditAvailability,
     required this.saving,
     required this.onOpenSchedule,
-    required this.onOpenAvailability,
+    required this.availabilityEditor,
     required this.onAccessChanged,
     required this.onProvisionAccess,
     required this.onManageLifecycle,
@@ -47,11 +45,9 @@ class TeacherDetailContent extends StatelessWidget {
   final bool canManageCredentials;
   final bool canManageTeacherRates;
   final bool canOpenSchedule;
-  final bool canViewAvailability;
-  final bool canEditAvailability;
   final bool saving;
   final VoidCallback onOpenSchedule;
-  final VoidCallback onOpenAvailability;
+  final Widget? availabilityEditor;
   final VoidCallback onAccessChanged;
   final VoidCallback onProvisionAccess;
   final VoidCallback onManageLifecycle;
@@ -98,13 +94,6 @@ class TeacherDetailContent extends StatelessWidget {
             onPressed: onOpenSchedule,
             icon: const Icon(Icons.calendar_month_outlined),
             label: const Text('Занятия преподавателя'),
-          ),
-        if (canViewAvailability)
-          OutlinedButton.icon(
-            key: const Key('teacher-open-availability'),
-            onPressed: onOpenAvailability,
-            icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('Рабочий график и отсутствие'),
           ),
       ],
     );
@@ -211,6 +200,10 @@ class TeacherDetailContent extends StatelessWidget {
                 ],
                 const SizedBox(height: 12),
                 identity,
+                if (availabilityEditor != null) ...[
+                  const SizedBox(height: 12),
+                  availabilityEditor!,
+                ],
               ],
             ),
           ),
@@ -274,6 +267,10 @@ class TeacherDetailContent extends StatelessWidget {
             ],
             const SizedBox(height: 12),
             details,
+            if (availabilityEditor != null) ...[
+              const SizedBox(height: 12),
+              availabilityEditor!,
+            ],
             const SizedBox(height: 12),
             access,
           ],

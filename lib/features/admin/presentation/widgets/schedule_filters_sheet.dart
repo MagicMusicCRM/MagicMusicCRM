@@ -41,6 +41,7 @@ class ScheduleFiltersPanel extends StatefulWidget {
     required this.teacherOptions,
     required this.onApply,
     this.showHeader = false,
+    this.showBranchSelector = true,
     this.initialSettlementTypes = const {},
     this.initialCompensationRules = const {},
     this.loadFinancialCatalog,
@@ -56,6 +57,7 @@ class ScheduleFiltersPanel extends StatefulWidget {
   final List<({String id, String name})> teacherOptions;
   final ValueChanged<ScheduleFilterResult> onApply;
   final bool showHeader;
+  final bool showBranchSelector;
   final Set<String> initialSettlementTypes, initialCompensationRules;
   final Future<Map<String, dynamic>> Function(String? branchId)?
   loadFinancialCatalog;
@@ -209,31 +211,34 @@ class _ScheduleFiltersPanelState extends State<ScheduleFiltersPanel> {
             ? constraints.maxWidth
             : (constraints.maxWidth - AppSpace.md * (columns - 1)) / columns;
         final fields = <Widget>[
-          _dropdown(
-            key: const ValueKey('schedule-filter-branch'),
-            label: 'Филиал',
-            icon: Icons.location_on_outlined,
-            value: _branchId ?? _allBranches,
-            items: [
-              const DropdownMenuItem(
-                value: _allBranches,
-                child: Text('Все филиалы'),
-              ),
-              for (final branch in widget.branches)
-                DropdownMenuItem(
-                  value: branch['id']?.toString(),
-                  child: Text(
-                    branch['name']?.toString() ?? 'Филиал',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+          if (widget.showBranchSelector)
+            _dropdown(
+              key: const ValueKey('schedule-filter-branch'),
+              label: 'Филиал',
+              icon: Icons.location_on_outlined,
+              value: _branchId ?? _allBranches,
+              items: [
+                const DropdownMenuItem(
+                  value: _allBranches,
+                  child: Text('Все филиалы'),
                 ),
-            ],
-            onChanged: (value) {
-              setState(() => _branchId = value == _allBranches ? null : value);
-              _loadCatalog();
-            },
-          ),
+                for (final branch in widget.branches)
+                  DropdownMenuItem(
+                    value: branch['id']?.toString(),
+                    child: Text(
+                      branch['name']?.toString() ?? 'Филиал',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (value) {
+                setState(
+                  () => _branchId = value == _allBranches ? null : value,
+                );
+                _loadCatalog();
+              },
+            ),
           _dropdown(
             key: const ValueKey('schedule-filter-teacher'),
             label: 'Преподаватель',
@@ -437,6 +442,7 @@ Future<ScheduleFilterResult?> showScheduleFiltersSheet(
   required bool initialOnlyConflicts,
   required String? initialTeacherId,
   required List<({String id, String name})> teacherOptions,
+  bool showBranchSelector = true,
   Set<String> initialSettlementTypes = const {},
   Set<String> initialCompensationRules = const {},
   Future<Map<String, dynamic>> Function(String? branchId)? loadFinancialCatalog,
@@ -446,6 +452,7 @@ Future<ScheduleFilterResult?> showScheduleFiltersSheet(
     title: 'Фильтры расписания',
     icon: Icons.filter_alt_outlined,
     builder: (ctx) => ScheduleFiltersPanel(
+      showBranchSelector: showBranchSelector,
       initialBranchId: initialBranchId,
       initialMode: initialMode,
       branches: branches,

@@ -79,7 +79,7 @@ class _GroupsList extends ConsumerWidget {
                 child: ListTile(
                   onTap: () async {
                     final Future<bool?> dialog;
-                    if (archived) {
+                    if (archived && canManageLifecycle) {
                       dialog = showMagicDialog<bool>(
                         context: context,
                         builder: (_) => GroupLifecycleDialog(group: item),

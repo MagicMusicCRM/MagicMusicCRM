@@ -156,7 +156,8 @@ void main() {
   testWidgets('admin opens the read-only Tasks destination', (tester) async {
     final api = await _pumpStaffMessenger(tester, role: 'admin');
 
-    expect(find.text('Ещё'), findsNothing);
+    await tester.tap(find.text('Ещё'));
+    await tester.pumpAndSettle();
     expect(find.text('Задачи'), findsOneWidget);
     await tester.tap(find.text('Задачи'));
     await tester.pump();

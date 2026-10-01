@@ -325,6 +325,13 @@ export class LessonSeriesCommandService {
       : { rows: [] };
     const preservedDates = new Set(preserved.rows.map((item) => item.local_date));
     const failures: SchedulePlanRowConstraintPreview["failures"] = [];
+    const first = validationOccurrences[0]!;
+    const last = validationOccurrences[validationOccurrences.length - 1]!;
+    const prepared = await this.constraints.prepareValidation({
+      clientRef: {type: "student", id: studentIds[0]!},
+      teacherId: row.teacherId, branchId: row.branchId, roomId: row.roomId,
+      startAt: first.startAt, endAt: last.endAt,
+    }, client);
     for (const occurrence of validationOccurrences) {
       if (preservedDates.has(occurrence.localDate)) continue;
       for (const studentId of studentIds) {
@@ -339,6 +346,7 @@ export class LessonSeriesCommandService {
             excludeScheduleSeriesIds: options.excludeScheduleSeriesIds,
           },
           client,
+          prepared,
         );
         if (!result.valid) {
           failures.push({

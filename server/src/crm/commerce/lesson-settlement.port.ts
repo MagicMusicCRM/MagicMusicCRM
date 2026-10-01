@@ -56,7 +56,8 @@ export interface PreparedLessonSettlementPlan {
 export interface ResolvePlannedLessonSettlementInput {
   branchId: string;
   durationMinutes: number;
-  decision: LessonFinancialDecision;
+  decision: Omit<LessonFinancialDecision, "teacherCompensationRuleKey"> &
+    Partial<Pick<LessonFinancialDecision, "teacherCompensationRuleKey">>;
   actorUserId: string;
   authorization: ReturnType<CrmPolicy["teacherCompensationMutationAuthorization"]>;
   reasonText?: string;

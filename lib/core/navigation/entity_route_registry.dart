@@ -199,6 +199,7 @@ class EntityRouteRegistry {
             'homework' => 'homework',
             'tasks' => 'task',
             'schedule' => 'lesson_list',
+            'groups' => 'group',
             'reports' => 'report',
             _ => '',
           };
@@ -248,7 +249,10 @@ class EntityRouteRegistry {
     CapabilitySnapshot snapshot,
     String location,
   ) {
-    final section = _sectionFor(link);
+    final section =
+        link.entityType == EntityLinkType.group && snapshot.role == 'teacher'
+        ? 'schedule'
+        : _sectionFor(link);
     final home = _staffHome(snapshot);
     final rootLocation = Uri(
       path: home,
@@ -292,6 +296,11 @@ class EntityRouteRegistry {
         entityId: '__section__',
         optionalFocus: EntityLinkFocus(focus: 'schedule'),
         variant: 'lesson_list',
+      ),
+      'groups' => EntityLink.typed(
+        entityType: EntityLinkType.group,
+        entityId: '__section__',
+        optionalFocus: focus,
       ),
       'tasks' => EntityLink.typed(
         entityType: EntityLinkType.task,
@@ -370,10 +379,10 @@ class EntityRouteRegistry {
     EntityLinkType.subscriptionPackage => 'clients',
     EntityLinkType.lesson ||
     EntityLinkType.teacher ||
-    EntityLinkType.group ||
     EntityLinkType.room ||
     EntityLinkType.branch ||
     EntityLinkType.scheduleSeries => 'schedule',
+    EntityLinkType.group => 'groups',
     EntityLinkType.task => 'tasks',
     EntityLinkType.payment
         when link.optionalFocus?.filter['studentId']?.toString().isNotEmpty ==
@@ -391,6 +400,7 @@ class EntityRouteRegistry {
     'clients' => 'Клиенты',
     'personnel' => 'Персонал',
     'schedule' => 'Расписание',
+    'groups' => 'Группы',
     'tasks' => 'Задачи',
     'finance' => 'Финансы',
     'users' => 'Пользователи',
@@ -550,8 +560,13 @@ class EntityRouteRegistry {
     ),
     EntityLinkType.user: EntityRouteRegistration(
       isAllowed: (link, snapshot) => link.rawEntityType == 'staff'
-          ? const {'admin', 'manager', 'director', 'system_admin'}.contains(snapshot.role) &&
-              snapshot.allows('crm.client.read.basic')
+          ? const {
+                  'admin',
+                  'manager',
+                  'director',
+                  'system_admin',
+                }.contains(snapshot.role) &&
+                snapshot.allows('crm.client.read.basic')
           : snapshot.allows('system.settings.manage'),
       buildLocation: (link, snapshot) => _staffRoute(
         link,
@@ -625,8 +640,13 @@ class EntityRouteRegistry {
     ),
     EntityLinkType.teacher: EntityRouteRegistration(
       isAllowed: (link, snapshot) => link.rawEntityType == 'personnel_teacher'
-          ? const {'admin', 'manager', 'director', 'system_admin'}.contains(snapshot.role) &&
-              snapshot.allows('crm.client.read.basic')
+          ? const {
+                  'admin',
+                  'manager',
+                  'director',
+                  'system_admin',
+                }.contains(snapshot.role) &&
+                snapshot.allows('crm.client.read.basic')
           : _hasAny(snapshot, const {
               'schedule.lesson.read.assigned',
               'schedule.lesson.write',
@@ -642,8 +662,11 @@ class EntityRouteRegistry {
         'schedule.lesson.read.assigned',
         'schedule.lesson.write',
       }),
-      buildLocation: (link, snapshot) =>
-          _staffRoute(link, snapshot, 'schedule'),
+      buildLocation: (link, snapshot) => _staffRoute(
+        link,
+        snapshot,
+        snapshot.role == 'teacher' ? 'schedule' : 'groups',
+      ),
     ),
     EntityLinkType.room: EntityRouteRegistration(
       isAllowed: (_, snapshot) => _hasAny(snapshot, const {

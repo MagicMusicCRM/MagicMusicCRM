@@ -1,6 +1,7 @@
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/widgets/client_selection_details.dart';
 
 import 'lesson_editor_models.dart';
 
@@ -23,16 +24,17 @@ class LessonParticipantSectionModel {
   final String? availabilityError;
   final VoidCallback? onAvailabilityRetry;
 
-  bool get isGroupEdit => session.isGroupEdit;
+  bool get isGroupEdit => session.isGroupLesson;
 
   bool get isClientLocked => session.isEdit || session.seededClient != null;
 
   List<LessonEditorReferenceItem> get eligibleTeachers => [
     for (final teacher in references.teachers)
-      if (teacher.status == 'active' &&
+      if (teacher.isWorkingTeacher &&
           teacher.assignedBranchIds.contains(draft.branchId) &&
           (availableTeacherIds == null ||
-              availableTeacherIds!.contains(teacher.id)))
+              availableTeacherIds!.contains(teacher.id) ||
+              teacher.id == draft.teacherId))
         teacher,
   ];
 
@@ -112,16 +114,29 @@ class _ClientField extends StatelessWidget {
       return InputDecorator(
         key: const ValueKey('lesson-client-field'),
         decoration: const InputDecoration(labelText: 'Клиент *'),
-        child: Text(
-          client == null
-              ? 'Не выбран'
-              : '${client.label} · ${_clientTypeLabel(client.type)}',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              client == null
+                  ? 'Не выбран'
+                  : '${client.label} · ${_clientTypeLabel(client.type)}',
+            ),
+            if (client != null)
+              ClientSelectionDetails(
+                type: client.type,
+                id: client.id,
+                branchId: client.branchId,
+                branchKnown: client.branchId != null,
+              ),
+          ],
         ),
       );
     }
     return SearchablePickerField(
       key: const ValueKey('lesson-client-field'),
       label: 'Клиент *',
+      clientType: client?.type,
       placeholder: 'Не выбран',
       hintText: 'Введите имя или ФИО клиента',
       selectedId: client?.key,
@@ -260,6 +275,13 @@ class _TeacherFields extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.only(top: 6),
             child: Text('Сначала выберите клиента.'),
+          )
+        else if (draft.teacherId != null &&
+            model.availableTeacherIds != null &&
+            !model.availableTeacherIds!.contains(draft.teacherId))
+          Text(
+            'Выбранный преподаватель недоступен на это время. Измените время или преподавателя.',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
           )
         else if (draft.branchId != null && teachers.isEmpty)
           Padding(

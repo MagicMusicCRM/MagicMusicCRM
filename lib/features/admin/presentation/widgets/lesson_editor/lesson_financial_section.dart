@@ -59,7 +59,7 @@ class LessonFinancialSection extends StatelessWidget {
     if (controller == null || client == null) return null;
     return LessonClientFundingFields(
       key: ValueKey('lesson-funding-${client.key}'),
-      participants: model.session.isGroupEdit
+      participants: model.session.isGroupLesson
           ? controller.groupParticipants
           : [
               LessonDecisionParticipant(
@@ -82,7 +82,7 @@ class LessonFinancialSection extends StatelessWidget {
   List<LessonDecisionParticipant> _participants() {
     final client = model.draft.client;
     if (client == null) return const [];
-    if (model.session.isGroupEdit) {
+    if (model.session.isGroupLesson) {
       return funding?.groupParticipants ?? const [];
     }
     return [
@@ -132,8 +132,14 @@ class LessonFinancialSection extends StatelessWidget {
         const SizedBox(height: 8),
         _CompletionControl(model: model, actions: actions),
         const SizedBox(height: 16),
-        _DecisionFields(model: model, actions: actions),
-        if (model.canManageTeacherCompensation)
+        if (model.session.isGroupLesson && !model.session.isEdit)
+          Text(
+            'Из настроек группы: ${_catalogItem(model.references.catalog?.settlementTypes, model.draft.settlementTypeKey)?.label ?? model.draft.settlementTypeKey} · ${_catalogItem(model.references.catalog?.compensationRules, model.draft.compensationRuleKey)?.label ?? model.draft.compensationRuleKey}',
+          )
+        else
+          _DecisionFields(model: model, actions: actions),
+        if (model.canManageTeacherCompensation &&
+            (!model.session.isGroupLesson || model.session.isEdit))
           _CompensationOverride(model: model, actions: actions),
         const SizedBox(height: 16),
         if (model.draft.settlementTypeKey == 'trial_lesson')
@@ -284,6 +290,7 @@ class _PartialDurationControls extends StatelessWidget {
           ),
         ],
         if (draft.compensationTouched &&
+            (!model.session.isGroupLesson || model.session.isEdit) &&
             draft.settlementTypeKey != 'trial_lesson') ...[
           const SizedBox(height: 8),
           Align(

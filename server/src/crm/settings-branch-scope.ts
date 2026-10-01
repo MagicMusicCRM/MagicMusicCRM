@@ -3,7 +3,7 @@ import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 
 export async function settingsBranchIdsForActor(
-  database: DatabaseService,
+  database: Pick<DatabaseService, "query">,
   actor: ActorContext,
 ): Promise<string[] | null> {
   if (actor.role !== "manager") return null;
@@ -24,7 +24,7 @@ export async function settingsBranchIdsForActor(
 }
 
 export async function assertSettingsBranchScope(
-  database: DatabaseService,
+  database: Pick<DatabaseService, "query">,
   actor: ActorContext,
   branchId: string,
 ): Promise<void> {

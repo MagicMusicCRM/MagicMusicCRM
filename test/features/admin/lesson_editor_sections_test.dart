@@ -17,8 +17,10 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_edito
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_view.dart';
 
 import '../../support/modal_layout_evidence.dart';
+import '../../support/client_picker_test_scope.dart';
 
-Widget _host(Widget child) => MaterialApp(home: Material(child: child));
+Widget _host(Widget child) =>
+    clientPickerTestScope(MaterialApp(home: Material(child: child)));
 
 const _suggestion = ScheduleSuggestion(
   kind: 'SAME_TIME_ROOM',
@@ -348,27 +350,31 @@ void main() {
       await tester.pumpWidget(
         RepaintBoundary(
           key: evidenceRootKey,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            localizationsDelegates: GlobalMaterialLocalizations.delegates,
-            supportedLocales: const [Locale('ru')],
-            locale: const Locale('ru'),
-            theme: AppTheme.production.copyWith(platform: platform),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(scale)),
-              child: child!,
-            ),
-            home: Scaffold(
-              body: Builder(
-                builder: (context) => TextButton(
-                  onPressed: () => showMagicDialog<void>(
-                    context: context,
-                    builder: (_) =>
-                        LessonEditorView(model: _viewModel(), actions: actions),
+          child: clientPickerTestScope(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+              supportedLocales: const [Locale('ru')],
+              locale: const Locale('ru'),
+              theme: AppTheme.production.copyWith(platform: platform),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => showMagicDialog<void>(
+                      context: context,
+                      builder: (_) => LessonEditorView(
+                        model: _viewModel(),
+                        actions: actions,
+                      ),
+                    ),
+                    child: const Text('Открыть'),
                   ),
-                  child: const Text('Открыть'),
                 ),
               ),
             ),
@@ -1967,6 +1973,7 @@ void main() {
             'package:magic_music_crm/core/widgets/app_dropdown.dart',
             'package:flutter/material.dart',
             'package:magic_music_crm/core/widgets/searchable_picker_field.dart',
+            'package:magic_music_crm/core/widgets/client_selection_details.dart',
             'lesson_editor_models.dart',
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_schedule_section.dart':

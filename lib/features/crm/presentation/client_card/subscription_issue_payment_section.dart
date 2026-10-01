@@ -13,6 +13,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
   const SubscriptionIssuePaymentSection({
     super.key,
     required this.draft,
+    this.recipientType = 'student',
     required this.defaultPaymentMinor,
     required this.fieldsEnabled,
     required this.searchPayers,
@@ -34,6 +35,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
   });
 
   final SubscriptionIssueDraft draft;
+  final String recipientType;
   final BigInt defaultPaymentMinor;
   final bool fieldsEnabled;
   final Future<List<SearchableSelectItem>> Function(String query) searchPayers;
@@ -99,6 +101,9 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
         const SizedBox(height: AppSpace.md),
         SearchablePickerField(
           key: const Key('subscription-payer'),
+          clientType: draft.payerStudentId == draft.recipientStudentId
+              ? recipientType
+              : 'student',
           label: 'Плательщик',
           placeholder: 'Выберите ученика',
           hintText: 'Введите имя или ФИО ученика',
@@ -109,6 +114,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
               id: draft.recipientStudentId,
               label: draft.recipientLabel,
               subtitle: 'Получатель абонемента',
+              clientType: recipientType,
             ),
           ],
           isNullable: false,

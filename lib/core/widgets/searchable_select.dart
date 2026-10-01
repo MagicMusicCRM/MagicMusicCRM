@@ -354,17 +354,19 @@ class _SearchableSelectState extends State<SearchableSelect> {
                                     : FontWeight.normal,
                               ),
                             ),
-                            subtitle: item.subtitle != null
-                                ? Text(
-                                    item.subtitle!,
-                                    style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                      fontSize: 12,
-                                    ),
-                                  )
-                                : null,
+                            subtitle:
+                                item.details ??
+                                (item.subtitle != null
+                                    ? Text(
+                                        item.subtitle!,
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      )
+                                    : null),
                             trailing: isSelected
                                 ? const Icon(
                                     Icons.check_circle_rounded,

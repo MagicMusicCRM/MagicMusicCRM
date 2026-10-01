@@ -52,6 +52,11 @@ class SchedulePlanMutationFlow {
   };
 
   Future<SchedulePlanMutationResult> create(BuildContext context) async {
+    final group = _groupMode ? await service.getGroup(groupId!) : null;
+    if (!context.mounted) return SchedulePlanMutationResult.cancelled;
+    if (group != null && group['settlement_type_key'] == null) {
+      throw StateError('Сначала выберите типы расчёта в настройках группы.');
+    }
     GroupScheduleParticipantsDraft? participantDraft;
     if (_groupMode) {
       participantDraft = await showMagicSheet<GroupScheduleParticipantsDraft>(
@@ -74,6 +79,30 @@ class SchedulePlanMutationFlow {
       icon: Icons.event_repeat_rounded,
       builder: (_) => PreferredScheduleEditor(
         planMode: true,
+        financialDefaultsFromGroup: _groupMode,
+        initialDraft: group == null
+            ? null
+            : PreferredScheduleDraft(
+                branchId: group['branch_id'].toString(),
+                weekdays: {DateTime.now().weekday},
+                beginTime: '15:00',
+                durationMinutes: 60,
+                lessonsPerDay: 1,
+                validFrom: DateUtils.dateOnly(
+                  DateTime.now(),
+                ).add(const Duration(days: 1)),
+                validUntil: DateUtils.dateOnly(
+                  DateTime.now(),
+                ).add(const Duration(days: 91)),
+                teacherId: group['teacher_id'].toString(),
+                roomId: group['room_id'].toString(),
+                notes: '',
+                settlementTypeKey: group['settlement_type_key'].toString(),
+                teacherCompensationRuleKey:
+                    group['teacher_compensation_rule_key'].toString(),
+                clientDecisions: _initialClientDecisions(participantDraft),
+                openEnded: true,
+              ),
         initialTitle: _groupMode
             ? (subjectName?.trim().isNotEmpty == true
                   ? subjectName!.trim()
@@ -95,6 +124,8 @@ class SchedulePlanMutationFlow {
         participantLabels: _decisionParticipantLabels,
         teacherAvailable: (candidate) =>
             _checkCreateTeacher(candidate, participantDraft),
+        availableTeachers: (candidate, ids) =>
+            _checkCreateTeachers(candidate, participantDraft, ids),
       ),
     );
     if (draft == null || !context.mounted) {
@@ -114,6 +145,11 @@ class SchedulePlanMutationFlow {
           seed,
           adding: adding,
           references: references,
+          availableTeachers: (candidate, ids) => _checkCreateTeachers(
+            candidate.copyWith(subscriptionId: draft.subscriptionId),
+            participantDraft,
+            ids,
+          ),
           teacherAvailable: (candidate) => _checkCreateTeacher(
             candidate.copyWith(subscriptionId: draft.subscriptionId),
             participantDraft,
@@ -393,12 +429,15 @@ class SchedulePlanMutationFlow {
     required bool adding,
     required _SchedulePlanReferences references,
     required Future<bool> Function(PreferredScheduleDraft) teacherAvailable,
+    Future<Set<String>> Function(PreferredScheduleDraft, List<String>)?
+    availableTeachers,
   }) => showMagicSheet<PreferredScheduleDraft>(
     context,
     title: adding ? 'Добавить набор дней' : 'Изменить набор дней',
     subtitle: 'Для выбранных дней педагог и аудитория обязательны',
     icon: Icons.edit_calendar_outlined,
     builder: (_) => PreferredScheduleEditor(
+      financialDefaultsFromGroup: _groupMode,
       branches: branches,
       teachers: references.teachers,
       rooms: references.rooms,
@@ -410,6 +449,7 @@ class SchedulePlanMutationFlow {
       canManageTeacherCompensation: canManageTeacherCompensation,
       participantLabels: _decisionParticipantLabels,
       teacherAvailable: teacherAvailable,
+      availableTeachers: availableTeachers,
     ),
   );
 
@@ -431,6 +471,28 @@ class SchedulePlanMutationFlow {
       rows: _draftRows(draft),
     );
     return _teacherFitsPreview(preview);
+  }
+
+  Future<Set<String>> _checkCreateTeachers(
+    PreferredScheduleDraft draft,
+    GroupScheduleParticipantsDraft? participants,
+    List<String> candidates,
+  ) async {
+    final preview = await service.previewSchedulePlanConstraints(
+      title: draft.title?.isNotEmpty == true
+          ? draft.title!
+          : 'Проверка графика',
+      kind: _groupMode ? 'group' : 'individual',
+      studentId: studentId,
+      groupId: groupId,
+      subscriptionId: draft.subscriptionId,
+      participants: participants?.participants ?? const [],
+      activeFrom: _apiDate(draft.validFrom),
+      activeUntil: draft.openEnded ? null : _apiDate(draft.validUntil),
+      rows: _draftRows(draft.copyWith(teacherId: candidates.first)),
+      candidateTeacherIds: candidates,
+    );
+    return (preview['availableTeacherIds'] as List).cast<String>().toSet();
   }
 
   Future<bool> _checkUpdatedTeacher(
@@ -591,11 +653,13 @@ class SchedulePlanMutationFlow {
       rowsFromDraft(
         draft,
         canManageTeacherCompensation: canManageTeacherCompensation,
+        inheritGroupDefaults: _groupMode,
       );
 
   static List<Map<String, dynamic>> rowsFromDraft(
     PreferredScheduleDraft draft, {
     required bool canManageTeacherCompensation,
+    bool inheritGroupDefaults = false,
   }) {
     final rows = <Map<String, dynamic>>[];
     final weekdays = draft.weekdays.toList()..sort();
@@ -616,17 +680,21 @@ class SchedulePlanMutationFlow {
           'durationMinutes': draft.durationMinutes,
           if (draft.notes.isNotEmpty) 'notes': draft.notes,
           if (draft.teacherCompensationSource == 'manual' &&
+              !inheritGroupDefaults &&
               draft.plannedSettlementReason.isNotEmpty)
             'plannedSettlementReason': draft.plannedSettlementReason,
           'financialDecision': {
             'settlementTypeKey': draft.settlementTypeKey,
-            if (canManageTeacherCompensation)
+            if (canManageTeacherCompensation && !inheritGroupDefaults)
               'teacherCompensationRuleKey': draft.teacherCompensationRuleKey,
             if (canManageTeacherCompensation &&
+                (!inheritGroupDefaults ||
+                    draft.teacherCompensationSource == 'manual') &&
                 draft.teacherCreditedDurationMinutes != null)
               'teacherCreditedDurationMinutes':
                   draft.teacherCreditedDurationMinutes,
             if (canManageTeacherCompensation &&
+                !inheritGroupDefaults &&
                 draft.teacherCompensationSource != null)
               'teacherCompensationSource': draft.teacherCompensationSource,
             'clientDecisions': lessonClientDecisionsPayload(

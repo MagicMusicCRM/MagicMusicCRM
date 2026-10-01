@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_settings.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_cards.dart';
 
 import '../../support/settings_test_api.dart';
 
@@ -12,6 +14,7 @@ Future<void> _pump(
   WidgetTester tester,
   SettingsTestApi api, {
   String? initialArea,
+  bool scheduleEditor = false,
 }) async {
   tester.view.physicalSize = const Size(1200, 900);
   tester.view.devicePixelRatio = 1;
@@ -23,7 +26,22 @@ Future<void> _pump(
       child: MaterialApp(
         theme: ThemeData(platform: TargetPlatform.windows),
         home: Scaffold(
-          body: initialArea == 'users'
+          body: scheduleEditor
+              ? const ScheduleReferenceSettings(
+                  canEdit: true,
+                  section: ScheduleReferenceSection.teacherSchedule,
+                )
+              : initialArea == 'schedule' || initialArea == 'learning'
+              ? GroupsWorkspace(
+                  snapshot: CapabilitySnapshot(
+                    accountId: 'test-account',
+                    role: api.role,
+                    accessVersion: 1,
+                    capabilities: api.capabilities.toSet(),
+                    scopes: const {},
+                  ),
+                )
+              : initialArea == 'users'
               ? PersonnelWorkspace(
                   snapshot: CapabilitySnapshot(
                     accountId: 'test-account',
@@ -56,7 +74,7 @@ Future<void> _chooseSearchable(
 }
 
 void main() {
-  testWidgets('manager sees five linked settings groups and search', (
+  testWidgets('manager sees settings areas and searches subscriptions', (
     tester,
   ) async {
     await _pump(
@@ -72,16 +90,17 @@ void main() {
 
     for (final label in const [
       'Организация',
-      'Обучение',
-      'Клиенты',
-      'Доступ и уведомления',
+      'Пользователи',
+      'Уведомления',
+      'CRM и воронки',
+      'Абонементы',
       'Интеграции и система',
     ]) {
       expect(find.text(label), findsWidgets);
     }
     await tester.enterText(find.byKey(const Key('settings-search')), 'оплаты');
     await tester.pump();
-    expect(find.widgetWithText(ListTile, 'Клиенты'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Абонементы'), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'Организация'), findsNothing);
     expect(find.text('Только просмотр назначенных филиалов'), findsOneWidget);
     expect(find.text('Новый филиал'), findsNothing);
@@ -172,45 +191,38 @@ void main() {
     expect(find.text('отказ • использовано: 3'), findsOneWidget);
   });
 
-  testWidgets(
-    'branch hours and teacher schedules are separate read-only views',
-    (tester) async {
-      await _pump(
-        tester,
-        SettingsTestApi(
-          role: 'manager',
-          capabilities: const [
-            'system.settings.manage',
-            'schedule.lesson.read.assigned',
-          ],
-        ),
-      );
+  testWidgets('branch settings are read-only and contain no personnel editor', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      SettingsTestApi(
+        role: 'manager',
+        capabilities: const [
+          'system.settings.manage',
+          'schedule.lesson.read.assigned',
+        ],
+      ),
+    );
 
-      await tester.tap(find.widgetWithText(ListTile, 'Обучение'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Сокол'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('Сокол'), findsWidgets);
-      expect(find.text('Часы работы филиалов'), findsOneWidget);
-      expect(find.text('Рабочие часы филиала'), findsOneWidget);
-      expect(find.text('Петрова Мария'), findsNothing);
-      expect(
-        find.text('Только просмотр. Редактирование выдаёт директор.'),
-        findsOneWidget,
-      );
-      expect(find.widgetWithText(FilledButton, 'Сохранить'), findsNothing);
-      final mondaySwitch = find.bySemanticsLabel('Понедельник: включено');
-      expect(mondaySwitch, findsOneWidget);
+    expect(find.text('Сокол'), findsWidgets);
+    expect(find.text('Рабочие часы филиала'), findsOneWidget);
+    expect(find.text('Петрова Мария'), findsNothing);
+    expect(
+      find.text('Только просмотр. Редактирование выдаёт директор.'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(FilledButton, 'Сохранить'), findsNothing);
+    final mondaySwitch = find.bySemanticsLabel('Понедельник: включено');
+    expect(mondaySwitch, findsOneWidget);
 
-      await tester.tap(find.text('Графики преподавателей'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Графики преподавателей'), findsWidgets);
-      expect(find.text('Петрова Мария'), findsWidgets);
-      expect(find.text('Филиалы преподавателя'), findsOneWidget);
-      expect(find.text('Доступность преподавателя'), findsOneWidget);
-      expect(find.text('Рабочие часы филиала'), findsNothing);
-    },
-  );
+    expect(find.text('Графики преподавателей'), findsNothing);
+    expect(find.text('Филиалы преподавателя'), findsNothing);
+    expect(find.text('Рабочий график и отсутствия'), findsNothing);
+  });
 
   testWidgets('teacher unavailability requires and displays a reason', (
     tester,
@@ -225,12 +237,8 @@ void main() {
           'config.crm.edit',
         ],
       ),
+      scheduleEditor: true,
     );
-
-    await tester.tap(find.widgetWithText(ListTile, 'Обучение'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Графики преподавателей'));
-    await tester.pumpAndSettle();
     final addInterval = find.byKey(const ValueKey('interval-unavailable-add'));
     await tester.ensureVisible(addInterval);
     await tester.pumpAndSettle();
@@ -284,9 +292,7 @@ void main() {
         ],
         teachers: teachers,
       );
-      await _pump(tester, api, initialArea: 'schedule');
-      await tester.tap(find.text('Графики преподавателей'));
-      await tester.pumpAndSettle();
+      await _pump(tester, api, scheduleEditor: true);
 
       for (var index = 0; index < teachers.length; index += 1) {
         final teacher = teachers[index];
@@ -300,12 +306,26 @@ void main() {
           );
         }
 
-        final assignmentsCard = find
-            .ancestor(
-              of: find.text('Филиалы преподавателя'),
-              matching: find.byType(Card),
+        tester
+            .state<ScrollableState>(
+              find
+                  .descendant(
+                    of: find.byType(ListView).first,
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
             )
-            .first;
+            .position
+            .jumpTo(0);
+        await tester.pumpAndSettle();
+        final assignmentsCard = find.byType(TeacherAssignmentsCard);
+        await tester.ensureVisible(
+          find.descendant(
+            of: assignmentsCard,
+            matching: find.widgetWithText(FilledButton, 'Сохранить'),
+          ),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(
           find.descendant(
             of: assignmentsCard,
@@ -314,16 +334,23 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final availabilityCard = find
-            .ancestor(
-              of: find.text('Доступность преподавателя'),
-              matching: find.byType(Card),
-            )
-            .first;
+        final add = find.byKey(const ValueKey('teacher-availability-add-7'));
+        await tester.ensureVisible(add);
+        await tester.pumpAndSettle();
+        await tester.tap(add);
+        await tester.pumpAndSettle();
+        final availabilityCard = find.byType(TeacherAvailabilityCard);
+        await tester.ensureVisible(
+          find.descendant(
+            of: availabilityCard,
+            matching: find.widgetWithText(FilledButton, 'Сохранить график'),
+          ),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(
           find.descendant(
             of: availabilityCard,
-            matching: find.widgetWithText(FilledButton, 'Сохранить'),
+            matching: find.widgetWithText(FilledButton, 'Сохранить график'),
           ),
         );
         await tester.pumpAndSettle();
@@ -650,8 +677,6 @@ void main() {
     );
     await _pump(tester, api, initialArea: 'schedule');
 
-    await tester.tap(find.text('Группы').first);
-    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Новая группа'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('create-group-form')), findsOneWidget);
@@ -684,7 +709,7 @@ void main() {
     expect(payload, isNot(contains('teacherRate')));
   });
 
-  testWidgets('director sees the group-rate control', (tester) async {
+  testWidgets('director sees the group compensation type', (tester) async {
     final api = SettingsTestApi(
       role: 'director',
       capabilities: const [
@@ -695,12 +720,14 @@ void main() {
     );
     await _pump(tester, api, initialArea: 'schedule');
 
-    await tester.tap(find.text('Группы').first);
-    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Новая группа'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Ставка педагога по группе'), findsOneWidget);
+    await tester.tap(find.byType(AppDropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сокол').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Тип оплаты преподавателю *'), findsOneWidget);
   });
 
   testWidgets('settings lists localized staff status and group size', (
@@ -738,8 +765,6 @@ void main() {
     expect(find.textContaining('@migration.invalid'), findsNothing);
 
     await _pump(tester, api, initialArea: 'learning');
-    await tester.tap(find.text('Группы'));
-    await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('Поиск группы'), findsOneWidget);
     expect(find.textContaining('Учеников: 7'), findsOneWidget);
   });

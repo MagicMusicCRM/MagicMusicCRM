@@ -15,6 +15,7 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     required this.defaultBranchId,
     this.series,
     this.planMode = false,
+    this.financialDefaultsFromGroup = false,
     this.initialDraft,
     this.subscriptionOptions = const [],
     this.initialSubscriptionId,
@@ -32,6 +33,7 @@ class PreferredScheduleEditorController extends ChangeNotifier {
   final String? defaultBranchId;
   final Map<String, dynamic>? series;
   final bool planMode;
+  final bool financialDefaultsFromGroup;
   final PreferredScheduleDraft? initialDraft;
   final List<Map<String, dynamic>> subscriptionOptions;
   final String? initialSubscriptionId;
@@ -114,9 +116,10 @@ class PreferredScheduleEditorController extends ChangeNotifier {
           initialDraft?.plannedSettlementReason ??
           '',
       compensationTouched:
+          !financialDefaultsFromGroup &&
           (seriesDecision['teacherCompensationSource']?.toString() ??
-              initialDraft?.teacherCompensationSource) ==
-          'manual',
+                  initialDraft?.teacherCompensationSource) ==
+              'manual',
       clientDecisions: _initialClientDecisions(seriesDecision),
       openEnded:
           allowOpenEnded &&
@@ -183,7 +186,14 @@ class PreferredScheduleEditorController extends ChangeNotifier {
   }
 
   bool _teacherBelongsToBranch(Map<String, dynamic> teacher, String branchId) {
-    if (teacher['status']?.toString() != 'active') return false;
+    if (!const {
+      'active',
+      'working',
+      'активен',
+      'работает',
+    }.contains(teacher['status']?.toString().toLowerCase())) {
+      return false;
+    }
     final assignments = teacher['assigned_branches'];
     return assignments is List &&
         assignments.whereType<Map>().any(
@@ -290,7 +300,9 @@ class PreferredScheduleEditorController extends ChangeNotifier {
         ),
       );
       next = next.copyWith(
-        teacherCompensationRuleKey: recommendation.compensationRuleKey,
+        teacherCompensationRuleKey: financialDefaultsFromGroup
+            ? next.teacherCompensationRuleKey
+            : recommendation.compensationRuleKey,
         teacherCreditedDurationInput: recommendation
             .teacherCreditedDurationMinutes
             ?.toString(),
@@ -394,7 +406,7 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     _update(
       _state.copyWith(
         teacherCreditedDurationInput: value,
-        compensationTouched: true,
+        compensationTouched: !financialDefaultsFromGroup,
         teacherCompensationSource: 'manual',
       ),
     );

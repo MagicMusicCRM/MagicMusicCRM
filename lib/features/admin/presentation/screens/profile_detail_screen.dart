@@ -5,7 +5,9 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_toast.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_launcher.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/access_editor_sheet.dart';
 
 /// Карточка пользователя (профиль/админ).
@@ -18,10 +20,12 @@ class ProfileDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.profileId,
     this.embedded = false,
+    this.initialAccess = false,
   });
 
   final String profileId;
   final bool embedded;
+  final bool initialAccess;
 
   @override
   ConsumerState<ProfileDetailScreen> createState() =>
@@ -35,10 +39,12 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
   bool _loading = true;
   bool _linking = false;
   String? _error;
+  late bool _editingAccess;
 
   @override
   void initState() {
     super.initState();
+    _editingAccess = widget.initialAccess;
     _load();
   }
 
@@ -167,6 +173,32 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
 
     final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
     final userId = profile['user_id']?.toString();
+    final canManageAccess =
+        snapshot?.allows('system.settings.manage') == true &&
+        (snapshot?.role == 'director' || snapshot?.role == 'system_admin');
+    if (_editingAccess && canManageAccess && userId?.isNotEmpty == true) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _editingAccess = false),
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('К карточке пользователя'),
+            ),
+          ),
+          Expanded(
+            child: AccessEditorSheet(
+              actorRole: snapshot!.role,
+              userId: userId!,
+              userLabel: _fullName(profile),
+              embedded: true,
+            ),
+          ),
+        ],
+      );
+    }
     return RefreshIndicator(
       color: AppColor.gold,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -186,15 +218,9 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
               spacing: AppSpace.sm,
               runSpacing: AppSpace.sm,
               children: [
-                if (userId?.isNotEmpty == true)
+                if (canManageAccess && userId?.isNotEmpty == true)
                   FilledButton.icon(
-                    onPressed: () => AccessEditorSheet.show(
-                      context,
-                      actorRole: snapshot!.role,
-                      userId: userId!,
-                      userLabel: _fullName(profile),
-                      onChanged: _load,
-                    ),
+                    onPressed: () => setState(() => _editingAccess = true),
                     icon: const Icon(Icons.admin_panel_settings_outlined),
                     label: const Text('Настроить доступ'),
                   ),
@@ -375,7 +401,7 @@ class _LinksSection extends StatelessWidget {
             bottom: AppSpace.sm,
           ),
           child: Text(
-            'Привязанные клиенты',
+            'Связанные карточки',
             style: TextStyle(
               color: scheme.onSurface,
               fontSize: 15,
@@ -401,7 +427,7 @@ class _LinksSection extends StatelessWidget {
                   ),
                   title: const Text('Не удалось загрузить привязки'),
                   subtitle: const Text(
-                    'Профиль загружен. Повторите запрос привязанных клиентов.',
+                    'Профиль загружен. Повторите запрос связанных карточек.',
                   ),
                   trailing: TextButton(
                     onPressed: onRetry,
@@ -412,7 +438,7 @@ class _LinksSection extends StatelessWidget {
               ? Padding(
                   padding: const EdgeInsets.all(AppSpace.lg),
                   child: Text(
-                    'Нет привязанных клиентов',
+                    'Нет связанных карточек',
                     style: TextStyle(
                       color: scheme.onSurfaceVariant,
                       fontSize: 13,
@@ -438,28 +464,60 @@ class _LinksSection extends StatelessWidget {
   }
 }
 
-class _LinkTile extends StatelessWidget {
+class _LinkTile extends ConsumerWidget {
   const _LinkTile({required this.link});
 
   final Map<String, dynamic> link;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final entityType = link['entity_type']?.toString();
     final entityId = link['entity_id']?.toString();
     final name = (link['name'] ?? '').toString().trim();
 
-    final isStudent = entityType == 'student';
-    final typeLabel = isStudent ? 'Ученик' : 'Лид';
-    final canOpen = entityId != null && entityId.isNotEmpty;
+    final (typeLabel, icon, linkType, variant) = switch (entityType) {
+      'student' => (
+        'Ученик',
+        Icons.school_outlined,
+        EntityLinkType.client,
+        'student',
+      ),
+      'lead' => (
+        'Лид',
+        Icons.assignment_ind_outlined,
+        EntityLinkType.client,
+        'lead',
+      ),
+      'teacher' => (
+        'Преподаватель',
+        Icons.school_outlined,
+        EntityLinkType.teacher,
+        'personnel_teacher',
+      ),
+      'staff' => (
+        'Сотрудник',
+        Icons.badge_outlined,
+        EntityLinkType.user,
+        'staff',
+      ),
+      _ => ('Карточка', Icons.link_outlined, EntityLinkType.unknown, 'unknown'),
+    };
+    final entityLink = EntityLink.typed(
+      entityType: linkType,
+      entityId: entityId ?? '',
+      variant: variant,
+      presentation: name.isEmpty
+          ? null
+          : EntityPresentationReference(primary: name),
+    );
+    final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
+    final canOpen =
+        snapshot != null &&
+        EntityRouteRegistry().resolve(entityLink, snapshot).canOpen;
 
     return ListTile(
-      leading: Icon(
-        isStudent ? Icons.school_outlined : Icons.assignment_ind_outlined,
-        color: AppColor.gold,
-        size: 22,
-      ),
+      leading: Icon(icon, color: AppColor.gold, size: 22),
       title: Text(
         name.isNotEmpty ? name : 'Без имени',
         style: TextStyle(
@@ -479,25 +537,7 @@ class _LinkTile extends StatelessWidget {
               size: 20,
             )
           : null,
-      onTap: !canOpen
-          ? null
-          : () async {
-              if (isStudent) {
-                await showClientCard(
-                  context,
-                  entityType: 'student',
-                  entityId: entityId,
-                  presentationLabel: name,
-                );
-              } else {
-                await showClientCard(
-                  context,
-                  entityType: 'lead',
-                  entityId: entityId,
-                  presentationLabel: name,
-                );
-              }
-            },
+      onTap: !canOpen ? null : () => openEntityLink(context, ref, entityLink),
     );
   }
 }

@@ -54,6 +54,37 @@ void main() {
           expect(field('Название'), findsNothing);
         }
 
+        Future<void> searchCatalog() async {
+          await h.check('SEARCH', 'Поиск абонемента по названию', () async {
+            final search = find.byKey(const Key('subscription-package-search'));
+            for (final query in ['CATALOG', 'NO-SUCH-PACKAGE', '']) {
+              await tester.enterText(search, query);
+              await h.quiet();
+              expect(
+                find.text('CATALOG-UPDATED'),
+                query == 'NO-SUCH-PACKAGE' ? findsNothing : findsOneWidget,
+              );
+              if (query == 'NO-SUCH-PACKAGE') {
+                expect(find.text('Ничего не найдено'), findsOneWidget);
+              }
+            }
+          });
+          await h.check(
+            'NARROW',
+            'Каталог абонементов на узком экране',
+            () async {
+              tester.view.physicalSize = const Size(390, 844);
+              await h.quiet();
+              expect(
+                find.byKey(const Key('subscription-package-search')),
+                findsOneWidget,
+              );
+              expect(find.text('CATALOG-UPDATED'), findsOneWidget);
+            },
+          );
+          tester.view.physicalSize = const Size(1440, 1200);
+        }
+
         await h.check(
           'OPEN',
           'Открыть каталог в системных настройках',
@@ -62,7 +93,7 @@ void main() {
               const SystemSettingsRouteScreen(initialArea: 'sales'),
             );
             await h.waitFor(
-              () => find.text('Продажи и оплаты').evaluate().isNotEmpty,
+              () => find.text('Абонементы').evaluate().isNotEmpty,
               'Sales catalog rendered',
             );
             await h.quiet();
@@ -96,6 +127,7 @@ void main() {
               expect(tile.onTap, isNull);
             },
           );
+          await searchCatalog();
           await h.finish();
           return;
         }
@@ -346,6 +378,7 @@ void main() {
             },
           );
         }
+        await searchCatalog();
         await h.finish();
       },
       timeout: const Timeout(Duration(minutes: 7)),

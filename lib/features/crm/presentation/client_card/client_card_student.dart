@@ -732,6 +732,7 @@ extension _ClientCardStudent on _ClientCardState {
       packages: packages,
       acceptedByLabel: acceptedByLabel,
       recipientStudentId: recipientId,
+      recipientType: issuingForLead ? 'lead' : 'student',
       recipientLabel: recipientLabel.isEmpty
           ? (issuingForLead ? 'Текущий лид' : 'Текущий ученик')
           : recipientLabel,
@@ -751,6 +752,7 @@ extension _ClientCardStudent on _ClientCardState {
                     ? row['label'].toString()
                     : 'Ученик без имени',
                 subtitle: 'Плательщик',
+                data: row,
               ),
         ];
       },

@@ -4,6 +4,7 @@ import { groupScheduleConflicts } from "./schedule-analyzer";
 import type { SchedulePlanRowPreview } from "./schedule-plan-overlap-analyzer";
 
 export interface SchedulePlanConstraintProjection {
+  availableTeacherIds?: string[];
   valid: boolean;
   conflicts: ReturnType<typeof groupScheduleConflicts>;
   rows: Array<{

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import {
   evaluateReferenceConstraints,
+  halfOpenIntervalsOverlap,
   parseConstraintInterval,
   sortConstraintViolations,
   violation,
@@ -12,6 +13,7 @@ import {
   LessonConstraintDraft,
   LessonConflict,
   ConstraintTransaction,
+  ResolvedConstraintReference,
 } from "./constraint-engine.types";
 import {
   groupScheduleConflicts,
@@ -27,13 +29,36 @@ export interface ScheduleAnalysisResult extends ConstraintValidationResult {
   suggestions: ScheduleSuggestion[];
 }
 
+interface PreparedConstraintValidation {
+  transaction: ConstraintTransaction;
+  branchId: string;
+  teacherId: string;
+  roomId: string;
+  startAt: Date;
+  endAt: Date;
+  reference: ResolvedConstraintReference;
+  roomMatchesBranch: boolean;
+  conflicts: Map<string, Promise<LessonConflict[]>>;
+}
+
 @Injectable()
 export class ScheduleConstraintEngine {
   constructor(private readonly repository: ConstraintEngineRepository) {}
 
+  async prepareValidation(draft: LessonConstraintDraft, transaction: ConstraintTransaction): Promise<PreparedConstraintValidation | undefined> {
+    const interval = parseConstraintInterval(draft.startAt, draft.endAt);
+    if (!interval) return undefined;
+    const reference = await this.repository.resolveReference(draft, interval.startAt, interval.endAt, transaction);
+    // A partial assignment needs the original per-occurrence lookup.
+    if (!reference?.teacherBranchAssigned) return undefined;
+    const roomMatchesBranch = await this.repository.roomMatchesBranch(draft.roomId, draft.branchId, transaction);
+    return {transaction, branchId:draft.branchId,teacherId:draft.teacherId,roomId:draft.roomId,...interval,reference,roomMatchesBranch,conflicts: new Map()};
+  }
+
   async validate(
     draft: LessonConstraintDraft,
     transaction?: ConstraintTransaction,
+    prepared?: PreparedConstraintValidation,
   ): Promise<ConstraintValidationResult> {
     const interval = parseConstraintInterval(draft.startAt, draft.endAt);
     if (!interval) {
@@ -48,26 +73,40 @@ export class ScheduleConstraintEngine {
       };
     }
 
-    const loadReference = () =>
+    const reusable = prepared && prepared.transaction === transaction &&
+      prepared.branchId === draft.branchId && prepared.teacherId === draft.teacherId &&
+      prepared.roomId === draft.roomId && interval.startAt >= prepared.startAt && interval.endAt <= prepared.endAt;
+    const loadReference = () => reusable ? Promise.resolve({...prepared.reference,
+      teacherRules: prepared.reference.teacherRules.filter(rule => {
+        const bounds = parseConstraintInterval(rule.startsAt, rule.endsAt ?? new Date(8_640_000_000_000_000));
+        return bounds !== null && halfOpenIntervalsOverlap(bounds, interval);
+      }),
+    }) :
       this.repository.resolveReference(
         draft,
         interval.startAt,
         interval.endAt,
         transaction,
       );
-    const loadRoomMatch = () =>
+    const loadRoomMatch = () => reusable ? Promise.resolve(prepared.roomMatchesBranch) :
       this.repository.roomMatchesBranch(
         draft.roomId,
         draft.branchId,
         transaction,
       );
-    const loadConflicts = () =>
-      this.repository.findConflicts(
-        draft,
-        interval.startAt,
-        interval.endAt,
-        transaction,
-      );
+    const loadConflicts = async () => {
+      if (!reusable) return this.repository.findConflicts(draft, interval.startAt, interval.endAt, transaction);
+      const key = JSON.stringify([draft.clientRef, draft.excludeLessonId, draft.excludeScheduleSeriesIds]);
+      let pending = prepared.conflicts.get(key);
+      if (!pending) {
+        pending = this.repository.findConflicts(draft, prepared.startAt, prepared.endAt, transaction);
+        prepared.conflicts.set(key, pending);
+      }
+      return (await pending).filter(conflict => {
+        const bounds = conflict.startsAt && conflict.endsAt ? parseConstraintInterval(conflict.startsAt, conflict.endsAt) : null;
+        return bounds !== null && halfOpenIntervalsOverlap(bounds, interval);
+      });
+    };
     // A pg PoolClient may execute only one query at a time. Keep read-only
     // previews parallel on the pool, but serialize checks inside commit paths.
     const [reference, roomMatchesBranch, conflicts] = transaction

@@ -10,10 +10,10 @@ import type { PreparedSchedulePlanRow } from "./schedule-plan-preview.types";
 type RowDecision = SchedulePlanRowDto["financialDecision"];
 
 const sameTeacherDecision = (left: RowDecision, right: RowDecision) =>
-  left.teacherCompensationRuleKey === right.teacherCompensationRuleKey &&
-  left.teacherCompensationValueMinor === right.teacherCompensationValueMinor &&
-  left.teacherCreditedDurationMinutes === right.teacherCreditedDurationMinutes &&
-  left.teacherCompensationSource === right.teacherCompensationSource;
+  (left.teacherCompensationRuleKey === undefined || left.teacherCompensationRuleKey === right.teacherCompensationRuleKey) &&
+  (left.teacherCompensationValueMinor === undefined || left.teacherCompensationValueMinor === right.teacherCompensationValueMinor) &&
+  (left.teacherCreditedDurationMinutes === undefined || left.teacherCreditedDurationMinutes === right.teacherCreditedDurationMinutes) &&
+  (left.teacherCompensationSource === undefined || left.teacherCompensationSource === right.teacherCompensationSource);
 
 const teacherDecision = (decision: RowDecision) => ({
   teacherCompensationRuleKey: decision.teacherCompensationRuleKey,
@@ -37,6 +37,12 @@ const storedDecisionContext = (
     stored &&
       stored.teacherCompensationSource !== "automatic" &&
       (!policy.canManageTeacherCompensation(actor) ||
+        (prepared?.plan.kind === "group" && row.financialDecision.teacherCompensationRuleKey === undefined &&
+          row.financialDecision.teacherCompensationValueMinor === undefined && row.financialDecision.teacherCompensationSource === undefined) ||
+        (row.financialDecision.teacherCompensationRuleKey === undefined &&
+          row.financialDecision.teacherCompensationValueMinor === undefined &&
+          row.financialDecision.teacherCreditedDurationMinutes === undefined &&
+          row.financialDecision.teacherCompensationSource === undefined) ||
         sameTeacherDecision(row.financialDecision, stored)),
   );
   const effectiveDecision = preservesTeacher
@@ -55,6 +61,8 @@ const storedDecisionContext = (
             ...storedTeacherDecision,
             teacherCompensationSource:
               storedTeacherDecision.teacherCompensationSource ?? "manual",
+            ...(prepared?.plan.kind === "group" && row.financialDecision.teacherCreditedDurationMinutes !== undefined
+              ? { teacherCreditedDurationMinutes: row.financialDecision.teacherCreditedDurationMinutes } : {}),
           }
         : undefined,
   };
@@ -68,6 +76,7 @@ export async function prepareSchedulePlanRow(input: {
   policy: CrmPolicy;
   settlement: LessonSettlementPort;
   prepared?: PreparedSchedulePlanUpdate;
+  groupDefaults?: { settlementTypeKey: string; teacherCompensationRuleKey: string };
 }): Promise<PreparedSchedulePlanRow> {
   const { client, actor, row, allowedClientIds, policy, settlement, prepared } =
     input;
@@ -81,7 +90,13 @@ export async function prepareSchedulePlanRow(input: {
   const settlementPlan = await settlement.resolvePlannedPlan(client, {
     branchId: row.branchId,
     durationMinutes: row.durationMinutes ?? 60,
-    decision: row.financialDecision,
+    decision: input.groupDefaults ? {
+      settlementTypeKey: input.groupDefaults.settlementTypeKey,
+      clientDecisions: row.financialDecision.clientDecisions?.map((decision) => ({ ...decision, settlementTypeKey: undefined })),
+    } : context.preservedTeacherDecision ? { ...row.financialDecision,
+      teacherCompensationRuleKey: undefined, teacherCompensationValueMinor: undefined,
+      teacherCreditedDurationMinutes: undefined, teacherCompensationSource: undefined,
+    } : row.financialDecision,
     actorUserId: actor.userId,
     authorization: policy.teacherCompensationMutationAuthorization(actor),
     reasonText: row.plannedSettlementReason,
@@ -97,6 +112,11 @@ export async function prepareSchedulePlanRow(input: {
     ...(!unchangedLegacyWithoutClientDecisions
       ? { requiredClientIds: allowedClientIds }
       : {}),
+    ...(input.groupDefaults ? { preservedTeacherDecision: {
+      teacherCompensationRuleKey: input.groupDefaults.teacherCompensationRuleKey,
+      teacherCompensationSource: "manual" as const,
+      teacherCreditedDurationMinutes: row.financialDecision.teacherCreditedDurationMinutes,
+    } } : {}),
     ...(context.preservedTeacherDecision
       ? { preservedTeacherDecision: context.preservedTeacherDecision }
       : {}),

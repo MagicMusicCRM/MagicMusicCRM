@@ -20,6 +20,7 @@ Widget? buildStaffWorkspaceSurface({
 
   final link = route.link;
   if (link.entityType != EntityLinkType.user ||
+      link.rawEntityType == 'staff' ||
       !snapshot.allows('system.settings.manage') ||
       link.entityId == '__section__' ||
       link.entityId == 'user-search') {

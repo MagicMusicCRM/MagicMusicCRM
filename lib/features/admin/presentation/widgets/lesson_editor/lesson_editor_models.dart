@@ -369,6 +369,7 @@ class LessonEditorSession {
   final String? leadNoteSource;
 
   bool get isEdit => snapshot != null;
+  bool get isGroupLesson => draft.client?.type == 'group';
   bool get isGroupEdit => isEdit && draft.client?.type == 'group';
 }
 
@@ -388,6 +389,12 @@ class LessonEditorReferenceItem {
   final String? branchId;
   final String? status;
   final Set<String> assignedBranchIds;
+  bool get isWorkingTeacher => const {
+    'active',
+    'working',
+    'активен',
+    'работает',
+  }.contains(status?.toLowerCase());
 }
 
 class LessonEditorReferenceState {

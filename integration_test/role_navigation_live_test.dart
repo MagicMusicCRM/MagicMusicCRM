@@ -211,28 +211,40 @@ void main() {
               'Настройки',
               SystemSettingsWorkspace,
             );
-            await h.check('SETTINGS-SEARCH', 'Поиск группы настроек на 1366×768/125%', () async {
-              tester.view.physicalSize = const Size(1366, 768);
-              tester.view.devicePixelRatio = 1.25;
-              await tester.pump();
-              final search = find.byKey(const Key('settings-search'));
-              await h.tap(search);
-              await tester.enterText(search, 'клиенты');
-              await h.quiet();
-              await h.tap(find.widgetWithText(ListTile, 'Клиенты'));
-              expect(
-                find.byKey(Key('client-settings-${role == 'manager' ? 'sales' : 'crm'}')),
-                findsOneWidget,
-              );
-              expect(tester.takeException(), isNull);
-            });
+            await h.check(
+              'SETTINGS-SEARCH',
+              'Поиск группы настроек на 1366×768/125%',
+              () async {
+                tester.view.physicalSize = const Size(1366, 768);
+                tester.view.devicePixelRatio = 1.25;
+                await tester.pump();
+                final search = find.byKey(const Key('settings-search'));
+                await h.tap(search);
+                await tester.enterText(search, 'клиенты');
+                await h.quiet();
+                await h.tap(find.widgetWithText(ListTile, 'CRM и воронки'));
+                expect(
+                  find.byKey(const Key('settings-area-crm')),
+                  findsOneWidget,
+                );
+                expect(tester.takeException(), isNull);
+              },
+            );
             await h.check(
               'SETTINGS-COMMERCE-OPEN',
-              'Настройки → Продажи и оплаты',
+              'Настройки → Абонементы',
               () async {
-                await h.tap(find.text('Продажи и оплаты'));
+                await tester.enterText(
+                  find.byKey(const Key('settings-search')),
+                  '',
+                );
+                await h.quiet();
+                await h.tap(find.widgetWithText(ListTile, 'Абонементы'));
                 await h.waitFor(
-                  () => find.text('Каталог абонементов').evaluate().isNotEmpty,
+                  () => find
+                      .text('Пакеты занятий, стоимость и срок действия')
+                      .evaluate()
+                      .isNotEmpty,
                   'Product package catalog mounted',
                 );
               },

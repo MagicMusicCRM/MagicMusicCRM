@@ -306,10 +306,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('schedule-filter-branch')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('schedule-filter-branch')), findsNothing);
     expect(
       find.byKey(const ValueKey('schedule-filter-teacher')),
       findsOneWidget,
@@ -359,28 +356,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.matrixQueries.last['branchId'], _branchId);
 
-    await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('schedule-filter-branch')));
+    await tester.tap(
+      find.byKey(ValueKey('schedule-branch-selector-$_branchId')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Все филиалы').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('schedule-filter-apply')));
-    await tester.pumpAndSettle();
-
     expect(api.matrixQueries.last.containsKey('branchId'), isFalse);
-    await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
-    await tester.pumpAndSettle();
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey('schedule-filter-branch')),
+        of: find.byKey(const ValueKey('schedule-branch-control')),
         matching: find.text('Все филиалы'),
       ),
       findsOneWidget,
     );
 
-    await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
-    await tester.pumpAndSettle();
     await _enterTodayDayView(tester);
     expect(find.text('Анна Обычная'), findsOneWidget);
     expect(find.text('Борис Пробный'), findsOneWidget);

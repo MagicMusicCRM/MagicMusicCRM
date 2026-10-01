@@ -177,7 +177,6 @@ void main() {
         final controller = _controller(api);
 
         await controller.loadCatalogs();
-        expect(controller.availabilityLocked, isFalse);
         expect(controller.recurringRulesFor(1), hasLength(2));
         final afternoon = controller.recurringRulesFor(1).last;
         controller.updateRecurringRule(afternoon, 'localStart', '15:00');
@@ -371,7 +370,7 @@ void main() {
         'Другая школа',
       );
 
-      final save = find.widgetWithText(FilledButton, 'Сохранить');
+      final save = find.widgetWithText(FilledButton, 'Сохранить график');
       await tester.ensureVisible(save);
       await tester.pumpAndSettle();
       await tester.tap(save);
@@ -519,7 +518,7 @@ void main() {
         controller.state.teacherDraft!.intervals.single['reason'],
         'Другая школа',
       );
-      final save = find.widgetWithText(FilledButton, 'Сохранить');
+      final save = find.widgetWithText(FilledButton, 'Сохранить график');
       await tester.ensureVisible(save);
       await tester.tap(save);
       await tester.pumpAndSettle();

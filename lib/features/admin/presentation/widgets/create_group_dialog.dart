@@ -10,22 +10,26 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
-import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
+import 'lesson_decision/lesson_decision_models.dart';
 
-Future<bool?> showCreateGroupSurface(BuildContext context) {
+Future<bool?> showCreateGroupSurface(
+  BuildContext context, {
+  Map<String, dynamic>? group,
+}) {
   return showMagicAdaptiveSurface<bool>(
     context,
     kind: AppSurfaceKind.selection,
-    title: 'Новая учебная группа',
+    title: group == null ? 'Новая учебная группа' : 'Настройки группы',
     subtitle: 'Преподаватель, филиал и аудитория',
     icon: Icons.groups_2_outlined,
     scrollBody: false,
-    builder: (_) => const CreateGroupDialog(),
+    builder: (_) => CreateGroupDialog(group: group),
   );
 }
 
 class CreateGroupDialog extends ConsumerStatefulWidget {
-  const CreateGroupDialog({super.key});
+  const CreateGroupDialog({super.key, this.group});
+  final Map<String, dynamic>? group;
 
   @override
   ConsumerState<CreateGroupDialog> createState() => _CreateGroupDialogState();
@@ -34,7 +38,12 @@ class CreateGroupDialog extends ConsumerStatefulWidget {
 class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _priceController = TextEditingController();
+  LessonDecisionCatalog? _catalog;
+  String? _settlementKey;
+  String? _compensationKey;
+  bool _catalogLoading = false;
+  String? _catalogError;
+  int _catalogRevision = 0;
 
   bool _loading = true;
   bool _saving = false;
@@ -45,18 +54,26 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
   String? _teacherId;
   String? _branchId;
   String? _roomId;
-  num? _teacherRate;
 
   @override
   void initState() {
     super.initState();
+    final group = widget.group;
+    if (group != null) {
+      _nameController.text = group['name']?.toString() ?? '';
+      _branchId = group['branch_id']?.toString();
+      _teacherId = group['teacher_id']?.toString();
+      _roomId = group['room_id']?.toString();
+      _settlementKey = group['settlement_type_key']?.toString();
+      _compensationKey = group['teacher_compensation_rule_key']?.toString();
+    }
     _loadReferences();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _priceController.dispose();
+
     super.dispose();
   }
 
@@ -79,6 +96,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
         _rooms = results[2];
         _loading = false;
       });
+      if (_branchId != null) await _loadCatalog();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -104,20 +122,36 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
     setState(() => _saving = true);
 
     try {
-      final rawPrice = _priceController.text.trim().replaceAll(',', '.');
       final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
       final canManageRate =
           snapshot != null && crmCanManageTeacherRates(snapshot);
-      await ref
-          .read(magicCrmServiceProvider)
-          .createGroup(
-            name: _nameController.text,
-            teacherId: _teacherId!,
-            branchId: _branchId!,
-            roomId: _roomId!,
-            pricePerLesson: rawPrice.isEmpty ? null : num.parse(rawPrice),
-            teacherRate: canManageRate ? _teacherRate : null,
-          );
+      if (_settlementKey == null ||
+          _compensationKey == null ||
+          _catalogError != null) {
+        throw StateError('Выберите тип списания и тип оплаты преподавателю.');
+      }
+      final crm = ref.read(magicCrmServiceProvider);
+      if (widget.group == null) {
+        await crm.createGroup(
+          name: _nameController.text,
+          teacherId: _teacherId!,
+          branchId: _branchId!,
+          roomId: _roomId!,
+          settlementTypeKey: _settlementKey,
+          teacherCompensationRuleKey: canManageRate ? _compensationKey : null,
+        );
+      } else {
+        await crm.updateGroup(
+          widget.group!['id'].toString(),
+          name: _nameController.text,
+          teacherId: _teacherId!,
+          branchId: _branchId!,
+          roomId: _roomId!,
+          settlementTypeKey: _settlementKey,
+          teacherCompensationRuleKey: canManageRate ? _compensationKey : null,
+          expectedVersion: (widget.group!['version'] as num).toInt(),
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -131,6 +165,57 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
       }
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _loadCatalog() async {
+    final branchId = _branchId;
+    final revision = ++_catalogRevision;
+    setState(() {
+      _catalogLoading = true;
+      _catalogError = null;
+      _catalog = null;
+    });
+    try {
+      final raw = await ref
+          .read(magicCrmServiceProvider)
+          .getLessonDecisionCatalog(branchId: branchId);
+      if (!mounted || revision != _catalogRevision) return;
+      final catalog = LessonDecisionCatalog.fromJson(
+        raw,
+        LessonDecisionOperation.settle,
+      );
+      setState(() {
+        _catalog = catalog;
+        if (!catalog.settlementTypes.any(
+          (item) => item.key == _settlementKey,
+        )) {
+          _settlementKey =
+              catalog.settlementTypes
+                  .where((item) => item.key == 'lesson')
+                  .firstOrNull
+                  ?.key ??
+              catalog.settlementTypes.firstOrNull?.key;
+        }
+        if (!catalog.compensationRules.any(
+          (item) => item.key == _compensationKey,
+        )) {
+          _compensationKey = catalog.settlementTypes
+              .where((item) => item.key == _settlementKey)
+              .firstOrNull
+              ?.defaultTeacherCompensationRuleKey;
+        }
+        _catalogLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || revision != _catalogRevision) return;
+      setState(() {
+        _catalogLoading = false;
+        _catalogError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить типы расчёта.',
+        );
+      });
     }
   }
 
@@ -222,6 +307,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                 _teacherId = null;
                 _roomId = null;
               });
+              _loadCatalog();
             },
             validator: (value) => value == null ? 'Выберите филиал' : null,
           ),
@@ -268,25 +354,53 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
             onSelected: (item) => setState(() => _roomId = item?.id),
           ),
           const SizedBox(height: 12),
-          TextFormField(
-            controller: _priceController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Цена за занятие'),
-            validator: (value) {
-              final text = value?.trim().replaceAll(',', '.') ?? '';
-              if (text.isEmpty) return null;
-              final parsed = num.tryParse(text);
-              return parsed == null || parsed < 0
-                  ? 'Введите корректную цену'
-                  : null;
-            },
-          ),
-          if (canManageRate) ...[
+          if (_branchId != null) ...[
+            if (_catalogLoading) const LinearProgressIndicator(),
+            if (_catalogError != null) Text(_catalogError!),
+            AppDropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: ValueKey('group-settlement-$_settlementKey'),
+              initialValue: _settlementKey,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Тип списания *'),
+              items: [
+                for (final item
+                    in _catalog?.settlementTypes ??
+                        <LessonDecisionCatalogItem>[])
+                  DropdownMenuItem(value: item.key, child: Text(item.label)),
+              ],
+              onChanged: _catalogLoading
+                  ? null
+                  : (key) => setState(() {
+                      _settlementKey = key;
+                      _compensationKey = _catalog?.settlementTypes
+                          .where((item) => item.key == key)
+                          .firstOrNull
+                          ?.defaultTeacherCompensationRuleKey;
+                    }),
+              validator: (value) =>
+                  value == null ? 'Выберите тип списания' : null,
+            ),
             const SizedBox(height: 12),
-            TeacherRateSelector(
-              allowInherit: true,
-              label: 'Ставка педагога по группе',
-              onChanged: (rate) => _teacherRate = rate,
+            AppDropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: ValueKey('group-compensation-$_compensationKey'),
+              initialValue: _compensationKey,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Тип оплаты преподавателю *',
+              ),
+              items: [
+                for (final item
+                    in _catalog?.compensationRules ??
+                        <LessonDecisionCatalogItem>[])
+                  DropdownMenuItem(value: item.key, child: Text(item.label)),
+              ],
+              onChanged: canManageRate && !_catalogLoading
+                  ? (key) => setState(() => _compensationKey = key)
+                  : null,
+              validator: (value) =>
+                  value == null ? 'Выберите тип оплаты' : null,
             ),
           ],
         ],
@@ -295,11 +409,10 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
     return MagicFormBody(
       hasChanges: () =>
           _nameController.text.isNotEmpty ||
-          _priceController.text.isNotEmpty ||
           _teacherId != null ||
           _branchId != null ||
           _roomId != null ||
-          _teacherRate != null,
+          _settlementKey != null,
       busy: () => _saving,
       actions: [
         OutlinedButton(
@@ -307,13 +420,13 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
           child: const Text('Отмена'),
         ),
         FilledButton(
-          onPressed: _saving ? null : _save,
+          onPressed: _saving || _catalogLoading ? null : _save,
           child: _saving
               ? const SizedBox.square(
                   dimension: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Создать группу'),
+              : Text(widget.group == null ? 'Создать группу' : 'Сохранить'),
         ),
       ],
       child: fields,

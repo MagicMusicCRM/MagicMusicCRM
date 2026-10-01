@@ -428,11 +428,13 @@ void main() {
     );
     await _pump(tester, api);
 
-    expect(find.text('Поля и категории'), findsOneWidget);
+    expect(find.text('Поля карточек'), findsOneWidget);
     expect(find.text('Варианты для полей'), findsOneWidget);
     expect(find.text('Бизнес-параметры'), findsOneWidget);
     expect(find.text('Вся школа'), findsOneWidget);
 
+    await tester.tap(find.text('Категории'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Добавить категорию'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -496,6 +498,8 @@ void main() {
     );
     await _pump(tester, api);
 
+    await tester.tap(find.text('Категории'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Изменить категорию').last);
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -759,7 +763,7 @@ void main() {
     await _pump(tester, api);
 
     expect(find.text('Черновик · версия 1'), findsOneWidget);
-    await tester.tap(find.text('Формат занятий'));
+    await tester.tap(find.widgetWithText(ListTile, 'Формат занятий'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Изменить'));
     await tester.pumpAndSettle();
@@ -804,7 +808,7 @@ void main() {
     );
     await _pump(tester, api);
 
-    await tester.tap(find.text('Формат занятий'));
+    await tester.tap(find.widgetWithText(ListTile, 'Формат занятий'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Изменить'));
     await tester.pumpAndSettle();

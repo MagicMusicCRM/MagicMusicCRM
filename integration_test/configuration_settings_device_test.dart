@@ -44,7 +44,7 @@ void main() {
     await captureEvidence(tester, 'configuration-lesson-payment-catalogs');
   });
 
-  testWidgets('schedule settings show branch hours and teacher assignment', (
+  testWidgets('schedule settings keep branch hours without personnel editors', (
     tester,
   ) async {
     _desktop(tester);
@@ -63,16 +63,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
+    await tester.tap(find.widgetWithText(ListTile, 'Обучение'));
     await tester.pumpAndSettle();
     expect(find.text('Рабочие часы филиала'), findsOneWidget);
     expect(find.text('Петрова Мария'), findsNothing);
 
-    await tester.tap(find.text('Графики преподавателей'));
-    await tester.pumpAndSettle();
-    expect(find.text('Доступность преподавателя'), findsOneWidget);
-    expect(find.text('Петрова Мария'), findsWidgets);
-    await captureEvidence(tester, 'settings-teacher-branch-availability');
+    expect(find.text('Графики преподавателей'), findsNothing);
+    expect(find.text('Рабочий график и отсутствия'), findsNothing);
+    expect(find.text('Петрова Мария'), findsNothing);
+    await captureEvidence(tester, 'settings-without-personnel-availability');
   });
 
   testWidgets('director can manage a manager capability with an audit reason', (

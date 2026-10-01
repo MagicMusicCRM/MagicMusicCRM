@@ -253,7 +253,8 @@ describe("LessonCommandService semantic boundary", () => {
     expect(sources.write).toMatch(/operation: "schedule\.lesson\.update"/);
     expect(sources.write).toMatch(/action: "crm\.lesson_created"/);
     expect(sources.write).toMatch(/action: "crm\.lesson_updated"/);
-    expect(sources.write).toMatch(/pg_advisory_xact_lock/);
+    expect(sources.write).toMatch(/acquireScheduleLockKeys/);
+    expect(readSource("schedule-locks.ts")).toMatch(/pg_advisory_xact_lock/);
     expect(sources.settlement).toMatch(
       /operation: "schedule\.lesson\.settlement-plan\.update"/,
     );

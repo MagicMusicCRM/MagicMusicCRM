@@ -27,6 +27,7 @@ Future<bool?> showSubscriptionIssueFormSheet(
   List<Map<String, dynamic>>? packages,
   String acceptedByLabel = 'Текущий пользователь',
   required String recipientStudentId,
+  String recipientType = 'student',
   required String recipientLabel,
   required Future<List<SearchableSelectItem>> Function(String query)
   searchPayers,
@@ -44,6 +45,7 @@ Future<bool?> showSubscriptionIssueFormSheet(
       packages: packages ?? [package],
       acceptedByLabel: acceptedByLabel,
       recipientStudentId: recipientStudentId,
+      recipientType: recipientType,
       recipientLabel: recipientLabel,
       searchPayers: searchPayers,
       onPreview: onPreview,
@@ -60,6 +62,7 @@ class SubscriptionIssueForm extends StatefulWidget {
     required this.packages,
     required this.acceptedByLabel,
     required this.recipientStudentId,
+    this.recipientType = 'student',
     required this.recipientLabel,
     required this.searchPayers,
     required this.onPreview,
@@ -71,6 +74,7 @@ class SubscriptionIssueForm extends StatefulWidget {
   final List<Map<String, dynamic>> packages;
   final String acceptedByLabel;
   final String recipientStudentId;
+  final String recipientType;
   final String recipientLabel;
   final Future<List<SearchableSelectItem>> Function(String query) searchPayers;
   final SubscriptionIssuePreview onPreview;
@@ -171,6 +175,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
               currencyCode: draft.currencyCode,
             ),
             SubscriptionIssueFormSections(
+              recipientType: widget.recipientType,
               controller: _controller,
               packages: widget.packages,
               searchPayers: widget.searchPayers,

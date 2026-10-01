@@ -571,6 +571,8 @@ extension _ClientCardPersistence on _ClientCardState {
           id: student['id'].toString(),
           label: name.isEmpty ? 'Без имени' : name,
           subtitle: student['phone']?.toString(),
+          clientType: 'student',
+          data: student,
         );
       }).toList();
     }

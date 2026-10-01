@@ -22,10 +22,7 @@ import {
 import { assertSchedulePlanMetadata as assertMetadata } from "./schedule-plan-definition.service";
 import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
 import type { PreparedSchedulePlanRow } from "./schedule-plan-preview.types";
-import type {
-  SchedulePlanMutationReference as MutationReference,
-  SchedulePlanMutationResult,
-} from "./schedule-plan-mutation.types";
+import type { SchedulePlanMutationReference as MutationReference, SchedulePlanMutationResult } from "./schedule-plan-mutation.types";
 import { SchedulePlanRepository } from "./schedule-plan.repository";
 import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
@@ -191,6 +188,8 @@ export class SchedulePlanMutationService {
       actor,
       normalized.rows,
       studentIds,
+      undefined,
+      normalized.groupId ?? undefined,
     );
     const includePast = await this.previews.assertCreateHistoricalConfirmation(
       client,

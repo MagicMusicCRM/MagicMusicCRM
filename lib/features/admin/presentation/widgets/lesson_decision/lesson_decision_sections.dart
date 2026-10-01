@@ -674,6 +674,7 @@ class LessonDecisionClientOverrides extends StatelessWidget {
           ],
           SearchablePickerField(
             key: Key('lesson-decision-payer-${participants[index].id}'),
+            clientType: 'student',
             label: showSettlementOverrides
                 ? 'Плательщик для ${participants[index].name}'
                 : 'Плательщик',
@@ -686,7 +687,11 @@ class LessonDecisionClientOverrides extends StatelessWidget {
             onSearch: (query) async => [
               for (final payer in await searchPayers(query))
                 if (payer.id != participants[index].id)
-                  SearchableSelectItem(id: payer.id, label: payer.name),
+                  SearchableSelectItem(
+                    id: payer.id,
+                    label: payer.name,
+                    clientType: 'student',
+                  ),
             ],
             onSelected: (item) => onPayerChanged(
               participants[index].id,

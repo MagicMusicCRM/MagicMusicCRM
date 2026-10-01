@@ -86,7 +86,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     corrections = new LessonSettlementCorrectionService(database, platform, policy,
       settlement, previewTokens, reservations, constraints);
     commands = new LessonCommandService(
-      new LessonConstraintPreviewService(policy, constraints),
+      new LessonConstraintPreviewService(policy, constraints, database),
       new LessonWriteCommandService(
         platform,
         policy,
@@ -2086,7 +2086,10 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       idempotencyKey: `planned-settlement-${name}-${randomUUID()}`,
       requestId: `planned-settlement-request-${name}-${randomUUID()}`,
     });
-    const scheduledAt = started ? "2026-08-31T07:00:00.000Z" : nextMondayAtTenMoscow();
+    const upcoming = new Date(nextMondayAtTenMoscow());
+    const scheduledAt = started
+      ? new Date(upcoming.getTime() - 14 * 86400000).toISOString()
+      : upcoming.toISOString();
     try {
       const lesson = await commands.create(
         actor,

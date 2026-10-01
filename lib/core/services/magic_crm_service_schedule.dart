@@ -51,7 +51,10 @@ extension MagicCrmSchedule on MagicCrmService {
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/lessons/constraints/preview',
       data: {
-        'clientRef': {'type': clientType, 'id': clientId},
+        if (clientType == 'group')
+          'groupId': clientId
+        else
+          'clientRef': {'type': clientType, 'id': clientId},
         'teacherId': teacherId,
         'branchId': branchId,
         'roomId': roomId,
@@ -859,6 +862,7 @@ extension MagicCrmSchedule on MagicCrmService {
     required String activeFrom,
     required String? activeUntil,
     required List<Map<String, dynamic>> rows,
+    List<String>? candidateTeacherIds,
   }) {
     return _api.post<Map<String, dynamic>>(
       '/crm/schedule-plans/constraints/preview',
@@ -872,6 +876,7 @@ extension MagicCrmSchedule on MagicCrmService {
         'activeFrom': activeFrom,
         'activeUntil': activeUntil,
         'rows': rows,
+        'candidateTeacherIds': ?candidateTeacherIds,
       },
     );
   }

@@ -15,6 +15,10 @@ Widget buildStaffWorkspaceSecondaryDestination({
 }) {
   final route = tab.currentRoute;
   return switch (selectedTab) {
+    9
+        when snapshot.allows('schedule.lesson.read.assigned') ||
+            snapshot.allows('schedule.lesson.write') =>
+      GroupsWorkspace(snapshot: snapshot, initialLink: route.link),
     4 when snapshot.allows('crm.client.read.basic') => PersonnelWorkspace(
       snapshot: snapshot,
       initialLink: route.link,
@@ -41,12 +45,17 @@ Widget buildStaffWorkspaceSecondaryDestination({
             : route.link.optionalFocus?.focus == 'users'
             ? 'users'
             : route.link.rawEntityType == 'configuration'
-            ? route.link.optionalFocus?.focus == 'learning'
-                  ? 'learning'
-                  : 'crm'
+            ? switch (route.link.optionalFocus?.focus) {
+                'learning' => 'organization',
+                'organization' ||
+                'notifications' ||
+                'subscriptions' ||
+                'sales' ||
+                'access' ||
+                'system' => route.link.optionalFocus?.focus,
+                _ => 'crm',
+              }
             : null,
-        initialTeacherId: route.link.optionalFocus?.filter['teacherId']
-            ?.toString(),
         initialUserSearch: route.link.optionalFocus?.filter['query']
             ?.toString(),
       ),

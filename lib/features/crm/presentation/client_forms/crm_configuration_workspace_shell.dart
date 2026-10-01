@@ -22,6 +22,7 @@ class _CrmConfigurationShell extends StatelessWidget {
     required this.onRetry,
     required this.onScopeChanged,
     required this.onAreaChanged,
+    required this.onBackToList,
     required this.onSaveDraft,
     required this.onPublish,
   });
@@ -46,6 +47,7 @@ class _CrmConfigurationShell extends StatelessWidget {
   final VoidCallback onRetry;
   final ValueChanged<String?> onScopeChanged;
   final ValueChanged<String> onAreaChanged;
+  final VoidCallback onBackToList;
   final Future<bool> Function() onSaveDraft;
   final VoidCallback onPublish;
 
@@ -81,10 +83,59 @@ class _CrmConfigurationShell extends StatelessWidget {
             onPublish: onPublish,
           ),
           if (busy) const LinearProgressIndicator(minHeight: 2),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final chips = <Widget>[
+                for (final item in areas)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpace.xs),
+                    child: ChoiceChip(
+                      showCheckmark: false,
+                      avatar: Icon(
+                        item.$3,
+                        size: 18,
+                        color: area == item.$1
+                            ? AppColor.brand
+                            : AppColor.text2,
+                      ),
+                      label: Text(item.$2),
+                      selected: area == item.$1,
+                      onSelected: busy ? null : (_) => onAreaChanged(item.$1),
+                    ),
+                  ),
+              ];
+              return constraints.maxWidth >= 760
+                  ? Padding(
+                      padding: const EdgeInsets.all(AppSpace.sm),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: AppSpace.xs,
+                          runSpacing: AppSpace.xs,
+                          children: chips,
+                        ),
+                      ),
+                    )
+                  : SizedBox(
+                      height: 52,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpace.sm,
+                        ),
+                        children: chips,
+                      ),
+                    );
+            },
+          ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) =>
-                  constraints.maxWidth >= 900 ? _desktop() : _compact(),
+                  area == 'funnel' || area == 'history' || area == 'categories'
+                  ? listPane
+                  : constraints.maxWidth >= 760
+                  ? _desktop(constraints.maxWidth)
+                  : _compact(),
             ),
           ),
         ],
@@ -92,13 +143,11 @@ class _CrmConfigurationShell extends StatelessWidget {
     );
   }
 
-  Widget _desktop() {
+  Widget _desktop(double width) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(width: 230, child: _areaList()),
-        const VerticalDivider(width: 1),
-        SizedBox(width: 360, child: listPane),
+        SizedBox(width: (width * 0.38).clamp(360, 460), child: listPane),
         const VerticalDivider(width: 1),
         Expanded(child: editorPane),
       ],
@@ -108,40 +157,16 @@ class _CrmConfigurationShell extends StatelessWidget {
   Widget _compact() {
     return Column(
       children: [
-        SizedBox(
-          height: 52,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
-            children: [
-              for (final item in areas)
-                Padding(
-                  padding: const EdgeInsets.only(right: AppSpace.xs),
-                  child: ChoiceChip(
-                    label: Text(item.$2),
-                    selected: area == item.$1,
-                    onSelected: (_) => onAreaChanged(item.$1),
-                  ),
-                ),
-            ],
+        if (selectedKey != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: busy ? null : onBackToList,
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('К списку'),
+            ),
           ),
-        ),
         Expanded(child: selectedKey == null ? listPane : editorPane),
-      ],
-    );
-  }
-
-  Widget _areaList() {
-    return ListView(
-      padding: const EdgeInsets.all(AppSpace.sm),
-      children: [
-        for (final item in areas)
-          ListTile(
-            selected: area == item.$1,
-            leading: Icon(item.$3),
-            title: Text(item.$2),
-            onTap: () => onAreaChanged(item.$1),
-          ),
       ],
     );
   }
@@ -303,12 +328,16 @@ class _CrmConfigurationListPane extends StatelessWidget {
     required this.title,
     this.addLabel,
     this.onAdd,
+    this.controls,
+    this.emptyLabel = 'Пока нет элементов',
     required this.children,
   });
 
   final String title;
   final String? addLabel;
   final VoidCallback? onAdd;
+  final Widget? controls;
+  final String emptyLabel;
   final List<Widget> children;
 
   @override
@@ -335,9 +364,10 @@ class _CrmConfigurationListPane extends StatelessWidget {
             ],
           ),
         ),
+        ?controls,
         Expanded(
           child: children.isEmpty
-              ? const Center(child: Text('Пока нет элементов'))
+              ? Center(child: Text(emptyLabel))
               : ListView(children: children),
         ),
       ],

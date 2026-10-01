@@ -1,3 +1,5 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,78 +27,94 @@ void main() {
       await tester.pumpWidget(
         RepaintBoundary(
           key: evidenceRootKey,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            localizationsDelegates: GlobalMaterialLocalizations.delegates,
-            supportedLocales: const [Locale('ru')],
-            locale: const Locale('ru'),
-            theme: AppTheme.production.copyWith(
-              platform: size.width >= 840
-                  ? TargetPlatform.windows
-                  : TargetPlatform.android,
-            ),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(scale)),
-              child: child!,
-            ),
-            home: Scaffold(
-              body: Builder(
-                builder: (context) => Column(
-                  children: [
-                    TextButton(
-                      onPressed: () => showLessonDetailsSheet(
-                        context,
-                        teacherName: 'Константин Александрович',
-                        studentName: student,
-                        roomName: 'Большой зал музыкальной школы',
-                        timeRange: '15:00–16:00',
-                        currentStatus: 'settlement_pending',
-                        conflicts: const [],
-                        lessonId: 'lesson-a',
-                        settlementIssue:
-                            'Проверьте списание и оплату преподавателю.',
-                        onEdit: () {},
-                        onMove: () {},
-                        onCancel: () async {},
-                      ),
-                      child: const Text('Занятие'),
-                    ),
-                    TextButton(
-                      onPressed: () => showSubscriptionIssueFormSheet(
-                        context,
-                        package: const {
-                          'id': 'package-a',
-                          'name': 'Индивидуальные занятия вокалом',
-                          'basePriceMinor': '800000',
-                          'currencyCode': 'RUB',
-                        },
-                        recipientStudentId: 'student-a',
-                        recipientLabel: student,
-                        searchPayers: (_) async => [],
-                        onPreview: (_) async => throw StateError(
-                          'No financial command in a layout test',
+          child: ProviderScope(
+            overrides: [
+              capabilitySnapshotProvider.overrideWith(
+                (ref) async => const CapabilitySnapshot(
+                  accountId: "layout",
+                  role: "client",
+                  accessVersion: 1,
+                  capabilities: {},
+                  scopes: {},
+                ),
+              ),
+            ],
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+              supportedLocales: const [Locale('ru')],
+              locale: const Locale('ru'),
+              theme: AppTheme.production.copyWith(
+                platform: size.width >= 840
+                    ? TargetPlatform.windows
+                    : TargetPlatform.android,
+              ),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: Builder(
+                  builder: (context) => Column(
+                    children: [
+                      TextButton(
+                        onPressed: () => showLessonDetailsSheet(
+                          context,
+                          teacherName: 'Константин Александрович',
+                          studentName: student,
+                          roomName: 'Большой зал музыкальной школы',
+                          timeRange: '15:00–16:00',
+                          currentStatus: 'settlement_pending',
+                          conflicts: const [],
+                          lessonId: 'lesson-a',
+                          settlementIssue:
+                              'Проверьте списание и оплату преподавателю.',
+                          onEdit: () {},
+                          onMove: () {},
+                          onCancel: () async {},
                         ),
-                        onSubmit: (_) async => throw StateError(
-                          'No financial command in a layout test',
+                        child: const Text('Занятие'),
+                      ),
+                      TextButton(
+                        onPressed: () => showSubscriptionIssueFormSheet(
+                          context,
+                          package: const {
+                            'id': 'package-a',
+                            'name': 'Индивидуальные занятия вокалом',
+                            'basePriceMinor': '800000',
+                            'currencyCode': 'RUB',
+                          },
+                          recipientStudentId: 'student-a',
+                          recipientLabel: student,
+                          searchPayers: (_) async => [],
+                          onPreview: (_) async => throw StateError(
+                            'No financial command in a layout test',
+                          ),
+                          onSubmit: (_) async => throw StateError(
+                            'No financial command in a layout test',
+                          ),
                         ),
+                        child: const Text('Абонемент'),
                       ),
-                      child: const Text('Абонемент'),
-                    ),
-                    TextButton(
-                      onPressed: () => SearchableSelect.show(
-                        context: context,
-                        title: 'Выберите клиента',
-                        hintText: 'Поиск по ФИО',
-                        items: [
-                          SearchableSelectItem(id: 'student-a', label: student),
-                        ],
-                        onSelected: (_) {},
+                      TextButton(
+                        onPressed: () => SearchableSelect.show(
+                          context: context,
+                          title: 'Выберите клиента',
+                          hintText: 'Поиск по ФИО',
+                          items: [
+                            SearchableSelectItem(
+                              id: 'student-a',
+                              label: student,
+                            ),
+                          ],
+                          onSelected: (_) {},
+                        ),
+                        child: const Text('Клиент'),
                       ),
-                      child: const Text('Клиент'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

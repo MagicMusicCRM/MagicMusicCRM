@@ -7,7 +7,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
-import type { QueryResult, QueryResultRow } from "pg";
+import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
@@ -28,7 +28,11 @@ import { requiredTrim } from "./crm-util";
 import { assertSettingsBranchScope } from "./settings-branch-scope";
 import { assertGroupBranchScope } from "./group-branch-scope";
 
+import { loadLessonSettlementCatalog, assertPlannedLessonSettlementDecision } from "./commerce/lesson-settlement-catalog";
+
 interface GroupRow {
+  settlement_type_key: string | null;
+  teacher_compensation_rule_key: string | null;
   id: string;
   teacher_id: string | null;
   branch_id: string | null;
@@ -101,6 +105,8 @@ export class GroupsService {
       branchId: row.branch_id,
       roomId: row.room_id,
       name: row.name,
+      settlementTypeKey: row.settlement_type_key ?? null,
+      teacherCompensationRuleKey: row.teacher_compensation_rule_key ?? null,
       pricePerLesson:
         row.price_per_lesson === null ? null : Number(row.price_per_lesson),
       // KVA-238: null = брать ставку педагога, 0 = «входит в оклад».
@@ -130,7 +136,7 @@ export class GroupsService {
     const result = await this.database.query<GroupRow>(
       `
         select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson, g.teacher_rate,
+          g.price_per_lesson, g.teacher_rate, g.settlement_type_key, g.teacher_compensation_rule_key,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
@@ -188,7 +194,7 @@ export class GroupsService {
     const result = await this.database.query<GroupRow>(
       `
         select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson, g.teacher_rate,
+          g.price_per_lesson, g.teacher_rate, g.settlement_type_key, g.teacher_compensation_rule_key,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
@@ -224,6 +230,7 @@ export class GroupsService {
       runner: GroupQueryRunner,
       groupId: string | null,
       version: number | null,
+      defaults?: { settlementTypeKey: string; teacherCompensationRuleKey: string },
     ) => {
       const result = await runner<GroupRow>(
         `
@@ -253,17 +260,18 @@ export class GroupsService {
             name,
             price_per_lesson,
             teacher_rate,
+            settlement_type_key, teacher_compensation_rule_key,
             version
           )
           select coalesce($7::uuid, gen_random_uuid()), teacher_id, branch_id,
-            room_id, $4, $5, $6, coalesce($8::bigint, 1)
+            room_id, $4, $5, $6, $9, $10, coalesce($8::bigint, 1)
           from valid_references
           returning id, teacher_id, branch_id, room_id, name, price_per_lesson,
-            teacher_rate, lifecycle_state, version, archived_at, archive_reason,
+            teacher_rate, settlement_type_key, teacher_compensation_rule_key, lifecycle_state, version, archived_at, archive_reason,
             archive_effective_date, created_at
         )
         select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson, g.teacher_rate,
+          g.price_per_lesson, g.teacher_rate, g.settlement_type_key, g.teacher_compensation_rule_key,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
@@ -285,6 +293,8 @@ export class GroupsService {
           dto.teacherRate ?? null,
           groupId,
           version,
+          defaults?.settlementTypeKey ?? null,
+          defaults?.teacherCompensationRuleKey ?? null,
         ],
       );
       const group = result.rows[0];
@@ -297,7 +307,11 @@ export class GroupsService {
     };
     const hasInitialRate =
       dto.teacherRate !== undefined && dto.teacherRate !== null;
-    if (hasInitialRate) {
+    const hasDefaults = dto.settlementTypeKey !== undefined;
+    if (dto.teacherCompensationRuleKey !== undefined) this.policy.assertCanManagePayrollHistory(actor);
+    if (dto.teacherCompensationRuleKey !== undefined && !hasDefaults) throw new BadRequestException("Выберите тип списания группы.");
+    const capabilityKey = hasInitialRate || dto.teacherCompensationRuleKey !== undefined ? "config.commerce.manage" : "schedule.lesson.write";
+    if (hasInitialRate || hasDefaults) {
       assertVersionedMutationMetadata(
         metadata ?? { idempotencyKey: "", requestId: "" },
       );
@@ -305,8 +319,8 @@ export class GroupsService {
       const mutation = await this.integrity.executeVersionedMutation({
         actorKey: actor.userId,
         actorUserId: actor.userId,
-        authorization: { actor, capabilityKey: "config.commerce.manage" },
-        operation: "crm.group.create-with-teacher-rate",
+        authorization: { actor, capabilityKey },
+        operation: hasDefaults ? "crm.group.create-with-lesson-defaults" : "crm.group.create-with-teacher-rate",
         idempotencyKey: metadata!.idempotencyKey,
         payload: { ...dto, name },
         aggregateType: "organization:group",
@@ -317,16 +331,19 @@ export class GroupsService {
           action: "crm.group_created",
           entityType: "group",
           entityId: groupId,
-          metadata: { teacherRate: dto.teacherRate },
+          metadata: { teacherRate: dto.teacherRate, settlementTypeKey: dto.settlementTypeKey, teacherCompensationRuleKey: dto.teacherCompensationRuleKey },
         },
         outbox: {
           type: "organization.group.changed",
           payload: { entityId: groupId, action: "created" },
         },
-        mutate: async (client, version) => ({
-          groupId: (await insert(client.query.bind(client), groupId, version))
-            .id,
-        }),
+        mutate: async (client, version) => {
+          if (hasDefaults) {
+            const defaults = await this.resolveLessonDefaults(client, dto.branchId, dto.settlementTypeKey!, dto.teacherCompensationRuleKey);
+            return { groupId: (await insert(client.query.bind(client), groupId, version, defaults)).id };
+          }
+          return { groupId: (await insert(client.query.bind(client), groupId, version)).id };
+        },
       });
       const createdGroup = await this.getGroup(
         actor,
@@ -388,6 +405,9 @@ export class GroupsService {
         ? null
         : requiredTrim(dto.name, "Название группы обязательно.");
     const teacherRateProvided = dto.teacherRate !== undefined;
+    const defaultsProvided = dto.settlementTypeKey !== undefined || dto.teacherCompensationRuleKey !== undefined;
+    if (dto.teacherCompensationRuleKey !== undefined) this.policy.assertCanManagePayrollHistory(actor);
+    const capabilityKey = teacherRateProvided || dto.teacherCompensationRuleKey !== undefined ? "config.commerce.manage" : "schedule.lesson.write";
     const referencesProvided =
       dto.teacherId !== undefined ||
       dto.branchId !== undefined ||
@@ -397,6 +417,7 @@ export class GroupsService {
       runner: GroupQueryRunner,
       nextVersion: number | null,
       expectedVersion: number | null,
+      defaults?: { settlementTypeKey: string; teacherCompensationRuleKey: string },
     ) => {
       const result = await runner<GroupRow>(
         `
@@ -435,17 +456,19 @@ export class GroupsService {
             room_id = coalesce($5::uuid, g.room_id),
             price_per_lesson = coalesce($6::numeric, g.price_per_lesson),
             teacher_rate = case when $7::boolean then $8::numeric else g.teacher_rate end,
+            settlement_type_key = coalesce($12::text, g.settlement_type_key),
+            teacher_compensation_rule_key = coalesce($13::text, g.teacher_compensation_rule_key),
             version = coalesce($10::bigint, g.version),
             updated_at = now()
           from valid_references
           where g.id = valid_references.id
             and ($11::bigint is null or g.version = $11::bigint)
           returning g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-            g.price_per_lesson, g.teacher_rate, g.lifecycle_state, g.version,
+            g.price_per_lesson, g.teacher_rate, g.settlement_type_key, g.teacher_compensation_rule_key, g.lifecycle_state, g.version,
             g.archived_at, g.archive_reason, g.archive_effective_date, g.created_at
         )
         select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
-          g.price_per_lesson, g.teacher_rate,
+          g.price_per_lesson, g.teacher_rate, g.settlement_type_key, g.teacher_compensation_rule_key,
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
@@ -470,6 +493,8 @@ export class GroupsService {
           referencesProvided,
           nextVersion,
           expectedVersion,
+          defaults?.settlementTypeKey ?? null,
+          defaults?.teacherCompensationRuleKey ?? null,
         ],
       );
       const group = result.rows[0];
@@ -484,7 +509,7 @@ export class GroupsService {
       }
       return group;
     };
-    if (teacherRateProvided) {
+    if (teacherRateProvided || defaultsProvided) {
       if (
         !Number.isSafeInteger(dto.expectedVersion) ||
         dto.expectedVersion! < 1
@@ -498,7 +523,7 @@ export class GroupsService {
         await authorizeCurrentCapability(
           client,
           actor,
-          "config.commerce.manage",
+          capabilityKey,
           true,
         );
         await client.query(
@@ -511,10 +536,10 @@ export class GroupsService {
       const mutation = await this.integrity.executeVersionedMutation({
         actorKey: actor.userId,
         actorUserId: actor.userId,
-        authorization: { actor, capabilityKey: "config.commerce.manage" },
-        operation: "crm.group.teacher-rate.update",
+        authorization: { actor, capabilityKey },
+        operation: defaultsProvided ? "crm.group.lesson-defaults.update" : "crm.group.teacher-rate.update",
         idempotencyKey: metadata!.idempotencyKey,
-        payload: { groupId, teacherRate: dto.teacherRate ?? null },
+        payload: { groupId, ...dto },
         aggregateType: "organization:group",
         aggregateId: groupId,
         expectedVersion: dto.expectedVersion!,
@@ -523,21 +548,22 @@ export class GroupsService {
           action: "crm.group_updated",
           entityType: "group",
           entityId: groupId,
-          metadata: { teacherRate: dto.teacherRate ?? null },
+          metadata: { teacherRate: dto.teacherRate ?? null, settlementTypeKey: dto.settlementTypeKey, teacherCompensationRuleKey: dto.teacherCompensationRuleKey },
         },
         outbox: {
           type: "organization.group.changed",
           payload: { entityId: groupId, action: "teacher_rate_updated" },
         },
-        mutate: async (client, version) => ({
-          groupId: (
-            await update(
-              client.query.bind(client),
-              version,
-              dto.expectedVersion!,
-            )
-          ).id,
-        }),
+        mutate: async (client, version) => {
+          let defaults;
+          if (defaultsProvided) {
+            const current = await client.query<GroupRow>("select * from app.groups where id = $1 for update", [groupId]);
+            const group = current.rows[0];
+            if (!group) throw new NotFoundException("Группа не найдена.");
+            defaults = await this.resolveLessonDefaults(client, dto.branchId ?? group.branch_id!, dto.settlementTypeKey ?? group.settlement_type_key ?? "", dto.teacherCompensationRuleKey ?? (dto.settlementTypeKey ? undefined : group.teacher_compensation_rule_key ?? undefined));
+          }
+          return { groupId: (await update(client.query.bind(client), version, dto.expectedVersion!, defaults)).id };
+        },
       });
       const updatedGroup = await this.getGroup(
         actor,
@@ -576,6 +602,14 @@ export class GroupsService {
       affectedUserIds,
     });
     return this.toGroupDto(group);
+  }
+
+  private async resolveLessonDefaults(client: PoolClient, branchId: string, settlementTypeKey: string, teacherCompensationRuleKey?: string) {
+    const catalog = await loadLessonSettlementCatalog(client, branchId);
+    const settlement = catalog.settlement_types.find(item => item.active && item.stableKey === settlementTypeKey);
+    const defaults = { settlementTypeKey, teacherCompensationRuleKey: teacherCompensationRuleKey ?? settlement?.defaultTeacherCompensationRuleKey ?? "" };
+    assertPlannedLessonSettlementDecision(catalog, defaults);
+    return defaults;
   }
 
   private async assertAssignmentChangeAllowed(

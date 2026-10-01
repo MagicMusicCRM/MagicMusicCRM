@@ -12,6 +12,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entit
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_cards.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_settings.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
@@ -48,16 +49,21 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
         await h.mount(
-          SystemSettingsRouteScreen(key: UniqueKey(), initialArea: 'schedule'),
+          Scaffold(
+            body: ScheduleReferenceSettings(
+              key: UniqueKey(),
+              canEdit: true,
+              section: ScheduleReferenceSection.teacherSchedule,
+              initialTeacherId: teacherId,
+            ),
+          ),
         );
-        await h.quiet();
-        await h.tap(find.text('Графики преподавателей').last);
         await h.quiet();
         await h.waitFor(
           () =>
               picker().evaluate().isNotEmpty &&
               assignments.evaluate().isNotEmpty,
-          'Teacher settings loaded',
+          'Teacher reference editor loaded',
         );
         await selectTeacher(teacherId);
         await h.quiet();
@@ -75,7 +81,10 @@ void main() {
 
       Finder save(Finder card) => find.descendant(
         of: card,
-        matching: find.widgetWithText(FilledButton, 'Сохранить'),
+        matching: find.widgetWithText(
+          FilledButton,
+          card == availability ? 'Сохранить график' : 'Сохранить',
+        ),
       );
       Future<void> persist(Finder card) async {
         await h.tap(save(card));

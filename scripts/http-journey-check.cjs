@@ -1293,9 +1293,20 @@ async function main() {
     fs.writeFileSync(path.join(output,'purchase-retry-db.json'),JSON.stringify(db,null,2));
   }
   if(process.argv.includes('--audit-group-plan')){
+    const performanceTeachers = Number(process.env.GROUP_PERF_TEACHERS || 0);
+    assert(Number.isInteger(performanceTeachers) && performanceTeachers >= 0 && performanceTeachers <= 50);
+    for (let index = 2; index < performanceTeachers; index++) {
+      const user = (await pool.query("insert into app.users(email,role,is_app_account) values($1,'teacher',false) returning id", ['group-perf-'+index+'@example.test'])).rows[0].id;
+      const profile = (await pool.query("insert into app.profiles(user_id,first_name,last_name) values($1,$2,'HTTP test') returning id", [user, 'PerfTeacher'+index])).rows[0].id;
+      const teacher = (await pool.query('insert into app.teachers(profile_id) values($1) returning id', [profile])).rows[0].id;
+      await pool.query("insert into app.teacher_branches(teacher_id,branch_id,active_from,active_until) values($1,$2,'2020-01-01','2100-12-31')", [teacher, fixture.branch]);
+      await pool.query("insert into app.teacher_availability_rules(teacher_id,kind,available,timezone_name,weekday,local_start,local_end,valid_from,valid_until) select $1,'recurring',true,'Europe/Moscow',day,'08:00','22:00','2020-01-01','2100-12-31' from generate_series(1,7) day", [teacher]);
+      await pool.query("insert into app.teacher_rates(teacher_id,rate,effective_from) values($1,800,'2020-01-01')", [teacher]);
+    }
     const students=[];
     const pkg=await request('POST','/crm/subscription-packages',{name:'GROUP-PLAN-PACKAGE',branchId:fixture.branch,unitCount:20,basePriceMinor:'2000000',currencyCode:'RUB',validityDays:365},201);
-    const group=await request('POST','/crm/groups',{name:'AUDIT-GROUP-PLAN',teacherId:fixture.teachers[1],branchId:fixture.branch,roomId:fixture.rooms[1],pricePerLesson:1000},201);
+    const group=await request('POST','/crm/groups',{name:'AUDIT-GROUP-PLAN',teacherId:fixture.teachers[1],branchId:fixture.branch,roomId:fixture.rooms[1],settlementTypeKey:'lesson',teacherCompensationRuleKey:'standard'},201);
+    assert.equal(group.settlementTypeKey,'lesson');assert.equal(group.teacherCompensationRuleKey,'standard');
     for(let i=0;i<2;i++){
       const u=(await pool.query("insert into app.users(email,role,is_app_account) values($1,'client',false) returning id",['audit-group-plan-'+i+'@example.test'])).rows[0];
       const p=(await pool.query("insert into app.profiles(user_id,first_name,last_name) values($1,$2,'HTTP test') returning id",[u.id,'AUDIT-GROUP-STUDENT-'+i])).rows[0];
@@ -1306,8 +1317,82 @@ async function main() {
       await request('POST','/crm/groups/'+group.id+'/students',{studentId:st.id},201);
     }
     await check('Actual group plan creation and dated participants replacement',()=>runDeviceTest('group_plan_live_test.dart','group-plan-windows.log',{
-      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,students,groupId:group.id,branchId:fixture.branch})
+      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,students,groupId:group.id,branchId:fixture.branch,teacherId:fixture.teachers[1],roomId:fixture.rooms[1],performanceTeachers,performancePhase:process.env.GROUP_PERF_PHASE||'unspecified'})
     }));
+    await check('Group defaults update replays safely and leaves existing lesson decisions unchanged', async()=>{
+      const before=(await pool.query('select lesson_id,decision from app.lesson_settlement_plans order by lesson_id')).rows;
+      const current=await request('GET','/crm/groups/'+group.id);
+      const body={expectedVersion:current.version,settlementTypeKey:'lesson',teacherCompensationRuleKey:'none'};
+      const key=randomUUID();
+      const updated=await request('PATCH','/crm/groups/'+group.id,body,200,{key});
+      assert.equal(updated.teacherCompensationRuleKey,'none');
+      assert.equal((await request('PATCH','/crm/groups/'+group.id,body,200,{key})).version,updated.version);
+      await request('PATCH','/crm/groups/'+group.id,body,409);
+      assert.deepEqual((await pool.query('select lesson_id,decision from app.lesson_settlement_plans order by lesson_id')).rows,before);
+    });
+    await check('Manager creates one whole-group lesson with inherited rules, replay, audit and reservations', async()=>{
+      const previousToken=token;
+      try {
+        const account=fixture.clientAuditAccounts.find(item=>item.role==='manager');
+        token=(await request('POST','/auth/login',{email:account.email,password:fixture.password},200,{auth:false})).session.accessToken;
+        const funding=(await pool.query("select id,student_id from app.subscriptions where student_id=any($1::uuid[]) and status='active'",[students])).rows;
+        const body={groupId:group.id,scheduledAt:'2027-01-20T12:00:00Z',durationMinutes:60,isTrial:false,completionType:'standard.success',
+          financialDecision:{settlementTypeKey:'free_lesson',clientDecisions:students.map(clientId=>({clientId,settlementTypeKey:'free_lesson',chargeType:'subscription',subscriptionId:funding.find(item=>item.student_id===clientId).id}))}};
+        const key=randomUUID(),lesson=await request('POST','/crm/lessons',body,201,{key});
+        assert.equal((await request('POST','/crm/lessons',body,201,{key})).id,lesson.id);
+        const saved=(await pool.query(`select l.teacher_id,l.room_id,l.student_id,l.lead_id,p.decision,
+          (select count(*)::int from app.lesson_snapshot_participants where lesson_id=l.id) participants,
+          (select count(*)::int from app.lesson_reservations where lesson_id=l.id and state='reserved') reservations,
+          (select count(*)::int from app.audit_events where entity_id=l.id::text and action='crm.lesson_created') audits,
+          (select count(*)::int from app.platform_outbox_events where aggregate_id=l.id::text) events
+          from app.lessons l join app.lesson_settlement_plans p on p.lesson_id=l.id where l.id=$1`,[lesson.id])).rows[0];
+        assert.equal(saved.teacher_id,fixture.teachers[1]);assert.equal(saved.room_id,fixture.rooms[1]);
+        assert.equal(saved.student_id,null);assert.equal(saved.lead_id,null);
+        assert.equal(saved.decision.settlementTypeKey,'lesson');assert.equal(saved.decision.teacherCompensationRuleKey,'none');
+        assert(saved.decision.clientDecisions.every(item=>(item.settlementTypeKey??saved.decision.settlementTypeKey)==='lesson' && item.chargeDurationMinutes===60));
+        assert.deepEqual([saved.participants,saved.reservations,saved.audits,saved.events],[2,2,1,1]);
+        await request('POST','/crm/lessons',{...body,scheduledAt:'2027-01-21T12:00:00Z',financialDecision:{...body.financialDecision,teacherCompensationRuleKey:'standard'}},403);
+        await request('PATCH','/crm/groups/'+group.id,{expectedVersion:(await request('GET','/crm/groups/'+group.id)).version,teacherCompensationRuleKey:'standard'},403);
+        await request('POST','/crm/lessons',{...body,scheduledAt:'2027-01-21T12:00:00Z',financialDecision:{...body.financialDecision,clientDecisions:body.financialDecision.clientDecisions.slice(0,1)}},422);
+        assert.equal((await pool.query("select count(*)::int count from app.lessons where group_id=$1 and scheduled_at='2027-01-21T12:00:00Z'",[group.id])).rows[0].count,0);
+      } finally {token=previousToken;}
+    });
+    await check('Single group lesson checks every member and rolls back a participant conflict',async()=>{
+      await request('POST','/crm/lessons',{clientRef:{type:'student',id:students[1]},teacherId:fixture.teachers[0],branchId:fixture.branch,roomId:fixture.rooms[0],scheduledAt:'2027-01-22T12:00:00Z',durationMinutes:60,isTrial:false,completionType:'standard.success',clientChargeType:'personal_account',clientChargeValue:1000,teacherCompensationType:'hourly',teacherCompensationValue:700,financialDecision:{settlementTypeKey:'lesson',teacherCompensationRuleKey:'standard',clientDecisions:[{clientId:students[1],payerStudentId:students[1],chargeType:'personal_account',basePriceMinor:'100000'}]}},201);
+      const result=await request('POST','/crm/lessons',{groupId:group.id,scheduledAt:'2027-01-22T12:00:00Z',durationMinutes:60,isTrial:false,completionType:'standard.success',financialDecision:{settlementTypeKey:'lesson',clientDecisions:students.map(clientId=>({clientId,chargeType:'none'}))}},422);
+      assert.equal(result.code,'LESSON_CONSTRAINT_VIOLATIONS');
+      assert.equal((await pool.query("select count(*)::int count from app.lessons where group_id=$1 and scheduled_at='2027-01-22T12:00:00Z'",[group.id])).rows[0].count,0);
+    });
+    await check('Group defaults migration rollback is reversible without changing history',async()=>{
+      const client=await pool.connect();
+      try {
+        await client.query('begin');
+        await client.query(fs.readFileSync(path.join(root,'server/db/migrations/0162_group_lesson_defaults.down.sql'),'utf8'));
+        assert.equal((await client.query("select count(*)::int count from information_schema.columns where table_schema='app' and table_name='groups' and column_name='settlement_type_key'")).rows[0].count,0);
+        await client.query('rollback');
+        assert.equal((await request('GET','/crm/groups/'+group.id)).teacherCompensationRuleKey,'none');
+      } finally {await client.query('rollback');client.release();}
+    });
+    await check('Partial group charges and teacher minutes inherit group types for single and recurring lessons',async()=>{
+      const current=await request('GET','/crm/groups/'+group.id);
+      await request('PATCH','/crm/groups/'+group.id,{expectedVersion:current.version,settlementTypeKey:'partially_paid_lesson',teacherCompensationRuleKey:'standard'});
+      const funding=(await pool.query("select id,student_id from app.subscriptions where student_id=any($1::uuid[]) and status='active'",[students])).rows;
+      const clientDecisions=students.map(clientId=>({clientId,chargeType:'subscription',subscriptionId:funding.find(item=>item.student_id===clientId).id,chargeDurationMinutes:30}));
+      const financialDecision={settlementTypeKey:'lesson',teacherCreditedDurationMinutes:30,clientDecisions};
+      const lesson=await request('POST','/crm/lessons',{groupId:group.id,scheduledAt:'2027-01-23T12:00:00Z',durationMinutes:60,isTrial:false,completionType:'standard.success',financialDecision},201);
+      const single=(await pool.query('select decision from app.lesson_settlement_plans where lesson_id=$1',[lesson.id])).rows[0].decision;
+      assert.equal(single.settlementTypeKey,'partially_paid_lesson');assert.equal(single.teacherCompensationRuleKey,'standard');assert.equal(single.teacherCreditedDurationMinutes,30);
+      assert.equal((await pool.query("select sum(units)::text units from app.lesson_reservations where lesson_id=$1 and state='reserved'",[lesson.id])).rows[0].units,'1.00');
+      const row={teacherId:fixture.teachers[1],roomId:fixture.rooms[1],branchId:fixture.branch,weekday:1,beginTime:'16:00',durationMinutes:60,financialDecision};
+      const plan=await request('POST','/crm/schedule-plans',{kind:'group',title:'AUDIT-PARTIAL-GROUP',groupId:group.id,activeFrom:'2027-01-25',activeUntil:'2027-02-08',participants:funding.map(item=>({studentId:item.student_id,subscriptionId:item.id})),rows:[row]},201);
+      const saved=(await pool.query('select planned_financial_decision decision from app.schedule_series where id=$1',[plan.seriesIds[0]])).rows[0].decision;
+      assert.equal(saved.teacherCompensationRuleKey,'standard');assert.equal(saved.teacherCreditedDurationMinutes,30);
+      const update={expectedVersion:plan.version,effectiveFrom:'2027-02-01',activeUntil:'2027-02-08',rows:[{...row,seriesId:plan.seriesIds[0],durationMinutes:45,financialDecision:{...financialDecision,settlementTypeKey:'partially_paid_lesson',teacherCreditedDurationMinutes:20}}]};
+      const preview=await request('POST','/crm/schedule-plans/'+plan.id+'/constraints/preview',update,201);assert(preview.valid);
+      const updated=await request('PATCH','/crm/schedule-plans/'+plan.id,update);
+      const changed=(await pool.query('select planned_financial_decision decision from app.schedule_series where id=$1',[updated.seriesIds[0]])).rows[0].decision;
+      assert.equal(changed.teacherCompensationRuleKey,'standard');assert.equal(changed.teacherCreditedDurationMinutes,20);
+    });
     const db={students,groupId:group.id};for(const table of ['schedule_plans','schedule_series','schedule_plan_participants','lessons','lesson_snapshot_participants','lesson_reservations'])db[table]=(await pool.query('select to_jsonb(t) row from app.'+table+' t')).rows.map(r=>r.row);
     fs.writeFileSync(path.join(output,'group-plan-db.json'),JSON.stringify(db,null,2));
   }
@@ -1584,10 +1669,20 @@ async function main() {
     fs.writeFileSync(path.join(output,'workspace-db.json'),JSON.stringify({students},null,2));
   }
   if(process.argv.includes('--audit-schedule-views')){
+    const pickerPackage = await request('POST','/crm/subscription-packages',{
+      name:'AUDIT-CLIENT-PICKER-HOURS',branchId:fixture.branch,unitCount:1.5,
+      basePriceMinor:'150000',currencyCode:'RUB',validityDays:365,
+    },201);
+    const pickerInput = {packageId:pickerPackage.id,payerStudentId:fixture.students[1],
+      fundingMode:'installment',purchaseReason:'Синтетическая проверка остатка астрономических часов',
+      installments:[30,60].map(days=>({dueAt:new Date(Date.now()+days*86400000).toISOString(),amountMinor:'75000'}))};
+    const pickerPreview = await request('POST',`/crm/students/${fixture.students[1]}/subscriptions/purchase/preview`,pickerInput,201);
+    assert(pickerPreview.canCommit);
+    await request('POST',`/crm/students/${fixture.students[1]}/subscriptions/purchase`,{...pickerInput,previewToken:pickerPreview.previewToken,confirm:true},201);
     const before=(await pool.query('select id,version,scheduled_at,teacher_id,room_id,status,deleted_at from app.lessons order by id')).rows;
     const lesson=before.find(l=>l.deleted_at===null&&l.status==='scheduled');assert(lesson);
     await check('Actual schedule navigation filters and cancellation',()=>runDeviceTest('schedule_views_live_test.dart','schedule-views-windows.log',{
-      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,branchId:fixture.branch,lesson})
+      HTTP_JOURNEY_FIXTURE:JSON.stringify({baseUrl,password:fixture.password,accounts:fixture.clientAuditAccounts,branchId:fixture.branch,lesson,activeStudentId:fixture.students[1]})
     }));
     const after=(await pool.query('select id,version,scheduled_at,teacher_id,room_id,status,deleted_at from app.lessons order by id')).rows;
     fs.writeFileSync(path.join(output,'schedule-views-db.json'),JSON.stringify({before,after},null,2));

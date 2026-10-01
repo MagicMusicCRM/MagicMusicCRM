@@ -46,18 +46,20 @@ export class LessonCommandRepository {
     lessonId: string,
     draft: CompleteLessonDraft,
     actorUserId: string,
+    groupId?: string,
   ) {
     return client.query(
       `
         insert into app.lessons (
-          id, student_id, lead_id, teacher_id, branch_id, room_id,
+          id, student_id, lead_id, group_id, teacher_id, branch_id, room_id,
           scheduled_at, duration_minutes, status, is_trial, notes,
           teacher_rate, created_by
         )
         values (
           $1,
-          case when $2 = 'student' then $3::uuid else null end,
-          case when $2 = 'lead' then $3::uuid else null end,
+          case when $13::uuid is null and $2 = 'student' then $3::uuid else null end,
+          case when $13::uuid is null and $2 = 'lead' then $3::uuid else null end,
+          $13,
           $4, $5, $6, $7, $8, 'scheduled', $9, $10, $11, $12
         )
       `,
@@ -76,6 +78,7 @@ export class LessonCommandRepository {
           ? null
           : draft.teacherCompensationValue,
         actorUserId,
+        groupId ?? null,
       ],
     );
   }

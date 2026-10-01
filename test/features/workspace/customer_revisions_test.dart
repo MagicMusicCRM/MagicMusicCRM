@@ -51,6 +51,7 @@ class _Api extends MagicApiClient {
               },
               {
                 'ref': {'type': 'student', 'id': 'student'},
+                'branchId': null,
                 'label': 'Анна',
                 'links': [],
               },
@@ -271,7 +272,7 @@ void main() {
       await tester.pumpAndSettle(const Duration(milliseconds: 301));
       expect(api.calls, hasLength(3));
       expect(find.text('Анна'), findsOneWidget);
-      expect(find.text('Ученик'), findsOneWidget);
+      expect(find.textContaining('Ученик ·'), findsOneWidget);
       expect(find.text('Лид'), findsNothing);
       expect(find.text('Андрей Учитель'), findsOneWidget);
       expect(find.text('Антон Администратор'), findsOneWidget);

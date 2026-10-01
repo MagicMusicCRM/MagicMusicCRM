@@ -133,9 +133,9 @@ int? crmTabForEntityLink(EntityLink link, String role) {
     };
   }
   return switch (link.entityType) {
+    EntityLinkType.group => 9,
     EntityLinkType.lesson ||
     EntityLinkType.teacher ||
-    EntityLinkType.group ||
     EntityLinkType.room ||
     EntityLinkType.branch ||
     EntityLinkType.scheduleSeries => 2,

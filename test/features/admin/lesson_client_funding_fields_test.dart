@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_client_funding_fields.dart';
+import '../../support/client_picker_test_scope.dart';
 
 const _student = LessonDecisionParticipant(id: 'student-a', name: 'Анна');
 const _payer = LessonDecisionParticipant(id: 'payer-b', name: 'Пётр');
@@ -36,21 +37,23 @@ Widget _host({
   Future<List<LessonDecisionSubscription>> Function(String)? loadSubscriptions,
   required ValueChanged<List<Map<String, dynamic>>> onChanged,
   GlobalKey<FormState>? formKey,
-}) => MaterialApp(
-  home: Scaffold(
-    body: SingleChildScrollView(
-      child: Form(
-        key: formKey,
-        child: LessonClientFundingFields(
-          participants: participants,
-          decisions: decisions ?? [_decision()],
-          enabled: enabled,
-          allowsNoFunding: allowsNoFunding,
-          knownPayers: const [_payer],
-          subscriptionsByPayer: subscriptionsByPayer,
-          searchPayers: (_) async => [_payer],
-          loadSubscriptions: loadSubscriptions ?? (_) async => [],
-          onChanged: onChanged,
+}) => clientPickerTestScope(
+  MaterialApp(
+    home: Scaffold(
+      body: SingleChildScrollView(
+        child: Form(
+          key: formKey,
+          child: LessonClientFundingFields(
+            participants: participants,
+            decisions: decisions ?? [_decision()],
+            enabled: enabled,
+            allowsNoFunding: allowsNoFunding,
+            knownPayers: const [_payer],
+            subscriptionsByPayer: subscriptionsByPayer,
+            searchPayers: (_) async => [_payer],
+            loadSubscriptions: loadSubscriptions ?? (_) async => [],
+            onChanged: onChanged,
+          ),
         ),
       ),
     ),

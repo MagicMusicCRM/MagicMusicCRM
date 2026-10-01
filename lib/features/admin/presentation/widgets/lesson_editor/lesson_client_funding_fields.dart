@@ -364,6 +364,7 @@ class _ParticipantFundingFieldsState extends State<_ParticipantFundingFields> {
         SearchablePickerField(
           key: _key('payer'),
           label: 'Плательщик *',
+          clientType: 'student',
           hintText: 'Найдите ученика по имени',
           enabled: widget.enabled && _chargeType != 'none',
           isNullable: false,
@@ -377,12 +378,20 @@ class _ParticipantFundingFieldsState extends State<_ParticipantFundingFields> {
               : null,
           items: [
             for (final entry in _payerNames.entries)
-              SearchableSelectItem(id: entry.key, label: entry.value),
+              SearchableSelectItem(
+                id: entry.key,
+                label: entry.value,
+                clientType: 'student',
+              ),
           ],
           onSearch: (query) async => [
             for (final payer in await widget.searchPayers(query))
               if (payer.isStudent)
-                SearchableSelectItem(id: payer.id, label: payer.name),
+                SearchableSelectItem(
+                  id: payer.id,
+                  label: payer.name,
+                  clientType: 'student',
+                ),
           ],
           onSelected: _choosePayer,
         ),

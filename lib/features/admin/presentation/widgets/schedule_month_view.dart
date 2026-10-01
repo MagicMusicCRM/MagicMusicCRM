@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/widgets/lesson_settlement_corner.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
-import 'schedule_legends.dart';
 import 'schedule_shared.dart';
 
 /// Month grid (weekday header + day cells with load/conflict marks) plus a
@@ -136,26 +135,19 @@ class ScheduleMonthView extends StatelessWidget {
       ],
     );
 
-    return Column(
-      children: [
-        const ScheduleMonthLegend(),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final wide = c.maxWidth >= 760 && c.maxHeight >= 420;
-              if (!wide) return calendar;
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: calendar),
-                  const SizedBox(width: 10),
-                  SizedBox(width: 260, child: _sidePanel(context, focal)),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, c) {
+        final wide = c.maxWidth >= 760 && c.maxHeight >= 420;
+        if (!wide) return calendar;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: calendar),
+            const SizedBox(width: 10),
+            SizedBox(width: 260, child: _sidePanel(context, focal)),
+          ],
+        );
+      },
     );
   }
 

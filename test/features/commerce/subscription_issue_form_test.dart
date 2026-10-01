@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_sheet.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_models.dart';
+import '../../support/client_picker_test_scope.dart';
 
 typedef _Call = ({String path, Object? data, MagicMutationIdentity? identity});
 
@@ -128,23 +129,25 @@ Future<void> _openSheet(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => FilledButton(
-            onPressed: () => showSubscriptionIssueFormSheet(
-              context,
-              package: _package,
-              packages: packages,
-              acceptedByLabel: acceptedByLabel,
-              recipientStudentId: _recipientId,
-              recipientLabel: 'Иванов Иван',
-              searchPayers: searchPayers ?? (_) async => const [],
-              onPreview: onPreview,
-              onSubmit: onSubmit,
-              commandTimestamp: DateTime.utc(2026, 8, 26),
+    clientPickerTestScope(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showSubscriptionIssueFormSheet(
+                context,
+                package: _package,
+                packages: packages,
+                acceptedByLabel: acceptedByLabel,
+                recipientStudentId: _recipientId,
+                recipientLabel: 'Иванов Иван',
+                searchPayers: searchPayers ?? (_) async => const [],
+                onPreview: onPreview,
+                onSubmit: onSubmit,
+                commandTimestamp: DateTime.utc(2026, 8, 26),
+              ),
+              child: const Text('Открыть'),
             ),
-            child: const Text('Открыть'),
           ),
         ),
       ),

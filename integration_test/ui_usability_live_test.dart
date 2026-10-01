@@ -10,6 +10,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/create_emplo
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_group_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_teacher_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_cards.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_create_dialogs.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
@@ -287,12 +288,107 @@ void main() {
           find.byKey(const Key('teacher-rate-change-confirmation')),
           findsOneWidget,
         );
+        expect(find.byType(TeacherAvailabilityCard), findsOneWidget);
         expect(
           find.byKey(const Key('teacher-open-availability')),
+          findsNothing,
+        );
+        expect(find.byType(SystemSettingsWorkspace), findsNothing);
+        final graph = find.byType(TeacherAvailabilityCard);
+        await h.tap(find.byTooltip('Скрыть список персонала'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Рабочий график и отсутствия'));
+        await tester.pump();
+        await captureEvidence(tester, 'ui-teacher-availability-wide');
+        final sunday = find.byKey(const ValueKey('teacher-availability-day-7'));
+        await h.tap(find.byKey(const ValueKey('teacher-availability-add-7')));
+        expect(
+          find.text('Есть несохранённые изменения графика'),
           findsOneWidget,
         );
+        await h.tap(find.byTooltip('Закрыть карточку'));
+        expect(find.text('Выйти без сохранения?'), findsOneWidget);
+        await h.tap(find.text('Остаться'));
+        final saveGraph = find.descendant(
+          of: graph,
+          matching: find.widgetWithText(FilledButton, 'Сохранить график'),
+        );
+        await h.tap(saveGraph);
+        await h.quiet();
+        final reference = await crm.getScheduleReference(
+          branchId: branchId,
+          teacherId: id,
+        );
+        final rules = (reference['teacher'] as Map)['availability'] as List;
+        expect(rules.where((r) => r['weekday'] == 7), hasLength(1));
+        expect(find.text('Есть несохранённые изменения графика'), findsNothing);
+        expect(sunday, findsOneWidget);
+        final addAbsence = find.byKey(
+          const ValueKey('interval-unavailable-add'),
+        );
+        await h.tap(addAbsence);
+        final dialog = find.ancestor(
+          of: find.text('Занято на дату'),
+          matching: find.byType(AlertDialog),
+        );
+        final reason = find.descendant(
+          of: dialog,
+          matching: find.byType(TextField),
+        );
+        await h.tap(reason);
+        await tester.enterText(reason, 'PERSONNEL-ABSENCE');
+        await tester.pump();
+        await h.tap(
+          find.descendant(of: dialog, matching: find.text('Добавить')),
+        );
+        await h.tap(find.byKey(const Key('teacher-detail-save')));
+        await h.quiet();
+        final after = await crm.getScheduleReference(
+          branchId: branchId,
+          teacherId: id,
+        );
+        expect(
+          ((after['teacher'] as Map)['availability'] as List).where(
+            (r) => r['reason'] == 'PERSONNEL-ABSENCE',
+          ),
+          hasLength(1),
+        );
+        tester.view.physicalSize = const Size(390, 800);
+        await tester.pumpAndSettle();
+        await h.tap(find.byKey(const ValueKey('teacher-availability-add-7')));
+        expect(find.byType(TeacherAvailabilityCard), findsOneWidget);
+        await tester.ensureVisible(find.text('Рабочий график и отсутствия'));
+        await tester.pump();
+        await captureEvidence(tester, 'ui-teacher-availability-narrow');
+        tester.view.physicalSize = const Size(1280, 800);
+        await tester.pumpAndSettle();
         await tester.pump(const Duration(seconds: 5));
         await captureEvidence(tester, 'ui-teacher-card');
+      },
+    );
+
+    await h.check(
+      'PERSONNEL-SETTINGS',
+      'В настройках нет графиков и списков персонала',
+      () async {
+        await mount(
+          const SystemSettingsWorkspace(
+            role: 'director',
+            initialArea: 'learning',
+          ),
+        );
+        expect(find.text('Обучение'), findsNothing);
+        expect(find.text('Часы филиалов'), findsNothing);
+        expect(find.text('Группы'), findsNothing);
+        expect(find.text('Графики преподавателей'), findsNothing);
+        expect(find.byType(TeacherAvailabilityCard), findsNothing);
+        expect(find.text('Доступ и уведомления'), findsNothing);
+        await h.tap(find.widgetWithText(ListTile, 'Пользователи'));
+        await h.quiet();
+        expect(find.text('Сотрудники'), findsNothing);
+        expect(find.text('Преподаватели'), findsNothing);
+        expect(find.byType(TeacherAvailabilityCard), findsNothing);
+        await captureEvidence(tester, 'ui-settings-without-personnel');
       },
     );
 

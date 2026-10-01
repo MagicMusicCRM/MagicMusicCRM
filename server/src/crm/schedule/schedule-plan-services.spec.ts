@@ -101,7 +101,7 @@ describe("Schedule plan semantic owners", () => {
         },
       })],
       ["student-a"],
-      { activeSeries: [automatic] } as never,
+      { plan: { kind: "individual" }, activeSeries: [automatic] } as never,
     );
 
     expect(settlement.resolvePlannedPlan).toHaveBeenCalledWith(
@@ -130,6 +130,7 @@ describe("Schedule plan semantic owners", () => {
       })],
       ["student-a"],
       {
+        plan: { kind: "individual" },
         activeSeries: [{
           ...automatic,
           planned_financial_decision: legacyDecision,
@@ -184,6 +185,7 @@ describe("Schedule plan semantic owners", () => {
         })],
         ["student-a", "student-b"],
         {
+          plan: { kind: "individual" },
           activeSeries: [{
             id: "series-a",
             settlement_revision_id: "old-settlement",

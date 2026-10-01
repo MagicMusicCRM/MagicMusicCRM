@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'client_selection_details.dart';
 
 class SearchableSelectItem {
   final String id;
@@ -9,6 +10,7 @@ class SearchableSelectItem {
   final String? subtitle;
   final String? avatarUrl;
   final Map<String, dynamic>? data;
+  final String? clientType;
 
   SearchableSelectItem({
     required this.id,
@@ -16,7 +18,24 @@ class SearchableSelectItem {
     this.subtitle,
     this.avatarUrl,
     this.data,
+    this.clientType,
   });
+
+  String? get clientEntityType =>
+      clientType ??
+      (data?['ref'] is Map ? (data!['ref'] as Map)['type']?.toString() : null);
+
+  Widget? get details => {'lead', 'student'}.contains(clientEntityType)
+      ? ClientSelectionDetails(
+          type: clientEntityType!,
+          id: data?['ref'] is Map ? (data!['ref'] as Map)['id'].toString() : id,
+          subtitle: subtitle,
+          branchId: (data?['branchId'] ?? data?['branch_id'])?.toString(),
+          branchKnown:
+              data?.containsKey('branchId') == true ||
+              data?.containsKey('branch_id') == true,
+        )
+      : null;
 }
 
 /// Compact searchable field for data-driven lists such as people and rooms.
@@ -41,6 +60,7 @@ class SearchablePickerField extends StatefulWidget {
   final bool isNullable;
   final bool enabled;
   final bool showSearchHint;
+  final String? clientType;
 
   const SearchablePickerField({
     super.key,
@@ -56,6 +76,7 @@ class SearchablePickerField extends StatefulWidget {
     this.isNullable = true,
     this.enabled = true,
     this.showSearchHint = false,
+    this.clientType,
   });
 
   @override
@@ -133,6 +154,7 @@ class _SearchablePickerFieldState extends State<SearchablePickerField> {
           a.label != b.label ||
           a.subtitle != b.subtitle ||
           a.avatarUrl != b.avatarUrl ||
+          a.clientType != b.clientType ||
           !mapEquals(a.data, b.data)) {
         return false;
       }
@@ -202,73 +224,103 @@ class _SearchablePickerFieldState extends State<SearchablePickerField> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) => DropdownMenu<String>(
-        key: ValueKey('searchable-picker-${widget.selectedId}-$_menuRevision'),
-        controller: _controller,
-        focusNode: _focusNode,
-        menuController: _menuController,
-        width: constraints.maxWidth,
-        menuHeight: _menuHeight,
-        enabled: widget.enabled,
-        enableFilter: true,
-        enableSearch: true,
-        requestFocusOnTap: true,
-        label: Text(widget.label),
-        hintText: widget.placeholder,
-        helperText: widget.showSearchHint ? widget.hintText : null,
-        errorText: widget.errorText,
-        leadingIcon: _searching
-            ? const Padding(
-                padding: EdgeInsets.all(12),
-                child: SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+    final selected = [
+      ..._items,
+      ...widget.items,
+    ].where((item) => item.id == widget.selectedId).firstOrNull;
+    final details =
+        selected?.details ??
+        (widget.clientType != null && widget.selectedId != null
+            ? ClientSelectionDetails(
+                type: widget.clientType!,
+                id: widget.selectedId!.split(':').last,
               )
-            : const Icon(Icons.search_rounded),
-        dropdownMenuEntries: [
-          for (final item in _items)
-            DropdownMenuEntry<String>(
-              value: item.id,
-              label: item.label,
-              labelWidget: item.subtitle == null
-                  ? null
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.label, overflow: TextOverflow.ellipsis),
-                        Text(
-                          item.subtitle!,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
+            : null);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) => DropdownMenu<String>(
+            key: ValueKey(
+              'searchable-picker-${widget.selectedId}-$_menuRevision',
+            ),
+            controller: _controller,
+            focusNode: _focusNode,
+            menuController: _menuController,
+            width: constraints.maxWidth,
+            menuHeight: _items.any((item) => item.clientEntityType != null)
+                ? 5 * 80.0 + 16
+                : _menuHeight,
+            enabled: widget.enabled,
+            enableFilter: true,
+            enableSearch: true,
+            requestFocusOnTap: true,
+            label: Text(widget.label),
+            hintText: widget.placeholder,
+            helperText: widget.showSearchHint ? widget.hintText : null,
+            errorText: widget.errorText,
+            leadingIcon: _searching
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-            ),
-          if (widget.isNullable && widget.selectedId != null)
-            const DropdownMenuEntry<String>(
-              value: _clearId,
-              label: 'Сбросить выбор',
-              leadingIcon: Icon(Icons.clear_rounded),
-            ),
-        ],
-        filterCallback: widget.onSearch == null
-            ? null
-            : (entries, _) => entries,
-        onSelected: (id) {
-          if (!widget.enabled || id == null) return;
-          _debounce?.cancel();
-          if (id == _clearId) {
-            _controller.clear();
-            widget.onSelected(null);
-            return;
-          }
-          final item = _items.where((item) => item.id == id).firstOrNull;
-          if (item != null) widget.onSelected(item);
-        },
-      ),
+                  )
+                : const Icon(Icons.search_rounded),
+            dropdownMenuEntries: [
+              for (final item in _items)
+                DropdownMenuEntry<String>(
+                  value: item.id,
+                  label: item.label,
+                  labelWidget: item.subtitle == null && item.details == null
+                      ? null
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.label, overflow: TextOverflow.ellipsis),
+                            if (item.details != null)
+                              item.details!
+                            else
+                              Text(
+                                item.subtitle ?? '',
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                ),
+              if (widget.isNullable && widget.selectedId != null)
+                const DropdownMenuEntry<String>(
+                  value: _clearId,
+                  label: 'Сбросить выбор',
+                  leadingIcon: Icon(Icons.clear_rounded),
+                ),
+            ],
+            filterCallback: widget.onSearch == null
+                ? null
+                : (entries, _) => entries,
+            onSelected: (id) {
+              if (!widget.enabled || id == null) return;
+              _debounce?.cancel();
+              if (id == _clearId) {
+                _controller.clear();
+                widget.onSelected(null);
+                return;
+              }
+              final item = _items.where((item) => item.id == id).firstOrNull;
+              if (item != null) widget.onSelected(item);
+            },
+          ),
+        ),
+        if (details != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, top: 6),
+            child: details,
+          ),
+      ],
     );
   }
 }

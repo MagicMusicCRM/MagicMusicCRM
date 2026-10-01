@@ -6,11 +6,13 @@ class _BranchesList extends ConsumerWidget {
   final bool canEdit;
   final bool canManageLifecycle;
   final bool includeArchived;
+  final ValueChanged<Map<String, dynamic>> onSelected;
   const _BranchesList({
     required this.searchQuery,
     required this.canEdit,
     required this.canManageLifecycle,
     required this.includeArchived,
+    required this.onSelected,
   });
 
   String _offsetLabel(int minutes) {
@@ -87,19 +89,7 @@ class _BranchesList extends ConsumerWidget {
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
-                  onTap: archived
-                      ? (canManageLifecycle ? openLifecycle : null)
-                      : !canEdit
-                      ? null
-                      : () async {
-                          final res = await showMagicDialog<bool>(
-                            context: context,
-                            builder: (ctx) => BranchFormDialog(branch: item),
-                          );
-                          if (res == true) {
-                            invalidateBranchCatalog(ref);
-                          }
-                        },
+                  onTap: () => onSelected(item),
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Icon(

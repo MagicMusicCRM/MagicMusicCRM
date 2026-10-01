@@ -71,7 +71,9 @@ class LessonEditorDecisionPolicy {
     final rule =
         _catalogItemByKey(
           catalog.compensationRules,
-          recommendation?.compensationRuleKey,
+          !session.isEdit && session.isGroupLesson
+              ? draft.compensationRuleKey
+              : recommendation?.compensationRuleKey,
         ) ??
         fallbackRule;
     final configuredDuration = catalog.defaultDurationMinutes;
@@ -301,7 +303,7 @@ class LessonEditorDecisionPolicy {
     final keepsTeacher = references.teachers.any(
       (item) =>
           item.id == draft.teacherId &&
-          item.status == 'active' &&
+          item.isWorkingTeacher &&
           item.assignedBranchIds.contains(branchId),
     );
     final branch = references.branches
@@ -430,7 +432,13 @@ class LessonEditorDecisionPolicy {
   ) {
     final changed = draft.copyWith(durationMinutes: durationMinutes);
     if (draft.compensationTouched) return changed;
-    return restoreRecommendation(changed, references);
+    final recommended = restoreRecommendation(changed, references);
+    return draft.client?.type == 'group'
+        ? recommended.copyWith(
+            compensationRuleKey: draft.compensationRuleKey,
+            compensationValueMinor: draft.compensationValueMinor,
+          )
+        : recommended;
   }
 
   LessonEditorDraft _clientDurationSelection(
@@ -613,7 +621,10 @@ class LessonEditorDecisionPolicy {
     );
     return {
       ...schedulePayload(draft),
-      'clientRef': {'type': client?.type, 'id': client?.id},
+      if (client?.type == 'group')
+        'groupId': client?.id
+      else
+        'clientRef': {'type': client?.type, 'id': client?.id},
       'isTrial': draft.isTrial,
       'completionType': draft.completionType,
       'clientChargeType': draft.clientChargeType,
@@ -621,12 +632,22 @@ class LessonEditorDecisionPolicy {
         draft: draft,
         references: references,
       ),
-      if (canManageTeacherCompensation) ...{
+      if (canManageTeacherCompensation && client?.type != 'group') ...{
         'teacherCompensationType': teacherRate.$1,
         'teacherCompensationValue': teacherRate.$2,
       },
-      'financialDecision': financialDecision,
+      'financialDecision': client?.type == 'group'
+          ? {
+              'settlementTypeKey': draft.settlementTypeKey,
+              'clientDecisions': financialDecision['clientDecisions'],
+              if (canManageTeacherCompensation &&
+                  draft.teacherCreditedDurationMinutes != null)
+                'teacherCreditedDurationMinutes':
+                    draft.teacherCreditedDurationMinutes,
+            }
+          : financialDecision,
       if (canManageTeacherCompensation &&
+          client?.type != 'group' &&
           compensationNeedsReason(draft: draft, rule: rule))
         'plannedSettlementReason': draft.plannedSettlementReason.trim(),
       if (requiresSubscription(draft)) 'subscriptionId': draft.subscriptionId,

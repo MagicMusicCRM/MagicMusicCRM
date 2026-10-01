@@ -5,6 +5,8 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_cards.dart';
 import 'live_audit_harness.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -31,12 +33,28 @@ void main() {
         of: card,
         matching: find.widgetWithText(FilledButton, 'Сохранить'),
       );
-      Future<void> open() async {
+      Future<void> open({bool standalone = false}) async {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
         await h.mount(
-          SystemSettingsRouteScreen(key: UniqueKey(), initialArea: 'schedule'),
+          standalone
+              ? const SystemSettingsRouteScreen(initialArea: 'organization')
+              : StaffWorkspaceScreen(
+                  key: UniqueKey(),
+                  initialLink: EntityRouteRegistry.sectionRootLink(
+                    'configuration',
+                  ),
+                ),
         );
+        await h.quiet();
+        if (!standalone) {
+          await h.tap(find.widgetWithText(ListTile, 'Организация'));
+        }
+        await h.waitFor(
+          () => find.text('HTTP test').evaluate().isNotEmpty,
+          'Branches loaded',
+        );
+        await h.tap(find.text('HTTP test'));
         await h.waitFor(
           () =>
               card.evaluate().isNotEmpty &&
@@ -78,9 +96,12 @@ void main() {
 
       await h.check(
         'OPEN',
-        'Настройки → часы филиала показывают семь сохранённых дней',
+        'Организация → карточка филиала показывает семь сохранённых дней без модального окна',
         () async {
           await open();
+          expect(find.text('Обучение'), findsNothing);
+          expect(find.byType(AlertDialog), findsNothing);
+          expect(find.byKey(const Key('branch-detail-pane')), findsOneWidget);
           expect(
             tester
                 .widgetList<Switch>(find.byType(Switch))
@@ -235,6 +256,63 @@ void main() {
           expect((await read())['exceptions'], isEmpty);
           await open();
           expect(find.byTooltip('Удалить исключение'), findsNothing);
+        },
+      );
+      await h.check(
+        'NARROW',
+        'Карточка филиала на узком экране сохраняет доступ к часам и действиям',
+        () async {
+          tester.view.physicalSize = const Size(390, 844);
+          await open(standalone: true);
+          expect(find.byKey(const Key('branch-detail-pane')), findsOneWidget);
+          expect(
+            find.byKey(const Key('branch-save')).hitTestable(),
+            findsOneWidget,
+          );
+          await tester.ensureVisible(row('Понедельник'));
+          await h.quiet();
+        },
+      );
+      await h.check(
+        'WIDE',
+        'Повторное открытие широкой карточки показывает сохранённый график',
+        () async {
+          tester.view.physicalSize = const Size(1440, 1400);
+          await open();
+          expect(find.byKey(const Key('branch-detail-pane')), findsOneWidget);
+        },
+      );
+      await h.check(
+        'CARD-SAVE',
+        'Общая кнопка карточки сохраняет рабочие часы филиала',
+        () async {
+          await open();
+          await h.tap(toggle('Четверг'));
+          await h.tap(find.byKey(const Key('branch-save')));
+          await h.quiet();
+          expect(find.byKey(const Key('branch-detail-pane')), findsNothing);
+          expect(
+            ((await read())['weekly'] as List).any((r) => r['weekday'] == 4),
+            false,
+          );
+          await open();
+          expect(tester.widget<Switch>(toggle('Четверг')).value, false);
+          await h.tap(toggle('Четверг'));
+          await persist();
+        },
+      );
+      await h.check(
+        'DIRTY-EXIT',
+        'Выход из карточки сохраняет черновик при выборе «Остаться»',
+        () async {
+          await h.tap(toggle('Пятница'));
+          await h.tap(find.text('К списку филиалов'));
+          await h.tap(find.text('Остаться'));
+          expect(tester.widget<Switch>(toggle('Пятница')).value, false);
+          await h.tap(find.text('К списку филиалов'));
+          await h.tap(find.text('Не сохранять'));
+          await open();
+          expect(tester.widget<Switch>(toggle('Пятница')).value, true);
         },
       );
       await h.check(

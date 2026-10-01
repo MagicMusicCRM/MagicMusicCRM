@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_sheet.dart';
+import '../../support/client_picker_test_scope.dart';
 
 const _package = <String, dynamic>{
   'id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -17,20 +18,22 @@ Future<void> _openSheet(WidgetTester tester) async {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => FilledButton(
-            onPressed: () => showSubscriptionIssueFormSheet(
-              context,
-              package: _package,
-              recipientStudentId: _recipientId,
-              recipientLabel: 'Иванов Иван',
-              searchPayers: (_) async => const <SearchableSelectItem>[],
-              onPreview: (_) async => throw StateError('not expected'),
-              onSubmit: (_) async => throw StateError('not expected'),
+    clientPickerTestScope(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => showSubscriptionIssueFormSheet(
+                context,
+                package: _package,
+                recipientStudentId: _recipientId,
+                recipientLabel: 'Иванов Иван',
+                searchPayers: (_) async => const <SearchableSelectItem>[],
+                onPreview: (_) async => throw StateError('not expected'),
+                onSubmit: (_) async => throw StateError('not expected'),
+              ),
+              child: const Text('Открыть'),
             ),
-            child: const Text('Открыть'),
           ),
         ),
       ),

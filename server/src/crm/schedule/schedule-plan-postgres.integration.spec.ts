@@ -6379,7 +6379,7 @@ async function createFixture(pool: Pool) {
     [studentIds],
   );
   const group = await pool.query<{ id: string }>(
-    "insert into app.groups (branch_id, name) values ($1, $2) returning id",
+    "insert into app.groups (branch_id, name, settlement_type_key, teacher_compensation_rule_key) values ($1, $2, 'lesson', 'standard') returning id",
     [branchId, `Plan group ${randomUUID()}`],
   );
   await pool.query(

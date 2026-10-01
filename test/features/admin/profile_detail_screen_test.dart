@@ -61,7 +61,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Смирнова Анна'), findsOneWidget);
-    expect(find.text('Настроить доступ'), findsOneWidget);
+    expect(find.text('Настроить доступ'), findsNothing);
     expect(find.text('Связать по телефону'), findsOneWidget);
     expect(find.text('Не удалось загрузить привязки'), findsOneWidget);
     expect(find.text('Повторить'), findsOneWidget);

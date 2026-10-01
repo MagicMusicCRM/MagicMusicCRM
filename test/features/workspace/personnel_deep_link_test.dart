@@ -271,9 +271,9 @@ void main() {
       );
     }
     expect(find.byKey(const Key('teacher-open-schedule')), findsOneWidget);
-    expect(find.byKey(const Key('teacher-open-availability')), findsOneWidget);
+    expect(find.byKey(const Key('teacher-availability-editor')), findsOneWidget);
 
-    expect(api.requests, isNot(contains('/crm/schedule-reference')));
+    expect(api.requests, contains('/crm/schedule-reference'));
     expect(
       find.byKey(const Key('teacher-personnel-content-employment')),
       findsOneWidget,

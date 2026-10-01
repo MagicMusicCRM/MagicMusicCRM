@@ -1,3 +1,4 @@
+import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -8,6 +9,8 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entit
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_group_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
 import 'live_audit_harness.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -41,14 +44,14 @@ void main() {
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump();
           await h.mount(
-            SystemSettingsRouteScreen(
+            StaffWorkspaceScreen(
               key: UniqueKey(),
-              initialArea: 'schedule',
+              initialLink: EntityRouteRegistry.sectionRootLink('groups'),
             ),
           );
           await h.quiet();
-          await h.tap(find.text('Группы'));
-          await h.quiet();
+          expect(find.byType(GroupsWorkspace), findsOneWidget);
+          expect(find.byType(SystemSettingsWorkspace), findsNothing);
         }
 
         Future<void> newGroup() async {
@@ -71,7 +74,7 @@ void main() {
           await h.tap(
             find.descendant(
               of: create,
-              matching: find.byType(DropdownButtonFormField<String>),
+              matching: find.byType(AppDropdownButtonFormField<String>),
             ),
           );
           await h.tap(find.text('HTTP test').last);

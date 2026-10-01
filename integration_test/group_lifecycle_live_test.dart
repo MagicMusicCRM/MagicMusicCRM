@@ -6,6 +6,8 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/group_lifecy
 import 'package:magic_music_crm/features/admin/presentation/widgets/group_detail_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 import 'live_audit_harness.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -38,16 +40,16 @@ void main() {
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump();
           await h.mount(
-            SystemSettingsRouteScreen(
+            StaffWorkspaceScreen(
               key: UniqueKey(),
-              initialArea: 'schedule',
+              initialLink: EntityRouteRegistry.sectionRootLink('groups'),
             ),
           );
           await h.quiet();
-          await h.tap(find.text('Группы'));
-          await h.quiet();
+          expect(find.byType(GroupsWorkspace), findsOneWidget);
+          expect(find.byType(SystemSettingsWorkspace), findsNothing);
           if (archived) {
-            await h.tap(find.text('Показывать завершённые'));
+            await h.tap(find.text('Завершённые'));
             await h.quiet();
           }
         }

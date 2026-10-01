@@ -9,7 +9,9 @@ import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 
 /// Controls inbound lead notifications by staff role and delivery channel.
 class NotificationPreferencesDialog extends ConsumerStatefulWidget {
-  const NotificationPreferencesDialog({super.key});
+  const NotificationPreferencesDialog({super.key, this.embedded = false});
+
+  final bool embedded;
 
   static Future<void> show(BuildContext context) {
     return showMagicDialog<void>(
@@ -82,98 +84,102 @@ class _NotificationPreferencesDialogState
 
   @override
   Widget build(BuildContext context) {
+    final content = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.embedded ? 'Уведомления' : 'Настройки уведомлений',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (widget.embedded)
+                IconButton(
+                  tooltip: 'Обновить уведомления',
+                  onPressed: _saving.isNotEmpty
+                      ? null
+                      : () => setState(() => _future = _fetch()),
+                  icon: const Icon(Icons.refresh_rounded),
+                )
+              else
+                IconButton(
+                  tooltip: 'Закрыть',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+            ],
+          ),
+          Text(
+            'Получатели и каналы уведомлений о входящих заявках. Изменения сохраняются сразу.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(child: _buildPreferences()),
+        ],
+      ),
+    );
+    if (widget.embedded) return content;
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640, maxHeight: 640),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Настройки уведомлений',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Закрыть',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              Text(
-                'Кому сообщать о новых входящих заявках и какими каналами.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: FutureBuilder<List<NotificationPreference>>(
-                  future: _future,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const MagicPageState.loading();
-                    }
-                    if (snapshot.hasError) {
-                      return MagicPageState(
-                        kind: MagicPageStateKind.error,
-                        title: 'Не удалось загрузить настройки',
-                        message: userErrorMessage(
-                          snapshot.error,
-                          fallback: 'Не удалось загрузить настройки.',
-                        ),
-                        actionLabel: 'Повторить',
-                        onAction: () => setState(() => _future = _fetch()),
-                      );
-                    }
-                    if (_items.isEmpty) {
-                      return const MagicPageState(
-                        kind: MagicPageStateKind.empty,
-                        title: 'Настройки не заведены',
-                      );
-                    }
-                    final events = notificationEventLabels.keys
-                        .where(
-                          (event) =>
-                              _items.any((item) => item.eventType == event),
-                        )
-                        .toList();
-                    return ListView.separated(
-                      itemCount: events.length,
-                      separatorBuilder: (_, _) => const Divider(height: 24),
-                      itemBuilder: (context, index) {
-                        final event = events[index];
-                        return _EventSection(
-                          label: notificationEventLabels[event] ?? event,
-                          prefs: _items
-                              .where((item) => item.eventType == event)
-                              .toList(),
-                          isSaving: (pref) => _saving.contains(_key(pref)),
-                          onToggle: (pref, value) =>
-                              _save(pref, enabled: value),
-                          onChannels: (pref, channels) =>
-                              _save(pref, channels: channels),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: content,
       ),
     );
   }
+
+  Widget _buildPreferences() => FutureBuilder<List<NotificationPreference>>(
+    future: _future,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const MagicPageState.loading();
+      }
+      if (snapshot.hasError) {
+        return MagicPageState(
+          kind: MagicPageStateKind.error,
+          title: 'Не удалось загрузить настройки',
+          message: userErrorMessage(
+            snapshot.error,
+            fallback: 'Не удалось загрузить настройки.',
+          ),
+          actionLabel: 'Повторить',
+          onAction: () => setState(() => _future = _fetch()),
+        );
+      }
+      if (_items.isEmpty) {
+        return const MagicPageState(
+          kind: MagicPageStateKind.empty,
+          title: 'Настройки не заведены',
+        );
+      }
+      final events = notificationEventLabels.keys
+          .where((event) => _items.any((item) => item.eventType == event))
+          .toList();
+      return ListView.separated(
+        itemCount: events.length,
+        separatorBuilder: (_, _) => const Divider(height: 24),
+        itemBuilder: (context, index) {
+          final event = events[index];
+          return _EventSection(
+            label: notificationEventLabels[event] ?? event,
+            prefs: _items.where((item) => item.eventType == event).toList(),
+            isSaving: (pref) => _saving.contains(_key(pref)),
+            onToggle: (pref, value) => _save(pref, enabled: value),
+            onChannels: (pref, channels) => _save(pref, channels: channels),
+          );
+        },
+      );
+    },
+  );
 }
 
 class _EventSection extends StatelessWidget {

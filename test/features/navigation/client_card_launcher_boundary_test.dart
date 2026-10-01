@@ -16,7 +16,6 @@ void main() {
       'lib/features/crm/presentation/client_card/show_client_card.dart',
     ).readAsStringSync();
     const launcherCallers = [
-      'lib/features/admin/presentation/screens/profile_detail_screen.dart',
       'lib/features/manager/presentation/widgets/finance_widget.dart',
       'lib/features/manager/presentation/widgets/leads_widget.dart',
       'lib/features/manager/presentation/widgets/students_board_widget.dart',

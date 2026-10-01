@@ -18,7 +18,9 @@ class ScheduleReferenceSettings extends ConsumerStatefulWidget {
     this.initialBranchId,
     this.initialTeacherId,
     this.lockedTeacherId,
+    this.lockedBranchId,
     this.inline = false,
+    this.onChanged,
   });
 
   final bool canEdit;
@@ -26,16 +28,35 @@ class ScheduleReferenceSettings extends ConsumerStatefulWidget {
   final String? initialBranchId;
   final String? initialTeacherId;
   final String? lockedTeacherId;
+  final String? lockedBranchId;
   final bool inline;
+  final VoidCallback? onChanged;
 
   @override
   ConsumerState<ScheduleReferenceSettings> createState() =>
-      _ScheduleReferenceSettingsState();
+      ScheduleReferenceSettingsState();
 }
 
-class _ScheduleReferenceSettingsState
+class ScheduleReferenceSettingsState
     extends ConsumerState<ScheduleReferenceSettings> {
   late ScheduleReferenceController _controller;
+  bool get hasChanges => widget.section == ScheduleReferenceSection.branchHours
+      ? _controller.hasBranchHoursChanges
+      : _controller.hasAvailabilityChanges;
+  bool get saving => _controller.state.saving;
+
+  Future<void> saveChanges() async {
+    if (!hasChanges) return;
+    if (widget.section == ScheduleReferenceSection.branchHours) {
+      await _controller.saveBranchHours();
+    } else {
+      await _controller.saveAvailability();
+    }
+  }
+
+  void _onChanged() {
+    if (!_controller.state.loading) widget.onChanged?.call();
+  }
 
   @override
   void initState() {
@@ -51,7 +72,8 @@ class _ScheduleReferenceSettingsState
         oldWidget.section == widget.section &&
         oldWidget.initialBranchId == widget.initialBranchId &&
         oldWidget.initialTeacherId == widget.initialTeacherId &&
-        oldWidget.lockedTeacherId == widget.lockedTeacherId) {
+        oldWidget.lockedTeacherId == widget.lockedTeacherId &&
+        oldWidget.lockedBranchId == widget.lockedBranchId) {
       return;
     }
     _controller.dispose();
@@ -67,7 +89,8 @@ class _ScheduleReferenceSettingsState
         initialBranchId: widget.initialBranchId,
         initialTeacherId: widget.initialTeacherId,
         lockedTeacherId: widget.lockedTeacherId,
-      );
+        lockedBranchId: widget.lockedBranchId,
+      )..addListener(_onChanged);
 
   @override
   void dispose() {

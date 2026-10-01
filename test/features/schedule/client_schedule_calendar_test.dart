@@ -871,16 +871,11 @@ void main() {
     expect(states.last.filters['view'], 'week');
     expect(states.last.filters['clientCalendarMode'], 'week');
 
-    await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('schedule-filter-branch')));
+    await tester.tap(
+      find.byKey(const ValueKey('schedule-branch-selector-branch-a')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Центр').last);
-    await tester.pumpAndSettle();
-    final apply = find.byKey(const ValueKey('schedule-filter-apply'));
-    await tester.ensureVisible(apply);
-    await tester.pumpAndSettle();
-    await tester.tap(apply);
     await tester.pumpAndSettle();
     expect(states.last.filters['branchId'], 'branch-b');
     expect(states.last.filters['clientCalendarBranchId'], 'branch-b');

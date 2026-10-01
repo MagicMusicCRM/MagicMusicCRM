@@ -133,7 +133,11 @@ class LessonEditorInitialMapper {
     final clientId = _nonEmpty(input.clientId);
     if (clientId != null) {
       return LessonClientRef(
-        type: input.clientType == 'lead' ? 'lead' : 'student',
+        type: input.clientType == 'group'
+            ? 'group'
+            : input.clientType == 'lead'
+            ? 'lead'
+            : 'student',
         id: clientId,
         label: _nonEmpty(input.clientName) ?? 'Клиент без имени',
       );

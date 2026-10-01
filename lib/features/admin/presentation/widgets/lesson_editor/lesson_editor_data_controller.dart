@@ -117,6 +117,7 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   final LessonEditorRowsById? _listLessons;
   final MagicCrmService? _crm;
   List<LessonDecisionParticipant> _knownPayers = const [];
+  List<Map<String, dynamic>> _groupParticipants = const [];
 
   List<LessonDecisionParticipant> get knownPayers => _knownPayers;
 
@@ -133,7 +134,11 @@ class LessonEditorDataController implements LessonEditorDataLoader {
           lesson:
               session.snapshot?.rawLesson ??
               {
-                'student_id': draft.client?.id,
+                if (draft.client?.type == 'group') ...{
+                  'group_id': draft.client?.id,
+                  'group_participants': _groupParticipants,
+                } else
+                  'student_id': draft.client?.id,
                 'student_name': draft.client?.label,
                 'branch_id': draft.branchId,
               },
@@ -278,7 +283,7 @@ class LessonEditorDataController implements LessonEditorDataLoader {
       seededBranchId: session.draft.branchId,
     );
     _activeBranchId = branchId;
-    final draft = _initialDraft(
+    var draft = _initialDraft(
       session.draft,
       session.snapshot,
       selectedClient,
@@ -286,6 +291,53 @@ class LessonEditorDataController implements LessonEditorDataLoader {
       branches,
       teachers,
     );
+    if (selectedClient?.type == 'group' &&
+        !session.isEdit &&
+        resolved.row != null) {
+      final group = resolved.row!;
+      if (group['settlement_type_key'] == null) {
+        throw StateError('Сначала выберите типы расчёта в настройках группы.');
+      }
+      final members = await _crm!.listGroupStudents(
+        selectedClient!.id,
+        limit: 100,
+      );
+      final choices = await Future.wait([
+        for (final member in members)
+          _listSubscriptions(member['id'].toString()),
+      ]);
+      if (clientRevision != _clientRevision) return null;
+      _groupParticipants = [
+        for (final member in members)
+          {
+            'studentId': member['id'],
+            'studentName':
+                '${member['first_name'] ?? ''} ${member['last_name'] ?? ''}'
+                    .trim(),
+          },
+      ];
+      draft = draft.copyWith(
+        teacherId: group['teacher_id']?.toString(),
+        roomId: group['room_id']?.toString(),
+        settlementTypeKey: group['settlement_type_key'].toString(),
+        compensationRuleKey: group['teacher_compensation_rule_key'].toString(),
+        clientDecisions: [
+          for (var index = 0; index < members.length; index++)
+            {
+              'clientId': members[index]['id'],
+              'chargeType':
+                  choices[index].any((row) => row['status'] == 'active')
+                  ? 'subscription'
+                  : 'none',
+              if (choices[index]
+                      .where((row) => row['status'] == 'active')
+                      .firstOrNull
+                  case final subscription?)
+                'subscriptionId': subscription['id'],
+            },
+        ],
+      );
+    }
     final references = LessonEditorReferenceState(
       teachers: teachers,
       clients: clients,
@@ -479,6 +531,18 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   Future<({LessonClientRef? client, Map<String, dynamic>? row})>
   _resolveInitialClient(LessonEditorSession session) async {
     final seededClient = session.seededClient ?? session.draft.client;
+    if (!session.isEdit && seededClient?.type == 'group' && _crm != null) {
+      final group = await _crm.getGroup(seededClient!.id);
+      return (
+        client: LessonClientRef(
+          type: 'group',
+          id: seededClient.id,
+          label: group['name']?.toString() ?? seededClient.label,
+          branchId: group['branch_id']?.toString(),
+        ),
+        row: group,
+      );
+    }
     if (session.isEdit ||
         seededClient == null ||
         seededClient.type == 'group') {
@@ -821,7 +885,7 @@ bool _isTeacherEligible(
   return teachers.any(
     (teacher) =>
         teacher.id == teacherId &&
-        teacher.status == 'active' &&
+        teacher.isWorkingTeacher &&
         teacher.assignedBranchIds.contains(branchId),
   );
 }

@@ -1,18 +1,13 @@
-import {
-  ConflictException,
-  Injectable,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { ConflictException, Injectable, UnprocessableEntityException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
-import {
-  assertActiveClientReferences,
-  ClientReferenceService,
-} from "../clients/client-reference.service";
+import { assertActiveClientReferences, ClientReferenceService } from "../clients/client-reference.service";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
+import { acquireScheduleLockKeys } from "./schedule-locks";
+import { prepareGroupLessonCreate } from "./group-lesson-create";
 import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import {
@@ -25,7 +20,6 @@ import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { assertLessonPatchUsesTransition } from "./lesson-protected-patch.guard";
 import {
   CompleteLessonDraft,
-  ExistingLessonDraft,
   LessonRequiredFieldValidator,
 } from "./lesson-required-field.validator";
 
@@ -52,7 +46,11 @@ export class LessonWriteCommandService {
     assertLessonCommandMetadata(metadata);
     const canManageTeacherCompensation =
       this.policy.canManageTeacherCompensation(actor);
-    const draft = this.validator.create(
+    if (dto.groupId && (dto.clientRef || dto.studentId || dto.leadId)) {
+      throw new UnprocessableEntityException({ code: "AMBIGUOUS_LESSON_SUBJECT" });
+    }
+    if (dto.groupId) this.policy.assertCanSupplyTeacherCompensation(actor, dto);
+    const draft = dto.groupId ? undefined : this.validator.create(
       canManageTeacherCompensation
         ? dto
         : {
@@ -67,7 +65,7 @@ export class LessonWriteCommandService {
         fields: ["financialDecision"],
       });
     }
-    await this.assertClientActive(actor, draft);
+    if (draft) await this.assertClientActive(actor, draft);
     const lessonId = stableLessonCreateId(
       actor.userId,
       metadata.idempotencyKey,
@@ -95,33 +93,79 @@ export class LessonWriteCommandService {
         payload: { lessonId, action: "created" },
       },
       mutate: async (client) => {
-        const effectiveDraft = canManageTeacherCompensation
-          ? draft
-          : await this.withEffectiveTeacherRate(client, draft);
-        await this.acquireLocks(client, effectiveDraft);
-        await assertActiveClientReferences(client, [effectiveDraft.clientRef]);
+        const groupContext = dto.groupId
+          ? await prepareGroupLessonCreate(client, actor, dto, this.validator)
+          : undefined;
+        const effectiveDraft = groupContext
+          ? await this.withEffectiveTeacherRate(client, groupContext.draft)
+          : (canManageTeacherCompensation
+          ? draft!
+          : await this.withEffectiveTeacherRate(client, draft!));
+        if (!groupContext) {
+          await acquireScheduleLockKeys(client, [
+            `branch:${effectiveDraft.branchId}`,
+            `client:${effectiveDraft.clientRef.type}:${effectiveDraft.clientRef.id}`,
+            `room:${effectiveDraft.roomId}`,
+            `teacher:${effectiveDraft.teacherId}`,
+          ]);
+          await assertActiveClientReferences(client, [effectiveDraft.clientRef]);
+        }
         const preparedPlan = await this.settlement.resolvePlannedPlan(
           client,
           {
             branchId: effectiveDraft.branchId,
             durationMinutes: effectiveDraft.durationMinutes,
-            decision: dto.financialDecision!,
+            decision: groupContext
+              ? { settlementTypeKey: groupContext.settlementTypeKey,
+                clientDecisions: dto.financialDecision!.clientDecisions?.map((decision) => ({ ...decision, settlementTypeKey: undefined })),
+              }
+              : dto.financialDecision!,
             actorUserId: actor.userId,
             authorization:
               this.policy.teacherCompensationMutationAuthorization(actor),
             reasonText: dto.plannedSettlementReason,
-            requiredClientIds: [effectiveDraft.clientRef.id],
+            requiredClientIds: groupContext?.memberIds ?? [effectiveDraft.clientRef.id],
+            ...(groupContext ? { preservedTeacherDecision: {
+              teacherCompensationRuleKey: groupContext.teacherCompensationRuleKey,
+              teacherCompensationSource: "manual" as const,
+              teacherCreditedDurationMinutes: dto.financialDecision!.teacherCreditedDurationMinutes,
+            } } : {}),
           },
         );
-        await this.assertConstraints(effectiveDraft, client);
+        if (groupContext) {
+          for (const studentId of groupContext.memberIds) {
+            await this.assertConstraints({ ...effectiveDraft, clientRef: { type: "student", id: studentId } }, client);
+          }
+        } else {
+          await this.assertConstraints(effectiveDraft, client);
+        }
         await this.assertLeadNotConverted(client, effectiveDraft);
         await this.repository.insertLesson(
           client,
           lessonId,
           effectiveDraft,
           actor.userId,
+          dto.groupId,
         );
-        await this.lifecycle.createSnapshot(client, {
+        if (groupContext) {
+          await this.lifecycle.createGroupSnapshot(client, {
+            lessonId, groupId: dto.groupId!, completionType: effectiveDraft.completionType,
+            teacherCompensationType: effectiveDraft.teacherCompensationType,
+            teacherCompensationValue: effectiveDraft.teacherCompensationValue,
+            trial: effectiveDraft.isTrial,
+            participants: groupContext.memberIds.map(studentId => {
+              const decision = preparedPlan.decision.clientDecisions!.find(item => item.clientId === studentId)!;
+              return {
+                studentId, chargeType: decision.chargeType ?? "none",
+                chargeValue: decision.chargeType === "subscription"
+                  ? (decision.chargeDurationMinutes ?? effectiveDraft.durationMinutes) / 60
+                  : decision.chargeType === "personal_account" ? Number(decision.basePriceMinor ?? 0) / 100 : 0,
+                subscriptionId: decision.subscriptionId,
+              };
+            }),
+          });
+        } else {
+          await this.lifecycle.createSnapshot(client, {
           lessonId,
           clientType: effectiveDraft.clientRef.type,
           clientId: effectiveDraft.clientRef.id,
@@ -133,6 +177,7 @@ export class LessonWriteCommandService {
           subscriptionId: effectiveDraft.subscriptionId ?? undefined,
           trial: effectiveDraft.isTrial,
         });
+        }
         const plan = await this.settlement.assignPreparedPlan(client, {
           lessonId,
           selectedBy: actor.userId,
@@ -293,31 +338,6 @@ export class LessonWriteCommandService {
         message: "Lesson draft violates schedule constraints.",
         violations: result.violations,
       });
-    }
-  }
-
-  private async acquireLocks(
-    client: PoolClient,
-    draft: CompleteLessonDraft,
-    previous?: ExistingLessonDraft,
-  ) {
-    const keys = [
-      `branch:${draft.branchId}`,
-      `client:${draft.clientRef.type}:${draft.clientRef.id}`,
-      `room:${draft.roomId}`,
-      `teacher:${draft.teacherId}`,
-      previous?.branchId ? `branch:${previous.branchId}` : null,
-      previous?.roomId ? `room:${previous.roomId}` : null,
-      previous?.teacherId ? `teacher:${previous.teacherId}` : null,
-    ]
-      .filter((key): key is string => key !== null)
-      .filter((key, index, values) => values.indexOf(key) === index)
-      .sort();
-    for (const key of keys) {
-      await client.query(
-        "select pg_advisory_xact_lock(hashtextextended($1, 0))",
-        [key],
-      );
     }
   }
 

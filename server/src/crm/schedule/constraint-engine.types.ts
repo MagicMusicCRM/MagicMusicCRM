@@ -76,6 +76,8 @@ export interface LessonConflict {
   >;
   resource: ConstraintResourceRef;
   lessonId: string;
+  startsAt?: string | Date;
+  endsAt?: string | Date;
 }
 
 export type ConstraintTransaction = PoolClient;

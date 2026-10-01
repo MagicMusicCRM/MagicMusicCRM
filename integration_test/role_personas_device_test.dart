@@ -242,10 +242,13 @@ void main() {
 
     await _openDesktopSection<SystemSettingsWorkspace>(tester, 'Настройки');
     expect(find.text('Организация'), findsWidgets);
-    expect(find.text('Продажи и оплаты'), findsOneWidget);
-    await tester.tap(find.text('Продажи и оплаты'));
+    expect(find.text('Абонементы'), findsOneWidget);
+    await tester.tap(find.text('Абонементы'));
     await _pumpFor(tester);
-    expect(find.text('Каталог абонементов'), findsOneWidget);
+    expect(
+      find.text('Пакеты занятий, стоимость и срок действия'),
+      findsOneWidget,
+    );
     expect(find.text('Новый абонемент'), findsNothing);
     await captureEvidence(tester, 'manager-windows-persona-settings');
 
@@ -297,10 +300,13 @@ void main() {
 
     await _openDesktopSection<SystemSettingsWorkspace>(tester, 'Настройки');
     expect(find.text('Пользователи и доступы'), findsWidgets);
-    expect(find.text('Продажи и оплаты'), findsOneWidget);
-    await tester.tap(find.text('Продажи и оплаты'));
+    expect(find.text('Абонементы'), findsOneWidget);
+    await tester.tap(find.text('Абонементы'));
     await _pumpFor(tester);
-    expect(find.text('Каталог абонементов'), findsOneWidget);
+    expect(
+      find.text('Пакеты занятий, стоимость и срок действия'),
+      findsOneWidget,
+    );
     expect(find.text('Новый абонемент'), findsOneWidget);
     await captureEvidence(tester, 'director-windows-persona-settings');
 
@@ -341,8 +347,8 @@ void main() {
     await _openDesktopSection<ReportsWidget>(tester, 'Аналитика');
     await _openDesktopSection<SystemSettingsWorkspace>(tester, 'Настройки');
     expect(find.text('Пользователи и доступы'), findsWidgets);
-    expect(find.text('Продажи и оплаты'), findsOneWidget);
-    await tester.tap(find.text('Продажи и оплаты'));
+    expect(find.text('Абонементы'), findsOneWidget);
+    await tester.tap(find.text('Абонементы'));
     await _pumpFor(tester);
     expect(find.text('Новый абонемент'), findsOneWidget);
     await captureEvidence(tester, 'system-admin-windows-persona-settings');

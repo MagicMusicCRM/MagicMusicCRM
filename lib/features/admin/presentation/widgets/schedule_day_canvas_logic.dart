@@ -21,7 +21,10 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     final index = (point.dx / colWidth).floor();
     if (index < 0 || index >= widget.columns.length) return;
     final column = widget.columns[index];
-    if (column.isUnassigned || column.date != null) return;
+    if (column.isUnassigned ||
+        (column.date != null && column.id != entry.columnId)) {
+      return;
+    }
     final start = scheduleDayMoveStart(
       entry.startLocal,
       verticalDelta: to.dy - from.dy,

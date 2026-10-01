@@ -74,6 +74,7 @@ class LiveAuditHarness {
       InterceptorsWrapper(
         onRequest: (options, handler) {
           options.extra['auditStep'] = currentStep;
+          options.extra['auditClock'] = Stopwatch()..start();
           pending.add(options);
           handler.next(options);
         },
@@ -149,12 +150,15 @@ class LiveAuditHarness {
   }
 
   void trace(RequestOptions options, int? status, {String? error}) {
+    final clock = options.extra['auditClock'] as Stopwatch?;
+    clock?.stop();
     pending.remove(options);
     requests.add({
       'step': options.extra['auditStep'] ?? currentStep,
       'method': options.method,
       'path': options.uri.path,
       'status': status,
+      if (clock != null) 'durationMs': clock.elapsedMicroseconds / 1000,
       'error': ?error,
       if (options.method == 'PATCH' && options.data is Map)
         'requestKeys': (options.data as Map).keys.map((key) => '$key').toList(),

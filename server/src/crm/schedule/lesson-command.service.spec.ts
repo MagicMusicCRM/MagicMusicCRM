@@ -20,6 +20,7 @@ describe("LessonConstraintPreviewService", () => {
     const service = new LessonConstraintPreviewService(
       policy as never,
       constraints as never,
+      {} as DatabaseService,
     );
     const actor = {
       userId: "00000000-0000-4000-8000-000000000001",

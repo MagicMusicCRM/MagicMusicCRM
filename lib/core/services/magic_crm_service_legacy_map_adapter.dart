@@ -375,6 +375,8 @@ Map<String, dynamic> _legacyGroup(Map<String, dynamic> item) {
     'branch_id': item['branchId'],
     'room_id': item['roomId'],
     'name': item['name'],
+    'settlement_type_key': item['settlementTypeKey'],
+    'teacher_compensation_rule_key': item['teacherCompensationRuleKey'],
     'price_per_lesson': item['pricePerLesson'],
     // KVA-238: null = брать ставку педагога, 0 = «входит в оклад».
     'teacher_rate': item['teacherRate'],

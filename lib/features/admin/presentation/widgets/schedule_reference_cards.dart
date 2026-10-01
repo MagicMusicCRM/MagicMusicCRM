@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/widgets/magic_picker.dart';
 
 import 'schedule_reference_controller.dart';
 import 'schedule_reference_busy_cards.dart';
@@ -25,10 +23,12 @@ class BranchHoursCard extends StatelessWidget {
       title: 'Рабочие часы филиала',
       action: controller.canEdit
           ? FilledButton(
-              onPressed:
-                  controller.state.saving || draft?.weekly.isEmpty != false
-                  ? null
-                  : onSave,
+              onPressed: _whenEnabled(
+                canMutate &&
+                    !controller.state.loading &&
+                    controller.hasBranchHoursChanges,
+                onSave,
+              ),
               child: const Text('Сохранить'),
             )
           : null,
@@ -151,21 +151,13 @@ class TeacherAvailabilityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canEdit = controller.canEdit && !controller.availabilityLocked;
-    final canMutate = _canMutate(canEdit, controller.state.saving);
-    return ScheduleReferenceCard(
-      title: 'Доступность преподавателя',
-      action: canEdit
-          ? FilledButton(
-              onPressed: controller.state.saving ? null : onSave,
-              child: const Text('Сохранить'),
-            )
-          : null,
+    final canEdit = controller.canEdit;
+    final canMutate =
+        _canMutate(canEdit, controller.state.saving) &&
+        !controller.state.loading;
+    final workingHours = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TeacherWeeklyBusySection(controller: controller, editable: canMutate),
-        const Divider(height: 28),
-        TeacherDateBusySection(controller: controller, editable: canMutate),
-        const Divider(height: 28),
         const Text(
           'Рабочие часы по дням недели',
           style: TextStyle(fontWeight: FontWeight.w700),
@@ -178,6 +170,60 @@ class TeacherAvailabilityCard extends StatelessWidget {
             controller: controller,
             editable: canMutate,
           ),
+      ],
+    );
+    final absences = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TeacherDateBusySection(controller: controller, editable: canMutate),
+        const Divider(height: 28),
+        TeacherWeeklyBusySection(controller: controller, editable: canMutate),
+      ],
+    );
+    return ScheduleReferenceCard(
+      key: const Key('teacher-availability-editor'),
+      title: 'Рабочий график и отсутствия',
+      action: canEdit
+          ? FilledButton(
+              onPressed: canMutate && controller.hasAvailabilityChanges
+                  ? onSave
+                  : null,
+              child: Text(
+                controller.state.saving ? 'Сохранение…' : 'Сохранить график',
+              ),
+            )
+          : null,
+      children: [
+        Text(
+          !controller.canEdit
+              ? 'Только просмотр. Редактирование выдаёт директор.'
+              : controller.hasAvailabilityChanges
+              ? 'Есть несохранённые изменения графика'
+              : 'Укажите часы работы и периоды отсутствия',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) => constraints.maxWidth >= 760
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: workingHours),
+                    const SizedBox(width: 20),
+                    Expanded(flex: 2, child: absences),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    workingHours,
+                    const SizedBox(height: 16),
+                    absences,
+                  ],
+                ),
+        ),
       ],
     );
   }
@@ -237,7 +283,7 @@ class _TeacherRecurringDayEditor extends StatelessWidget {
             )
           else
             for (final rule in rules)
-              _TeacherRecurringRuleRow(
+              TeacherRecurringRuleRow(
                 rule: rule,
                 controller: controller,
                 editable: editable,
@@ -245,116 +291,6 @@ class _TeacherRecurringDayEditor extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _TeacherRecurringRuleRow extends StatelessWidget {
-  const _TeacherRecurringRuleRow({
-    required this.rule,
-    required this.controller,
-    required this.editable,
-  });
-
-  final Map<String, dynamic> rule;
-  final ScheduleReferenceController controller;
-  final bool editable;
-
-  @override
-  Widget build(BuildContext context) {
-    final start = rule['localStart']?.toString() ?? '09:00';
-    final end = rule['localEnd']?.toString() ?? '21:00';
-    final validFrom = DateTime.tryParse(rule['validFrom']?.toString() ?? '');
-    final validUntil = DateTime.tryParse(rule['validUntil']?.toString() ?? '');
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          TextButton.icon(
-            onPressed: editable
-                ? () => _pickTime(context, 'localStart', start)
-                : null,
-            icon: const Icon(Icons.schedule_rounded, size: 16),
-            label: Text(start),
-          ),
-          const Text('—'),
-          TextButton(
-            onPressed: editable
-                ? () => _pickTime(context, 'localEnd', end)
-                : null,
-            child: Text(end),
-          ),
-          TextButton.icon(
-            onPressed: editable
-                ? () => _pickDate(context, 'validFrom', validFrom)
-                : null,
-            icon: const Icon(Icons.event_available_outlined, size: 16),
-            label: Text(
-              'с ${validFrom == null ? 'сегодня' : DateFormat('dd.MM.yyyy').format(validFrom)}',
-            ),
-          ),
-          TextButton.icon(
-            onPressed: editable
-                ? () => _pickDate(context, 'validUntil', validUntil)
-                : null,
-            icon: const Icon(Icons.event_busy_outlined, size: 16),
-            label: Text(
-              validUntil == null
-                  ? 'без срока'
-                  : 'до ${DateFormat('dd.MM.yyyy').format(validUntil)}',
-            ),
-          ),
-          if (validUntil != null)
-            IconButton(
-              tooltip: 'Убрать дату окончания',
-              onPressed: editable
-                  ? () =>
-                        controller.updateRecurringRule(rule, 'validUntil', null)
-                  : null,
-              icon: const Icon(Icons.event_busy_rounded, size: 18),
-            ),
-          IconButton(
-            tooltip: 'Удалить рабочий интервал',
-            onPressed: editable
-                ? () => controller.removeRecurringRule(rule)
-                : null,
-            icon: const Icon(Icons.delete_outline_rounded, size: 18),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickTime(
-    BuildContext context,
-    String field,
-    String current,
-  ) async {
-    final next = await pickScheduleTime(context, current);
-    if (next != null) controller.updateRecurringRule(rule, field, next);
-  }
-
-  Future<void> _pickDate(
-    BuildContext context,
-    String field,
-    DateTime? current,
-  ) async {
-    final now = DateUtils.dateOnly(DateTime.now());
-    final next = await showMagicDatePicker(
-      context: context,
-      initialDate: current ?? now,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (next != null) {
-      controller.updateRecurringRule(
-        rule,
-        field,
-        DateFormat('yyyy-MM-dd').format(next),
-      );
-    }
   }
 }
 
@@ -381,7 +317,7 @@ class ScheduleTimeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = value != null;
-    return Row(
+    final toggle = Row(
       children: [
         Semantics(
           label: '$label: ${enabled ? 'включено' : 'выключено'}',
@@ -394,12 +330,32 @@ class ScheduleTimeRow extends StatelessWidget {
           ),
         ),
         Expanded(child: Text(label)),
-        if (enabled) ...[
-          _timeButton(context, startKey, '09:00'),
-          const Text('Не указано'),
-          _timeButton(context, endKey, '21:00'),
-        ],
       ],
+    );
+    final times = [
+      _timeButton(context, startKey, '09:00'),
+      const Text('—'),
+      _timeButton(context, endKey, '21:00'),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 420) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              toggle,
+              if (enabled)
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: times),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: toggle),
+            if (enabled) ...times,
+          ],
+        );
+      },
     );
   }
 

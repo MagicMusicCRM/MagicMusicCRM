@@ -25,6 +25,7 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
   let pool: Pool;
   let database: DatabaseService;
   let engine: ScheduleConstraintEngine;
+  let repository: ConstraintEngineRepository;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: testDatabaseUrl });
@@ -33,14 +34,47 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
       getOrThrow: () => testDatabaseUrl,
     } as unknown as ConfigService);
     const availability = new AvailabilityRepository(database);
-    engine = new ScheduleConstraintEngine(
-      new ConstraintEngineRepository(database, availability),
-    );
+    repository = new ConstraintEngineRepository(database, availability);
+    engine = new ScheduleConstraintEngine(repository);
   });
 
   afterAll(async () => {
     await database.onModuleDestroy();
     await pool.end();
+  });
+
+  it("reuses a bounded reference without losing per-date conflicts or assignment changes", async () => {
+    const client = await pool.connect();
+    await client.query('begin');
+    try {
+      const fixture = await createFixture(client);
+      const base = {clientRef:{type:'student' as const,id:fixture.studentId},teacherId:fixture.teacherId,branchId:fixture.branchId,roomId:fixture.roomId};
+      const drafts = [
+        {...base,startAt:'2026-07-27T07:30:00Z',endAt:'2026-07-27T08:30:00Z'},
+        {...base,startAt:'2026-07-27T08:00:00Z',endAt:'2026-07-27T09:00:00Z'},
+        {...base,startAt:'2026-08-03T08:00:00Z',endAt:'2026-08-03T09:00:00Z'},
+        {...base,startAt:'2026-08-03T16:00:00Z',endAt:'2026-08-03T17:00:00Z'},
+      ];
+      const prepared = await engine.prepareValidation({...base,startAt:drafts[0]!.startAt,endAt:drafts[3]!.endAt},client);
+      for (const draft of drafts) expect(await engine.validate(draft,client,prepared)).toEqual(await engine.validate(draft,client));
+      expect((await engine.validate(drafts[0]!,client,prepared)).violations.map(v=>v.code)).toContain('TEACHER_OVERLAP');
+      expect((await engine.validate(drafts[1]!,client,prepared)).valid).toBe(true);
+      expect((await engine.validate(drafts[3]!,client,prepared)).valid).toBe(false);
+      const conflictQuery = jest.spyOn(repository, 'findConflicts');
+      try {
+        const fresh = await engine.prepareValidation({...base,startAt:drafts[0]!.startAt,endAt:drafts[3]!.endAt},client);
+        for (const draft of drafts) await engine.validate(draft,client,fresh);
+        expect(conflictQuery).toHaveBeenCalledTimes(1);
+        const excluded = {...drafts[0]!,excludeLessonId:fixture.lessonId};
+        expect(await engine.validate(excluded,client,fresh)).toEqual(await engine.validate(excluded,client));
+      } finally { conflictQuery.mockRestore(); }
+      await client.query("update app.teacher_branches set active_until='2026-07-31' where teacher_id=$1",[fixture.teacherId]);
+      const partial = await engine.prepareValidation({...base,startAt:drafts[0]!.startAt,endAt:drafts[3]!.endAt},client);
+      expect((await engine.validate(drafts[1]!,client,partial)).valid).toBe(true);
+      expect((await engine.validate(drafts[2]!,client,partial)).violations.map(v=>v.code)).toContain('TEACHER_BRANCH_MISMATCH');
+      const wrongRoom = {...drafts[1]!,roomId:fixture.otherRoomId};
+      expect((await engine.validate(wrongRoom,client,prepared)).violations.map(v=>v.code)).toContain('ROOM_BRANCH_MISMATCH');
+    } finally {await client.query('rollback');client.release();}
   });
 
   it("allows adjacency and blocks all overlaps with refs, excludeLessonId and cross-branch mismatch", async () => {

@@ -307,6 +307,18 @@ class FakeCardApiClient extends MagicApiClient {
     if (path == '/crm/disciplines') {
       return <String, dynamic>{'items': disciplines} as T;
     }
+    if (path == '/crm/groups/group-1') {
+      return {
+            'id': 'group-1',
+            'teacherId': 'teacher-1',
+            'branchId': 'branch-1',
+            'roomId': 'room-1',
+            'settlementTypeKey': 'free_lesson',
+            'teacherCompensationRuleKey': 'none',
+            'version': 1,
+          }
+          as T;
+    }
     if (path == '/crm/branches') {
       return <String, dynamic>{'items': branches} as T;
     }
@@ -877,6 +889,8 @@ class FakeCardApiClient extends MagicApiClient {
       final rows = data is Map ? data['rows'] as List? ?? const [] : const [];
       return <String, dynamic>{
             'valid': true,
+            if (data is Map && data['candidateTeacherIds'] is List)
+              'availableTeacherIds': data['candidateTeacherIds'],
             'rows': [
               for (var index = 0; index < rows.length; index++)
                 {

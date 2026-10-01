@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
+import 'package:magic_music_crm/core/widgets/client_selection_details.dart';
 
 class PeopleSearchAction extends ConsumerWidget {
   const PeopleSearchAction({this.inline = false, super.key});
@@ -385,7 +386,18 @@ class _PeopleSearchState extends ConsumerState<_PeopleSearch> {
             final person = _items[index];
             return ListTile(
               title: Text(person.name),
-              subtitle: Text(person.context),
+              subtitle: {'lead', 'student'}.contains(person.type)
+                  ? ClientSelectionDetails(
+                      type: person.type,
+                      id: person.id,
+                      branchId: person.row['branchId']?.toString(),
+                      branchKnown:
+                          person.row.containsKey('branchId') &&
+                          person.row['ref'] is Map &&
+                          (person.row['ref'] as Map)['id']?.toString() ==
+                              person.id,
+                    )
+                  : Text(person.context),
               leading: Icon(
                 person.type == 'teacher'
                     ? Icons.school_outlined

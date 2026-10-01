@@ -4,7 +4,7 @@ import { DatabaseService } from "../db/database.service";
 import { settingsBranchIdsForActor } from "./settings-branch-scope";
 
 export async function assertGroupBranchScope(
-  database: DatabaseService,
+  database: Pick<DatabaseService, "query">,
   actor: ActorContext,
   groupId: string,
   knownBranchId?: string | null,

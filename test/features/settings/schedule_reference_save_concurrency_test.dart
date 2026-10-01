@@ -108,6 +108,8 @@ void main() {
       section: ScheduleReferenceSection.branchHours,
     );
 
+    await tester.tap(find.byType(Switch).at(1));
+    await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
     await tester.pump();
     final card = find.byType(BranchHoursCard);

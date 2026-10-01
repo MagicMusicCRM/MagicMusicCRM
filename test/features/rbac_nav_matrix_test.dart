@@ -113,8 +113,8 @@ void main() {
     });
 
     test('Администратор: Чат, Расписание, Клиенты, Персонал и Задачи', () {
-      expect(crmVisibleTabs('admin', isDesktop: true), [0, 2, 3, 4, 6]);
-      expect(crmVisibleTabs('admin', isDesktop: false), [0, 2, 3, 4, 6]);
+      expect(crmVisibleTabs('admin', isDesktop: true), [0, 2, 9, 3, 4, 6]);
+      expect(crmVisibleTabs('admin', isDesktop: false), [0, 2, 9, 3, 4, 6]);
     });
 
     test('Управляющий: operational CRM без раздела «Финансы» (5)', () {
@@ -122,6 +122,7 @@ void main() {
         0,
         1,
         2,
+        9,
         3,
         4,
         6,
@@ -132,6 +133,7 @@ void main() {
         0,
         1,
         2,
+        9,
         3,
         4,
         6,
@@ -145,6 +147,7 @@ void main() {
         0,
         1,
         2,
+        9,
         3,
         4,
         6,
@@ -155,6 +158,7 @@ void main() {
         0,
         1,
         2,
+        9,
         3,
         4,
         6,

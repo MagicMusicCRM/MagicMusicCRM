@@ -10,9 +10,14 @@ import {
 import { ClientRefDto } from "./client-ref.dto";
 
 export class LessonConstraintPreviewDto {
+  @IsOptional()
   @ValidateNested()
   @Type(() => ClientRefDto)
-  clientRef!: ClientRefDto;
+  clientRef?: ClientRefDto;
+
+  @IsOptional()
+  @IsUUID()
+  groupId?: string;
 
   @IsUUID()
   teacherId!: string;

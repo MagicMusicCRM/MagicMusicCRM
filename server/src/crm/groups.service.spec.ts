@@ -172,6 +172,8 @@ describe("GroupsService", () => {
           roomId: "room-a",
           name: "Гитара",
           pricePerLesson: 2500,
+          settlementTypeKey: null,
+          teacherCompensationRuleKey: null,
           teacherRate: null, // KVA-238: переопределение не задано
           teacherName: "Иван Петров",
           branchName: "Центр",
@@ -280,6 +282,8 @@ describe("GroupsService", () => {
       "Фортепиано",
       3000,
       null, // KVA-238: teacherRate не передан
+      null,
+      null,
       null,
       null,
     ]);
@@ -451,6 +455,8 @@ describe("GroupsService", () => {
       false,
       2,
       1,
+      null,
+      null,
     ]);
     expect(query.mock.calls[2][0]).toContain("where not $9::boolean");
   });

@@ -51,4 +51,13 @@ export class UpdateGroupDto {
   @Min(0)
   @Max(1000000)
   teacherRate?: number | null;
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  settlementTypeKey?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  teacherCompensationRuleKey?: string;
 }

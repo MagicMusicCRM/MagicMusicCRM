@@ -119,7 +119,7 @@ class LessonEditorScheduleController {
     final candidates = references.teachers
         .where(
           (teacher) =>
-              teacher.status == 'active' &&
+              teacher.isWorkingTeacher &&
               teacher.assignedBranchIds.contains(branchId),
         )
         .toList();
@@ -175,9 +175,7 @@ class LessonEditorScheduleController {
       availableTeacherIds = available;
       teacherOptionsLoading = false;
       onChanged();
-      return draft.teacherId != null && !available.contains(draft.teacherId)
-          ? draft.copyWith(teacherId: null)
-          : null;
+      return null;
     } catch (_) {
       if (generation != _teacherOptionsGeneration) return null;
       teacherOptionsError = 'Не удалось проверить доступность преподавателей.';

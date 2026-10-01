@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/app_dropdown.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/notification_preferences_dialog.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/skeletons.dart';
@@ -30,7 +31,6 @@ import 'branch_lifecycle_dialog.dart';
 import 'reference_catalog_settings.dart';
 import 'data_quality_widget.dart';
 import 'deletion_requests_widget.dart';
-import 'schedule_reference_settings.dart';
 
 part 'manage_entities_people.dart';
 part 'manage_entities_scheduling.dart';
@@ -709,13 +709,11 @@ class SystemSettingsWorkspace extends ConsumerStatefulWidget {
     required this.role,
     this.initialArea,
     this.initialUserSearch,
-    this.initialTeacherId,
   });
 
   final String role;
   final String? initialArea;
   final String? initialUserSearch;
-  final String? initialTeacherId;
 
   @override
   ConsumerState<SystemSettingsWorkspace> createState() =>
@@ -726,31 +724,41 @@ class _SystemSettingsWorkspaceState
     extends ConsumerState<SystemSettingsWorkspace> {
   static const _areas = <(String, String, IconData)>[
     ('organization', 'Организация', Icons.apartment_rounded),
-    ('learning', 'Обучение', Icons.school_rounded),
-    ('crm', 'Клиенты', Icons.view_kanban_rounded),
-    ('access', 'Доступ и уведомления', Icons.manage_accounts_rounded),
+    ('users', 'Пользователи', Icons.manage_accounts_rounded),
+    ('notifications', 'Уведомления', Icons.notifications_outlined),
+    ('crm', 'CRM и воронки', Icons.view_kanban_rounded),
+    ('subscriptions', 'Абонементы', Icons.confirmation_number_outlined),
     ('system', 'Интеграции и система', Icons.hub_rounded),
   ];
 
   static const _searchTerms = <String, String>{
     'organization': 'филиалы аудитории справочники дисциплины причины',
-    'learning': 'расписание графики преподавателей группы часы работы',
-    'crm': 'клиенты лиды поля воронки источники продажи оплаты абонементы',
-    'access': 'пользователи сотрудники роли права уведомления доступ',
+    'crm': 'клиенты лиды поля воронки источники бизнес параметры система',
+    'subscriptions': 'продажи оплаты абонементы каталог пакеты тарифы',
+    'users': 'пользователи аккаунты сотрудники роли права доступ связи',
+    'notifications': 'уведомления получатели события каналы доставка',
     'system': 'интеграции данные обслуживание удаление качество система',
   };
 
   late String _area;
-  late final String _initialClientArea;
   final _search = TextEditingController();
   final Set<String> _visitedAreas = {};
+  final _contentKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _area = _normalizeArea(widget.initialArea);
-    _initialClientArea = widget.initialArea == 'sales' ? 'sales' : 'crm';
     _visitedAreas.add(_area);
+  }
+
+  @override
+  void didUpdateWidget(covariant SystemSettingsWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialArea != widget.initialArea) {
+      _area = _normalizeArea(widget.initialArea);
+      _visitedAreas.add(_area);
+    }
   }
 
   @override
@@ -760,9 +768,9 @@ class _SystemSettingsWorkspaceState
   }
 
   String _normalizeArea(String? area) => switch (area) {
-    'schedule' => 'learning',
-    'sales' => 'crm',
-    'users' => 'access',
+    'schedule' || 'learning' => 'organization',
+    'sales' => 'subscriptions',
+    'access' => 'users',
     'data' => 'system',
     final value when _areas.any((candidate) => candidate.$1 == value) => value!,
     _ => 'organization',
@@ -771,7 +779,9 @@ class _SystemSettingsWorkspaceState
   List<(String, String, IconData)> _allowedAreas(CapabilitySnapshot snapshot) {
     if (snapshot.allows('system.settings.manage')) return _areas;
     if (snapshot.allows('config.crm.read')) {
-      return _areas.where((area) => area.$1 == 'crm').toList();
+      return _areas
+          .where((area) => area.$1 == 'crm' || area.$1 == 'subscriptions')
+          .toList();
     }
     return const [];
   }
@@ -810,6 +820,7 @@ class _SystemSettingsWorkspaceState
           }).toList();
     final selectedIndex = areas.indexWhere((area) => area.$1 == _area);
     final content = IndexedStack(
+      key: _contentKey,
       index: selectedIndex,
       children: [
         for (final area in areas)
@@ -944,19 +955,23 @@ class _SystemSettingsWorkspaceState
             canEdit &&
             (snapshot.role == 'director' || snapshot.role == 'system_admin'),
       ),
-      'learning' => _ScheduleSettings(
-        canEditReferences: canEdit,
-        canManageGroups: snapshot.allows('schedule.lesson.write'),
-        initialTeacherId: widget.initialTeacherId,
+      'crm' when snapshot.allows('config.crm.read') => const Column(
+        children: [
+          _SettingsToolbar(
+            title: 'CRM и воронки',
+            subtitle: 'Поля карточек, справочники, правила и воронки клиентов',
+          ),
+          Expanded(child: CrmConfigurationWorkspace()),
+        ],
       ),
-      'crm' => _ClientSettingsGroup(
-        snapshot: snapshot,
-        initialArea: _initialClientArea,
+      'crm' => const _SettingsDenied(text: 'Нет доступа к настройкам CRM.'),
+      'subscriptions' => _SalesSettings(
+        canEdit: snapshot.allows('commerce.package.manage'),
       ),
-      'access' => _UsersSettings(
+      'notifications' => const NotificationPreferencesDialog(embedded: true),
+      'users' => UserRolesWidget(
         currentRole: widget.role,
         initialSearch: widget.initialUserSearch,
-        canCreatePeople: snapshot.allows('crm.client.write'),
       ),
       'system' => _DataSettings(
         canManageDeletion:
@@ -969,268 +984,73 @@ class _SystemSettingsWorkspaceState
   }
 }
 
-class _ClientSettingsGroup extends StatefulWidget {
-  const _ClientSettingsGroup({
-    required this.snapshot,
-    required this.initialArea,
-  });
-
+class GroupsWorkspace extends ConsumerStatefulWidget {
+  const GroupsWorkspace({super.key, required this.snapshot, this.initialLink});
   final CapabilitySnapshot snapshot;
-  final String initialArea;
-
+  final EntityLink? initialLink;
   @override
-  State<_ClientSettingsGroup> createState() => _ClientSettingsGroupState();
+  ConsumerState<GroupsWorkspace> createState() => _GroupsWorkspaceState();
 }
 
-class _ClientSettingsGroupState extends State<_ClientSettingsGroup> {
-  late String _area;
-  final _visited = <String>{};
-
+class _GroupsWorkspaceState extends ConsumerState<GroupsWorkspace> {
+  final _search = TextEditingController();
+  bool _showArchived = false;
+  String? _openedId;
   @override
   void initState() {
     super.initState();
-    _area = widget.initialArea == 'sales' ? 'sales' : 'crm';
-    _visited.add(_area);
+    _queueLinkedGroup();
   }
 
   @override
-  Widget build(BuildContext context) {
-    final canReadCrm = widget.snapshot.allows('config.crm.read');
-    final areas = <(String, String)>[
-      if (canReadCrm) ('crm', 'CRM и воронки'),
-      ('sales', 'Продажи и оплаты'),
-    ];
-    if (!areas.any((candidate) => candidate.$1 == _area)) {
-      _area = areas.first.$1;
-      _visited.add(_area);
+  void didUpdateWidget(covariant GroupsWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _queueLinkedGroup();
+  }
+
+  void _queueLinkedGroup() {
+    final link = widget.initialLink;
+    if (link?.entityId == '__section__') {
+      _openedId = null;
+      return;
     }
-    return Column(
-      children: [
-        _SettingsToolbar(
-          title: 'Клиенты',
-          subtitle: 'Воронки, поля, источники, абонементы и правила продаж',
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SegmentedButton<String>(
-              segments: [
-                for (final area in areas)
-                  ButtonSegment(value: area.$1, label: Text(area.$2)),
-              ],
-              selected: {_area},
-              onSelectionChanged: (value) {
-                setState(() {
-                  _area = value.first;
-                  _visited.add(_area);
-                });
-              },
-            ),
-          ),
-        ),
-        Expanded(
-          child: IndexedStack(
-            index: areas.indexWhere((area) => area.$1 == _area),
-            children: [
-              for (final area in areas)
-                KeyedSubtree(
-                  key: ValueKey('client-settings-${area.$1}'),
-                  child: !_visited.contains(area.$1)
-                      ? const SizedBox.shrink()
-                      : area.$1 == 'crm'
-                      ? const CrmConfigurationWorkspace()
-                      : _SalesSettings(
-                          canEdit: widget.snapshot.allows(
-                            'commerce.package.manage',
-                          ),
-                        ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ScheduleSettings extends StatefulWidget {
-  const _ScheduleSettings({
-    required this.canEditReferences,
-    required this.canManageGroups,
-    this.initialTeacherId,
-  });
-
-  final bool canEditReferences;
-  final bool canManageGroups;
-  final String? initialTeacherId;
-
-  @override
-  State<_ScheduleSettings> createState() => _ScheduleSettingsState();
-}
-
-enum _ScheduleSettingsView { branchHours, teacherSchedules, groups }
-
-class _ScheduleSettingsState extends State<_ScheduleSettings> {
-  final _search = TextEditingController();
-  late _ScheduleSettingsView _view;
-  bool _showArchivedGroups = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _view = widget.initialTeacherId == null
-        ? _ScheduleSettingsView.branchHours
-        : _ScheduleSettingsView.teacherSchedules;
-  }
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  Future<void> _createGroup() async {
-    final saved = await showCreateGroupSurface(context);
-    if (saved == true && mounted) {
-      final container = ProviderScope.containerOf(context);
-      container.invalidate(entitiesProvider('groups'));
-      container.invalidate(entitiesProvider('groups:all'));
+    if (link?.entityType != EntityLinkType.group ||
+        link!.entityId == '__section__' ||
+        link.entityId.isEmpty ||
+        _openedId == link.entityId ||
+        (!widget.snapshot.allows('schedule.lesson.read.assigned') &&
+            !widget.snapshot.allows('schedule.lesson.write'))) {
+      return;
     }
+    _openedId = link.entityId;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final group = await ref
+            .read(magicCrmServiceProvider)
+            .getGroup(link.entityId);
+        if (!mounted || widget.initialLink?.entityId != link.entityId) return;
+        if (await GroupDetailDialog.show(
+                  context,
+                  group,
+                  canWrite:
+                      widget.snapshot.allows('schedule.lesson.write') &&
+                      group['lifecycle_state'] != 'archived',
+                ) ==
+                true &&
+            mounted) {
+          invalidateGroupCatalog(ref);
+        }
+      } catch (error) {
+        if (mounted) {
+          MagicToast.show(
+            context,
+            userErrorMessage(error, fallback: 'Не удалось открыть группу.'),
+            type: MagicToastType.danger,
+          );
+        }
+      }
+    });
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final groups = _view == _ScheduleSettingsView.groups;
-    final title = switch (_view) {
-      _ScheduleSettingsView.branchHours => 'Часы работы филиалов',
-      _ScheduleSettingsView.teacherSchedules => 'Графики преподавателей',
-      _ScheduleSettingsView.groups => 'Учебные группы',
-    };
-    final subtitle = switch (_view) {
-      _ScheduleSettingsView.branchHours =>
-        'Рабочие дни, время открытия и исключения',
-      _ScheduleSettingsView.teacherSchedules =>
-        'Назначения по филиалам, рабочие часы и недоступность',
-      _ScheduleSettingsView.groups => 'Состав и параметры учебных групп',
-    };
-    return Column(
-      children: [
-        _SettingsToolbar(
-          title: title,
-          subtitle: subtitle,
-          action: groups && widget.canManageGroups
-              ? FilledButton.icon(
-                  onPressed: _createGroup,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Новая группа'),
-                )
-              : null,
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SegmentedButton<_ScheduleSettingsView>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _ScheduleSettingsView.branchHours,
-                      label: Text('Часы филиалов'),
-                    ),
-                    ButtonSegment(
-                      value: _ScheduleSettingsView.teacherSchedules,
-                      label: Text('Графики преподавателей'),
-                    ),
-                    ButtonSegment(
-                      value: _ScheduleSettingsView.groups,
-                      label: Text('Группы'),
-                    ),
-                  ],
-                  selected: {_view},
-                  onSelectionChanged: (value) {
-                    setState(() => _view = value.first);
-                  },
-                ),
-              ),
-              if (groups) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 420,
-                      child: TextField(
-                        controller: _search,
-                        onChanged: (_) => setState(() {}),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          prefixIcon: Icon(Icons.search_rounded),
-                          labelText: 'Поиск группы',
-                        ),
-                      ),
-                    ),
-                    FilterChip(
-                      selected: _showArchivedGroups,
-                      onSelected: (value) {
-                        setState(() => _showArchivedGroups = value);
-                      },
-                      avatar: const Icon(Icons.archive_outlined, size: 18),
-                      label: const Text('Показывать завершённые'),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-        Expanded(
-          child: switch (_view) {
-            _ScheduleSettingsView.branchHours => ScheduleReferenceSettings(
-              key: const ValueKey('branch-hours-settings'),
-              canEdit: widget.canEditReferences,
-              section: ScheduleReferenceSection.branchHours,
-            ),
-            _ScheduleSettingsView.teacherSchedules => ScheduleReferenceSettings(
-              key: const ValueKey('teacher-schedule-settings'),
-              canEdit: widget.canEditReferences,
-              section: ScheduleReferenceSection.teacherSchedule,
-              initialTeacherId: widget.initialTeacherId,
-            ),
-            _ScheduleSettingsView.groups => _GroupsList(
-              searchQuery: _search.text,
-              includeArchived: _showArchivedGroups,
-              canManageLifecycle: widget.canManageGroups,
-            ),
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _UsersSettings extends StatefulWidget {
-  const _UsersSettings({
-    required this.currentRole,
-    required this.initialSearch,
-    required this.canCreatePeople,
-  });
-
-  final String currentRole;
-  final String? initialSearch;
-  final bool canCreatePeople;
-
-  @override
-  State<_UsersSettings> createState() => _UsersSettingsState();
-}
-
-class _UsersSettingsState extends State<_UsersSettings> {
-  final _search = TextEditingController();
-  String _section = 'access';
 
   @override
   void dispose() {
@@ -1239,101 +1059,72 @@ class _UsersSettingsState extends State<_UsersSettings> {
   }
 
   Future<void> _create() async {
-    bool? saved;
-    if (_section == 'staff') {
-      saved = await showCreateEmployeeSurface(context);
-    } else if (_section == 'teachers') {
-      saved = await showCreateTeacherSurface(context);
-    }
-    if (saved != true || !mounted) return;
-    final container = ProviderScope.containerOf(context);
-    final query = _search.text.trim();
-    if (_section == 'staff') {
-      container.invalidate(entitiesProvider('employees'));
-      container.invalidate(staffSearchProvider(query));
-    } else {
-      container.invalidate(entitiesProvider('teachers'));
-      container.invalidate(teacherSearchProvider(query));
+    if (await showCreateGroupSurface(context) == true && mounted) {
+      invalidateGroupCatalog(ref);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final listSection = _section != 'access';
+    if (!widget.snapshot.allows('schedule.lesson.read.assigned') &&
+        !widget.snapshot.allows('schedule.lesson.write')) {
+      return const _SettingsDenied(text: 'Нет доступа к группам.');
+    }
+    final canWrite = widget.snapshot.allows('schedule.lesson.write');
     return Column(
       children: [
         _SettingsToolbar(
-          title: 'Пользователи и доступы',
-          subtitle: switch (_section) {
-            'staff' => 'Сотрудники школы',
-            'teachers' => 'Преподаватели и специализации',
-            _ => 'Аккаунты, роли и персональные права',
-          },
-          action: listSection && widget.canCreatePeople
-              ? FilledButton.icon(
+          title: 'Группы',
+          subtitle: 'Состав, преподаватели и параметры учебных групп',
+          action: Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => invalidateGroupCatalog(ref),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Обновить'),
+              ),
+              if (canWrite)
+                FilledButton.icon(
                   onPressed: _create,
-                  icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: Text(
-                    _section == 'staff'
-                        ? 'Новый сотрудник'
-                        : 'Новый преподаватель',
-                  ),
-                )
-              : null,
+                  icon: const Icon(Icons.group_add_outlined),
+                  label: const Text('Новая группа'),
+                ),
+            ],
+          ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Row(
             children: [
               Expanded(
-                flex: 2,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'access', label: Text('Доступы')),
-                      ButtonSegment(value: 'staff', label: Text('Сотрудники')),
-                      ButtonSegment(
-                        value: 'teachers',
-                        label: Text('Преподаватели'),
-                      ),
-                    ],
-                    selected: {_section},
-                    onSelectionChanged: (value) {
-                      setState(() => _section = value.first);
-                    },
+                child: TextField(
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search_rounded),
+                    labelText: 'Поиск группы',
                   ),
                 ),
               ),
-              if (listSection) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _search,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      prefixIcon: Icon(Icons.search_rounded),
-                      labelText: 'Поиск',
-                    ),
-                  ),
-                ),
-              ],
+              const SizedBox(width: 12),
+              FilterChip(
+                selected: _showArchived,
+                onSelected: (value) => setState(() => _showArchived = value),
+                avatar: const Icon(Icons.archive_outlined, size: 18),
+                label: const Text('Завершённые'),
+              ),
             ],
           ),
         ),
         Expanded(
-          child: switch (_section) {
-            'staff' => _EmployeesList(
-              searchQuery: _search.text,
-              currentRole: widget.currentRole,
-            ),
-            'teachers' => _TeachersList(searchQuery: _search.text),
-            _ => UserRolesWidget(
-              currentRole: widget.currentRole,
-              initialSearch: widget.initialSearch,
-            ),
-          },
+          child: _GroupsList(
+            searchQuery: _search.text,
+            includeArchived: _showArchived,
+            canManageLifecycle: canWrite,
+          ),
         ),
       ],
     );
@@ -1358,6 +1149,9 @@ class _OrganizationSettings extends ConsumerStatefulWidget {
 
 class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
   final _search = TextEditingController();
+  final _exitGuardKey = GlobalKey<FormDiscardGuardState>();
+  Map<String, dynamic>? _selectedBranch;
+  bool _creating = false;
   String _section = 'branches';
   bool _showArchived = false;
 
@@ -1380,19 +1174,59 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
   }
 
   Future<void> _create() async {
-    final saved = await showMagicDialog<bool>(
-      context: context,
-      builder: (_) => const BranchFormDialog(),
-    );
-    if (saved == true) {
-      invalidateBranchCatalog(ref);
+    setState(() => _creating = true);
+  }
+
+  void _closeCard() => setState(() {
+    _selectedBranch = null;
+    _creating = false;
+  });
+
+  Future<void> _back() async {
+    if (await _exitGuardKey.currentState?.confirmLeave() == false || !mounted) {
+      return;
     }
+    _closeCard();
   }
 
   void _refreshBranches() => invalidateBranchCatalog(ref);
 
   @override
   Widget build(BuildContext context) {
+    if (_creating || _selectedBranch != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _back,
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('К списку филиалов'),
+            ),
+          ),
+          Expanded(
+            child: BranchFormDialog(
+              key: const Key('branch-detail-pane'),
+              branch: _selectedBranch,
+              embedded: true,
+              canEdit:
+                  widget.canEdit &&
+                  _selectedBranch?['lifecycle_state'] != 'archived',
+              canManageLifecycle:
+                  widget.canManageLifecycle &&
+                  _selectedBranch?['lifecycle_state'] != 'archived',
+              exitGuardKey: _exitGuardKey,
+              onClose: _closeCard,
+              onSaved: () {
+                invalidateBranchCatalog(ref);
+                _closeCard();
+              },
+            ),
+          ),
+        ],
+      );
+    }
     final branches = _section == 'branches';
     return Column(
       children: [
@@ -1400,7 +1234,7 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
           title: branches ? 'Организация' : 'Организационные справочники',
           subtitle: branches
               ? widget.canEdit
-                    ? 'Филиалы; аудитории и дисциплины настраиваются внутри филиала'
+                    ? 'Филиалы, рабочие часы, аудитории и дисциплины'
                     : 'Только просмотр назначенных филиалов'
               : 'Дисциплины школы и причины отказа',
           action: branches
@@ -1485,6 +1319,8 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
                   canEdit: widget.canEdit,
                   canManageLifecycle: widget.canManageLifecycle,
                   includeArchived: _showArchived,
+                  onSelected: (branch) =>
+                      setState(() => _selectedBranch = branch),
                 )
               : ReferenceCatalogSettings(canEdit: widget.canManageLifecycle),
         ),
@@ -1504,14 +1340,21 @@ class _SalesSettings extends ConsumerStatefulWidget {
 
 class _SalesSettingsState extends ConsumerState<_SalesSettings> {
   bool _showArchived = false;
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         _SettingsToolbar(
-          title: 'Продажи и оплаты',
-          subtitle: 'Каталог абонементов',
+          title: 'Абонементы',
+          subtitle: 'Пакеты занятий, стоимость и срок действия',
           action: Wrap(
             spacing: 10,
             runSpacing: 8,
@@ -1538,9 +1381,21 @@ class _SalesSettingsState extends ConsumerState<_SalesSettings> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: TextField(
+            key: const Key('subscription-package-search'),
+            controller: _search,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Поиск абонемента',
+              prefixIcon: Icon(Icons.search_rounded),
+            ),
+          ),
+        ),
         Expanded(
           child: _PackagesList(
-            searchQuery: '',
+            searchQuery: _search.text,
             canEdit: widget.canEdit,
             includeArchived: _showArchived,
           ),
@@ -1598,27 +1453,39 @@ class _SettingsToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 3),
+        Text(
+          subtitle,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ?action,
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => constraints.maxWidth < 640
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  heading,
+                  if (action != null) ...[
+                    const SizedBox(height: 12),
+                    Align(alignment: Alignment.centerLeft, child: action!),
+                  ],
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(child: heading),
+                  ?action,
+                ],
+              ),
       ),
     );
   }

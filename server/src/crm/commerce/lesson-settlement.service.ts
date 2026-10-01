@@ -256,11 +256,10 @@ export class LessonSettlementService implements LessonSettlementPort {
     catalog: Awaited<ReturnType<typeof loadLessonSettlementCatalog>>,
     input: {
       durationMinutes: number;
-      decision: LessonFinancialDecision;
       authorization: TeacherCompensationMutationAuthorization;
       reasonText?: string;
     },
-    decision: LessonFinancialDecision,
+    decision: ResolvePlannedLessonSettlementInput["decision"],
   ): LessonFinancialDecision {
     const policy = resolveSettlementPolicy(
       catalog,
@@ -390,6 +389,7 @@ export class LessonSettlementService implements LessonSettlementPort {
     }
     return {
       ...decision,
+      teacherCompensationRuleKey: selectedRule.stableKey,
       teacherCreditedDurationMinutes:
         selectedRule.mode === "percent" &&
           decision.teacherCompensationValueMinor !== undefined &&
@@ -549,7 +549,7 @@ function resolveDurationMinutes(
 }
 
 function assertExactClientDecisions(
-  decision: LessonFinancialDecision,
+  decision: Pick<LessonFinancialDecision, "clientDecisions">,
   requiredClientIds: string[] | undefined,
 ): void {
   if (requiredClientIds === undefined) return;
@@ -594,7 +594,7 @@ function assertDurationWithinLesson(
 }
 
 function hasSuppliedTeacherDecision(
-  decision: LessonFinancialDecision,
+  decision: Partial<LessonFinancialDecision>,
 ): boolean {
   return decision.teacherCompensationRuleKey !== undefined ||
     decision.teacherCompensationValueMinor !== undefined ||

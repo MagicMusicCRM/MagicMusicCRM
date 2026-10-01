@@ -7,61 +7,91 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
   }) {
     final cs = Theme.of(context).colorScheme;
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final narrow = constraints.maxWidth < 900 * textScale;
     final teacherWeek =
         (_currentView == ScheduleView.week ||
             (_showScheduleTabs && _currentView == ScheduleView.day)) &&
         _dayViewMode == DayViewMode.byTeacher;
+    final hasDensity =
+        _currentView == ScheduleView.week ||
+        (_currentView == ScheduleView.day &&
+            _dayViewMode != DayViewMode.byTeacher);
+    final actionWidth =
+        (hasDensity ? 144.0 : 108.0) +
+        (widget.canWrite ? 120 * textScale : 0.0);
+    final navigationWidth =
+        (_currentView == ScheduleView.month
+            ? 250
+            : _currentView == ScheduleView.week
+            ? 308
+            : 280) *
+        textScale;
+    final branchWidth = 190 * textScale;
+    final viewWidth = 220 * textScale;
+    final extraWidth = teacherWeek
+        ? 210 * textScale
+        : !_showScheduleTabs && _currentView != ScheduleView.month
+        ? 176 * textScale
+        : 0;
     final singleRow =
         constraints.maxWidth >=
-        (teacherWeek ? 1440 : 1220) * MediaQuery.textScalerOf(context).scale(1);
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _desktopFilters(firstLoad),
-        _desktopLegend(),
-        if ((_currentView == ScheduleView.week ||
-            (_currentView == ScheduleView.day &&
-                _dayViewMode != DayViewMode.byTeacher)))
-          IconButton(
-            key: const ValueKey('schedule-density-toggle'),
-            tooltip: _fitDayToViewport ? 'Крупнее' : 'Весь день',
-            onPressed: () =>
-                _emitState(() => _fitDayToViewport = !_fitDayToViewport),
-            icon: Icon(
-              _fitDayToViewport
-                  ? Icons.zoom_in_rounded
-                  : Icons.fit_screen_rounded,
-              size: 19,
-            ),
-          ),
-        IconButton(
-          tooltip: 'Обновить расписание',
-          onPressed: _isLoading ? null : _fetchAll,
-          icon: const Icon(Icons.refresh_rounded, size: 19),
-        ),
-        if (widget.canWrite)
-          Tooltip(
-            message: 'Создать занятие',
-            child: FilledButton(
-              key: const ValueKey('schedule-create-lesson'),
-              onPressed: firstLoad ? null : _openLessonCreate,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(36, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                backgroundColor: AppColor.gold,
-                foregroundColor: AppColor.onGold,
+        navigationWidth +
+            branchWidth +
+            viewWidth +
+            150 * textScale +
+            actionWidth +
+            extraWidth +
+            (extraWidth == 0 ? 56 : 64);
+    final actions = SizedBox(
+      width: actionWidth,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _desktopFilters(firstLoad),
+          _desktopLegend(),
+          if (hasDensity)
+            IconButton(
+              key: const ValueKey('schedule-density-toggle'),
+              tooltip: _fitDayToViewport ? 'Крупнее' : 'Весь день',
+              onPressed: () =>
+                  _emitState(() => _fitDayToViewport = !_fitDayToViewport),
+              icon: Icon(
+                _fitDayToViewport
+                    ? Icons.zoom_in_rounded
+                    : Icons.fit_screen_rounded,
+                size: 19,
               ),
-              child: const Text('+ Занятие'),
             ),
+          IconButton(
+            tooltip: 'Обновить расписание',
+            onPressed: _isLoading ? null : _fetchAll,
+            icon: const Icon(Icons.refresh_rounded, size: 19),
           ),
-      ],
+          if (widget.canWrite)
+            Tooltip(
+              message: 'Создать занятие',
+              child: FilledButton(
+                key: const ValueKey('schedule-create-lesson'),
+                onPressed: firstLoad ? null : _openLessonCreate,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(36, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(fontSize: 12),
+                  backgroundColor: AppColor.gold,
+                  foregroundColor: AppColor.onGold,
+                ),
+                child: const Text('+ Занятие'),
+              ),
+            ),
+        ],
+      ),
     );
     final navigation = SizedBox(
-      width: (_currentView == ScheduleView.week ? 360 : 308) * textScale,
+      width: navigationWidth,
       child: _buildDateNavigation(compact: true),
     );
-    final views = SizedBox(width: 240 * textScale, child: _buildViewSwitcher());
+    final branch = SizedBox(width: branchWidth, child: _buildBranchSelector());
+    final views = SizedBox(width: viewWidth, child: _buildViewSwitcher());
     final mode = SizedBox(
       width: 176 * textScale,
       child: AppDropdownButtonFormField<DayViewMode>(
@@ -133,6 +163,8 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
             minimumSize: const Size(36, 36),
             maximumSize: const Size(36, 36),
             padding: EdgeInsets.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
           ),
         ),
         child: singleRow
@@ -140,12 +172,25 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                 children: [
                   navigation,
                   const SizedBox(width: 8),
-                  views,
-                  if (!_showScheduleTabs && _currentView != ScheduleView.month)
-                    mode,
-                  if (teacherWeek) _buildWeekTeacherSelector(firstLoad),
+                  branch,
                   const SizedBox(width: 8),
-                  Expanded(child: search),
+                  views,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Align(
+                      heightFactor: 1,
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(width: 260 * textScale, child: search),
+                    ),
+                  ),
+                  if (teacherWeek) ...[
+                    const SizedBox(width: 8),
+                    _buildWeekTeacherSelector(firstLoad),
+                  ] else if (!_showScheduleTabs &&
+                      _currentView != ScheduleView.month) ...[
+                    const SizedBox(width: 8),
+                    mode,
+                  ],
                   const SizedBox(width: 8),
                   actions,
                 ],
@@ -154,28 +199,32 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: navigation),
-                      const SizedBox(width: 8),
-                      if (!narrow) views,
+                      Flexible(child: navigation),
+                      const Spacer(),
                       actions,
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      if (narrow) ...[views, const SizedBox(width: 8)],
+                      branch,
+                      const SizedBox(width: 8),
+                      views,
+                      const SizedBox(width: 8),
                       Expanded(child: search),
-                      if (!_showScheduleTabs &&
-                          _currentView != ScheduleView.month) ...[
-                        const SizedBox(width: 8),
-                        mode,
-                      ],
-                      if (teacherWeek) ...[
-                        const SizedBox(width: 8),
-                        Expanded(child: _buildWeekTeacherSelector(firstLoad)),
-                      ],
                     ],
                   ),
+                  if (teacherWeek ||
+                      (!_showScheduleTabs &&
+                          _currentView != ScheduleView.month)) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: teacherWeek
+                          ? _buildWeekTeacherSelector(firstLoad)
+                          : mode,
+                    ),
+                  ],
                 ],
               ),
       ),
@@ -251,6 +300,7 @@ extension _ScheduleDesktopToolbar on _ScheduleWidgetState {
                     ? _loadFinancialFilterCatalog
                     : null,
                 showHeader: true,
+                showBranchSelector: false,
                 onApply: (result) {
                   MenuController.maybeOf(menuContext)?.close();
                   _applyScheduleFilterResult(result);

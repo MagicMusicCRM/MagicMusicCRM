@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'create_group_dialog.dart';
+import 'create_lesson_dialog.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -35,6 +37,7 @@ class GroupDetailDialog extends ConsumerStatefulWidget {
 }
 
 class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
+  late Map<String, dynamic> _group;
   bool _loading = true;
   bool _saving = false;
   bool _changed = false;
@@ -47,6 +50,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
   @override
   void initState() {
     super.initState();
+    _group = widget.group;
     _loadData();
   }
 
@@ -57,15 +61,17 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
     });
     try {
       final crm = ref.read(magicCrmServiceProvider);
+      final groupFuture = crm.getGroup(_group['id'].toString());
       final results = await Future.wait([
-        crm.listGroupStudents(widget.group['id'].toString(), limit: 100),
+        crm.listGroupStudents(_group['id'].toString(), limit: 100),
         crm.listStudents(limit: 100),
         crm.listLessons(
-          groupId: widget.group['id'].toString(),
+          groupId: _group['id'].toString(),
           order: 'desc',
           limit: 100,
         ),
       ]);
+      final currentGroup = await groupFuture;
       final groupStudents = results[0];
       final scheduleMembers = await Future.wait([
         for (final student in groupStudents)
@@ -74,6 +80,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
 
       if (!mounted) return;
       setState(() {
+        _group = currentGroup;
         _groupStudents = groupStudents;
         _allStudents = results[1];
         _groupLessons = results[2];
@@ -137,7 +144,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
       await ref
           .read(magicCrmServiceProvider)
           .addGroupStudent(
-            groupId: widget.group['id'].toString(),
+            groupId: _group['id'].toString(),
             studentId: selectedStudentId,
           );
       _changed = true;
@@ -188,7 +195,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
       await ref
           .read(magicCrmServiceProvider)
           .removeGroupStudent(
-            groupId: widget.group['id'].toString(),
+            groupId: _group['id'].toString(),
             studentId: studentId,
           );
       _changed = true;
@@ -210,7 +217,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final groupName = widget.group['name'] ?? 'Без названия';
+    final groupName = _group['name'] ?? 'Без названия';
 
     return AlertDialog(
       title: Text('Группа: $groupName'),
@@ -261,6 +268,58 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (widget.canWrite)
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              key: const ValueKey('group-edit-defaults'),
+                              onPressed: _saving
+                                  ? null
+                                  : () async {
+                                      if (await showCreateGroupSurface(
+                                            context,
+                                            group: _group,
+                                          ) ==
+                                          true) {
+                                        _changed = true;
+                                        await _loadData();
+                                      }
+                                    },
+                              icon: const Icon(Icons.tune),
+                              label: const Text('Настройки группы'),
+                            ),
+                            FilledButton.icon(
+                              key: const ValueKey('group-single-lesson'),
+                              onPressed: _saving || _groupStudents.isEmpty
+                                  ? null
+                                  : () async {
+                                      if (await CreateLessonDialog.show(
+                                            context,
+                                            clientType: 'group',
+                                            clientId: _group['id'].toString(),
+                                            clientName: _group['name']
+                                                ?.toString(),
+                                            initialTeacherId:
+                                                _group['teacher_id']
+                                                    ?.toString(),
+                                            initialRoomId: _group['room_id']
+                                                ?.toString(),
+                                            initialBranchId: _group['branch_id']
+                                                ?.toString(),
+                                          ) ==
+                                          true) {
+                                        _changed = true;
+                                        await _loadData();
+                                      }
+                                    },
+                              icon: const Icon(Icons.add),
+                              label: const Text('Одиночное занятие'),
+                            ),
+                          ],
+                        ),
+                      const SizedBox(height: 12),
                       Text(
                         'Состав группы:',
                         style: TextStyle(
@@ -335,10 +394,8 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
                       const Divider(),
                       const SizedBox(height: 12),
                       RecurringSchedulePlanSection(
-                        key: ValueKey(
-                          'group-schedule-plans-${widget.group['id']}',
-                        ),
-                        groupId: widget.group['id']?.toString(),
+                        key: ValueKey('group-schedule-plans-${_group['id']}'),
+                        groupId: _group['id']?.toString(),
                         subjectName: groupName.toString(),
                         fallbackLessons: _groupLessons,
                         branches: _groupBranches(),
@@ -368,15 +425,14 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
   }
 
   String? _groupBranchId() =>
-      (widget.group['branch_id'] ?? (widget.group['branches'] as Map?)?['id'])
-          ?.toString();
+      (_group['branch_id'] ?? (_group['branches'] as Map?)?['id'])?.toString();
 
   List<Map<String, dynamic>> _groupBranches() {
     final id = _groupBranchId();
     if (id == null || id.isEmpty) return const [];
     final name =
-        (widget.group['branch_name'] ??
-                (widget.group['branches'] as Map?)?['name'] ??
+        (_group['branch_name'] ??
+                (_group['branches'] as Map?)?['name'] ??
                 'Филиал')
             .toString();
     return [
@@ -393,6 +449,8 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
         .where((student) => !existingIds.contains(student['id']?.toString()))
         .map(
           (student) => SearchableSelectItem(
+            clientType: 'student',
+            data: student,
             id: student['id'].toString(),
             label: _studentName(student),
           ),
@@ -416,6 +474,8 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
           for (final row in rows.whereType<Map<String, dynamic>>())
             if (!existingIds.contains(row['id']?.toString()))
               SearchableSelectItem(
+                clientType: 'student',
+                data: row,
                 id: row['id'].toString(),
                 label: _studentName(row),
               ),
